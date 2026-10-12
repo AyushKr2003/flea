@@ -28,6 +28,16 @@ ShellRoot {
     // Lane acceptance and body calls for the propagated End, each tail path pins red alone.
     property bool laneEndAccepted: false
     property int bodyEndCalls: 0
+    // The census stroke's first report (tools/flea-field-instant stroke()): 2.7 mm, 106 px at 1000 dpi.
+    readonly property int firstUpdateRaw: -106
+    // How far the first update's travel may sit from the gained distance, in pixels.
+    readonly property real firstMoveSlack: 0.5
+    readonly property real firstStartY: 40000
+    property int firstStep: 0
+    property var firstBefore: null
+    property var firstTouch: null
+    property var firstWheel: null
+    property string firstSummary: ""
 
     function buildRows() {
         var rows = []
@@ -145,7 +155,8 @@ ShellRoot {
         root.stubPane.listArea = list
     }
 
-    Timer { interval: 800; running: true; repeat: false; onTriggered: root.beginStroke() }
+    Timer { interval: 800; running: true; repeat: false; onTriggered: root.firstUpdate() }
+    Timer { id: firstFrame; interval: 100; repeat: false; onTriggered: root.firstUpdate() }
     Timer { id: liveTimer; interval: 50; repeat: true; onTriggered: root.pollLive() }
     // The view's own release fixup runs on real frames, so the held-overscroll pin waits for it.
     Timer { id: fixupWait; interval: root.fixupWaitMs; repeat: false; onTriggered: root.checkFixupRested() }
@@ -166,6 +177,121 @@ ShellRoot {
                     lane = inner[j]
         }
         return { body: body, lane: lane }
+    }
+
+    function parkAt(y) {
+        root.freeze()
+        Scroll.stopTail(list)
+        list.contentY = y
+    }
+
+    function takeSnap() {
+        var kids = list.contentItem.children
+        var seen = []
+        for (var i = 0; i < kids.length; i++)
+            seen.push({ item: kids[i], index: kids[i].index })
+        return { objs: countUnder(list), kids: seen }
+    }
+
+    // What changed since the snapshot: objects net, delegates built, delegates re-bound to another index.
+    function diffSnap(snap) {
+        var kids = list.contentItem.children
+        var built = 0, reused = 0
+        for (var i = 0; i < kids.length; i++) {
+            var was = null
+            for (var j = 0; j < snap.kids.length; j++)
+                if (snap.kids[j].item === kids[i])
+                    was = snap.kids[j]
+            if (was === null)
+                built += 1
+            else if (was.index !== kids[i].index)
+                reused += 1
+        }
+        return { objs: countUnder(list) - snap.objs, built: built, reused: reused }
+    }
+
+    function runningTimers() {
+        var h = handlers()
+        var n = 0
+        if (h.body.tailRunning) n += 1
+        if (h.body.returnRunning) n += 1
+        if (h.lane.tailRunning) n += 1
+        if (h.lane.returnRunning) n += 1
+        return n
+    }
+
+    // A ScrollBegin then the stroke's first pixel update; returns the travel of the update call alone.
+    function touchFirst() {
+        var h = handlers()
+        h.body.handleWheel(touchWheel(0, Qt.ScrollBegin))
+        var at = list.contentY
+        h.body.handleWheel(touchWheel(root.firstUpdateRaw, Qt.ScrollUpdate))
+        return list.contentY - at
+    }
+
+    // One notch event worth the same distance as the touch update, as Qt reports a phaseless wheel.
+    function wheelFirst() {
+        var h = handlers()
+        var angle = Scroll.touchDistance(root.firstUpdateRaw) / h.body.scrollDistance(0, 120) * 120
+        var at = list.contentY
+        h.body.handleWheel({ pixelDelta: { x: 0, y: 0 }, angleDelta: { x: 0, y: angle },
+            phase: 0, modifiers: 0, accepted: false })
+        return list.contentY - at
+    }
+
+    // A stroke's first update against a notch of equal distance, each warmed once, read in the call and a frame later.
+    function firstUpdate() {
+        var step = root.firstStep
+        root.firstStep += 1
+        if (step === 0 || step === 3) {
+            root.parkAt(root.firstStartY)
+            if (step === 0) root.touchFirst(); else root.wheelFirst()
+        } else if (step === 1 || step === 4) {
+            root.parkAt(root.firstStartY)
+            root.firstBefore = root.takeSnap()
+            var moved = step === 1 ? root.touchFirst() : root.wheelFirst()
+            var rec = { moved: moved, call: root.diffSnap(root.firstBefore), timers: root.runningTimers() }
+            if (step === 1) root.firstTouch = rec; else root.firstWheel = rec
+        } else if (step === 2 || step === 5) {
+            var kept = step === 2 ? root.firstTouch : root.firstWheel
+            kept.frame = root.diffSnap(root.firstBefore)
+        } else {
+            root.firstVerdict()
+            return
+        }
+        firstFrame.start()
+    }
+
+    function firstVerdict() {
+        var t = root.firstTouch, w = root.firstWheel
+        var want = Scroll.touchDistance(root.firstUpdateRaw) * -1
+        if (Math.abs(t.moved - want) > root.firstMoveSlack) {
+            fail("the first touchpad update moved " + t.moved.toFixed(1) + " inside its call, want " + want.toFixed(1))
+            root.report()
+            return
+        }
+        if (Math.abs(w.moved - want) > root.firstMoveSlack) {
+            fail("the wheel notch moved " + w.moved.toFixed(1) + ", want " + want.toFixed(1))
+            root.report()
+            return
+        }
+        var kinds = [["call", t.call, w.call], ["frame", t.frame, w.frame]]
+        for (var i = 0; i < kinds.length; i++) {
+            if (kinds[i][1].objs > kinds[i][2].objs || kinds[i][1].built > kinds[i][2].built) {
+                fail("the first touchpad update built objects " + kinds[i][1].objs + " delegates " + kinds[i][1].built
+                    + " against the notch's " + kinds[i][2].objs + " and " + kinds[i][2].built + " (" + kinds[i][0] + ")")
+                root.report()
+                return
+            }
+        }
+        root.firstSummary = " firstMoved=1 firstObjs=" + t.call.objs + "/" + w.call.objs
+            + " firstNew=" + t.call.built + "/" + w.call.built
+            + " firstFrameObjs=" + t.frame.objs + "/" + w.frame.objs
+            + " firstFrameNew=" + t.frame.built + "/" + w.frame.built
+            + " firstReused=" + t.call.reused + "/" + w.call.reused
+            + " firstTimers=" + t.timers + "/" + w.timers
+        root.parkAt(0)
+        root.beginStroke()
     }
 
     function touchWheel(py, phase) {
@@ -742,7 +868,7 @@ ShellRoot {
             + " rest=" + Math.round(b.liftY + b.liftGot) + " tail=" + b.liftGot.toFixed(1)
             + " objs=" + b.objs + " delegates=" + b.delegates
             + " edgeTop=" + b.top.toFixed(1) + " edgeBottom=" + b.bottom.toFixed(1)
-            + " tailPeak=" + b.tail.toFixed(1))
+            + " tailPeak=" + b.tail.toFixed(1) + root.firstSummary)
         console.log("TOUCHPAD EDGE PASS top=" + b.top.toFixed(1) + " bottom=" + b.bottom.toFixed(1)
             + " tailPeak=" + b.tail.toFixed(1) + " rest=bound")
         root.report()
