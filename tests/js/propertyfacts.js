@@ -66,6 +66,12 @@ function run(check) {
     check("the exposure is shutter, aperture and ISO as the board writes it", PropertyFacts.exposure([1, 250], [28, 10], 400), "1/250 s · f/2.8 · ISO 400")
     check("a shutter that is not one over a whole number reads as the nearest 1/n", PropertyFacts.exposure([10, 600], [0, 0], 0), "1/60 s")
     same("a shutter of a second or more is seconds", [PropertyFacts.exposure([2, 1], [0, 0], 0), PropertyFacts.exposure([13, 10], [0, 0], 0)], ["2 s", "1.3 s"])
+    same("a shutter under a second keeps its stored rational", [0.4, 0.5, 0.6, 0.8].map(function (s) { return PropertyFacts.exposure([Math.round(s * 10), 10], [0, 0], 0) }), ["0.4 s", "1/2 s", "0.6 s", "0.8 s"])
+    same("a numerator of one reads 1/den and a numerator that divides den reads 1/n", [PropertyFacts.exposure([1, 3], [0, 0], 0), PropertyFacts.exposure([1, 250], [0, 0], 0), PropertyFacts.exposure([2, 500], [0, 0], 0)], ["1/3 s", "1/250 s", "1/250 s"])
+    check("2.5 s reads one decimal of seconds", PropertyFacts.exposure([5, 2], [0, 0], 0), "2.5 s")
+    same("a make with a company suffix is not said twice when the model repeats its first word", [PropertyFacts.camera("NIKON CORPORATION", "NIKON Z 6"), PropertyFacts.camera("OM Digital Solutions", "OM-1"), PropertyFacts.camera("OLYMPUS IMAGING CORP.", "OLYMPUS E-M1")],
+         ["NIKON Z 6", "OM-1", "OLYMPUS E-M1"])
+    same("a make whose model never repeats its first word still leads", [PropertyFacts.camera("SONY", "ILCE-7M4"), PropertyFacts.camera("OM Digital Solutions", "TG-7")], ["SONY ILCE-7M4", "OM Digital Solutions TG-7"])
     check("a whole f-number drops the decimal", PropertyFacts.exposure([0, 0], [4, 1], 0), "f/4")
     same("an exposure missing parts keeps the rest in order", [PropertyFacts.exposure([0, 0], [18, 10], 100), PropertyFacts.exposure([1, 60], [0, 0], 3200)], ["f/1.8 · ISO 100", "1/60 s · ISO 3200"])
     same("no exposure fact names no value", [PropertyFacts.exposure([0, 0], [0, 0], 0), PropertyFacts.exposure(undefined, undefined, undefined)], ["", ""])

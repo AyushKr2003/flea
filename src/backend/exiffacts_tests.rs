@@ -164,20 +164,17 @@ fn a_photo_with_only_some_facts_keeps_the_rest_empty() {
 
 #[test]
 fn a_hostile_ifd_ends_the_read_and_never_panics() {
-    // An Exif pointer past the block, a string whose offset is past the block, an entry count past the block, and a pointer loop.
-    let mut block = tiff(true, camera_tags(), exif_tags(true));
-    let len = block.len();
-    block[8 + 2 + 8..8 + 2 + 12].copy_from_slice(&((len as u32) + 99).to_le_bytes());
-    let _ = read_bytes("exifhostile1", "a.jpg", &jpeg_with(&block));
+    // The Exif pointer is IFD0's third entry, after Make and Model, so its value field is that entry's last four bytes.
+    let pointer_at = 8 + 2 + 12 * 2 + 8;
+    let only_the_camera = Photo { make: "Canon".into(), model: "Canon EOS R6".into(), ..Photo::default() };
+    for (name, target) in [("past", tiff(true, camera_tags(), exif_tags(true)).len() as u32 + 99), ("far", u32::MAX)] {
+        let mut block = tiff(true, camera_tags(), exif_tags(true));
+        block[pointer_at..pointer_at + 4].copy_from_slice(&target.to_le_bytes());
+        assert_eq!(read_bytes("exifhostile1", "a.jpg", &jpeg_with(&block)), only_the_camera, "an Exif pointer {name} the block keeps IFD0 and drops the rest");
+    }
     let mut counted = tiff(true, camera_tags(), vec![]);
     counted[8..10].copy_from_slice(&0xFFFFu16.to_le_bytes());
     let _ = read_bytes("exifhostile2", "b.jpg", &jpeg_with(&counted));
-    let mut pointing_back = exif_tags(true);
-    pointing_back.insert(0, Tag(0x8769, 4, 1, 8u32.to_le_bytes().to_vec()));
-    let mut looped = tiff(true, vec![], pointing_back);
-    let exif_at = u32::from_le_bytes(looped[8 + 2 + 8..8 + 2 + 12].try_into().unwrap()) as usize;
-    looped[exif_at + 2 + 8..exif_at + 2 + 12].copy_from_slice(&8u32.to_le_bytes());
-    let _ = read_bytes("exifhostile3", "c.jpg", &jpeg_with(&looped));
     let truncated = jpeg_with(&tiff(true, camera_tags(), exif_tags(true)));
     let _ = read_bytes("exifhostile4", "d.jpg", &truncated[..60]);
     let _ = read_bytes("exifhostile5", "e.cr3", &cr3(&[0xFF; 40], &[], &[])[..90]);
@@ -195,10 +192,16 @@ fn text_is_trimmed_of_padding_and_cut_to_a_line() {
 
 #[test]
 fn the_read_is_bounded_on_a_file_of_endless_segments() {
-    // 40 000 empty APP segments and no frame: the walk gives up at its segment budget instead of reading all of it.
-    let mut v = vec![0xFF, 0xD8];
-    for _ in 0..40_000 {
-        v.extend_from_slice(&[0xFF, 0xE5, 0x00, 0x02]);
-    }
-    assert_eq!(read_bytes("exifendless", "e.jpg", &v), Photo::default());
+    // The Exif segment comes after more empty segments than the budget allows, so only the budget keeps the walk from finding it.
+    let block = tiff(true, camera_tags(), exif_tags(true));
+    let after = |empty: usize| {
+        let mut v = vec![0xFF, 0xD8];
+        for _ in 0..empty {
+            v.extend_from_slice(&[0xFF, 0xE5, 0x00, 0x02]);
+        }
+        v.extend_from_slice(&jpeg_with(&block)[2..]);
+        v
+    };
+    assert_eq!(read_bytes("exifendless", "e.jpg", &after(SEGMENT_BUDGET + 6)), Photo::default());
+    assert_eq!(read_bytes("exifwithin", "w.jpg", &after(SEGMENT_BUDGET - 4)), canon_r6(), "within the budget the walk still finds it");
 }

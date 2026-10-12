@@ -1,5 +1,4 @@
-// Properties on a file asks for its codecs, bit rate and photo facts, on the menu worker and under the request's own cancel, so the
-// card opens on what the listing already knows and these pairs arrive beside it. Nothing is read for a file the card cannot say more about.
+// Properties on a file asks for its codecs, bit rate and photo facts on the menu worker, under the request's own cancel, and only where the card can say more.
 use super::exiffacts::{self, Photo};
 use super::mediaprobe::{self, Media};
 use super::menu_actions::{response, Selected};

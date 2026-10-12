@@ -1,5 +1,4 @@
-// The camera, lens, exposure and capture time the Properties card names for a photo, read from the file's own EXIF block: a JPEG's
-// APP1, a TIFF-based RAW's IFDs, a CR3's Canon boxes. Only bounded reads of the head are made and nothing is decoded.
+// The camera, lens, exposure and capture time the Properties card names for a photo, read from a bounded head of the file's own EXIF block.
 use crate::backend::regfile::open_regular;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
