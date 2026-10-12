@@ -1,4 +1,5 @@
 import QtQuick
+import "js/Filter.js" as Filter
 import "js/Menu.js" as Menu
 import "js/Ops.js" as Ops
 import "js/Search.js" as Search
@@ -93,6 +94,8 @@ Item {
     function openTag(name) {
         if (!name) return
         root.pane.searchHere = false
+        // A walk replaces the listing a standing filter narrows, so the filter closes first, as the search key does.
+        Filter.close(root.pane)
         Search.start(root.pane)
         root.pane.searchQuery = "tag:" + name
         Search.sendQuery(root.pane)

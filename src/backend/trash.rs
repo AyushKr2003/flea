@@ -218,17 +218,25 @@ pub fn restore(entry: &Entry) -> Result<(), FleaError> {
     if fresh.len() > 1 {
         return Err(err(&format!(
             "that item was trashed at {} but the Trash holds more than one new item from that place, so it cannot be restored",
-            entry.trashed_at
+            shown(&entry.trashed_at)
         )));
     }
     let [one] = fresh.as_slice() else {
-        return Err(err(&format!("that item was trashed at {} but is no longer listed, so it cannot be restored", entry.trashed_at)));
+        return Err(err(&format!("that item was trashed at {} but is no longer listed, so it cannot be restored", shown(&entry.trashed_at))));
     };
     // Only the item trashed at this step's own time is this step's; a later item from the same place is refused.
     if !matches_time(&entry.trashed_at, one) {
-        return Err(err(&format!("that item was trashed at {} but the Trash holds no item from that time, so it cannot be restored", entry.trashed_at)));
+        return Err(err(&format!("that item was trashed at {} but the Trash holds no item from that time, so it cannot be restored", shown(&entry.trashed_at))));
     }
     restore_uri(one)
+}
+
+// The app's one date form, YYYY-MM-DD HH:MM, cut from a DeletionDate stamp; a stamp of another shape prints as it is.
+fn shown(stamp: &str) -> String {
+    match stamp_secs(stamp) {
+        Some(_) => format!("{} {}", &stamp[..10], &stamp[11..16]),
+        None => stamp.to_string(),
+    }
 }
 
 // Both stamps keep whole seconds from the same trash event, so a few seconds cover truncation and scheduling.

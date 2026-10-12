@@ -1,4 +1,5 @@
 .import "../../ui/js/Tags.js" as Tags
+.import "../../ui/js/Filter.js" as Filter
 .import "../../ui/js/Search.js" as Search
 .import "../../ui/js/Menu.js" as Menu
 .import "menu.js" as MenuSuite
@@ -28,11 +29,13 @@ function run(check) {
     check("an add answer says Tagged", Tags.changedLine("add", 2, "Blue"), "Tagged 2 items Blue \u00b7 z undoes")
     check("a remove answer says Removed", Tags.changedLine("remove", 2, "Blue"), "Removed Blue from 2 items \u00b7 z undoes")
     check("a clear answer says all tags", Tags.changedLine("clear", 1, ""), "Removed all tags from 1 item \u00b7 z undoes")
-    check("one skipped row names it", Tags.skippedLine(["c.lnk"]), "c.lnk is not a file or folder, so it was left untagged")
-    check("many skipped rows count them", Tags.skippedLine(["a.lnk", "b.lnk"]), "2 items are not files or folders, so they were left untagged")
-    check("a skip beside a change joins both whole sentences", Tags.doneLine("add", 2, "Blue", ["c.lnk"]),
-        "Tagged 2 items Blue \u00b7 z undoes \u00b7 c.lnk is not a file or folder, so it was left untagged")
-    check("a skip with no change says only the skip", Tags.doneLine("add", 0, "Blue", ["c.lnk"]), "c.lnk is not a file or folder, so it was left untagged")
+    check("one skipped row counts one link", Tags.skippedLine(["c.lnk"]), "1 link skipped")
+    check("many skipped rows count links", Tags.skippedLine(["a.lnk", "b.lnk"]), "2 links skipped")
+    check("a skip beside a change joins the fragment ahead of the undo hint", Tags.doneLine("add", 2, "Blue", ["c.lnk"]),
+        "Tagged 2 items Blue \u00b7 1 link skipped \u00b7 z undoes")
+    check("two skips beside a change count links", Tags.doneLine("add", 3, "Red", ["a.lnk", "b.lnk"]),
+        "Tagged 3 items Red \u00b7 2 links skipped \u00b7 z undoes")
+    check("a skip with no change says only the skip", Tags.doneLine("add", 0, "Blue", ["c.lnk"]), "1 link skipped")
     check("a change with no skip says only the change", Tags.doneLine("remove", 2, "Blue", []), "Removed Blue from 2 items \u00b7 z undoes")
     check("an absent skip list says only the change", Tags.doneLine("add", 1, "Red", undefined), "Tagged 1 item Red \u00b7 z undoes")
     check("no change and no skip says nothing", Tags.doneLine("add", 0, "Red", undefined), "")
@@ -85,13 +88,15 @@ function run(check) {
     var openPane = { searchHere: true, searchQuery: "", searchMode: "", searchGen: 0, searchOpenedGen: 0,
         path: "/h/d", home: "/h", cursorIndex: 0, recentMode: "", recentFrom: "", recentPaths: [],
         searchFrom: "", searchBase: "", searchRunning: false, searchCancelled: false, searchScanned: 0,
-        windowSize: 200, pendingSelect: "",
+        windowSize: 200, pendingSelect: "", filterQuery: "x", filterTyping: true,
         rowFor: function () { return null },
         join: function (base, name) { return base + "/" + name },
         restoreRecentSort: function () {},
         backend: { searchOpen: function (scope) { openSent.push("searchopen " + scope) },
                    searchQuery: function (query) { openSent.push("searchquery " + query) } } }
-    new Function("root", "Search", "return function (name) {" + openBody + "}")({ pane: openPane }, Search)("Red")
+    new Function("root", "Search", "Filter", "return function (name) {" + openBody + "}")({ pane: openPane }, Search, Filter)("Red")
     check("a tag row click opens a session at home, not the pane's folder, then sends its tag query",
         openSent.join(","), "searchopen /h,searchquery tag:Red")
+    check("and it closes a standing filter first, so the red files without the filter's letter still list",
+        openPane.filterQuery + "|" + openPane.filterTyping + "|" + Filter.shown([{ n: "apple.txt" }, { n: "box.txt" }], 0, openPane.filterQuery), "|false|null")
 }

@@ -173,7 +173,8 @@ fn an_unresolvable_deferred_step_names_its_time_in_the_error() {
     let err = restore(&e).expect_err("an empty Trash means nothing to resolve");
     STAND_IN.with(|slot| *slot.borrow_mut() = None);
     assert!(err.msg.contains("no longer listed"), "the error says the entry is gone: {}", err.msg);
-    assert!(err.msg.contains("2026-10-06T00:00:00"), "with the time it was trashed: {}", err.msg);
+    assert!(err.msg.contains("2026-10-06 00:00"), "with the time it was trashed in the app's one date form: {}", err.msg);
+    assert!(!err.msg.contains("T00:00") && !err.msg.contains("T16:00"), "never the raw DeletionDate stamp: {}", err.msg);
 }
 
 #[test]
@@ -211,6 +212,8 @@ fn two_new_entries_for_one_path_refuse_rather_than_guess() {
     let err = restore(&e).expect_err("two new entries for one path cannot be told apart");
     STAND_IN.with(|slot| *slot.borrow_mut() = None);
     assert!(err.msg.contains("more than one new item"), "the refusal names the ambiguity, not a missing entry: {}", err.msg);
+    assert!(err.msg.contains("2026-10-07 16:00"), "with the time it was trashed in the app's one date form: {}", err.msg);
+    assert!(!err.msg.contains("T00:00") && !err.msg.contains("T16:00"), "never the raw DeletionDate stamp: {}", err.msg);
 }
 
 #[test]
@@ -252,7 +255,8 @@ fn a_settled_step_never_restores_a_later_item_from_the_same_place() {
     let err = restore(&e).expect_err("a later item from the same place must refuse");
     STAND_IN.with(|slot| *slot.borrow_mut() = None);
     assert!(err.msg.contains("no item from that time"), "the refusal names the time mismatch: {}", err.msg);
-    assert!(err.msg.contains("2026-10-07T16:00:00"), "with the time it was trashed: {}", err.msg);
+    assert!(err.msg.contains("2026-10-07 16:00"), "with the time it was trashed in the app's one date form: {}", err.msg);
+    assert!(!err.msg.contains("T00:00") && !err.msg.contains("T16:00"), "never the raw DeletionDate stamp: {}", err.msg);
 }
 
 #[test]
