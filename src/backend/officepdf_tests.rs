@@ -12,6 +12,7 @@ const MAKE_PDF: &str = r#"printf '%s' '%PDF-1.4 stub' > "$2/out.pdf""#;
 // A builtin read, so a kill leaves no child holding the fifo.
 const GATED: &str = r#"read -r _ < "$1"; printf '%s' '%PDF-1.4 gated' > "$2/out.pdf""#;
 const BROKEN: &str = "echo boom >&2; exit 3";
+const GATED_BROKEN: &str = r#"read -r _ < "$1"; echo boom >&2; exit 3"#;
 const HANGS: &str = "exec sleep 30";
 const BOUND: Duration = Duration::from_secs(20);
 
@@ -60,8 +61,18 @@ fn rig_in(d: &TestDir, script: &'static str, timeout: Duration, runner: Runner) 
 }
 
 impl Rig {
+    // The first line the request leaves: converting on a miss, otherwise the terminal line that frees its registry id.
     fn ask(&self, wire: usize, path: &Path) -> String {
-        self.svc.request(wire, path, &self.tx, &mut |_| self.claims.fetch_add(1, Ordering::SeqCst) + 1)
+        let reg = self.claims.fetch_add(1, Ordering::SeqCst) + 1;
+        self.svc.request(wire, reg, path, &self.tx);
+        match self.rx.recv_timeout(BOUND).expect("a request always answers") {
+            OpMsg::Meta { line } => line,
+            OpMsg::DetachedDone { id, line } => {
+                assert_eq!(id, reg, "an immediate answer frees its own registry id");
+                line
+            }
+            _ => panic!("a request answers with Meta or DetachedDone"),
+        }
     }
 
     // The end line a job leaves, with the registry id it frees.
@@ -133,7 +144,7 @@ fn a_hit_answers_ready_with_no_job() {
     Store::publish(&pdf, mtime_of(&src), &mut "cached".as_bytes()).unwrap();
     let line = r.ask(1, &src);
     assert_eq!(line, ready_line(1, &pdf));
-    assert_eq!((r.jobs(), r.claims.load(Ordering::SeqCst)), (0, 0), "a hit starts no job and registers nothing");
+    assert_eq!((r.jobs(), r.rx.try_recv().is_err()), (0, true), "a hit starts no job and leaves one line");
 }
 
 #[test]
@@ -299,7 +310,6 @@ fn without_soffice_no_request_is_served() {
     let src = d.file("a.docx", "doc");
     let line = r.ask(1, &src);
     assert_eq!(line, failed_line(1, "LibreOffice is not installed on this box.", true));
-    assert_eq!(r.claims.load(Ordering::SeqCst), 0, "nothing is registered");
     assert!(r.svc.locked().running.is_none() && r.svc.locked().queued.is_none());
 }
 
@@ -314,4 +324,77 @@ fn the_production_runner_converts_through_the_real_jail() {
     let pdf = r.svc.store.pdf_path(&Store::key(&src));
     assert_eq!(r.end().1, ready_line(1, &pdf));
     assert_eq!(std::fs::read(&pdf).unwrap(), b"%PDF-1.4 stub");
+}
+
+#[test]
+fn a_request_on_a_stuck_mount_answers_the_refusal_and_converts_nothing() {
+    let d = TestDir::new("officepdf-stuck");
+    let r = rig(&d, MAKE_PDF, CONVERT_TIMEOUT);
+    let src = d.file("a.docx", "doc");
+    let mount = iomount::mount_key(&src, &iomount::mount_body());
+    let _stuck = iomount::test_hold_stuck(mount.clone());
+    let line = r.ask(1, &src);
+    assert_eq!(line, failed_line(1, &format!("{} is not responding.", mount.display()), false));
+    assert_eq!((r.jobs(), r.fail_markers()), (0, 0), "a stuck mount starts no job and records nothing");
+}
+
+#[test]
+fn start_returns_before_the_worker_has_looked_at_the_file() {
+    let d = TestDir::new("officepdf-offloop");
+    let (mut r, (open_tx, open_rx)) = (rig(&d, MAKE_PDF, CONVERT_TIMEOUT), channel::<()>());
+    let gate = Mutex::new(open_rx);
+    Arc::get_mut(&mut r.svc).unwrap().resolve = Box::new(move || {
+        let _ = gate.lock().unwrap().recv_timeout(Duration::from_secs(3));
+        Some("/usr/bin/sh".to_string())
+    });
+    let src = d.file("a.docx", "doc");
+    r.svc.start(1, 1, src.clone(), r.tx.clone());
+    assert!(r.rx.try_recv().is_err(), "start returned while the worker still waited, so the caller's thread did no path work");
+    open_tx.send(()).unwrap();
+    assert!(matches!(r.rx.recv_timeout(BOUND), Ok(OpMsg::Meta { line }) if line == converting_line(1)));
+    assert_eq!(r.end(), (1, ready_line(1, &r.svc.store.pdf_path(&Store::key(&src)))));
+}
+
+#[test]
+fn a_queued_job_behind_a_failed_one_answers_failed_without_running_the_converter_again() {
+    let d = TestDir::new("officepdf-shared-failure");
+    let r = rig(&d, GATED_BROKEN, CONVERT_TIMEOUT);
+    let gate = d.join("a.docx");
+    mkfifo(&gate);
+    assert_eq!((r.ask(1, &gate), r.ask(2, &gate)), (converting_line(1), converting_line(2)));
+    within("the gate opens", move || drop(std::fs::OpenOptions::new().write(true).open(&gate).unwrap()));
+    let ends = [r.end(), r.end()];
+    assert!(ends.iter().all(|e| e.1.contains(r#""state":"failed""#) && e.1.contains("boom")), "{ends:?}");
+    assert_eq!((r.jobs(), r.fail_markers()), (1, 1), "the converter ran once for both requests");
+}
+
+#[test]
+fn a_local_publish_error_records_no_failure_and_the_next_request_converts() {
+    let d = TestDir::new("officepdf-local-error");
+    let r = rig(&d, MAKE_PDF, CONVERT_TIMEOUT);
+    let src = d.file("a.docx", "doc");
+    let pdf = r.svc.store.pdf_path(&Store::key(&src));
+    std::fs::create_dir_all(&pdf).unwrap();
+    assert_eq!(r.ask(1, &src), converting_line(1));
+    assert!(r.end().1.contains(r#""state":"failed""#));
+    assert_eq!(r.fail_markers(), 0, "a local error is not remembered for the file");
+    std::fs::remove_dir(&pdf).unwrap();
+    assert_eq!(r.ask(2, &src), converting_line(2));
+    assert_eq!(r.end().1, ready_line(2, &pdf));
+    assert_eq!(r.jobs(), 2);
+}
+
+#[test]
+fn the_cache_holds_the_figure_stores_bound_and_drops_the_oldest_conversion() {
+    let d = TestDir::new("officepdf-prune");
+    let mut r = rig(&d, MAKE_PDF, CONVERT_TIMEOUT);
+    Arc::get_mut(&mut r.svc).unwrap().store.entries = 2;
+    let files: Vec<PathBuf> = ["a", "b", "c"].iter().map(|n| d.file(&format!("{n}.docx"), n)).collect();
+    for (i, f) in files.iter().enumerate() {
+        r.ask(i + 1, f);
+        r.end();
+        std::thread::sleep(Duration::from_millis(30));
+    }
+    let kept: Vec<bool> = files.iter().map(|f| r.svc.store.pdf_path(&Store::key(f)).exists()).collect();
+    assert_eq!(kept, [false, true, true], "the first conversion went, the newest stays");
 }

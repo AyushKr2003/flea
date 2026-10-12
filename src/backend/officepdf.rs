@@ -1,16 +1,18 @@
 // An office document becomes one cached PDF: LibreOffice runs headless in the jail Convert uses, one job at a time, and the PDF viewer draws the result.
 use crate::backend::aliases::Aliases;
 use crate::backend::archivework::{run_boxed_cancellable_capped, Work};
-use crate::error::FleaError;
+use crate::backend::iomount;
 use crate::backend::md5;
 use crate::backend::mime::Db;
 use crate::backend::opsdispatch::Ops;
 use crate::backend::opsreq::OpMsg;
 use crate::backend::sandbox;
 use crate::backend::thumbcache::uri_for;
+use crate::error::FleaError;
+use crate::figurestore::{evict_leaf, Names};
 use crate::json::escape;
 use std::io::{Read, Write};
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
@@ -35,6 +37,10 @@ const PROFILE_URL: &str = "file:///tmp/flea-office-profile";
 pub const CONVERT_TIMEOUT: Duration = Duration::from_secs(60);
 const WATCH_STEP: Duration = Duration::from_millis(50);
 const ANY_EXECUTE_BIT: u32 = 0o111;
+// The bound the figure store keeps, over the PDFs and over the failure markers each.
+const MAX_ENTRIES: usize = 512;
+const MAX_BYTES: u64 = 512 * 1024 * 1024;
+const KEY_HEX_CHARS: usize = 32;
 
 pub fn is_office(name: &str, mime: &Db, aliases: &Aliases) -> bool {
     mime.lookup(name).is_some_and(|m| OFFICE_TYPES.contains(&aliases.canonical(m)))
@@ -67,13 +73,16 @@ pub enum Hit {
 }
 
 // The PDFs and the failure markers, each stamped with the source's mtime so a changed file converts again.
+#[derive(Clone)]
 pub struct Store {
     dir: PathBuf,
+    entries: usize,
+    bytes: u64,
 }
 
 impl Store {
     pub fn new(cache: &Path) -> Store {
-        Store { dir: cache.join(CACHE_LEAF) }
+        Store { dir: cache.join(CACHE_LEAF), entries: MAX_ENTRIES, bytes: MAX_BYTES }
     }
 
     pub fn key(path: &Path) -> String {
@@ -123,7 +132,17 @@ impl Store {
     }
 
     fn record_failure(&self, key: &str, mtime: SystemTime, message: &str) {
-        let _ = Store::publish(&self.fail_path(key), mtime, &mut message.as_bytes());
+        let dest = self.fail_path(key);
+        if Store::publish(&dest, mtime, &mut message.as_bytes()).is_ok() {
+            self.prune(dest.parent().unwrap_or(&self.dir));
+        }
+    }
+
+    // The figure store's bound over one leaf, oldest conversion first: ctime is the publish time, the mtime being the source's.
+    fn prune(&self, dir: &Path) {
+        let cached = |n: &str| n.split_once('.').is_some_and(|(stem, ext)| stem.len() == KEY_HEX_CHARS && stem.bytes().all(|b| b.is_ascii_hexdigit()) && (ext == "pdf" || ext == "txt"));
+        let age = |m: &std::fs::Metadata| SystemTime::UNIX_EPOCH + Duration::new(m.ctime().max(0) as u64, m.ctime_nsec() as u32);
+        evict_leaf(dir, self.entries, self.bytes, &Names { entry: &cached, scratch: &|_| false, age: &age });
     }
 }
 
@@ -186,24 +205,37 @@ impl Service {
         self.queue.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    // The line to write now; a miss answers converting and the end arrives as DetachedDone, so claim registers it for the quit.
-    pub fn request(self: &Arc<Self>, wire: usize, path: &Path, tx: &Sender<OpMsg>, claim: &mut dyn FnMut(&Arc<AtomicBool>) -> usize) -> String {
+    // Off the loop: the stat, the cache lookup and the conversion wait on a worker; reg is the quit registry id claimed on the loop.
+    pub fn start(self: &Arc<Self>, wire: usize, reg: usize, path: PathBuf, tx: Sender<OpMsg>) {
+        let me = Arc::clone(self);
+        std::thread::spawn(move || me.request(wire, reg, &path, &tx));
+    }
+
+    // Every terminal line leaves as DetachedDone, which frees reg; a miss first says converting and the end line follows.
+    fn request(self: &Arc<Self>, wire: usize, reg: usize, path: &Path, tx: &Sender<OpMsg>) {
+        let end = |line: String| drop(tx.send(OpMsg::DetachedDone { id: reg, line }));
         let Some(program) = (self.resolve)() else {
-            return failed_line(wire, "LibreOffice is not installed on this box.", true);
+            return end(failed_line(wire, "LibreOffice is not installed on this box.", true));
         };
-        let mtime = match std::fs::metadata(path).and_then(|m| m.modified()) {
-            Ok(mtime) => mtime,
-            Err(e) => return failed_line(wire, &crate::error::io_message(&e), false),
+        let (store, source) = (self.store.clone(), path.to_path_buf());
+        let probed = iomount::call(path, &iomount::mount_body(), "office", move || {
+            let mtime = std::fs::metadata(&source).and_then(|m| m.modified()).map_err(|e| crate::error::io_message(&e))?;
+            let key = Store::key(&source);
+            let hit = store.lookup(&key, mtime);
+            Ok::<_, String>((mtime, key, hit))
+        });
+        let (mtime, key, hit) = match probed {
+            Ok(Ok(found)) => found,
+            Ok(Err(message)) => return end(failed_line(wire, &message, false)),
+            Err(e) => return end(failed_line(wire, &e.msg, false)),
         };
-        let key = Store::key(path);
-        match self.store.lookup(&key, mtime) {
-            Hit::Ready(pdf) => return ready_line(wire, &pdf),
-            Hit::Failed(message) => return failed_line(wire, &message, false),
+        match hit {
+            Hit::Ready(pdf) => return end(ready_line(wire, &pdf)),
+            Hit::Failed(message) => return end(failed_line(wire, &message, false)),
             Hit::Miss => {}
         }
-        let waiter = Waiter { wire, reg: claim(&self.quit), tx: tx.clone() };
-        self.enqueue(Job { key, program, path: path.to_path_buf(), mtime, waiters: vec![waiter] });
-        converting_line(wire)
+        let _ = tx.send(OpMsg::Meta { line: converting_line(wire) });
+        self.enqueue(Job { key, program, path: path.to_path_buf(), mtime, waiters: vec![Waiter { wire, reg, tx: tx.clone() }] });
     }
 
     // The running job is never replaced; a newer request replaces the one queued behind it, and an equal one is answered from the cache once the running job lands.
@@ -243,27 +275,31 @@ impl Service {
         }
     }
 
-    // A hit made by another window since the request is served, so one file and mtime convert once.
+    // A hit or a recorded failure made by another window since the request is served, so one file and mtime convert once.
     fn convert(&self, job: &Job) -> Result<PathBuf, String> {
         if self.quit.load(Ordering::Relaxed) {
             return Err("cancelled".to_string());
         }
-        if let Hit::Ready(pdf) = self.store.lookup(&job.key, job.mtime) {
-            return Ok(pdf);
+        match self.store.lookup(&job.key, job.mtime) {
+            Hit::Ready(pdf) => return Ok(pdf),
+            Hit::Failed(message) => return Err(message),
+            Hit::Miss => {}
         }
-        let result = self.run(job);
-        if let Err(message) = &result {
-            if !self.quit.load(Ordering::Relaxed) {
-                self.store.record_failure(&job.key, job.mtime, message);
+        match self.run(job) {
+            Ok(pdf) => Ok(pdf),
+            Err(Fail::Local(message)) => Err(message),
+            Err(Fail::Converter(message)) => {
+                self.store.record_failure(&job.key, job.mtime, &message);
+                Err(message)
             }
         }
-        result
     }
 
-    fn run(&self, job: &Job) -> Result<PathBuf, String> {
-        let input = std::fs::canonicalize(&job.path).map_err(|e| crate::error::io_message(&e))?;
-        std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&self.store.dir).map_err(|e| crate::error::io_message(&e))?;
-        let mut work = Work::new(&self.store.dir, "office").map_err(|e| e.msg)?;
+    fn run(&self, job: &Job) -> Result<PathBuf, Fail> {
+        let local = |e: std::io::Error| Fail::Local(crate::error::io_message(&e));
+        let input = std::fs::canonicalize(&job.path).map_err(local)?;
+        std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&self.store.dir).map_err(local)?;
+        let mut work = Work::new(&self.store.dir, "office").map_err(|e| Fail::Local(e.msg))?;
         let argv = (self.build)(&job.program, &input, &work.dir);
         let (stop, finished, timed_out) = (AtomicBool::new(false), AtomicBool::new(false), AtomicBool::new(false));
         let ran = std::thread::scope(|s| {
@@ -285,19 +321,26 @@ impl Service {
         });
         if let Err(e) = ran {
             return Err(if timed_out.load(Ordering::Relaxed) {
-                format!("the conversion took longer than {} seconds", self.timeout.as_secs())
+                Fail::Converter(format!("the conversion took longer than {} seconds", self.timeout.as_secs()))
             } else if self.quit.load(Ordering::Relaxed) {
-                "cancelled".to_string()
+                Fail::Local("cancelled".to_string())
             } else {
-                e.msg
+                Fail::Converter(e.msg)
             });
         }
-        let produced = produced_pdf(&work.dir).ok_or_else(|| "the converter wrote no PDF".to_string())?;
+        let produced = produced_pdf(&work.dir).ok_or_else(|| Fail::Converter("the converter wrote no PDF".to_string()))?;
         let dest = self.store.pdf_path(&job.key);
-        let mut body = std::fs::File::open(&produced).map_err(|e| crate::error::io_message(&e))?;
-        Store::publish(&dest, job.mtime, &mut body).map_err(|e| crate::error::io_message(&e))?;
+        let mut body = std::fs::File::open(&produced).map_err(local)?;
+        Store::publish(&dest, job.mtime, &mut body).map_err(local)?;
+        self.store.prune(&self.store.dir);
         Ok(dest)
     }
+}
+
+// Only the converter's own failure is remembered for the file; a local error fails this request and leaves no marker.
+enum Fail {
+    Converter(String),
+    Local(String),
 }
 
 // The one regular, non-empty PDF the converter left in the work folder.
@@ -331,18 +374,15 @@ fn production() -> &'static Arc<Service> {
 
 // Sample input: {"c":"officepdf","id":4,"path":"/home/gm/Documents/report.docx"}.
 pub fn serve(out: &mut impl Write, ops: &mut Ops, mime: &Db, aliases: &Aliases, id: usize, path: &str) {
-    let line = if is_office(path, mime, aliases) {
-        let tx = ops.tx.clone();
-        production().request(id, Path::new(path), &tx, &mut |quit| {
-            let reg = ops.claim_id();
-            ops.detached.insert(reg, quit);
-            reg
-        })
-    } else {
-        failed_line(id, "that file is not an office document", true)
-    };
-    writeln!(out, "{line}").ok();
-    out.flush().ok();
+    if !is_office(path, mime, aliases) {
+        writeln!(out, "{}", failed_line(id, "that file is not an office document", true)).ok();
+        out.flush().ok();
+        return;
+    }
+    let service = production();
+    let reg = ops.claim_id();
+    ops.detached.insert(reg, &service.quit);
+    service.start(id, reg, PathBuf::from(path), ops.tx.clone());
 }
 
 #[cfg(test)]

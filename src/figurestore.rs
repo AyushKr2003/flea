@@ -129,16 +129,29 @@ fn put(dir: &Path, key: &str, svg: &str, entries: usize, bytes: u64) -> Option<(
 
 // Stale scratch goes, then the least recently used entries until the count and the bytes are within the bound.
 fn evict(dir: &Path, entries: usize, bytes: u64) {
+    evict_leaf(dir, entries, bytes, &Names { entry: &is_entry, scratch: &is_scratch, age: &|meta| meta.modified().unwrap_or(SystemTime::UNIX_EPOCH) });
+}
+
+// What a cache leaf calls its own and how old one of its files is, so another leaf can sit under the same bound.
+pub(crate) struct Names<'a> {
+    pub entry: &'a dyn Fn(&str) -> bool,
+    pub scratch: &'a dyn Fn(&str) -> bool,
+    pub age: &'a dyn Fn(&fs::Metadata) -> SystemTime,
+}
+
+pub(crate) fn evict_leaf(dir: &Path, entries: usize, bytes: u64, names: &Names) {
     let Ok(listing) = fs::read_dir(dir) else { return };
     let mut kept: Vec<(SystemTime, String, u64)> = Vec::new();
     for entry in listing.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
         let Ok(meta) = fs::symlink_metadata(entry.path()) else { continue };
+        let stamp = (names.age)(&meta);
         let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-        if is_scratch(&name) && SystemTime::now().duration_since(modified).is_ok_and(|age| age > SCRATCH_STALE) {
+        let stale = SystemTime::now().duration_since(modified).is_ok_and(|age| age > SCRATCH_STALE);
+        if (names.scratch)(&name) && stale {
             remove_ours(&entry.path());
-        } else if is_entry(&name) {
-            kept.push((modified, name, meta.len()));
+        } else if (names.entry)(&name) {
+            kept.push((stamp, name, meta.len()));
         }
     }
     kept.sort();
