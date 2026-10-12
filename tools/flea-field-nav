@@ -746,6 +746,15 @@ def preview_default(entrant):
     return "none"
 
 
+def arm_preview(arm):
+    """The preview mode an arm measures: its own, else the entrant's default; an explicit null or empty falls to the default."""
+    return arm.get("preview") or preview_default(arm["entrant"])
+
+
+def manifest_entrants(arms):
+    return {a["id"]: {"entrant": a["entrant"], "view": arm_view(a), "preview": arm_preview(a)} for a in arms}
+
+
 def measure(plan_path):
     """measure PLAN.json: {"out": JSONL, "runs": N, "fixtures": {"nav500": D, "enter": D, "preview": D,
     "nav10k": D, "nav100k": D, "navscroll"?: D}, "arms": [{"id", "entrant", "flea_dir"?, "view"?, "preview"?}],
@@ -785,9 +794,7 @@ def measure(plan_path):
         "date": time.strftime("%Y-%m-%d %H:%M:%S"), "host": socket.gethostname(),
         "plan": plan, "fixtures": facts,
         "monitor": {k: monitor_info.get(k) for k in ("name", "width", "height", "refreshRate", "scale")},
-        "entrants": {a["id"]: {"entrant": a["entrant"], "view": arm_view(a),
-                               "preview": a.get("preview", preview_default(a["entrant"]))}
-                     for a in arms},
+        "entrants": manifest_entrants(arms),
         "recorder": ctx["rec_bin"], "nav_quiet_s": 2, "nav_cap_s": 15,
         "nav_split": {"inview_steps": plan.get("inview_steps", INVIEW_STEPS),
                       "scroll_steps": plan.get("scroll_steps", SCROLL_STEPS), "scroll_fixture": scroll_fixture,
@@ -818,7 +825,7 @@ def measure(plan_path):
                         rows += [x for x in both if ("enter" in columns and x["column"].startswith("nav.enter"))
                                  or ("back" in columns and x["column"].startswith("nav.back"))]
                     if "preview" in columns:
-                        mode = arm.get("preview") or preview_default(arm["entrant"])
+                        mode = arm_preview(arm)
                         rows += run_preview(arm, plan["fixtures"]["preview"], ctx, keys, view,
                                             mode, kinds, opts)
                     if "ql" in columns:
@@ -1386,6 +1393,10 @@ def selftest():
         fail.append("pane_nocapture: no refusal")
     except RuntimeError as e:
         check("pane_nocapture_names", "no capture" in str(e), True)
+    # An arm with preview null or empty records the mode it measures, not null.
+    for off in (None, ""):
+        got = manifest_entrants([{"id": "a", "entrant": "flea", "preview": off}])["a"]["preview"]
+        check("manifest_preview_%r" % off, got, preview_default("flea"))
     shutil.rmtree(tmp_dir)
     if fail:
         print("\n".join("FAIL " + f for f in fail))

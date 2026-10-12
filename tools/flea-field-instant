@@ -1952,7 +1952,7 @@ def run_series(sess, sp, n):
         rows = SERIES[sp["type"]](sess, sp, n)
     except ExternalWindow as e:
         rows = sess.taken + [e.row]
-    except (RuntimeError, OSError, ValueError, subprocess.CalledProcessError) as e:
+    except (RuntimeError, OSError, ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         rows = sess.taken + [{"journey": sp["type"], "view": sess.view, "error": "%s: %s" % (type(e).__name__, e)}]
     for r in rows if sess.load else ():
         r.update({"load": sess.load.name, "load_note": sess.load.note})
@@ -1975,7 +1975,7 @@ def run_session(spec, ctx, out):
                 raise RuntimeError("load %s needs a %s fixture" % (spec["load"], "USB" if spec["load"] in ("b", "d") else "NAS"))
         sess = Session(ctx, fixture, spec["view"], spec["region"], right,
                        os.path.join(ctx["out_dir"], "flea-%s.log" % ctx["tag"]))
-    except (RuntimeError, OSError, subprocess.CalledProcessError) as e:
+    except (RuntimeError, OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         emit(out, {"journey": "session", "view": spec.get("view"), "fixture": where,
                    "error": "%s: %s" % (type(e).__name__, e)})
         if spec.get("load") in ("b", "d") and right is not None:
@@ -2107,7 +2107,10 @@ def run_part(part, root, tree, out_dir, samples=20, dry=False, evidence=True, on
     if part in ("p2-held", "smoke"):
         ctx["repeat"].update(repeat_probe(keys, ctx["repeat"]))
     mon = S.monitor()
-    head = subprocess.run(["git", "-C", tree, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    rev = subprocess.run(["git", "-C", tree, "rev-parse", "HEAD"], capture_output=True, text=True)
+    head = rev.stdout.strip()
+    if rev.returncode != 0 or not head:
+        raise SystemExit("flea tree %s is not a git tree, git rev-parse HEAD says: %s" % (tree, rev.stderr.strip() or "nothing"))
     out_path = os.path.join(out_dir, "census-%s.jsonl" % part)
     with open(out_path, "x") as out:
         emit(out, {"manifest": {"date": time.strftime("%Y-%m-%d %H:%M:%S"), "host": socket.gethostname(),
@@ -2333,6 +2336,8 @@ def gate(paths, out=None, only=None, pattern=None):
         if part in PARTS:
             seen_parts.add(part)
             part_manifests[part] = part_manifests.get(part, 0) + 1
+            if not m.get("flea_head"):
+                sample_lines.append("GATE MISSING %s manifest has an empty flea_head" % part)
             s = plan.get("samples", GATE_MIN_SAMPLES)
             if s < GATE_MIN_SAMPLES:
                 sample_lines.append("GATE MISSING %s plan samples %s, under the defined %s" % (part, s, GATE_MIN_SAMPLES))
@@ -2645,8 +2650,8 @@ def selftest():
           ["nav.grid.after-rename-k", "nav.grid.down", "nav.list.after-rename-j", "nav.list.down",
            "nav.list.pre-rename-k"])
     # Gate: the same verdicts as report, one BREACH line per journey over ceiling, missing never passes.
-    def run_gate(rows, part="x", samples=20, only=None, pattern=None):
-        mani2 = {"manifest": {"date": "d", "host": "h", "flea_head": "c7e23485e",
+    def run_gate(rows, part="x", samples=20, only=None, pattern=None, head="c7e23485e"):
+        mani2 = {"manifest": {"date": "d", "host": "h", "flea_head": head,
                               "plan": {"part": part, "samples": samples},
                               "repeat": {"delay_ms": 250, "rate": 40, "source": "plan"}}}
         with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
@@ -2788,6 +2793,22 @@ def selftest():
     code, gtext = run_gate(full, "p7-load", 2)
     check("gate_samples_code", code, 2)
     check("gate_samples_line", "plan samples 2, under the defined 20" in gtext, True)
+    # A census whose manifest has no flea_head never passes: it cannot name the tree it measured.
+    code, gtext = run_gate(full, "p7-load", 20, head="")
+    check("gate_empty_head_code", code, 2)
+    check("gate_empty_head_line", "GATE MISSING p7-load manifest has an empty flea_head" in gtext, True)
+    # A timed-out ipc call is an error row for its series, never an escape that kills the part.
+    def hung(sess, sp, n):
+        raise subprocess.TimeoutExpired("ipc", 10)
+
+    class Stub:
+        taken, view, load = [], "list", None
+    SERIES["hung"] = hung
+    try:
+        trows = run_series(Stub(), {"type": "hung"}, 1)
+    finally:
+        del SERIES["hung"]
+    check("series_timeout_row", [r.get("error", "")[:14] for r in trows], ["TimeoutExpired"])
     # A part census with two manifests never passes: a rerun must not pool with the old rows.
     with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
         for head in ("c7e23485e", "d8f34596f"):

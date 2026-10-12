@@ -175,7 +175,6 @@ ui/js/Nav.js 328
 ui/js/Markdown.js 155
 ui/js/MdBlocks.js 444
 ui/js/FigureWorker.mjs 619
-ui/js/Markdown.js 155
 ui/js/MdDocument.js 341
 ui/js/MdLeaf.js 309
 ui/js/MdHtml.js 307
@@ -195,6 +194,14 @@ ui/boot/fleatab.qml 50
 tests/unlock-stdin.qml 485"
 
 status=0
+
+# A name listed twice would hand the lookup two ceilings, so it is refused outright.
+# Sample input: ui/Preview.qml 724, the first field of each known_over_cap line is its name.
+dups=$(printf '%s\n' "$known_over_cap" | awk '{ print $1 }' | sort | uniq -d)
+if [ -n "$dups" ]; then
+  echo "DUPLICATE known_over_cap entry: $dups"
+  exit 1
+fi
 
 budget_for() {
   case "$1" in
@@ -217,7 +224,7 @@ while IFS= read -r file; do
   lines=$(wc -l < "$file")
   if [ "$lines" -gt "$hard" ]; then
     # Sample input: ui/Preview.qml 724, an exact per-file ceiling from known_over_cap.
-    recorded=$(printf '%s\n' "$known_over_cap" | awk -v f="$file" '$1 == f { print $2 }')
+    recorded=$(printf '%s\n' "$known_over_cap" | awk -v f="$file" '$1 == f { print $2; exit }')
     if [ -n "$recorded" ]; then
       if [ "$lines" -gt "$recorded" ]; then
         echo "GREW      $file: $lines lines, recorded $recorded, cap $hard"
