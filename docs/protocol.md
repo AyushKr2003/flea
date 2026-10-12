@@ -417,7 +417,7 @@ whole: no blank listing stands between two queries.
 A query asked while the walk still runs waits for the walk to land, up to
 150 ms after the first query held, the search hold (`ui/js/Swap.js`
 `HOLD_MS`, not the listing swap's cap `Swap.CAP_MS`, 66 ms), so it is answered once from the whole index; a newer query asked
-meanwhile replaces it and answers in its place. Past the cap the held query
+meanwhile replaces it and answers in its place. Past `HOLD_MS` the held query
 is answered from the partial index with `walking` true, and every later query
 of that walk is answered at once. A `searchcancel` answers a held query as
 its stop.
