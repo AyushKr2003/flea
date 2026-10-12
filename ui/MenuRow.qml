@@ -55,19 +55,19 @@ Item {
     }
     Component.onCompleted: root.mountTag()
     onEntryChanged: root.mountTag()
-    readonly property color markColor: root.errored ? Theme.color.error
-                                     : !root.available ? Theme.color.mutedFrame : root.danger ? Theme.color.error
-                                     : root.picked ? Theme.color.accent : Theme.color.mutedFrame
+    readonly property color markColor: root.errored ? root.errorInk
+                                     : !root.available ? Theme.color.mutedFrame : root.danger ? root.errorInk
+                                     : root.picked ? Theme.color.accent : root.lit ? Theme.color.markLit : Theme.color.mutedFrame
     // A lit row is washed, so its error ink and its hint are the lifted pair; a picked row keeps its accent fill and its ink.
     readonly property bool lit: root.current && !root.picked
     readonly property color errorInk: root.lit ? Theme.color.errorLit : Theme.color.error
     readonly property color labelColor: root.errored ? root.errorInk
                                       : !root.available ? Theme.color.muted : root.danger ? root.errorInk
-                                      : root.entry.labelColor !== undefined ? root.entry.labelColor
-                                      : root.picked ? Theme.color.accent : Theme.color.foreground
+                                      : root.entry.labelColor !== undefined ? (root.lit ? Theme.color.labelLit : root.entry.labelColor)
+                                      : root.picked ? Theme.color.accent : root.lit ? Theme.color.labelLit : Theme.color.foreground
 
-    // The hover lift Row.qml uses, so a menu row and a list row read alike.
-    readonly property real hoverOpacity: Theme.washHover
+    // The cursor fill, shared by the pointer and the keyboard: Theme derives it per palette to stand 3:1 off the menu surface.
+    readonly property real hoverOpacity: Theme.washCursor
     // The rail's mount-status square and the gap the Update Flea board puts between it and the version.
     readonly property int statusSquareSize: 6
     readonly property int statusSquareGap: 7
@@ -117,20 +117,6 @@ Item {
         // colour here and an opacity for the plain lift, never both at once.
         color: root.picked ? Style.selectedAccentFill : Theme.color.foreground
         opacity: root.picked ? 1 : (root.current ? root.hoverOpacity : 0)
-    }
-
-    // The cursor row's own hairline in the foreground, inside the row and clear of any separator by the chrome control inset, and of a card's border rule on both sides by the inset past that rule.
-    Rectangle {
-        objectName: "menuCursorFrame"
-        anchors.fill: parent
-        anchors.leftMargin: Theme.chromeControlInset + Theme.spacing.hairline
-        anchors.rightMargin: Theme.chromeControlInset + Theme.spacing.hairline
-        anchors.topMargin: Theme.chromeControlInset
-        anchors.bottomMargin: Theme.chromeControlInset
-        visible: root.current && !root.isSeparator
-        color: "transparent"
-        border.width: Theme.spacing.hairline
-        border.color: Theme.color.foreground
     }
 
     Rectangle {
@@ -298,7 +284,7 @@ Item {
             anchors.fill: parent
             visible: root.isSubmenu
             name: "chevron-right"
-            color: Theme.color.mutedFrame
+            color: root.lit ? Theme.color.markLit : Theme.color.mutedFrame
         }
     }
 

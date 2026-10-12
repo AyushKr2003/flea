@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Applies each of the 24 palettes (the 22 stock themes, the Cool Dawn and Sunset fixtures) to the real ui/Theme.qml and holds its text, frame and cursor roles to their floors; offscreen, no display or lock.
+# Applies each of the 24 palettes (the 22 stock themes, the Cool Dawn and Sunset fixtures) to the real ui/Theme.qml and holds its text, frame and cursor-fill roles to their floors; offscreen, no display or lock.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -42,7 +42,7 @@ palettes=$(wc -l < "$list")
 [ "$palettes" -eq "$palettes_expected" ] || fail "the sweep reads $palettes palettes, not $palettes_expected: a stock theme was added or removed, update palettes_expected here and paletteCount in tests/theme-contrast.qml with it"
 
 run_timeout_s=120
-expected_checks=$((palettes * 19 + 4))
+expected_checks=$((palettes * 23 + 4))
 config="$test_root/config"
 mkdir -p "$config" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
@@ -88,5 +88,5 @@ fi
 if [ "$verdict" -ne 0 ]; then
     exit 1
 fi
-printf '%s\n' "$output" | grep -a 'THEMECONTRAST ok '
+printf '%s\n' "$output" | grep -aE 'THEMECONTRAST (ok|info) '
 printf 'THEMECONTRAST PASS %s checks over %s palettes, text at 4.5, frames at 3, the lit menu row clear\n' "$passed" "$palettes"

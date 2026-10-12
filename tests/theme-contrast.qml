@@ -58,6 +58,8 @@ ShellRoot {
             Flea.MenuRow { id: litRow; width: 400; current: true; entry: ({ label: "Open", glyph: "folder-open", action: "open", hint: "enter" }) }
             Flea.MenuRow { id: litDangerRow; width: 400; current: true; entry: ({ label: "Move to Trash", glyph: "trash", action: "trash", danger: true, hint: "d" }) }
             Flea.DialogButton { id: secondaryButton; label: "Cancel" }
+            Flea.MenuRow { id: litNamedRow; width: 400; current: true; entry: ({ label: "Convert", glyph: "image", action: "convert", labelColor: Flea.Theme.color.foreground }) }
+            Flea.MenuRow { id: pickedRow; width: 400; picked: true; entry: ({ label: "Name", glyph: "file", action: "name" }) }
             Flea.MenuRow { id: restingRow; width: 400; entry: ({ label: "Copy", glyph: "copy", action: "copy", hint: "y" }) }
         }
     }
@@ -72,14 +74,6 @@ ShellRoot {
         }
         return null
     }
-    // The row's own frame, by its object name, with the inset it keeps and whether it shows.
-    function frameOf(row) {
-        var f = Probe.find(row, "menuCursorFrame")
-        if (f === null) return { count: 0 }
-        return { count: 1, color: Probe.rgba(f.border.color), width: f.border.width, visible: f.visible,
-                 margins: [f.anchors.leftMargin, f.anchors.rightMargin, f.anchors.topMargin, f.anchors.bottomMargin] }
-    }
-
     // The ground a wash draws over a surface: the colour's own alpha times the item's opacity (Contrast.parse drops the alpha of #AARRGGBB).
     function groundOf(wash, surface) {
         return Contrast.hexOf(Contrast.over(String(wash.color), wash.color.a * wash.opacity, surface))
@@ -98,20 +92,26 @@ ShellRoot {
         shell.atLeast(name, "metadata text", "background", Contrast.ratio(String(c.metadata), bg), Flea.Theme.textContrast)
         shell.atLeast(name, "metadata text", "surface", Contrast.ratio(String(c.metadata), surface), Flea.Theme.textContrast)
         shell.atLeast(name, "muted frame", "background", Contrast.ratio(String(c.mutedFrame), bg), Flea.Theme.frameContrast)
-        // The cursor frame draws over the wash on the card's surface, so the lower of the two grounds counts.
-        shell.atLeast(name, "foreground cursor frame", "surface and wash", Math.min(Contrast.ratio(fg, surface), Contrast.ratio(fg, lit)), Flea.Theme.frameContrast)
+        // The cursor is one fill, pointer and keyboard alike: at least a graphical object off the menu surface, and the label, glyph and hints read on it.
+        shell.atLeast(name, "cursor wash", "surface", Contrast.ratio(lit, surface), Flea.Theme.frameContrast)
+        shell.check(name + " cursor wash is never under the hover wash", Flea.Theme.washCursor >= Flea.Theme.washHover, true)
+        shell.atLeast(name, "lit row label", "wash", Contrast.ratio(String(c.labelLit), lit), Flea.Theme.textContrast)
+        shell.atLeast(name, "lit row glyph", "wash", Contrast.ratio(String(c.markLit), lit), Flea.Theme.frameContrast)
         shell.atLeast(name, "lit row hint", "wash", Contrast.ratio(String(c.mutedLit), lit), Flea.Theme.textContrast)
         shell.atLeast(name, "lit row danger label", "wash", Contrast.ratio(String(c.errorLit), lit), Flea.Theme.textContrast)
         // The error ink is never the quieter of the two beside a caption, on each ground it draws on.
         shell.atLeast(name, "error against the caption", "background", Contrast.ratio(String(c.error), bg), Contrast.ratio(String(c.muted), bg))
         shell.atLeast(name, "status error against the caption", "surface", Contrast.ratio(String(c.errorOnSurface), surface), Contrast.ratio(String(c.muted), surface))
         shell.atLeast(name, "lit danger label against the hint", "wash", Contrast.ratio(String(c.errorLit), lit), Contrast.ratio(String(c.mutedLit), lit))
-        // The lit row draws one hairline frame in the foreground, the chrome control inset inside its footprint (past a card's border rule at the sides); a resting row draws none.
-        var frame = shell.frameOf(litRow), inset = Flea.Theme.chromeControlInset, side = inset + Flea.Theme.spacing.hairline
-        shell.check(name + " lit row frame colour, width and margins", [frame.count, frame.color, frame.width, frame.margins, frame.visible],
-                    [1, rgba(c.foreground), Flea.Theme.spacing.hairline, [side, side, inset, inset], true])
-        shell.check(name + " resting row frame is hidden", shell.frameOf(restingRow).visible, false)
-        var hint = shell.textDrawn(litRow, "enter"), danger = shell.textDrawn(litDangerRow, "Move to Trash")
+        // The lit row draws no frame object at all; the fill is its whole cue.
+        shell.check(name + " lit row draws no cursor frame", Probe.find(litRow, "menuCursorFrame") === null, true)
+        // Not gated: the picked row's fill beside the cursor wash, both over the surface, for the ruling on a pick list.
+        var pickedWash = Probe.find(pickedRow, "menuWash")
+        if (pickedWash !== null) shell.log("info " + name + " picked fill over cursor wash " + (Math.round(Contrast.ratio(shell.groundOf(pickedWash, surface), lit) * 1000) / 1000) + " (picked fill on surface " + (Math.round(Contrast.ratio(shell.groundOf(pickedWash, surface), surface) * 1000) / 1000) + ", cursor wash on surface " + (Math.round(Contrast.ratio(lit, surface) * 1000) / 1000) + ")")
+        var hint = shell.textDrawn(litRow, "enter"), label = shell.textDrawn(litRow, "Open"), danger = shell.textDrawn(litDangerRow, "Move to Trash")
+        shell.check(name + " lit row label draws the lifted ink", label ? rgba(label.color) : "none", rgba(c.labelLit))
+        var named = shell.textDrawn(litNamedRow, "Convert")
+        shell.check(name + " lit row naming its own label ink draws the lifted ink", named ? rgba(named.color) : "none", rgba(c.labelLit))
         shell.check(name + " lit row hint draws the lifted ink", hint ? rgba(hint.color) : "none", rgba(c.mutedLit))
         shell.check(name + " lit row danger label draws the lifted ink", danger ? rgba(danger.color) : "none", rgba(c.errorLit))
         // A secondary dialog button's rest frame is the frame role; the sunset fixture sets a muted that the frame and text lifts take apart, so a frame left on muted is red there.

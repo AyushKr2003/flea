@@ -113,7 +113,7 @@ case_convertdesign() (
     [[ "$(jq -r .source.path <<< "$state")" == "$source" && "$(jq -r .outputText <<< "$state")" == "Output: $jpeg" ]] \
         || fail "convert: source or full output path differs from the captured item"
     menus_expect convertState '.error == "photo (converted).jpg already exists" and .outputLines > 1' 'collision names the output and its full path wraps'
-    menus_expect convertState "all(.formats[]; .labelColor == \"$(ipc themeForeground)\") and any(.formats[]; .selected and .markColor == \"$(ipc palette | cut -d' ' -f5)\")" 'format labels retain foreground while the chosen glyph takes the accent role'
+    menus_expect convertState "all(.formats[]; (.current and (.selected | not)) or .labelColor == \"$(ipc themeForeground)\") and any(.formats[]; .selected and .markColor == \"$(ipc palette | cut -d' ' -f5)\")" 'format labels retain foreground (the cursor row takes the lifted label on its fill) while the chosen glyph takes the accent role'
     shot convert-existing-output
     menus_control convertState Convert
     menus_expect convertState '.opened and .collision and (.busy | not)' 'disabled Convert cannot activate'
