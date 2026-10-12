@@ -73,6 +73,7 @@ tests/js/rail.js 429
 tests/js/picker.js 343
 tests/picker-grid.qml 450
 tests/picker-hunt.qml 448
+tests/permissions-focus.qml 406
 tests/js/network.js 307
 tests/js/ops.js 569
 tests/js/slowclick.js 309

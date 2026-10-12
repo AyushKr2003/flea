@@ -44,6 +44,8 @@ ShellRoot {
     property int failures: 0
     property int oldCursor: 0
     property double started: Date.now()
+    // When the dismissed stage first saw the dialog closed and the listing settled; the fade budget runs from here.
+    property double closedAt: 0
     property bool executing: false
     property bool finished: false
     property var observedRow: null
@@ -131,7 +133,7 @@ ShellRoot {
         if (stage === "menu") trace("after release")
         if (stage === "menu") check("release activates Permissions once", rowActivations, 1)
     }
-    function next(stage) { root.stage = stage; started = Date.now() }
+    function next(stage) { root.stage = stage; started = Date.now(); closedAt = 0 }
     function finish() {
         finished = true
         console.log("PERMFOCUS DONE checks=" + checks + " failed=" + failures)
@@ -275,8 +277,9 @@ ShellRoot {
             next("dismissed")
         } else if (stage === "dismissed") {
             if (dialog().opened || pane.listInFlight) return
+            if (!closedAt) closedAt = Date.now()
             // The 140 ms fade-out keeps the dialog drawn after opened flips; past fadeLimitMs a dialog still drawn fails the check below.
-            if (dialog().visible && Date.now() - started < fadeLimitMs) return
+            if (dialog().visible && Date.now() - closedAt < fadeLimitMs) return
             check("dialog is hidden", dialog().visible, false)
             console.log("PERMFOCUS focus " + label() + " " + ipcObject().seam.keyDeliveryState())
             check("listing owns keyboard", pane.listArea.activeFocus, true)
