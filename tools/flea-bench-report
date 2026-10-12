@@ -218,7 +218,7 @@ for id in "${ids[@]}"; do
   while IFS= read -r row; do
     cols=$(printf '%s\n' "$row" | tr ',' '\n' | grep -c .)
     [ "$cols" -le "$header_n" ] || die "$id's row has $cols fields against the header's $header_n, so a field holds a comma: $(printf '%s' "$row" | cut -d, -f"$ranked_col")"
-  done < <(tail -n +2 "$CSV" | grep "^$id,")
+  done < <(awk -F, -v id="$id" 'NR > 1 && $1 == id' "$CSV")
   # An entrant the write guard dropped in full has nothing to rank or average, which is not a disagreement.
   if [ -z "$(id_rows "$id")" ]; then
     if [ -n "$write_clean_col" ]; then
