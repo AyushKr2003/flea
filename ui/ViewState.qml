@@ -112,6 +112,9 @@ QtObject {
     // stored "dual", a window shape and not a view a pane can be in. PR 97, DouglasdeMoura.
     readonly property string view: Settings.contains(["list", "columns", "grid"], root.state.view)
                                    ? root.state.view : "list"
+    // Per-folder views stay separate from the fallback above and off until opted in, so an existing ui.json keeps its global view.
+    readonly property bool rememberViewPerFolder: root.state.rememberViewPerFolder === true
+    readonly property var folderViews: root.state.folderViews || ({})
     // The chooser's own last-used view (`pickerView` in src/uischema.rs); an undrawable word reads as the list.
     readonly property string pickerView: Settings.contains(["list", "grid"], root.state.pickerView)
                                          ? root.state.pickerView : "list"

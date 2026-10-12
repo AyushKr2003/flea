@@ -567,7 +567,8 @@ the moment `listInFlight` turns it unreadable, and is cleared instead by the row
 selection `Nav.forget` changes, which is at the request when nothing is held and at the swap when rows
 are. It still asks for nothing while a listing is out.
 
-**Who does not hold.** A tab switch into a tab with another view passes `clearAtOnce`,
+**Who does not hold.** A tab switch into a tab with another view, and a hop into a folder that
+keeps another view (`ui/js/Nav.js` compares the view before and after `restoreView`), pass `clearAtOnce`,
 because these rows were never listed in that view and would be built in it only to be built again. A
 pane still loading has nothing to hold. A walk's exit holds the whole search state, strip and rows,
 until the landing clears both in one turn: holding result rows with the strip already gone would draw
@@ -1291,11 +1292,12 @@ lands the value already held owes nothing at all. `tests/uiwriter.sh` drives two
 state file both ways round and holds a queued writer at the door while the CLI writes under it, and
 `tests/js/uistate.js` pins the patch bytes.
 
-**The two map-valued keys merge per entry.** A `folderSorts` patch entry names one
-folder and a `columnWidths` patch entry names one column edge, so one window's write keeps
-what another wrote since its read. A null `folderSorts` entry forgets that path instead,
-and only a patch may send one. A re-sort moves its folder to the newest end of the map.
-Past the 500 cap the oldest entries go and the newest stay.
+**The three map-valued keys merge per entry.** A `folderSorts` or `folderViews` patch
+entry names one folder and a `columnWidths` patch entry names one column edge, so one
+window's write keeps what another wrote since its read. A null `folderSorts` or
+`folderViews` entry forgets that path instead, and only a patch may send one. A re-sort
+or re-view moves its folder to the newest end of its map. Past either folder map's 500 cap
+the oldest entries go and the newest stay.
 
 **The window's read is the settled file, and not a raw one.** `main()` calls `Store::settle` before
 it hands off to `qs`: an empty patch through the same lock and the same per-key validation, so
