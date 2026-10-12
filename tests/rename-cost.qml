@@ -38,7 +38,7 @@ ShellRoot {
     readonly property int idleTicks: 20
     // An armed frame hook draws on every vsync, so an idle second past half of one is a leak, below it noise.
     readonly property int idleFloor: 30
-    // Frames one view may draw beyond its other phase over the same sixteen keys; dual alone drew 26 in one phase and 32 in the other of one case (a spread of 6, plus a margin of 2, census3-v038.suite.log), grid drew 40 to 45 frames and its after phase drew at most 1 above its before phase in 24 phase pairs of the logs under .superpowers/ip265a/logs and qs-out/latest.
+    // The paint-frame count may differ between the two phases of one run by up to this many in any non-dual view.
     readonly property int frameSlack: 4
     readonly property int frameSlackDual: 8
     readonly property int readsPerBump: 5
