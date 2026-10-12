@@ -231,6 +231,25 @@ class StaticGateTests(unittest.TestCase):
         self.assertEqual(gates.ellipsis(self.root, files),
                          (2, ['ui/LineApostrophe.qml:3' + stops, 'ui/LineBlock.qml:2' + stops]))
 
+    def test_ellipsis_checks_template_continuation_lines(self):
+        self.write('ui/js/Spanning.js', 'function label(n) {\n'
+                   '    return `Copied ${n}\n'
+                   '    files, Saving...`\n'
+                   '}\n')
+        self.write('ui/js/Middle.js', 'function label() {\n'
+                   '    return `first\n'
+                   '    Saving... more\n'
+                   '    last`\n'
+                   '}\n')
+        self.write('ui/js/Closed.js', 'function label() {\n'
+                   '    return `done`\n'
+                   '    // "Saving..." noted after the closed template\n'
+                   '}\n')
+        files = ['ui/js/Spanning.js', 'ui/js/Middle.js', 'ui/js/Closed.js']
+        stops = ': three full stops after a letter, use the ellipsis character'
+        self.assertEqual(gates.ellipsis(self.root, files),
+                         (3, ['ui/js/Middle.js:3' + stops, 'ui/js/Spanning.js:3' + stops]))
+
     def test_worker_announce_allows_only_the_counted_worker(self):
         self.write('ui/Bare.qml', 'Item { WorkerScript { source: "W.js" } }\n')
         self.write('ui/Said.qml', 'WorkerScript {\n    // WORKER_STARTED\n    Component.onCompleted: console.info(log, "WORKER_STARTED " + source)\n}\n')
