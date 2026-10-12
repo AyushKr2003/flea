@@ -26,9 +26,7 @@ function itemDone(t, index, name) {
                                  moved: (t.moved || 0) + sampled})
 }
 
-// Ok item lines held back from the card and folded in one write, so a thousand small files do not
-// rebuild it a thousand times. Sample input: itemsDone(t, [{index: 0, name: "a"}, {index: 1, name: "b"}])
-// is itemDone(itemDone(t, 0, "a"), 1, "b"), the card the lines would have made one by one.
+// Sample input: itemsDone(t, [{index: 0, name: "a"}, {index: 1, name: "b"}]) is itemDone(itemDone(t, 0, "a"), 1, "b") in one write.
 function itemsDone(t, held) {
     var next = t
     for (var i = 0; i < held.length; i++)

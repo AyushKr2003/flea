@@ -8,8 +8,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::mpsc::Sender;
 
-// A directory reports the bytes its tree has copied so far and no total, see copyfile.rs Progress.
-// Its journal steps land in `steps` either way: a failure that created its destination left a partial there.
+// A directory reports its tree's bytes so far and no total, and its partial journals in `steps` either way.
 pub(super) fn one_item(
     id: usize,
     index: usize,
@@ -31,7 +30,7 @@ pub(super) fn one_item(
     pace.ended(index, name);
     match &outcome {
         Ok(()) if moving => steps.push(undo::moved(src, dst, source)?),
-        Ok(()) => steps.push(Step::Copied { from: src.to_path_buf(), to: dst.to_path_buf(), source, created: identity_in(dst, table)?, manifest: None, manifest_nonce: None, merge: false, rename_fat: false }),
+        Ok(()) => steps.push(undo::copied_as(src, dst, source, identity_in(dst, table)?)),
         // The partial is this operation's, so it is journaled and undo removes it like any created path.
         Err(_) => {
             if let Some(path) = p.partial.take() {

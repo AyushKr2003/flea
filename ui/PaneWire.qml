@@ -121,7 +121,8 @@ Item {
 
     // Ok item lines wait here and join the card at the next other line or this beat, so a run of small files writes it once; a failure never waits.
     property var heldItems: []
-    Timer { id: heldItemBeat; interval: 100; onTriggered: root.flushItems() }
+    readonly property int heldItemBeatMs: 100
+    Timer { id: heldItemBeat; interval: root.heldItemBeatMs; onTriggered: root.flushItems() }
     function flushItems() {
         heldItemBeat.stop()
         if (root.heldItems.length === 0) return

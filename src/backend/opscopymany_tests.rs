@@ -3,6 +3,7 @@ use crate::backend::collide::Policy;
 use crate::backend::opsprobe;
 use crate::backend::opsreq::{run_transfer_checked, OpMsg};
 use crate::backend::testdir::TestDir;
+use crate::backend::undo::{self, ItemIdentity};
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::channel;
 use std::sync::Arc;
@@ -19,10 +20,10 @@ fn paste(files: usize) -> (opsprobe::Counts, usize) {
     let body = "x".repeat(FILE_BYTES);
     let paths: Vec<String> = (0..files).map(|n| d.file(&format!("src/f{:04}.bin", n), &body).to_string_lossy().into()).collect();
     assert!(src.is_dir());
-    opsprobe::reset();
+    let watch = opsprobe::watch(d.path());
     let (tx, rx) = channel();
     run_transfer_checked(1, false, paths, dst.clone(), Arc::new(AtomicBool::new(false)), tx, None, None, Policy::default());
-    let counts = opsprobe::snapshot();
+    let counts = watch.snapshot();
     let (mut ok, mut journaled) = (0, 0);
     for msg in rx.iter() {
         match msg {
@@ -49,4 +50,18 @@ fn a_paste_reads_the_mount_table_once_for_the_journal_and_resolves_the_source_fo
     let (counts, _) = paste(MANY);
     assert_eq!(counts.table_reads, 1, "one read of the mount table serves every journaled copy: {:?}", counts);
     assert_eq!(counts.resolves, 1, "one folder resolved serves every source in it: {:?}", counts);
+}
+
+#[test]
+fn a_pasted_file_journals_the_step_the_plain_copy_constructor_builds() {
+    let d = TestDir::new("copystep");
+    d.dir("src");
+    let src = d.file("src/one.bin", "x");
+    let dst = d.dir("dst");
+    let source = ItemIdentity::inspect(&src).unwrap();
+    let (tx, rx) = channel();
+    run_transfer_checked(1, false, vec![src.to_string_lossy().into()], dst.clone(), Arc::new(AtomicBool::new(false)), tx, None, None, Policy::default());
+    let steps = rx.iter().find_map(|msg| if let OpMsg::TransferDone { entry, .. } = msg { Some(entry.steps) } else { None }).unwrap();
+    let want = undo::copied(&src, &dst.join("one.bin"), source).unwrap();
+    assert_eq!(steps, vec![want], "the journal step is the one undo::copied builds for that file");
 }

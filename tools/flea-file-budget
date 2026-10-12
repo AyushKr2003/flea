@@ -45,7 +45,7 @@ src/backend/thumbspec.rs 410
 src/backend/dirsizeworker.rs 573
 src/backend/watch.rs 550
 src/backend/thumbreq.rs 448
-src/backend/undo.rs 675
+src/backend/undo.rs 684
 src/backend/undo_tests.rs 423
 src/backend/undoshare.rs 414
 src/backend/undoshare_tests.rs 550

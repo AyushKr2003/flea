@@ -13,7 +13,7 @@ pub(crate) struct Table {
 impl Table {
     pub(crate) fn read(dest: &Path) -> Table {
         #[cfg(test)]
-        crate::backend::opsprobe::table_read();
+        crate::backend::opsprobe::table_read(dest);
         Table::of(std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default(), dest)
     }
 
@@ -43,7 +43,7 @@ impl Parents {
     pub(crate) fn resolve(&mut self, parent: &Path) -> &Path {
         if !self.0.contains_key(parent) {
             #[cfg(test)]
-            crate::backend::opsprobe::resolve();
+            crate::backend::opsprobe::resolve(parent);
             self.0.insert(parent.to_path_buf(), parent.canonicalize().unwrap_or_else(|_| parent.to_path_buf()));
         }
         &self.0[parent]
