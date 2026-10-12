@@ -196,12 +196,15 @@ ShellRoot {
         return ""
     }
 
-    // Grid tiles read rows from the held snapshot (GridGeometry.heldRow), never pane.rowFor, so the grid leg counts on the rows array itself: any tile read while the view holds no count, and a read of a row at or past the landed count after.
+    // Grid tiles read rows from the held snapshot (GridGeometry.heldRow), never pane.rowFor, so the grid leg counts on the rows array itself: any read while the view holds no count, and a read of a row at or past the landed count after. heldRow tests the length before any index (GridGeometry.js:82), so a tile reads only the length of an empty array.
+    function pastHeld(key) {
+        return root.counts.empty || (key !== "length" && /^\d+$/.test(key) && Number(key) + root.stubPane.held >= root.counts.landTotal)
+    }
     function watched(rows) {
         if (root.which !== "grid") return rows
         return new Proxy(rows, { get: function (target, key) {
-            if (typeof key === "string" && /expression for row@\S*GridArea\.qml/.test(new Error().stack)
-                    && (key === "length" ? root.counts.empty : /^\d+$/.test(key) && Number(key) + root.stubPane.held >= root.counts.landTotal))
+            // Sample input, one frame of the stack: "expression for row@qs:@/qs/flea/GridArea.qml:195"
+            if (typeof key === "string" && /expression for row@\S*GridArea\.qml/.test(new Error().stack) && root.pastHeld(key))
                 root.counts.readPast += 1
             return target[key]
         } })
@@ -213,9 +216,9 @@ ShellRoot {
         root.counts.landTotal = total
         root.counts.readPast = 0
         p.listInFlight = true
+        root.counts.empty = true
         p.total = 0
         p.held = 0
-        root.counts.empty = true
         p.rows = root.watched([])
         p.kindNames = []
         p.cursorIndex = 0
@@ -309,6 +312,23 @@ ShellRoot {
         if (seen === 0) root.failures.push("readPast control: a known past read counted 0, so the past-read check is blind")
     }
 
+    // Positive control for the empty window: an index read while the view holds no count must be counted, and one inside the landed count must not.
+    function emptyWindowControl() {
+        var keepEmpty = root.counts.empty, keepTotal = root.counts.landTotal
+        root.counts.landTotal = root.stubPane.held + 50
+        root.counts.empty = true
+        var inEmpty = root.pastHeld("3") && root.pastHeld("length")
+        root.counts.empty = false
+        var landed = root.pastHeld("3") || root.pastHeld("length")
+        var past = root.pastHeld("60")
+        root.counts.empty = keepEmpty
+        root.counts.landTotal = keepTotal
+        console.log("POOLPARK " + root.which + " empty window control=" + inEmpty + " landed=" + landed + " past=" + past)
+        if (!inEmpty) root.failures.push("empty window control: an index read while the view holds no count was not counted")
+        if (landed) root.failures.push("empty window control: a read inside the landed count was counted")
+        if (!past) root.failures.push("empty window control: a read past the landed count was not counted")
+    }
+
     property int step: 0
     property var before: []
 
@@ -358,6 +378,7 @@ ShellRoot {
                 p.selectionVersion += 1
                 root.check("enter b moved", "b_")
                 root.readPastControl()
+                root.emptyWindowControl()
             } else if (root.step === 6) {
                 // A filter narrows the listing below one screenful in every view, parking the tail, then clears and takes it back.
                 var list = []
