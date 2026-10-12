@@ -45,9 +45,14 @@ EOS
     done
 }
 
+# True while the IPC seam answers; it is built when the primary pane leaves loading (ui/WindowBody.qml ipcLoader, AGENTS.md "The IPC seam").
+heldcolumns_seam_up() {
+    [[ -n "$(timeout 2 omarchy-drive ipc -p "$flea_ui/boot" flea state 2>/dev/null)" ]]
+}
+
 # Columns heroes for a held listing and a denied folder, at 2 to 5 columns.
 case_cap_heldcolumns() {
-    local dir listing markers real_bin n seen read_by estate err_by denied
+    local dir listing markers real_bin n estate err_by denied
     dir="$fixture_root/cap-heldcolumns"
     listing="$dir/listing"
     markers="$dir/markers"
@@ -62,24 +67,20 @@ case_cap_heldcolumns() {
         seed_ui_state "$fixture_root/cap-heldcolumns-state-$n" '{"view":"columns","columnsLimit":'"$n"'}'
         export FLEA_HANGLISTING_REAL="$real_bin" FLEA_HANGLISTING_DELAY=15 FLEA_HANGLISTING_MARKER="$markers/held-$n"
         flea_bin="$dir/flea-proxy"
-        launch "$listing"
+        # launch_window, not launch: the seam is built only once the pane leaves loading, so a held listing hides loading from every IPC reader until the wait ends.
+        launch_window "$listing"
+        printf 'LAUNCH path=%q pid=%s\n' "$listing" "$(flea_pid)"
         flea_bin="$real_bin"
         wait_marker "$markers/held-$n" "heldcolumns: limit $n never held its listing"
-        seen=""
-        read_by=$(( $(date +%s%3N) + 10000 ))
-        while (( $(date +%s%3N) < read_by )); do
-            seen=$(ipc state 2>/dev/null || true)
-            [[ "$seen" == "loading" ]] && break
-            sleep 0.1
-        done
-        [[ "$seen" == "loading" ]] || fail "heldcolumns: limit $n never read loading, state is $seen"
-        [[ "$(ipc viewMode)" == "columns" ]] || fail "heldcolumns: limit $n opened in $(ipc viewMode), not columns"
-        # Past the 150 ms hold-off, before the 10 s deadline.
-        sleep 1
-        [[ "$(ipc state)" == "loading" ]] || fail "heldcolumns: limit $n left loading before its reading shot"
+        # No seam yet is the loading proof: it is built on the first non-loading state, and the proxy holds the rows past the 10 s wait.
+        heldcolumns_seam_up && fail "heldcolumns: limit $n left loading before its reading shot, state is $(ipc state)"
+        # Past the 150 ms hold-off, before the 10 s wait.
         heldcolumns_fade_wait
         shot "heldcolumns-$n-reading"
+        heldcolumns_seam_up && fail "heldcolumns: limit $n left loading under its reading shot, state is $(ipc state)"
         wait_pane_waiting heldcolumns
+        assert_window
+        [[ "$(ipc viewMode)" == "columns" ]] || fail "heldcolumns: limit $n opened in $(ipc viewMode), not columns"
         [[ "$(ipc stateMessage)" == "That folder is not responding." ]] || fail "heldcolumns: limit $n spoke $(ipc stateMessage)"
         heldcolumns_fade_wait
         shot "heldcolumns-$n-waiting"

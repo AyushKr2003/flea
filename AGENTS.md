@@ -1154,7 +1154,7 @@ The IPC seam (`ui/Ipc.qml`, `ui/IpcMenuState.qml`, `ui/IpcPreviewState.qml`, 77,
 the first rows: `ui/WindowBody.qml`'s asynchronous `ipcLoader` activates once when the primary pane leaves `loading` (a listing that
 never answers ends in `waiting` after 10 s, which builds it too), so the first window compiles 166 of 169 units (165 of 168 before `ui/Glass.qml`) and the target `flea`
 exists a few milliseconds after the rows. A client that drives or times a launch through IPC waits for `ready` (`tests/ui.sh assert_theme`)
-and never assumes the target at map; the Loader is the one object this adds to the startup gate, which is why `startupObjectLimit` was 619 then; it is 623 since background-only opacity, the spinner's still second and the list's cursor mark, see "The startup object gate". The move takes the `ui/WindowBody.qml` ceiling from 651 to 657, re-derived with `wc -l`.
+and never assumes the target at map, so a native case holding the first listing reads no `loading` over IPC: `ui:cap_heldcolumns` takes that proof from the seam still being absent under its reading shot and launches without `assert_window`, and `tests/heldcolumns.sh` pins loading, waiting and the landing offscreen; the Loader is the one object this adds to the startup gate, which is why `startupObjectLimit` was 619 then; it is 623 since background-only opacity, the spinner's still second and the list's cursor mark, see "The startup object gate". The move takes the `ui/WindowBody.qml` ceiling from 651 to 657, re-derived with `wc -l`.
 
 **`QT_QPA_PLATFORMTHEME=gtk3` starts GTK inside the shell**, about 60 ms warm and 7 MB of PSS, and
 the one thing Flea takes from that theme is the icon theme name. Omarchy writes the same name to
