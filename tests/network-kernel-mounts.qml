@@ -44,6 +44,12 @@ ShellRoot {
         + "33 1 0:47 / /mnt/kmount-idle rw - autofs systemd-1 rw\n"
         + "34 1 0:48 / /mnt/kmount-bulk rw - nfs nas:/exports/bulk rw\n"
 
+    // A systemd automount: idle is the autofs line alone, triggered stacks the real fstype on the same mountpoint; tests/network-kernel-mounts.sh traces any syscall naming the idle path.
+    property string idleAutomount: "/mnt/flea-idle-automount"
+    property string automountLines: "37 1 0:60 / /mnt/flea-live-automount rw - autofs systemd-1 rw,fd=44,pgrp=1,timeout=0,minproto=5,maxproto=5,direct\n"
+        + "38 37 0:61 / /mnt/flea-live-automount rw - nfs4 nas:/exports/live rw\n"
+        + "39 1 0:62 / " + root.idleAutomount + " rw - autofs systemd-1 rw,fd=45,pgrp=1,timeout=0,minproto=5,maxproto=5,direct\n"
+
     // The stub gio logs every call and the backend stays null, so a gio or backend call under the mountpoint cannot pass silently.
     NetworkMounts {
         id: network
@@ -107,9 +113,10 @@ ShellRoot {
             network.bookmarksText = ""
             var home = Quickshell.env("HOME")
             network.rebuild(root.minfo + "35 1 0:50 / " + home + "/gdrive rw - fuse.rclone remote: rw\n"
-                + "36 1 0:51 / /mnt/kmount-rclone rw - fuse.rclone remote: rw\n")
+                + "36 1 0:51 / /mnt/kmount-rclone rw - fuse.rclone remote: rw\n"
+                + root.automountLines)
             var entries = network.entries
-            root.eq("count", entries.length, 6)
+            root.eq("count", entries.length, 7)
             if (root.finished)
                 return
             var share = entries[0]
@@ -186,6 +193,17 @@ ShellRoot {
             if (root.finished)
                 return
             root.eq("outhome-mark", Eject.releasable(rout), false)
+            if (root.finished)
+                return
+            // An idle automount is an autofs line, not a network fstype: it draws no row, so the rail has nothing to open there.
+            root.eq("idle-automount-no-row", entries.filter(function (e) {
+                return JSON.stringify(e).indexOf("flea-idle-automount") >= 0 }).length, 0)
+            if (root.finished)
+                return
+            // Once the share is mounted the stacked line wins and the row reads like every other kernel row.
+            root.eq("live-automount", root.entryFields(entries[6]),
+                { label: "flea-live-automount", kind: "share", group: "network", path: "/mnt/flea-live-automount",
+                  uri: "/mnt/flea-live-automount", fstype: "nfs4", mounted: true, glyph: "server", editable: false })
             if (root.finished)
                 return
             network.activate(root.indexOf("file:///mnt/kmount-iso"), null)
