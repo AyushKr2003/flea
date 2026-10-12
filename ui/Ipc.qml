@@ -264,8 +264,10 @@ QtObject {
         }
         function permissionsState(): string {
             var probe = root, dialog = probe.permissionsDialog, inputReady = probe.pane.listArea.activeFocus && !probe.pane.listInFlight
-            if (!dialog) return JSON.stringify({opened: false, inputReady: inputReady})
-            return JSON.stringify({opened: dialog.opened, inputReady: !dialog.opened && !dialog.visible && inputReady, facts: dialog.facts, path: dialog.path, mode: dialog.modeText,
+            // A metadata write owes the pane a re-read that restores the marks it took; a click made before it lands is overwritten.
+            var owed = probe.pane.wire.stale || probe.pane.wire.anchor !== null
+            if (!dialog) return JSON.stringify({opened: false, inputReady: inputReady, rereadOwed: owed})
+            return JSON.stringify({opened: dialog.opened, inputReady: !dialog.opened && !dialog.visible && inputReady, rereadOwed: owed, facts: dialog.facts, path: dialog.path, mode: dialog.modeText,
                 title: root.firstVisibleText(dialog.cardItem), paths: dialog.multiPaths,
                 displayedError: dialog.displayedError, displayedSummary: dialog.displayedSummary,
                 bodyRect: root.cardRectOf(dialog.bodyItem), octalFrame: root.roleOf(dialog.octalFrame.border.color),

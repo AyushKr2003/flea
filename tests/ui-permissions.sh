@@ -528,7 +528,7 @@ permissions_eligibility() {
             Escape) key -k Escape >/dev/null ;;
             Apply) permissions_control Apply ;;
         esac
-        permissions_wait '(.opened == false) and .inputReady' "$dismissal returns listing input after the batch dialog"
+        permissions_wait '(.opened == false) and .inputReady and (.rereadOwed == false)' "$dismissal returns listing input after the batch dialog and the owed re-read lands"
         permissions_expect focusView list
         if [[ "$dismissal" == Apply ]]; then
             [[ "$(stat -c '%a' "$permissions_listing/notes.md")" == "$notes_applied" \
