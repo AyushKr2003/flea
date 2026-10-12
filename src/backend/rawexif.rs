@@ -24,8 +24,11 @@ pub(crate) const STRIP_OFF: u16 = 0x0111;
 pub(crate) const STRIP_LEN: u16 = 0x0117;
 pub(crate) const COMPRESSION: u16 = 0x0103;
 pub(crate) const RW2_JPGFROMRAW: u16 = 0x002E;
-pub(crate) const OLY_PREVIEW_START: u16 = 0x0101;
-pub(crate) const OLY_PREVIEW_LEN: u16 = 0x0102;
+pub(crate) const OLY_SETTINGS: u16 = 0x2020;
+// Olympus.pm names the preview start and length by these pairs: 0x0088 and 0x1036 in the note's IFD, 0x0101 in the CameraSettings IFD.
+pub(crate) const OLY_PAIR_A: (u16, u16) = (0x0088, 0x0089);
+pub(crate) const OLY_PAIR_B: (u16, u16) = (0x1036, 0x1037);
+pub(crate) const OLY_PAIR_SETTINGS: (u16, u16) = (0x0101, 0x0102);
 
 // A displayed string is short, so anything longer is a corrupt count, not a name.
 const MAX_STR: usize = 64;

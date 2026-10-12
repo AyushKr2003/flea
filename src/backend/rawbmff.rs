@@ -18,6 +18,10 @@ const PRVW_TAG_AT: usize = 12;
 const PRVW_LEN_AT: usize = 28;
 // A THMB payload is u32, width, height, JPEG length(4) and 4 reserved bytes, then the JPEG.
 const THMB_HEAD: u64 = 16;
+// A plain box header is size(4) and type(4).
+const BOX_HEAD: u64 = 8;
+// A uuid box names its owner with a usertype of this length right after its header.
+const USERTYPE: u64 = 16;
 // CMT TIFFs are metadata, so anything larger is a corrupt size, not a directory.
 const MAX_CMT: u64 = 262_144;
 
@@ -72,17 +76,17 @@ fn merge(dst: &mut RawFacts, src: RawFacts) {
     }
 }
 
-// The next plain size+type box at p inside end: its type and size, or None where the walk stops.
+// Sample input: 00 00 00 20 54 48 4D 42 at p, the header of a 32-byte "THMB" box, answered as ("THMB", 32) while it fits before end.
 fn child(ctx: &mut Ctx, p: u64, end: u64) -> Option<([u8; 4], u64)> {
-    let h = ctx.read_at(p, 8)?;
+    let h = ctx.read_at(p, BOX_HEAD as usize)?;
     let size = be32(&h[0..4])? as u64;
-    if size < 8 || p.checked_add(size)? > end {
+    if size < BOX_HEAD || p.checked_add(size)? > end {
         return None;
     }
     Some(([h[4], h[5], h[6], h[7]], size))
 }
 
-// The Canon uuid payload is plain size+type boxes: CMT1, CMT2, THMB and whatever else.
+// Sample input after the Canon usertype: size(4) "CMT1" TIFF bytes, then size(4) "THMB" 16 header bytes and the JPEG, answered as the CMT facts and the THMB span.
 fn canon(ctx: &mut Ctx, off: u64, len: u64, cands: &mut Vec<(u64, u64)>, facts: &mut RawFacts) {
     let end = match off.checked_add(len) {
         Some(e) if e <= ctx.len => e,
@@ -96,21 +100,21 @@ fn canon(ctx: &mut Ctx, off: u64, len: u64, cands: &mut Vec<(u64, u64)>, facts: 
             break;
         };
         if kind == *b"CMT1" || kind == *b"CMT2" {
-            let dl = size - 8;
+            let dl = size - BOX_HEAD;
             if dl > 0 && dl <= MAX_CMT {
-                if let Some(b) = ctx.read_blob(p + 8, dl) {
+                if let Some(b) = ctx.read_blob(p + BOX_HEAD, dl) {
                     // CMT1 is an IFD0 TIFF and CMT2 an EXIF TIFF, which is what their tops are read as.
                     merge(facts, rawtiff::facts_from_slice(&b, kind == *b"CMT2"));
                 }
             }
-        } else if kind == *b"THMB" && size > 8 + THMB_HEAD {
-            cands.push((p + 8 + THMB_HEAD, size - 8 - THMB_HEAD));
+        } else if kind == *b"THMB" && size > BOX_HEAD + THMB_HEAD {
+            cands.push((p + BOX_HEAD + THMB_HEAD, size - BOX_HEAD - THMB_HEAD));
         }
         p += size;
     }
 }
 
-// The Canon uuid is a child of the top-level moov box, found among the other children by its usertype.
+// Sample input in the moov payload: size(4) "uuid" 85 C0 B6 87 and 12 more usertype bytes, then boxes, answered as those boxes handed to canon.
 fn moov(ctx: &mut Ctx, off: u64, len: u64, cands: &mut Vec<(u64, u64)>, facts: &mut RawFacts) {
     let end = match off.checked_add(len) {
         Some(e) if e <= ctx.len => e,
@@ -123,12 +127,12 @@ fn moov(ctx: &mut Ctx, off: u64, len: u64, cands: &mut Vec<(u64, u64)>, facts: &
         let Some((kind, size)) = child(ctx, p, end) else {
             break;
         };
-        if kind == *b"uuid" && size >= 8 + 16 {
-            let Some(ut) = ctx.read_at(p + 8, 16) else {
+        if kind == *b"uuid" && size >= BOX_HEAD + USERTYPE {
+            let Some(ut) = ctx.read_at(p + BOX_HEAD, USERTYPE as usize) else {
                 break;
             };
             if ut.as_slice() == MOOV_UUID {
-                canon(ctx, p + 24, size - 24, cands, facts);
+                canon(ctx, p + BOX_HEAD + USERTYPE, size - BOX_HEAD - USERTYPE, cands, facts);
             }
         }
         p += size;
@@ -142,13 +146,13 @@ pub(crate) fn inspect_file(ctx: &mut Ctx) -> Option<(Vec<(u64, u64)>, RawFacts)>
     let mut n = 0u32;
     while pos < ctx.len && n < MAX_BOXES {
         n += 1;
-        let Some(h) = ctx.read_at(pos, 8) else {
+        let Some(h) = ctx.read_at(pos, BOX_HEAD as usize) else {
             break;
         };
         let mut size = be32(&h[0..4])? as u64;
-        let mut hlen = 8u64;
+        let mut hlen = BOX_HEAD;
         if size == 1 {
-            let Some(e) = ctx.read_at(pos + 8, 8) else {
+            let Some(e) = ctx.read_at(pos + BOX_HEAD, 8) else {
                 break;
             };
             size = u64::from_be_bytes(e[0..8].try_into().ok()?);
@@ -166,13 +170,13 @@ pub(crate) fn inspect_file(ctx: &mut Ctx) -> Option<(Vec<(u64, u64)>, RawFacts)>
         let kind = h.get(4..8);
         if kind == Some(b"moov".as_slice()) {
             moov(ctx, pos + hlen, size - hlen, &mut cands, &mut facts);
-        } else if kind == Some(b"uuid".as_slice()) && size >= hlen + 16 {
+        } else if kind == Some(b"uuid".as_slice()) && size >= hlen + USERTYPE {
             // A uuid box shorter than its header and usertype holds no payload.
-            let Some(ut) = ctx.read_at(pos + hlen, 16) else {
+            let Some(ut) = ctx.read_at(pos + hlen, USERTYPE as usize) else {
                 break;
             };
             if ut.as_slice() == PRVW_UUID {
-                if let Some(c) = prvw(ctx, pos + hlen + 16, size - hlen - 16) {
+                if let Some(c) = prvw(ctx, pos + hlen + USERTYPE, size - hlen - USERTYPE) {
                     cands.push(c);
                 }
             }

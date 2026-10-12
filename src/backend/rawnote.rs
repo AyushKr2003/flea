@@ -1,6 +1,6 @@
 // The MakerNote walk: a note is entered only when it opens with a known signature, and the layouts are the vendors' own, not one shared header.
 use crate::backend::rawexif as ex;
-use crate::backend::rawtiff::{rd16, rd32, walk_ifd, IfdLoc, Src, Walk};
+use crate::backend::rawtiff::{rd16, rd32, walk_ifd, IfdLoc, Oly, Src, Walk};
 
 // A MakerNote signature plus its header fit here; the note's payload is never read whole.
 const SIG_WINDOW: usize = 64;
@@ -8,6 +8,8 @@ const SIG_WINDOW: usize = 64;
 const NIKON_TIFF_AT: u64 = 10;
 // Sample input: "OLYMPUS\0" "II" 03 00, then the IFD at +12 with offsets counted from the note's start.
 const OLYMPUS_IFD_AT: u64 = 12;
+// Sample input: "OM SYSTEM\0" 00 00, "II" 04 00, then the IFD at +16 with offsets counted from the note's start.
+const OM_IFD_AT: u64 = 16;
 // Sample input: "OLYMP\0" 01 00, then the IFD at +8 in the file's byte order with the file's offsets.
 const OLYMP_IFD_AT: u64 = 8;
 // Sample input: "AOC\0" "MM", then the IFD at +6 with the file's offsets.
@@ -50,6 +52,8 @@ fn layout<S: Src>(
         (sub, le, ifd, false)
     } else if head.starts_with(b"OLYMPUS\x00") {
         (at, order_at(head, 8)?, OLYMPUS_IFD_AT, true)
+    } else if head.starts_with(b"OM SYSTEM\x00") {
+        (at, order_at(head, 12)?, OM_IFD_AT, true)
     } else if head.starts_with(b"OLYMP\x00") {
         (loc.base, loc.little_endian, file_ifd(OLYMP_IFD_AT)?, true)
     } else if head.starts_with(b"AOC\x00") {
@@ -89,7 +93,7 @@ pub(crate) fn makernote<S: Src>(
         in_sub_ifd: true,
         index_in_chain: 0,
         is_exif: false,
-        olympus_base: olympus.then_some(base),
+        olympus: if olympus { Oly::Note } else { Oly::No },
     };
     let _ = walk_ifd(src, w, &child, ifd);
     Some(())

@@ -64,7 +64,25 @@ impl Walk {
     }
 }
 
-// Where one IFD sits: the base its offsets count from, byte order, nesting, chain position and Olympus owner, in one value.
+// Which Olympus table an IFD is read with: the note's own IFD or the CameraSettings IFD under its 0x2020 tag.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum Oly {
+    No,
+    Note,
+    Settings,
+}
+
+impl Oly {
+    fn pairs(self) -> &'static [(u16, u16)] {
+        match self {
+            Oly::No => &[],
+            Oly::Note => &[ex::OLY_PAIR_A, ex::OLY_PAIR_B],
+            Oly::Settings => &[ex::OLY_PAIR_SETTINGS],
+        }
+    }
+}
+
+// Where one IFD sits: the base its offsets count from, byte order, nesting, chain position and Olympus table, in one value.
 pub(crate) struct IfdLoc {
     pub base: u64,
     pub little_endian: bool,
@@ -72,7 +90,7 @@ pub(crate) struct IfdLoc {
     pub in_sub_ifd: bool,
     pub index_in_chain: u32,
     pub is_exif: bool,
-    pub olympus_base: Option<u64>,
+    pub olympus: Oly,
 }
 
 pub(crate) fn rd16(b: &[u8], le: bool) -> Option<u16> {
@@ -131,7 +149,7 @@ pub(crate) fn walk_ifd<S: Src>(src: &mut S, w: &mut Walk, loc: &IfdLoc, ifd: u64
     let mut jpeg = (None, None);
     let mut strip = (None, None, None);
     let mut rw2: Option<(u64, u64)> = None;
-    let mut oly_pair = (None, None);
+    let mut oly: Vec<(u16, u64)> = Vec::new();
     let mut after: Vec<(u8, u64)> = Vec::new();
     let mut notes: Vec<(u16, u32, [u8; 4])> = Vec::new();
     for i in 0..count as usize {
@@ -191,11 +209,20 @@ pub(crate) fn walk_ifd<S: Src>(src: &mut S, w: &mut Walk, loc: &IfdLoc, ifd: u64
                     }
                 }
             }
-            t if t == ex::OLY_PREVIEW_START && loc.olympus_base.is_some() => {
-                oly_pair.0 = ex::one_u32(src, base, le, typ, cnt, val);
+            t if loc.olympus.pairs().iter().any(|p| p.0 == t || p.1 == t) => {
+                if let Some(v) = ex::one_u32(src, base, le, typ, cnt, val) {
+                    oly.push((t, v));
+                }
             }
-            t if t == ex::OLY_PREVIEW_LEN && loc.olympus_base.is_some() => {
-                oly_pair.1 = ex::one_u32(src, base, le, typ, cnt, val);
+            t if t == ex::OLY_SETTINGS && loc.olympus == Oly::Note => {
+                // A typed IFD or LONG holds the offset; an UNDEFINED value is the IFD itself, so its pointer is.
+                let p = match typ == 7 && cnt > 4 {
+                    true => rd32(val, le).map(u64::from),
+                    false => ex::one_u32(src, base, le, typ, cnt, val),
+                };
+                if let Some(p) = p {
+                    after.push((3, p));
+                }
             }
             t if t == ex::EXIF_IFD_PTR => {
                 if let Some(p) = ex::one_u32(src, base, le, typ, cnt, val) {
@@ -236,13 +263,12 @@ pub(crate) fn walk_ifd<S: Src>(src: &mut S, w: &mut Walk, loc: &IfdLoc, ifd: u64
     if let Some(c) = rw2 {
         w.cands.push(c);
     }
-    if let (Some(s), Some(n)) = oly_pair {
-        // Olympus previews count from the note's own base: the note start for the new layout, the file for OLYMP.
-        if n > 0 {
-            if let Some(ob) = loc.olympus_base {
-                if let Some(a) = ob.checked_add(s) {
-                    w.cands.push((a, n));
-                }
+    for &(s, l) in loc.olympus.pairs() {
+        // Olympus previews count from the note's own base: the note start for the new layouts, the file for OLYMP.
+        let find = |tag: u16| oly.iter().find(|e| e.0 == tag).map(|e| e.1);
+        if let (Some(s), Some(n)) = (find(s), find(l)) {
+            if let (true, Some(a)) = (n > 0, loc.base.checked_add(s)) {
+                w.cands.push((a, n));
             }
         }
     }
@@ -254,7 +280,7 @@ pub(crate) fn walk_ifd<S: Src>(src: &mut S, w: &mut Walk, loc: &IfdLoc, ifd: u64
             in_sub_ifd: true,
             index_in_chain: 0,
             is_exif: kind == 1,
-            olympus_base: None,
+            olympus: if kind == 3 { Oly::Settings } else { Oly::No },
         };
         let _ = walk_ifd(src, w, &child, p);
     }
@@ -277,7 +303,7 @@ pub(crate) fn walk_ifd<S: Src>(src: &mut S, w: &mut Walk, loc: &IfdLoc, ifd: u64
             in_sub_ifd: loc.in_sub_ifd,
             index_in_chain: loc.index_in_chain + 1,
             is_exif: loc.is_exif,
-            olympus_base: loc.olympus_base,
+            olympus: loc.olympus,
         };
         let _ = walk_ifd(src, w, &child, next);
     }
@@ -292,7 +318,7 @@ fn root(le: bool) -> IfdLoc {
         in_sub_ifd: false,
         index_in_chain: 0,
         is_exif: false,
-        olympus_base: None,
+        olympus: Oly::No,
     }
 }
 

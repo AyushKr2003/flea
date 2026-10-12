@@ -6,7 +6,7 @@ use crate::backend::rawembed::{self, Preview, BLOB_BUDGET, HEADER_BUDGET, SOF_BU
 use crate::backend::rawexif as ex;
 use crate::backend::rawraf::tests::raf;
 use crate::backend::rawtiff::tests::{jpeg, pair, write, Ev, Tb};
-use crate::backend::rawtiff::{inspect_file, walk_ifd, IfdLoc, SliceSrc, Src, Walk};
+use crate::backend::rawtiff::{inspect_file, walk_ifd, IfdLoc, Oly, SliceSrc, Src, Walk};
 use crate::backend::testdir::TestDir;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
@@ -273,7 +273,7 @@ fn a_walk_in_hand_copies_no_more_than_the_bytes_it_holds() {
     b.extend_from_slice(&0u32.to_le_bytes());
     b.resize(values_at + 65_534, 0);
     let mut src = Counted { inner: SliceSrc::new(&b), copied: 0 };
-    let loc = IfdLoc { base: 0, little_endian: true, depth: 0, in_sub_ifd: false, index_in_chain: 0, is_exif: false, olympus_base: None };
+    let loc = IfdLoc { base: 0, little_endian: true, depth: 0, in_sub_ifd: false, index_in_chain: 0, is_exif: false, olympus: Oly::No };
     let _ = walk_ifd(&mut src, &mut Walk::new(), &loc, 8);
     assert!(src.copied <= b.len(), "copied {} bytes out of {}", src.copied, b.len());
     // The floor: one whole 32767-value array was read, so the cap above bounds the copy path and not an early skip.
