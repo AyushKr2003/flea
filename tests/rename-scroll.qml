@@ -173,6 +173,11 @@ ShellRoot {
         }],
         [function () { return root.settled() }, function () {
             root.check(root.view.contentY === root.parkedY, "the pane's own reveal parks the last row again")
+            root.view.contentY = root.parkedY + 2
+            root.view.keepLastRowClear(root.lastTile)
+        }],
+        [function () { return root.settled() }, function () {
+            root.check(root.view.contentY === root.parkedY + 2, "a last row already past the clear line stays where it is")
         }]
     ]
 
