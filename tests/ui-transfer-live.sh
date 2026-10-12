@@ -136,6 +136,13 @@ transferlive_teardown() {
     (( drained )) || fail "transferlive: the window did not drain at teardown; the payload was deleted anyway"
 }
 
+# Diagnostic for the N1 stall: FLEA_TRANSFERLIVE_SYNC=1 waits for the fixture's own writeback before each launch; S0 rules after the native A/B whether it stays.
+transferlive_sync() {
+    if [[ "${FLEA_TRANSFERLIVE_SYNC:-}" == 1 ]]; then
+        sync -f "$transferlive_root" || fail "transferlive: sync -f $transferlive_root failed"
+    fi
+}
+
 # Writes random bytes into each FILE MIB pair, several dd writers per file at their own offsets, and waits for all of them.
 transferlive_fill() {
     local file mib part seek count pid status=0
@@ -203,6 +210,7 @@ transferlive_prepare() {
     began=$(date +%s%3N)
     transferlive_fill "$payload/full.bin" "$mib" "$payload/half.bin" "$((mib / 2))"
     filled_ms=$(( $(date +%s%3N) - began ))
+    transferlive_sync
     [[ "$(stat -c %s "$payload/full.bin")" == "$transferlive_full_bytes" && "$(stat -c %s "$payload/half.bin")" == "$transferlive_half_bytes" ]] \
         || fail "transferlive: the payload files are not the sizes written: $(stat -c '%n %s' "$payload/full.bin" "$payload/half.bin")"
     printf 'TRANSFERLIVE_PAYLOAD full=%s (%s) half=%s (%s) random_fill_ms=%s writers_per_file=%s\n' \
@@ -506,6 +514,7 @@ transferlive_one() {
     transferlive_holds "$dir/to" "big.bin"
     menus_same_file "one: the copy is byte-identical to its source" "$dir/big.bin" "$dir/to/big.bin"
     sandbox_remove "$dir"
+    transferlive_sync
 }
 
 # Leg two: three big files, one already in the destination, pasted with Skip; the batch total leaves the skipped one out.
@@ -537,7 +546,7 @@ transferlive_batch() {
     transferlive_enter_to "$dir" 1
     key p >/dev/null
     menus_expect collideState '.opened and .title == "b.bin already exists in to" and .names == ["b.bin"] and .more == ""
-        and .focus == "keep" and ([.buttons[].visible] | all)' "batch: the paste asks once about b.bin, on Keep both, with every button up"
+        and .focus == "keep" and ([.buttons[] | select(.name != "merge") | .visible] | all) and ([.buttons[] | select(.name == "merge") | .visible] == [false])' "batch: the paste asks once about b.bin, on Keep both, with every file button up and Merge hidden"
     key h >/dev/null
     menus_expect collideState '.opened and .focus == "skip"' "batch: h moves the focus to Skip"
     key -k Return >/dev/null
@@ -555,6 +564,7 @@ transferlive_batch() {
         menus_same_file "batch: $name is byte-identical to its source" "$dir/$name" "$dir/to/$name"
     done
     sandbox_remove "$dir"
+    transferlive_sync
 }
 
 # Leg three: one big file onto a name that exists, with Replace; the old item lands in this case's own Trash.
@@ -576,7 +586,7 @@ transferlive_replace() {
     transferlive_enter_to "$dir" 1
     key p >/dev/null
     menus_expect collideState '.opened and .title == "big.bin already exists in to" and .names == ["big.bin"] and .more == ""
-        and .focus == "keep" and ([.buttons[].visible] | all)' "replace: the paste asks about big.bin, on Keep both, with every button up"
+        and .focus == "keep" and ([.buttons[] | select(.name != "merge") | .visible] | all) and ([.buttons[] | select(.name == "merge") | .visible] == [false])' "replace: the paste asks about big.bin, on Keep both, with every file button up and Merge hidden"
     key l >/dev/null
     menus_expect collideState '.opened and .focus == "replace"' "replace: l moves the focus to Replace"
     trash_trap_own "$replace_trash" "$dir" "transferlive: replace" big.bin
