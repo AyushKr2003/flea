@@ -176,7 +176,7 @@ fn run_with(
 ) -> Result<Option<SevenFailure>, FleaError> {
     if !sandbox::available() {
         let tool = inner.first().map_or("", |s| s.as_str());
-        return Err(op_err(what, tool, "the sandbox is unavailable: bwrap or prlimit is not on PATH"));
+        return Err(op_err(what, tool, "the sandbox is unavailable: bubblewrap or prlimit is not installed"));
     }
     let mut full = sandbox::wrap_archive(&inner, read_only, &work.dir);
     sandbox::add_status(&mut full, inner.len());

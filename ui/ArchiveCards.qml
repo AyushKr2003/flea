@@ -17,22 +17,22 @@ Item {
     }
 
     // One card at a time: a second request is answered with a sentence and never dropped silently.
-    function cardBusy(holder, verb) {
+    function cardBusy(holder) {
         if (!compressDialog.opened && !extractDialog.opened)
             return false
-        holder.message(ArchiveCard.cardBusySentence(verb), true)
+        holder.message(ArchiveCard.CARD_BUSY, true)
         return true
     }
 
     function openCompressDialog(source, parentLeaf, holder) {
-        if (cardBusy(holder, "compress")) return
+        if (cardBusy(holder)) return
         compressOwner = holder
         compressDialog.active = true
         compressDialog.item.open(source, parentLeaf, holder)
     }
 
     function openExtractPw(source, holder, err) {
-        if (cardBusy(holder, "extract this archive")) return
+        if (cardBusy(holder)) return
         extractOwner = holder
         extractDialog.active = true
         extractDialog.item.open(source, holder, err)

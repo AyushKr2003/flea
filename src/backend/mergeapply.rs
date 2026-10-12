@@ -98,7 +98,7 @@ fn finish_manifest(src: &Path, dst_top: &Path, manifest: Option<Writer>, steps: 
     let (handle, loud) = crate::backend::copymanifest::finish_loud(Some(writer));
     if let Some(e) = loud {
         let mut err = r.as_ref().err().map(clone_err).unwrap_or_else(|| FleaError { where_: "transfer".into(), path: dst_top.to_string_lossy().to_string(), msg: String::new() });
-        err.msg.push_str(&format!("; copy manifest failed: {e}"));
+        err.msg = format!("{}; copy manifest failed: {e}", err.msg);
         return Err(err);
     }
     if let Some(handle) = handle {
@@ -217,10 +217,8 @@ fn merge_into(
     if own.is_empty() {
         Ok(())
     } else {
-        let mut msg = own.iter().take(REPORTED_FAILURES).cloned().collect::<Vec<_>>().join("; ");
-        if own.len() > REPORTED_FAILURES {
-            msg.push_str(&format!("; and {} more", own.len() - REPORTED_FAILURES));
-        }
+        let shown = own.iter().take(REPORTED_FAILURES).cloned().collect::<Vec<_>>().join("; ");
+        let msg = if own.len() > REPORTED_FAILURES { format!("{shown}; and {} more", own.len() - REPORTED_FAILURES) } else { shown };
         Err(FleaError { where_: "transfer".into(), path: dst_dir.to_string_lossy().to_string(), msg })
     }
 }
@@ -249,7 +247,7 @@ fn remove_emptied(path: &Path, steps: &mut Vec<Step>) {
 pub(crate) fn recreate_emptied(path: &PathBuf, mode: u32) -> Result<(), FleaError> {
     if path.symlink_metadata().is_ok() {
         return Err(FleaError { where_: "undo".into(), path: path.to_string_lossy().into(),
-            msg: "something now holds the emptied folder's name, so undo left the moved items in place".into() });
+            msg: "another item now has the emptied folder's name, so undo left the moved items in place".into() });
     }
     let parent = path.parent().filter(|p| !p.as_os_str().is_empty());
     let held = match parent {
@@ -312,5 +310,5 @@ pub(crate) fn decode_merge(pairs: &[(String, crate::jsondoc::Json)]) -> bool {
 // A merge undone outside its own window refuses, because only that window's manifest may take entries away.
 pub(crate) fn merge_foreign_undo(to: &Path) -> FleaError {
     FleaError { where_: "undo".into(), path: to.to_string_lossy().into(),
-        msg: "This merge can be undone only in the window that made it, so undo left the merged items in place".into() }
+        msg: "this merge can be undone only in the window that made it, so undo left the merged items in place".into() }
 }

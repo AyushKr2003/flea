@@ -1,5 +1,6 @@
 .pragma library
 
+.import "Format.js" as Format
 .import "Ops.js" as Ops
 .import "Search.js" as Search
 
@@ -31,9 +32,10 @@ function submitCompressPw(pane, source, format, name, password, encryptNames) {
     if (!pane.backend.queueing) pane.sticky(compressSticky(source.paths.length, format))
 }
 
-// The sticky line from one template, filled once, never joined from fragments.
+// The sticky line as one whole sentence per count, filled once, never joined from fragments.
 function compressSticky(count, format) {
-    return "Compressing %1 to .%2".replace("%1", Ops.items(count)).replace("%2", format)
+    if (count === 1) return "Compressing 1 item to .%1".replace("%1", format)
+    return "Compressing %1 items to .%2".replace("%1", Format.count(count)).replace("%2", format)
 }
 
 // The extract card's Extract: the archive and destination the card was opened over, retried with a password.

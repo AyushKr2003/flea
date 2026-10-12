@@ -416,7 +416,7 @@ function providerRefresh(check) {
     check("the listing context carries the flash fields", flashP.rowName + "|" + flashP.flashZipMember, "debian-13.iso|")
     check("Flash to drive shows on a disk image through the real context", actions(Menu.listingEntries(flashP)).indexOf("flashDrive") >= 0, true)
     var pasteBody = Source.slice(paneSrc, "function openPasteAs()", "function invertSelection")
-    check("Pane.openPasteAs closes and says empty on refuse", pasteBody.indexOf("menu.close()") >= 0 && pasteBody.indexOf("There is nothing to paste; y copies and x cuts.") >= 0, true)
+    check("Pane.openPasteAs closes and says empty on refuse", pasteBody.indexOf("menu.close()") >= 0 && pasteBody.indexOf("root.message(Menu.EMPTY_CLIPBOARD, false)") >= 0, true)
     // Show original answers only its own pending id, so a late reply never yanks a navigation.
     // One brace scan serves every shipped body below; an inline copy beside it is the defect this pins.
     // Sample input: functionBody("head function f(a) { return a } tail", "function f(") answers " return a ".

@@ -1,11 +1,23 @@
 .pragma library
 .import "Devices.js" as Devices
+.import "Mounts.js" as Mounts
 
 // Unlock (U039): the dialog's sentences and the udisks answers it parses; a passphrase goes only to the child's stdin.
 
+// Whole sentences with "%1" for the drive's label, filled by Mounts.fill.
+var WORDS = {
+    title: "Unlock %1",
+    unlocking: "Unlocking %1…",
+    wrong: "That passphrase did not unlock %1.",
+    unlocked: "Unlocked and mounted %1.",
+    lockFailed: "%1 was unmounted but could not be locked; close what is using it.",
+    mountFailed: "%1 was unlocked but could not be mounted.",
+    unlockFailed: "%1 could not be unlocked."
+}
+
 // Sample input: the label of the locked rail row the dialog opened over.
 function title(label) {
-    return "Unlock " + String(label || "")
+    return Mounts.fill(WORDS.title, label || "")
 }
 
 // Sample input: "Unlocked /dev/sda1 as /dev/dm-0.", the line udisksctl unlock prints.
@@ -16,22 +28,22 @@ function parseUnlocked(output) {
 
 // Sample input: "Backup", the locked rail row's own label.
 function unlockingNote(label) {
-    return "Unlocking " + String(label || "") + "…"
+    return Mounts.fill(WORDS.unlocking, label || "")
 }
 
 // Sample input: "Backup", the drive the passphrase did not open.
 function wrongNote(label) {
-    return "That passphrase did not unlock " + String(label || "") + "."
+    return Mounts.fill(WORDS.wrong, label || "")
 }
 
 // Sample input: "Backup", the drive just unlocked and mounted.
 function unlockedNote(label) {
-    return "Unlocked and mounted " + String(label || "") + "."
+    return Mounts.fill(WORDS.unlocked, label || "")
 }
 
 // Sample input: "Backup", the drive unmounted but still unlocked.
 function lockNote(label) {
-    return String(label || "") + " was unmounted but could not be locked; close what is using it."
+    return Mounts.fill(WORDS.lockFailed, label || "")
 }
 
 // Sample input: "Mounted /dev/dm-0 at /run/media/gm/Backup.", the line udisksctl mount prints.
@@ -42,12 +54,12 @@ function parseMounted(output) {
 
 // Sample input: "Backup", the drive unlocked but never mounted.
 function mountNote(label) {
-    return String(label || "") + " was unlocked but could not be mounted."
+    return Mounts.fill(WORDS.mountFailed, label || "")
 }
 
 // Sample input: "Backup", the drive whose unlock failed for a reason other than the passphrase.
 function unlockFailedNote(label) {
-    return String(label || "") + " could not be unlocked."
+    return Mounts.fill(WORDS.unlockFailed, label || "")
 }
 
 // Sample input: "Error unlocking /dev/sdb1: GDBus.Error:org.freedesktop.UDisks2.Error.Failed: x", answered with the error name.

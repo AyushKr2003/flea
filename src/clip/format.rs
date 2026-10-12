@@ -41,7 +41,7 @@ pub fn is_token(token: &str) -> bool {
 // What clipSet and the CLI accept, in the order both sides check them.
 pub fn check_selection(op: &str, paths: &[String]) -> Result<(), String> {
     if !is_op(op) {
-        return Err("the clipboard operation is copy or cut".to_string());
+        return Err("the clipboard operation must be copy or cut".to_string());
     }
     validate_clip_paths(paths)?;
     if paths.is_empty() {

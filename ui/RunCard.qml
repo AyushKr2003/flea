@@ -55,7 +55,7 @@ FocusScope {
     function open(info, pane) {
         var ask = RunFile.parseAsk(info.raw || "")
         if (ask === null) {
-            if (pane) pane.message("The run card could not ask about that file.", true)
+            if (pane) pane.message("Flea could not check that file, so it was not run.", true)
             return
         }
         root.pane = pane
@@ -145,8 +145,8 @@ FocusScope {
                 return
             }
             if (exitCode === root.runChangedStatus) {
-                root.pane.message(action === "handler" ? "That file changed since the card asked, so it was not opened."
-                    : "That file changed since the card asked, so it was not run.", true)
+                root.pane.message(action === "handler" ? "That file changed after Flea checked it, so it was not opened."
+                    : "That file changed after Flea checked it, so it was not run.", true)
                 return
             }
             if (exitCode === root.runNoExecStatus) {

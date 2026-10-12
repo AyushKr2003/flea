@@ -188,7 +188,7 @@ pub(crate) fn do_bulkrename(out: &mut impl Write, ops: &mut super::opsdispatch::
     match super::iomount::slow_write_with(&key, &body, "bulkrename", super::iomount::CALL_DEADLINE, move || Ok(bulk_work(paths, names))) {
         super::iomount::SlowWrite::Ready(outcome) => land_bulkrename(out, ops, outcome),
         super::iomount::SlowWrite::Slow { mount, rx } => {
-            writeln!(out, "{}", super::proto::slow_line("bulkrename", &key.to_string_lossy(), &super::iomount::slow_sentence(&mount, "bulkrename"))).ok();
+            writeln!(out, "{}", super::proto::slow_line("bulkrename", &key.to_string_lossy(), &super::iomount::slow_sentence(&mount, super::iomount::SLOW_BULK_RENAME))).ok();
             out.flush().ok();
             // The pending id is only a number: the slot stays with whatever holds it, so a transfer beside this write keeps its id and its cancel.
             let id = ops.claim_id();

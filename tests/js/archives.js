@@ -98,10 +98,12 @@ function run(check) {
           + ArchiveCard.encryptedTitle("backup.7z") + "|"
           + ArchiveOps.compressSticky(3, "7z"),
           "Compress 1 item|Compress 3 items|backup.7z is encrypted|Compressing 3 items to .7z")
+    check("AB3b: one item compresses under its own sticky sentence",
+          attempt(function () { return ArchiveOps.compressSticky(1, "zip") }), "Compressing 1 item to .zip")
     check("AB4: the card titles the leaf of the source it opened over",
           attempt(function () { return ArchiveCard.sourceLeaf({ path: "/d/backup.7z" }) + "|" + ArchiveCard.sourceLeaf(null) }), "backup.7z|")
-    check("AB8: a busy card is one whole sentence per verb",
-          attempt(function () { return ArchiveCard.cardBusySentence("compress") }), "Another password card is open. Answer it, then compress again.")
+    check("AB8: a busy card is one whole sentence for both callers",
+          attempt(function () { return ArchiveCard.CARD_BUSY }), "Another archive is waiting for its password. Enter it, then try again.")
     check("AB9: the dead helpers are gone", typeof Archive.hasSevenZip + "|" + typeof Archive.stashedLeaf, "undefined|undefined")
 
     // Sources: send's log, the card host fails loud, and the compress card has no busy state; the queue and the cards are driven in archivecards.js.

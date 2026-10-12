@@ -326,7 +326,7 @@ PY
     printf '# touched\n' >> "$dir/changed.sh"
     runfile_focus run
     key -k Return >/dev/null
-    wait_message "That file changed since the card asked, so it was not run."
+    wait_message "That file changed after Flea checked it, so it was not run."
     [[ ! -e "$dir/changed.ran" ]] || fail "runfile: the changed file still ran"
     shot cap-runfile-refused-changed
     runfile_dismiss_error

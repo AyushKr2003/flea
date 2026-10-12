@@ -386,7 +386,7 @@ pub fn paths_line(paths: &[String]) -> String {
     out
 }
 
-// Sample output: {"t":"slow","op":"rename","path":"/hung/a.txt","msg":"/hung is slow. The rename continues and will finish on its own."}
+// Sample output: {"t":"slow","op":"rename","path":"/hung/a.txt","msg":"/hung is slow. The rename will finish on its own."}
 pub fn slow_line(op: &str, path: &str, msg: &str) -> String {
     format!(r#"{{"t":"slow","op":"{}","path":"{}","msg":"{}"}}"#, escape(op), escape(path), escape(msg))
 }
@@ -434,6 +434,17 @@ pub fn error_line_with_mode(e: &FleaError, mode: u32) -> String {
         escape(&e.path),
         escape(&e.msg),
         mode
+    )
+}
+
+// A refusal the UI words itself: the code names the cause, and msg stays for a client that ignores it.
+pub fn error_line_with_code(e: &FleaError, code: &str) -> String {
+    format!(
+        r#"{{"t":"error","where":"{}","path":"{}","msg":"{}","code":"{}"}}"#,
+        escape(&e.where_),
+        escape(&e.path),
+        escape(&e.msg),
+        escape(code)
     )
 }
 

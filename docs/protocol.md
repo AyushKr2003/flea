@@ -776,7 +776,7 @@ Copy to closes its dialog, which sends `menuaction` `close` and expires the live
 answer comes back. The capture holds the same device, inode and type identities the live selection
 does, and they are still checked per item when the transfer runs. Collision destination identities
 also compare birth time when the filesystem reports it on both sides. A `menuId` whose selection has
-already expired answers a `total` of 0, and the `transfer` then answers `Menu selection expired`.
+already expired answers a `total` of 0, and the `transfer` then answers `Selected items changed; reopen the menu.`.
 
 **FAT-family destinations are answered inside this round trip.** When `dest` is on `vfat`, `exfat`,
 `fat`, `fat12`, `fat16`, `fat32`, `msdos`, `ntfs` or `ntfs3` (read off `/proc/self/mountinfo`, never
@@ -819,8 +819,8 @@ clipboard. The bytes never cross this wire: the backend runs `wl-paste --type im
 itself, refuses an image past 256 MiB and one that never arrives within 30 s, and streams the
 rest into the destination through an O_EXCL temp published by a no-replace rename, which a FAT
 destination takes where it takes no hard link, so a name that appeared meanwhile is never replaced.
-A name already taken lands beside it as `stem (n).ext`; a clipboard holding no image answers the
-error `There is nothing to paste; y copies and x cuts.`; a name that is empty, `.` or `..`, or carries `/`, is refused before anything runs. The answer
+A name already taken lands beside it as `stem (n).ext`; a clipboard holding no image answers an
+`error` line carrying `"code":"emptyclipboard"`, which the UI words itself; a name that is empty, `.` or `..`, or carries `/`, is refused before anything runs. The answer
 is the same `made` line a new file gets, and one journal entry named `paste`, so z undoes it; redo
 refuses it, because a clipboard has no recorded source to replay.
 
@@ -1949,7 +1949,7 @@ instead of holding the single operation slot.
 
 `{"t":"slow","op":"<string>","path":"<string>","msg":"<string>"}`
 
-Example: `{"t":"slow","op":"rename","path":"/hung/a.txt","msg":"/hung is slow. The rename continues and will finish on its own."}`
+Example: `{"t":"slow","op":"rename","path":"/hung/a.txt","msg":"/hung is slow. The rename will finish on its own."}`
 
 A remote `rename`, `mkdir`, `bulkrename` or `settags` past the single-call deadline answers this line and moves
 on: the write stays running on its own worker, so the loop keeps answering every other request,
@@ -2078,12 +2078,12 @@ exactly the way it was before this line existed.
 
 ### error
 
-`{"t":"error","where":"<string>","path":"<string>","msg":"<string>"[,"mode":<uint>]}`
+`{"t":"error","where":"<string>","path":"<string>","msg":"<string>"[,"mode":<uint>][,"code":"<string>"]}`
 
 Example: `{"t":"error","where":"scan","path":"/root","msg":"permission denied","mode":16872}`
 
 `where` names the failing operation, `path` names the input that failed, `msg` is the
-underlying message. Over `--backend`'s stdout, `where` is `scan` (a `list` whose path
+underlying message. `code` rides only on a refusal the UI words itself (`emptyclipboard`, from `pasteimage`). Over `--backend`'s stdout, `where` is `scan` (a `list` whose path
 failed to read), `sort` (a `sort` whose key names no order this wire defines; `path`
 carries the key as sent), `window` (a remote metadata window whose mount did not
 respond or whose worker stopped; `path` matches the current listing header's `path`
@@ -2165,7 +2165,7 @@ either code also names the retry: `{"t":"archivedone","id":<uint>,"ok":false,"ve
 so the card opens over the archive that asked and no client-side stash can name another extract's.
 
 A `.iso` lists and is never extracted: an `extract` naming one answers one `archivedone` with `ok` false
-and `err` of `"disk images list and are never extracted"`, and starts nothing, so no `archivestarted`
+and `err` of `"a disk image opens as a listing and is never extracted"`, and starts nothing, so no `archivestarted`
 line is sent and no slot is taken. Before extracting, the archive's unpacked
 size from its own index is weighed against the destination's free space, and a fit that cannot land is
 refused the same way: `{"t":"archivedone","id":<uint>,"ok":false,"verified":true,"err":"Extracting

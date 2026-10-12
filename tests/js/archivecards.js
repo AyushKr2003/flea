@@ -43,9 +43,9 @@ function run(check) {
     cards.askCompressPw(paneA, ["/a/x", "/a/y"], 4)
     cards.askCompressPw(paneB, ["/b/z"], 9)
     check("F22: a second pane's compress is refused with the busy sentence",
-          said.join(","), "b:" + ArchiveCard.cardBusySentence("compress"))
+          said.join(","), "b:" + ArchiveCard.CARD_BUSY)
     check("F22: and the open card stays the first pane's",
-          [cards.compressOwner === paneA, cards.compressItem.count, cards.cardBusy(paneB, "compress")].join("|"), "true|2|true")
+          [cards.compressOwner === paneA, cards.compressItem.count, cards.cardBusy(paneB)].join("|"), "true|2|true")
     cards.compressItem.takeSecretForTest("s3cret")
     cards.compressItem.submitItem.activated()
     check("F22: the first card's Compress still goes to the first pane",

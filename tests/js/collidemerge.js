@@ -31,6 +31,9 @@ function run(check) {
     check("a merge names what landed and where",
           Collide.merged(212, 0, "trip", 0, 0, false),
           "Merged 212 items into trip · z undoes")
+    check("one merged item reads as its own sentence",
+          Collide.merged(1, 0, "trip", 0, 0, false),
+          "Merged 1 item into trip · z undoes")
     check("kept both rides beside it",
           Collide.merged(212, 3, "trip", 0, 0, false),
           "Merged 212 items into trip · 3 kept both · z undoes")

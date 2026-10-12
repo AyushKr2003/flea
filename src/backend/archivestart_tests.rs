@@ -13,7 +13,7 @@ fn an_iso_extract_answers_archivedone_and_starts_nothing() {
     let text = String::from_utf8(out).unwrap();
     assert_eq!(text.lines().count(), 1, "one terminal line and nothing before it: {}", text);
     assert!(text.contains(r#""t":"archivedone""#) && text.contains(r#""ok":false"#), "{}", text);
-    assert!(text.contains("disk images list and are never extracted"), "{}", text);
+    assert!(text.contains("a disk image opens as a listing and is never extracted"), "{}", text);
     for started in ["archivestarted", "extractstarted", "transferprogress"] {
         assert!(!text.contains(started), "a refused extract announced {}: {}", started, text);
     }

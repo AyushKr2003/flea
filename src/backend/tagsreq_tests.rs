@@ -255,7 +255,7 @@ fn a_held_remote_tag_change_answers_slow_then_journals_when_it_lands() {
     });
     let line = String::from_utf8(std::mem::take(&mut out)).unwrap();
     assert!(line.contains(r#""t":"slow""#) && line.contains(r#""op":"settags""#), "{}", line);
-    assert!(line.contains("The tag change continues"), "{}", line);
+    assert!(line.contains(" is slow. The tag change will finish on its own."), "{}", line);
     crate::backend::opsdispatch::do_undo(&mut out, &mut o);
     assert!(String::from_utf8(std::mem::take(&mut out)).unwrap().contains("already running"), "undo waits for the late entry");
     assert_eq!(o.journal.len(), 0, "nothing is journalled until the held write lands");

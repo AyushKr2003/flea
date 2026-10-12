@@ -10,7 +10,7 @@ ShellRoot {
     id: shell
 
     readonly property string canary: "S3cr3t-canary-1006"
-    readonly property string busySentence: "Another password card is open. Answer it, then %1 again."
+    readonly property string busySentence: "Another archive is waiting for its password. Enter it, then try again."
 
     property int checks: 0
     property var failures: []
@@ -211,11 +211,11 @@ ShellRoot {
                 cards.openExtractPw({ path: "/s/two.7z", dest: "/s/two" }, shell.holder, "encrypted")
                 shell.check("AB8: a second extract request keeps the first card", cards.extractItem.leaf, "one.7z")
                 shell.check("AB8: and is answered with a whole sentence",
-                    shell.said, [shell.busySentence.replace("%1", "extract this archive")])
+                    shell.said, [shell.busySentence])
                 cards.askCompressPw(shell.holder, ["/s/x"], 0)
                 shell.check("AB8: a compress request over an open card is answered too",
                     [shell.said[1], cards.compressItem === null || !cards.compressItem.opened],
-                    [shell.busySentence.replace("%1", "compress"), true])
+                    [shell.busySentence, true])
                 cards.extractItem.takeSecretForTest(shell.canary)
                 shell.check("AT5: the extract card holds the typed secret", shell.held(cards).length > 0, true)
             } },

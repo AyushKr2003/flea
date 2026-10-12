@@ -19,15 +19,15 @@ src/backend/jump_tests.rs 487
 src/backend/renamecompat.rs 706
 src/backend/gvfslist.rs 513
 src/backend/imagesize.rs 473
-src/backend/iomount.rs 613
+src/backend/iomount.rs 629
 src/backend/localsend.rs 406
-src/backend/menu_actions.rs 641
+src/backend/menu_actions.rs 644
 src/backend/menu_registry.rs 564
 src/backend/meta.rs 551
 src/backend/metareq.rs 416
 src/backend/movebatch.rs 477
 src/backend/movebatch_tests.rs 752
-src/backend/opsdispatch.rs 2257
+src/backend/opsdispatch.rs 2258
 src/backend/opsreq.rs 615
 src/backend/opsreq/tests.rs 487
 src/backend/permissions.rs 699
@@ -43,7 +43,7 @@ src/backend/undo_tests.rs 423
 src/backend/undoshare.rs 414
 src/backend/undoshare_tests.rs 550
 src/backend/collide_replace_tests.rs 492
-src/backend/proto.rs 442
+src/backend/proto.rs 453
 src/backend/thumbworker.rs 962
 src/backend/trashbrowse.rs 778
 src/backend/trashdelete.rs 938
@@ -128,7 +128,7 @@ ui/NetworkDialog.qml 457
 ui/NetworkForm.qml 413
 ui/NetworkMounts.qml 901
 ui/OpenWithDialog.qml 613
-ui/Pane.qml 1180
+ui/Pane.qml 1181
 ui/PaneMenuActions.qml 490
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674

@@ -105,7 +105,7 @@ pub(crate) fn menu_sources(ops: &Ops, id: usize, dest: &str, collide: &Ask) -> R
     if let Some(menu) = captured.filter(|menu| menu.id == id) {
         return Ok((menu.items.clone(), menu.destination.clone()));
     }
-    ops.menuactions.as_ref().ok_or_else(|| "Menu selection expired; reopen the menu.".to_string())
+    ops.menuactions.as_ref().ok_or_else(|| super::menu_actions::SELECTION_CHANGED.to_string())
         .and_then(|menu| Ok((menu.selection(id)?, menu.provider_destination(id, Path::new(dest))?)))
 }
 

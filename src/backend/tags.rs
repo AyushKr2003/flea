@@ -75,7 +75,7 @@ pub fn read_raw(path: &Path) -> Result<Option<Vec<u8>>, FleaError> {
         return Err(FleaError {
             where_: "tags".into(),
             path: path.to_string_lossy().into(),
-            msg: "the stored tags are larger than any filesystem writes".into(),
+            msg: "the stored tags are too large to read".into(),
         });
     }
     // Sized by the probe above; a concurrent write growing it past that answers short rather than torn.

@@ -357,7 +357,7 @@ mod tests {
             assert_eq!(crate::json::field_str(&reply, "source").as_deref(), source.to_str());
             assert_eq!(crate::json::field_str(&reply, "path").as_deref(), destination.to_str());
             assert!(!crate::json::field_bool(&reply, "ok"));
-            assert!(reply.contains("Menu selection expired"));
+            assert!(reply.contains(crate::backend::menu_actions::SELECTION_CHANGED));
             assert!(!destination.exists());
         }
     }
