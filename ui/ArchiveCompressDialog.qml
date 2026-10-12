@@ -42,8 +42,15 @@ Item {
     }
 
     anchors.fill: parent
-    visible: root.opened
+    visible: root.opened || root.opacity > 0
+    // Closed means no input, even while the fade-out is still drawn.
+    enabled: root.opened
+    opacity: 0
     z: 2
+
+    Flea.Reveal { target: root; shown: root.opened; lift: card }
+    // The name clears once the fade ended, so the card stays still while it fades out; open() sets it again.
+    onOpacityChanged: if (root.opacity === 0 && !root.opened) nameField.text = ""
 
     // The tab order; a disabled stop is skipped, so Tab never lands on a button that does nothing.
     function tabStops() {
@@ -130,7 +137,6 @@ Item {
             return
         passwordField.text = ""
         confirmField.text = ""
-        nameField.text = ""
         root.stem = ""
         root.source = null
         root.opened = false
@@ -185,39 +191,68 @@ Item {
             onWheel: function (wheel) { wheel.accepted = true }
         }
 
-        Flea.CardScroll {
+        Flea.CardFrame {
             id: body
             bleedY: Theme.focusClearance
             anchors.fill: parent
             anchors.topMargin: Theme.spacing.rowPaddingX - Theme.focusClearance
             anchors.bottomMargin: Theme.spacing.rowPaddingX - Theme.focusClearance
+            spacing: Theme.spacing.rowPaddingX
+
+            title: Item {
+                width: parent.width
+                height: header.implicitHeight + Theme.spacing.gap
+
+                Flea.DialogTitle {
+                    id: header
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.margins: Theme.spacing.rowPaddingX
+                    text: ArchiveCard.compressTitle(root.count)
+                    elide: Text.ElideMiddle
+                }
+
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    x: Theme.spacing.rowPaddingX
+                    width: parent.width - 2 * Theme.spacing.rowPaddingX
+                    height: Theme.spacing.hairline
+                    color: Theme.color.mutedFrame
+                    opacity: 0.4
+                }
+            }
+
+            buttons: Item {
+                width: parent.width
+                height: Math.max(cancelButton.implicitHeight, compressButton.implicitHeight)
+                Row {
+                    anchors.bottom: parent.bottom
+                    anchors.right: parent.right
+                    anchors.rightMargin: Theme.spacing.rowPaddingX
+                    spacing: Theme.spacing.gap
+
+                    Flea.DialogButton {
+                        id: cancelButton
+                        label: "Cancel"
+                        focused: root.focusPart === 5
+                        onActivated: root.close()
+                        onTabbed: function (from, back) { root.stepTab(back) }
+                    }
+
+                    Flea.DialogButton {
+                        id: compressButton
+                        label: "Compress"
+                        primary: true
+                        focused: root.focusPart === 6
+                        onActivated: root.commit()
+                        onTabbed: function (from, back) { root.stepTab(back) }
+                    }
+                }
+            }
 
             Column {
                 width: parent.width
                 spacing: Theme.spacing.rowPaddingX
-
-                Item {
-                    width: parent.width
-                    height: header.implicitHeight + Theme.spacing.gap
-
-                    Flea.DialogTitle {
-                        id: header
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.margins: Theme.spacing.rowPaddingX
-                        text: ArchiveCard.compressTitle(root.count)
-                        elide: Text.ElideMiddle
-                    }
-
-                    Rectangle {
-                        anchors.bottom: parent.bottom
-                        x: Theme.spacing.rowPaddingX
-                        width: parent.width - 2 * Theme.spacing.rowPaddingX
-                        height: Theme.spacing.hairline
-                        color: Theme.color.mutedFrame
-                        opacity: 0.4
-                    }
-                }
 
                 // The segment's own caption, in the same capitals and at the same distance DialogField draws above its box.
                 Column {
@@ -335,34 +370,6 @@ Item {
                         acceptedButtons: Qt.LeftButton
                         gesturePolicy: TapHandler.ReleaseWithinBounds
                         onTapped: root.encryptNames = !root.encryptNames
-                    }
-                }
-
-                Item {
-                    width: parent.width
-                    height: Math.max(cancelButton.implicitHeight, compressButton.implicitHeight)
-                    Row {
-                        anchors.bottom: parent.bottom
-                        anchors.right: parent.right
-                        anchors.rightMargin: Theme.spacing.rowPaddingX
-                        spacing: Theme.spacing.gap
-
-                        Flea.DialogButton {
-                            id: cancelButton
-                            label: "Cancel"
-                            focused: root.focusPart === 5
-                            onActivated: root.close()
-                            onTabbed: function (from, back) { root.stepTab(back) }
-                        }
-
-                        Flea.DialogButton {
-                            id: compressButton
-                            label: "Compress"
-                            primary: true
-                            focused: root.focusPart === 6
-                            onActivated: root.commit()
-                            onTabbed: function (from, back) { root.stepTab(back) }
-                        }
                     }
                 }
             }

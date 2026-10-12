@@ -9,7 +9,10 @@ import "js/BulkRename.js" as BulkRename
 FocusScope {
     id: root
     anchors.fill: parent
-    visible: opened
+    visible: opened || opacity > 0
+    // Closed means no input, even while the fade-out is still drawn.
+    enabled: opened
+    opacity: 0
     property bool opened: false
     property var oldNames: []
     property var newNames: []
@@ -160,6 +163,7 @@ FocusScope {
         if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) { event.accepted = true; return }
         event.accepted = true
     }
+    Flea.Reveal { target: root; shown: root.opened; lift: card }
     Process {
         id: mktemp
         stderr: StdioCollector { waitForEnd: true }
@@ -234,7 +238,7 @@ FocusScope {
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             onWheel: function (wheel) { wheel.accepted = true }
         }
-        Flea.CardScroll {
+        Flea.CardFrame {
             id: body
             bleed: Theme.focusClearance
             anchors.fill: parent
@@ -242,10 +246,18 @@ FocusScope {
             anchors.rightMargin: root.cardPadding + Theme.spacing.hairline - Theme.focusClearance
             anchors.topMargin: root.cardPadding + Theme.spacing.hairline - Theme.focusClearance
             anchors.bottomMargin: root.cardPadding + Theme.spacing.hairline - Theme.focusClearance
-            Column {
-                width: body.holderWidth
+            title: Flea.DialogTitle { width: parent.width; text: BulkRename.title(root.oldNames.length) }
+            buttons: Row {
+                anchors.right: parent.right
                 spacing: Theme.spacing.gap
-                Flea.DialogTitle { width: parent.width; text: BulkRename.title(root.oldNames.length) }
+                // Tab reaches every button, the BulkRename board's callout 6: Qt's chain skips a button without activeFocusOnTab.
+                Flea.DialogButton { id: editButton; label: "Edit in terminal"; activeFocusOnTab: true; tabHandle: true; onTabbed: function (from, back) { root.stepFocus("edit", back) }; onActivated: root.editInTerminal() }
+                Flea.DialogButton { id: cancelButton; label: "Cancel"; activeFocusOnTab: true; tabHandle: true; onTabbed: function (from, back) { root.stepFocus("cancel", back) }; onActivated: root.close() }
+                Flea.DialogButton { id: renameButton; label: root.renameText; primary: true; available: root.canRename; activeFocusOnTab: true; tabHandle: true; onTabbed: function (from, back) { root.stepFocus("rename", back) }; onActivated: root.commit() }
+            }
+            Column {
+                width: parent.width
+                spacing: Theme.spacing.gap
                 Row {
                     width: parent.width
                     spacing: root.columnGap
@@ -361,14 +373,6 @@ FocusScope {
                     color: root.terminalError.length > 0 ? Theme.color.errorOnSurface : Theme.color.foreground
                     font.family: Theme.font.family
                     font.pixelSize: Theme.font.caption
-                }
-                Row {
-                    anchors.right: parent.right
-                    spacing: Theme.spacing.gap
-                    // Tab reaches every button, the BulkRename board's callout 6: Qt's chain skips a button without activeFocusOnTab.
-                    Flea.DialogButton { id: editButton; label: "Edit in terminal"; activeFocusOnTab: true; tabHandle: true; onTabbed: function (from, back) { root.stepFocus("edit", back) }; onActivated: root.editInTerminal() }
-                    Flea.DialogButton { id: cancelButton; label: "Cancel"; activeFocusOnTab: true; tabHandle: true; onTabbed: function (from, back) { root.stepFocus("cancel", back) }; onActivated: root.close() }
-                    Flea.DialogButton { id: renameButton; label: root.renameText; primary: true; available: root.canRename; activeFocusOnTab: true; tabHandle: true; onTabbed: function (from, back) { root.stepFocus("rename", back) }; onActivated: root.commit() }
                 }
             }
         }

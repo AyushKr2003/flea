@@ -59,7 +59,7 @@ trash_guard() {
     [[ -f "$trash_box/.flea-test-sandbox" ]] || fail "trash: missing owned fixture marker"
     canonical=$(realpath -m -- "$path") || fail "trash: could not resolve mutation path"
     [[ "$canonical" == "$trash_box/"* && "$canonical" != "$trash_box" ]] \
-        || fail "trash: mutation path is outside this case's sandbox"
+        || fail "trash: mutation path $path (resolved $canonical) is outside this case's sandbox $trash_box"
 }
 
 # A trash backing path keeps trash_guard's checks where it can sit in the sandbox, and must always sit inside the trash GLib used (trash_files, or ROOT).

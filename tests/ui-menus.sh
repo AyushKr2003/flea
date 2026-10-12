@@ -672,7 +672,7 @@ case_menuscoverage() (
         menus_expect menuState 'any(.entries[]; .action == "permissions" and (.disabled == false) and (.errored | not))' "directory Permissions is enabled without error"
         key -k Escape >/dev/null
         menus_file_menu link
-        menus_expect menuState 'any(.entries[]; .action == "permissions" and .disabled and .errored and .hint == null)' "symlink permissions reads red with no sentence"
+        menus_expect menuState 'any(.entries[]; .action == "permissions" and .disabled and .errored and .hint == "symlink")' "symlink permissions reads red with the word symlink"
         key -k Escape >/dev/null
         local first_index second_index
         first_index=$(row_index_of a.txt)
@@ -700,7 +700,7 @@ case_menuscoverage() (
             if [[ "$target" == folder ]]; then
                 menus_expect menuState '.opened and .hasRow and .snapshotReady and (.snapshotId > 0) and (.entries as $entries | ["rename","duplicate","openWith","properties"] | all(.[]; . as $action | any($entries[]; .action == $action and .disabled))) and any(.entries[]; .action == "permissions" and (.disabled == false) and (.errored | not))' "a file and a directory keep Permissions enabled without error in the several-items menu"
             else
-                menus_expect menuState '.opened and .hasRow and .snapshotReady and (.snapshotId > 0) and any(.entries[]; .action == "permissions" and .disabled and .errored and .hint == null)' "one symlink disables and errors Permissions for the whole selection"
+                menus_expect menuState '.opened and .hasRow and .snapshotReady and (.snapshotId > 0) and any(.entries[]; .action == "permissions" and .disabled and .errored and .hint == "symlink")' "one symlink disables and errors Permissions for the whole selection"
             fi
             key -k Escape >/dev/null
         done

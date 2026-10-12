@@ -8,7 +8,10 @@ import "js/Icons.js" as Icons
 FocusScope {
     id: root
     anchors.fill: parent
-    visible: opened
+    visible: opened || opacity > 0
+    // Closed means no input, even while the fade-out is still drawn.
+    enabled: opened
+    opacity: 0
     property bool opened: false
     property string titleText: ""
     property var names: []
@@ -45,6 +48,7 @@ FocusScope {
         opened = false
         chosen(choice)
     }
+    Flea.Reveal { target: root; shown: root.opened; lift: card }
     // A press lands on its own button first, so the accent never shows one choice while another is taken.
     function press(choice) {
         focusName = choice
@@ -77,7 +81,7 @@ FocusScope {
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             onWheel: function(wheel) { wheel.accepted = true }
         }
-        Flea.CardScroll {
+        Flea.CardFrame {
             id: body
             bleed: Theme.focusClearance
             anchors.fill: parent
@@ -85,14 +89,25 @@ FocusScope {
             anchors.rightMargin: root.cardPadding + Theme.spacing.hairline - Theme.focusClearance
             anchors.topMargin: root.cardPadding + Theme.spacing.hairline - Theme.focusClearance
             anchors.bottomMargin: root.cardBottomPadding + Theme.spacing.hairline - Theme.focusClearance
-            Column {
-                width: body.holderWidth
+            title: Flea.DialogHeader {
+                id: title
+                width: parent.width
+                text: root.titleText
+            }
+            buttons: Row {
+                id: buttons
+                anchors.right: parent.right
+                topPadding: root.buttonsAir
                 spacing: Theme.spacing.gap
-                Flea.DialogHeader {
-                    id: title
-                    width: parent.width
-                    text: root.titleText
-                }
+                Flea.DialogButton { id: cancelButton; label: Collide.LABELS.cancel; focused: root.focusName === "cancel"; onActivated: root.press("cancel") }
+                Flea.DialogButton { id: skipButton; label: Collide.LABELS.skip; focused: root.focusName === "skip"; onActivated: root.press("skip") }
+                Flea.DialogButton { id: keepButton; label: Collide.LABELS.keep; primary: true; focused: root.focusName === "keep"; onActivated: root.press("keep") }
+                Flea.DialogButton { id: mergeButton; visible: root.showMerge; label: Collide.LABELS.merge; focused: root.focusName === "merge"; onActivated: root.press("merge") }
+                Flea.DialogButton { id: replaceButton; label: Collide.LABELS.replace; destructive: true; focused: root.focusName === "replace"; onActivated: root.press("replace") }
+            }
+            Column {
+                width: parent.width
+                spacing: Theme.spacing.gap
                 Column {
                     width: parent.width
                     Repeater {
@@ -125,17 +140,6 @@ FocusScope {
                     wrapMode: Text.Wrap
                     color: Theme.color.foreground
                     font { family: Theme.font.family; pixelSize: Theme.font.caption }
-                }
-                Row {
-                    id: buttons
-                    anchors.right: parent.right
-                    topPadding: root.buttonsAir
-                    spacing: Theme.spacing.gap
-                    Flea.DialogButton { id: cancelButton; label: Collide.LABELS.cancel; focused: root.focusName === "cancel"; onActivated: root.press("cancel") }
-                    Flea.DialogButton { id: skipButton; label: Collide.LABELS.skip; focused: root.focusName === "skip"; onActivated: root.press("skip") }
-                    Flea.DialogButton { id: keepButton; label: Collide.LABELS.keep; primary: true; focused: root.focusName === "keep"; onActivated: root.press("keep") }
-                    Flea.DialogButton { id: mergeButton; visible: root.showMerge; label: Collide.LABELS.merge; focused: root.focusName === "merge"; onActivated: root.press("merge") }
-                    Flea.DialogButton { id: replaceButton; label: Collide.LABELS.replace; destructive: true; focused: root.focusName === "replace"; onActivated: root.press("replace") }
                 }
             }
         }

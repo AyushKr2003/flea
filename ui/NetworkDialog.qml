@@ -6,7 +6,6 @@ import qs.Ui
 import "." as Flea
 import "js/Mounts.js" as Mounts
 import "js/Protocols.js" as Protocols
-import "js/Motion.js" as Motion
 
 // A new favourite is saved only after its identified mount succeeds; credentials stay in this session.
 Item {
@@ -41,8 +40,10 @@ Item {
     // A plain overlay, not a QQC Popup, the same call ui/ContextMenu.qml already made.
     anchors.fill: parent
     // opened flips instantly (open()/close() above), so a caller reading it never races the close
-    // fade; visible only stays true a little longer, until card's own opacity finishes it.
-    visible: root.opened || card.opacity > 0
+    // fade; visible only stays true a little longer, until the fade ends, and a closed dialog takes no input.
+    visible: root.opened || root.opacity > 0
+    enabled: root.opened
+    opacity: 0
 
     function open() {
         if (root.opened || root.busy) return
@@ -202,7 +203,7 @@ Item {
         if (root.connecting) return "Connecting…"
         return root.retrying ? "Retry" : "Connect and save"
     }
-    function formMetrics() { return Math.round(card.padding) + "|" + Math.round(content.spacing) }
+    function formMetrics() { return Math.round(card.padding) + "|" + Math.round(body.spacing) }
     // "contentY|contentHeight|height" of the scrolling body, so a test sees the clamp and the scroll.
     function bodyScroll() { return Math.round(body.contentY) + "|" + Math.round(body.contentHeight) + "|" + Math.round(body.height) }
     function formMetricTargets() { return Style.space(16) + "|" + Style.space(12) }
@@ -277,21 +278,14 @@ Item {
         onExited: function (exitCode) { root.dropboxInstalled = exitCode === 0 }
     }
 
+    // The fade and the rise are the shared reveal of ui/Reveal.qml.
+    Flea.Reveal { target: root; shown: root.opened; lift: card }
+
     Rectangle {
         id: scrim
         anchors.fill: parent
         // Util.alpha bakes the 0.7 scrim strength into the colour, the house idiom ConfirmDialog uses.
         color: Util.alpha(Theme.color.background, 0.7)
-        // A backdrop only fades, no translate; same asymmetric open/close durations as card below.
-        opacity: root.opened ? 1 : 0
-
-        Behavior on opacity {
-            enabled: !Theme.reducedMotion
-            NumberAnimation {
-                duration: root.opened ? Motion.durMs.open : Motion.durMs.close
-                easing.type: Easing.OutCubic
-            }
-        }
 
         MouseArea {
             anchors.fill: parent
@@ -309,28 +303,11 @@ Item {
         // Clamped to the window; the body scrolls whatever the clamp cut, see ui/CardScroll.qml.
         height: Theme.cardSpan(body.wanted + contentTopInset + contentBottomInset, root.height - 2 * root.clampMargin)
         x: Theme.cardOrigin(root.width, width)
-        y: Theme.cardOrigin(root.height, height) + card.rise
-        // Open rises into place; close does not translate (enabled: root.opened only), only fades,
-        // faster than the open animation. root.opened itself already flipped above, synchronously.
-        property real rise: root.opened ? 0 : Motion.translateUpPx
-        opacity: root.opened ? 1 : 0
+        y: Theme.cardOrigin(root.height, height)
         color: Theme.color.surface
         borderSpec: Border.flat(Theme.color.accent, Style.normalBorderWidth)
         radius: Style.cornerRadius
         padding: Style.space(16)
-
-        Behavior on rise {
-            enabled: root.opened && !Theme.reducedMotion
-            NumberAnimation { duration: Motion.durMs.open; easing.type: Easing.OutCubic }
-        }
-
-        Behavior on opacity {
-            enabled: !Theme.reducedMotion
-            NumberAnimation {
-                duration: root.opened ? Motion.durMs.open : Motion.durMs.close
-                easing.type: Easing.OutCubic
-            }
-        }
 
         MouseArea {
             anchors.fill: parent
@@ -339,7 +316,7 @@ Item {
             onWheel: function (wheel) { wheel.accepted = true }
         }
 
-        Flea.CardScroll {
+        Flea.CardFrame {
             id: body
             anchors.fill: parent
             anchors.topMargin: card.contentTopInset - Theme.focusClearance
@@ -347,22 +324,72 @@ Item {
             bleed: Theme.focusClearance
             anchors.leftMargin: card.contentLeftInset - Theme.focusClearance
             anchors.rightMargin: card.contentRightInset - Theme.focusClearance
-
-        Column {
-            id: content
-            width: parent.width
             Keys.onEscapePressed: root.close()
             // Outer rhythm and each section's own header-to-content gap read exact off tailscale/dropbox Panel.qml.
             spacing: Style.space(12)
 
-            Column {
+            title: Flea.DialogTitle {
+                width: parent.width
+                text: root.dialogTitle
+            }
+
+            // Network.html places Cancel before the primary action at the card's right edge; the Dropbox install route stays pinned beneath.
+            buttons: Column {
                 width: parent.width
                 spacing: Style.space(12)
 
-                Flea.DialogTitle {
-                    width: parent.width
-                    text: root.dialogTitle
+                Row {
+                    anchors.right: parent.right
+                    spacing: Theme.spacing.gap
+
+                    Flea.DialogButton {
+                        id: cancelButton
+                        label: "Cancel"
+                        available: !root.saving
+                        tabHandle: true
+                        onTabbed: function (from, back) { form.step(from, back ? -1 : 1) }
+                        onActivated: root.close()
+                    }
+
+                    Flea.DialogButton {
+                        id: actionButton
+                        label: root.formAction()
+                        primary: true
+                        available: !root.busy
+                        tabHandle: true
+                        onTabbed: function (from, back) { form.step(from, back ? -1 : 1) }
+                        onActivated: root.submitLocation()
+                    }
                 }
+
+                PanelSeparator { visible: !root.dropboxInstalled }
+
+                // Dialogs rule 4: the section is a live install route while Dropbox is absent, and it is
+                // held here until providers have a home of their own; installed, it has nothing to say
+                // and is not drawn, where it used to draw a button that could never be pressed.
+                Column {
+                    width: parent.width
+                    visible: !root.dropboxInstalled
+                    spacing: Style.space(10)
+
+                    PanelSectionHeader {
+                        text: "DROPBOX"
+                    }
+
+                    Flea.DialogButton {
+                        id: dropboxButton
+                        label: "Install Dropbox"
+                        available: !root.busy
+                        tabHandle: true
+                        onTabbed: function (from, back) { form.step(from, back ? -1 : 1) }
+                        onActivated: root.installDropbox()
+                    }
+                }
+            }
+
+            Column {
+                width: parent.width
+                spacing: Style.space(12)
 
                 NetworkForm {
                     id: form
@@ -402,57 +429,7 @@ Item {
                         textFormat: Text.PlainText
                     }
                 }
-
-                // Network.html places Cancel before the primary action at the card's right edge.
-                Row {
-                    anchors.right: parent.right
-                    spacing: Theme.spacing.gap
-
-                    Flea.DialogButton {
-                        id: cancelButton
-                        label: "Cancel"
-                        available: !root.saving
-                        tabHandle: true
-                        onTabbed: function (from, back) { form.step(from, back ? -1 : 1) }
-                        onActivated: root.close()
-                    }
-
-                    Flea.DialogButton {
-                        id: actionButton
-                        label: root.formAction()
-                        primary: true
-                        available: !root.busy
-                        tabHandle: true
-                        onTabbed: function (from, back) { form.step(from, back ? -1 : 1) }
-                        onActivated: root.submitLocation()
-                    }
-                }
             }
-
-            PanelSeparator { visible: !root.dropboxInstalled }
-
-            // Dialogs rule 4: the section is a live install route while Dropbox is absent, and it is
-            // held here until providers have a home of their own; installed, it has nothing to say
-            // and is not drawn, where it used to draw a button that could never be pressed.
-            Column {
-                width: parent.width
-                visible: !root.dropboxInstalled
-                spacing: Style.space(10)
-
-                PanelSectionHeader {
-                    text: "DROPBOX"
-                }
-
-                Flea.DialogButton {
-                    id: dropboxButton
-                    label: "Install Dropbox"
-                    available: !root.busy
-                    tabHandle: true
-                    onTabbed: function (from, back) { form.step(from, back ? -1 : 1) }
-                    onActivated: root.installDropbox()
-                }
-            }
-        }
         }
     }
 }

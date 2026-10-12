@@ -14,6 +14,7 @@ ShellRoot {
     property int checks: 0
     property var failures: []
     property int step: 0
+    property int waited: 0
     property var script: []
     property var sent: []
     property var said: []
@@ -112,6 +113,9 @@ ShellRoot {
                 return
             }
             var entry = shell.script[shell.step]
+            // A step with an `until` waits for its state to settle, and runs after 100 polls so a state that never settles fails its own check.
+            if (entry.until !== undefined && !entry.until() && (shell.waited += 1) < 100) return
+            shell.waited = 0
             shell.step += 1
             try {
                 entry.run()
@@ -243,6 +247,9 @@ ShellRoot {
                 shell.check("AT6: typing again replaces the bullets and clears the error state",
                     [cards.extractItem.heldMarks, cards.extractItem.errorText, cards.extractItem.captureState().fieldError], [0, "", false])
                 cards.extractItem.close()
+            } },
+            // The card clears its leaf when its close fade ends, so this step waits for the card to leave the tree.
+            { id: "AB4 cancelled", until: function () { return !cards.extractItem.visible }, run: function () {
                 shell.check("AB4: Cancel on the re-ask leaves no source and no secret behind",
                     [cards.extractItem.leaf, shell.held(cards)], ["", []])
             } },
