@@ -115,8 +115,7 @@ pub fn list() -> Option<Vec<Entry>> {
     }
 }
 
-// The URI is captured here rather than looked up later, because gio trash --restore refuses an original
-// path outright and two files trashed from one path both list that same path, so a later lookup is ambiguous.
+// The URI is captured here, not looked up later, because two files trashed from one path both list that same original.
 pub fn trash(paths: &[PathBuf]) -> (Vec<Entry>, usize, String) {
     match trash_checked(paths, None) {
         Ok(result) => result,
@@ -143,46 +142,67 @@ pub(crate) fn trash_checked(paths: &[PathBuf], selection: Option<&[super::menu_a
         let reason = if quiet_gone || missing.is_empty() { String::new() } else { "those items are already gone".to_string() };
         return Ok((Vec::new(), if quiet_gone { 0 } else { missing.len() }, reason));
     }
-    let before = list();
+    // An item on the home Trash's own filesystem is renamed in and names its own entry, so only the rest need gio and its lists.
+    let (home, mut rest): (Vec<usize>, Vec<usize>) = (0..present.len()).partition(|&i| super::hometrash::renames_to_home(present[i]));
+    let mut before = if rest.is_empty() { None } else { Some(list()) };
     super::menu_actions::validate_sources(selection, paths)?;
-    // The exit status covers one chunk, so which paths actually went is read off the filesystem instead.
-    let mut output: Option<std::process::Output> = None;
-    // The local time each chunk's trash began, so a path no list attributes still names when its chunk went.
-    let mut stamps: Vec<String> = Vec::new();
-    for chunk in present.chunks(TRASH_CHUNK) {
-        let mut argv: Vec<String> = vec!["trash".to_string(), "--".to_string()];
-        for p in chunk {
-            argv.push(p.to_string_lossy().to_string());
-        }
-        let refs: Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
-        stamps.push(super::hometrash::deletion_date_local());
-        let out = gio(&refs);
-        let stop = !matches!(&out, Some(o) if o.status.success());
-        output = out;
-        if stop {
-            break;
+    let mut entries: Vec<Option<Entry>> = vec![None; present.len()];
+    let mut failed = if quiet_gone { 0 } else { missing.len() };
+    let (mut unsynced, mut durable) = (std::collections::BTreeSet::new(), None);
+    for i in home {
+        match super::hometrash::rename_to_home(present[i], &mut unsynced, &mut durable) {
+            Some(Ok(entry)) => entries[i] = Some(entry),
+            // Gone before its move, the Issue 88 refusal; the rename left no info file behind.
+            Some(Err(_)) => failed += 1,
+            // EXDEV, EBUSY or a taken name: nothing moved, so gio gets this one as it would have.
+            None => rest.push(i),
         }
     }
-    let after = list();
-    let mut ok = Vec::new();
-    let mut failed = if quiet_gone { 0 } else { missing.len() };
+    super::hometrash::sync_folders(&mut unsynced);
+    let mut output: Option<std::process::Output> = None;
     let mut still_here = 0;
-    for (index, p) in present.into_iter().enumerate() {
-        if p.symlink_metadata().is_ok() {
-            failed += 1;
-            still_here += 1;
-            continue;
-        }
-        match before.as_ref().zip(after.as_ref()).and_then(|(b, a)| newest_entry_for(b, a, p)) {
-            Some(e) => ok.push(e),
-            // A list that failed, or listed nothing new, still leaves the path, what the Trash held before and the time, so undo resolves the entry from a fresh list.
-            None => {
-                let at = stamps.get(index / TRASH_CHUNK).cloned().unwrap_or_default();
-                ok.push(Entry::unresolved((*p).clone(), uris_at(before.as_deref().unwrap_or_default(), p), at))
+    let gio_ran = !rest.is_empty();
+    if gio_ran {
+        rest.sort_unstable();
+        let before = before.get_or_insert_with(list);
+        // The exit status covers one chunk, so which paths actually went is read off the filesystem instead.
+        // The local time each chunk's trash began, so a path no list attributes still names when its chunk went.
+        let mut stamps: Vec<String> = Vec::new();
+        for chunk in rest.chunks(TRASH_CHUNK) {
+            let mut argv: Vec<String> = vec!["trash".to_string(), "--".to_string()];
+            for &i in chunk {
+                argv.push(present[i].to_string_lossy().to_string());
+            }
+            let refs: Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
+            stamps.push(super::hometrash::deletion_date_local());
+            let out = gio(&refs);
+            let stop = !matches!(&out, Some(o) if o.status.success());
+            output = out;
+            if stop {
+                break;
             }
         }
+        let after = list();
+        for (pos, i) in rest.into_iter().enumerate() {
+            let p = present[i];
+            if p.symlink_metadata().is_ok() {
+                failed += 1;
+                still_here += 1;
+                continue;
+            }
+            entries[i] = Some(match before.as_ref().zip(after.as_ref()).and_then(|(b, a)| newest_entry_for(b, a, p)) {
+                Some(e) => e,
+                // A list that failed, or listed nothing new, still leaves the path, what the Trash held before and the time, so undo resolves the entry from a fresh list.
+                None => {
+                    let at = stamps.get(pos / TRASH_CHUNK).cloned().unwrap_or_default();
+                    Entry::unresolved(p.clone(), uris_at(before.as_deref().unwrap_or_default(), p), at)
+                }
+            });
+        }
     }
-    let gio_failed = !matches!(&output, Some(o) if o.status.success());
+    let ok: Vec<Entry> = entries.into_iter().flatten().collect();
+    // A batch renamed whole ran no gio, so its silence is not a gio failure.
+    let gio_failed = gio_ran && !matches!(&output, Some(o) if o.status.success());
     let reason = if failed == 0 {
         String::new()
     } else if gio_failed {
@@ -346,3 +366,6 @@ mod tests;
 #[cfg(test)]
 #[path = "trashundo_tests.rs"]
 mod undo_tests;
+#[cfg(test)]
+#[path = "trashfast_tests.rs"]
+mod fast;

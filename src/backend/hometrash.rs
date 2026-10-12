@@ -268,16 +268,46 @@ fn same_filesystem(original: &Path, root: &Path) -> bool {
         return false;
     }
     let Some(parent) = original.parent().and_then(|p| p.metadata().ok()) else { return false };
+    // GLib reads the item's own device, so a mounted or nested volume under a shared parent still goes to gio.
+    if original.symlink_metadata().is_ok_and(|own| own.dev() != parent.dev()) {
+        return false;
+    }
     root.ancestors().find_map(|at| at.metadata().ok()).is_some_and(|trash| trash.dev() == parent.dev())
 }
 
-// Renames one replaced item into the home Trash on its own filesystem, as gio does there; None means nothing moved and gio still runs.
-pub(crate) fn rename_to_home(original: &Path, unsynced: &mut std::collections::BTreeSet<PathBuf>, durable: &mut Option<bool>) -> Option<Result<Entry, String>> {
+// The home Trash and the item's file name when the item may be renamed into it in-process; an item inside the Trash itself, or on another filesystem, is left to gio.
+fn rename_target(original: &Path) -> Option<(PathBuf, &OsStr)> {
     let root = home_trash_root()?;
     let name = original.file_name()?;
-    // An item inside the Trash itself is left to gio, which knows its own rules for it.
-    if original.starts_with(&root) || !same_filesystem(original, &root) {
+    // A record's Path= is absolute in the home Trash, so a relative path is gio's too.
+    if !original.is_absolute() || original.starts_with(&root) || !same_filesystem(original, &root) {
         return None;
+    }
+    Some((root, name))
+}
+
+// Whether rename_to_home would try this item, so a batch knows before it moves anything which paths still need gio.
+pub(crate) fn renames_to_home(original: &Path) -> bool {
+    rename_target(original).is_some()
+}
+
+#[cfg(test)]
+thread_local! {
+    static VANISH: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+// Test seam: this path is deleted as a batch starts to rename it, after the batch has already counted it as renameable.
+#[cfg(test)]
+pub(crate) fn test_vanish_on_rename(path: Option<PathBuf>) {
+    VANISH.with(|slot| *slot.borrow_mut() = path);
+}
+
+// Renames one item into the home Trash on its own filesystem, as gio does there; None means nothing moved and gio still runs.
+pub(crate) fn rename_to_home(original: &Path, unsynced: &mut std::collections::BTreeSet<PathBuf>, durable: &mut Option<bool>) -> Option<Result<Entry, String>> {
+    let (root, name) = rename_target(original)?;
+    #[cfg(test)]
+    if VANISH.with(|slot| slot.borrow().as_deref() == Some(original)) {
+        let _ = std::fs::remove_file(original);
     }
     let (files, info) = trash_dirs(&root).ok()?;
     // A drive Flea confirms syncs each record before its item moves; a fixed disk writes it as gio does, unsynced.
