@@ -5,23 +5,195 @@ use super::opsreq::{OpMsg, PROGRESS_EVERY};
 use super::trashmanifest::Cancellation;
 use crate::json::field_usize;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 // Sample input: {"c":"menuaction","op":"contents","id":4} answers a progress line every PROGRESS_EVERY, then one final line.
 // False once the receiver is gone, so the worker ends with it.
 pub(super) fn serve(line: &str, id: usize, items: &[Selected], replies: &Sender<OpMsg>, cancel: &Cancellation) -> bool {
-    let send = |fields: Result<String, String>| replies.send(OpMsg::Meta { line: response(line, fields) }).is_ok();
+    serve_with_deadline(line, id, items, replies, cancel, super::iomount::BULK_DEADLINE)
+}
+
+// The bulk deadline bounds only a remote folder; a local one walks inline exactly as before.
+fn serve_with_deadline(line: &str, id: usize, items: &[Selected], replies: &Sender<OpMsg>, cancel: &Cancellation, deadline: Duration) -> bool {
+    if id == 0 || field_usize(line, "id") != Some(id) || items.len() != 1 {
+        return send(replies, line, Err("Menu selection expired; reopen the menu.".into()));
+    }
+    let body = super::iomount::mount_body();
+    if super::iomount::is_remote(&items[0].path, &body) {
+        serve_remote(line, &items[0], replies, cancel, deadline)
+    } else {
+        serve_local(line, id, items, replies, cancel)
+    }
+}
+
+fn send(replies: &Sender<OpMsg>, line: &str, fields: Result<String, String>) -> bool {
+    replies.send(OpMsg::Meta { line: response(line, fields) }).is_ok()
+}
+
+fn serve_local(line: &str, id: usize, items: &[Selected], replies: &Sender<OpMsg>, cancel: &Cancellation) -> bool {
+    let send = |fields: Result<String, String>| send(replies, line, fields);
     let folder = match folder_of(line, id, items) {
         Ok(folder) => folder,
         Err(error) => return send(Err(error)),
     };
-    let mut open = true;
-    let stopped = || cancel.check().is_err();
-    let progress = Progress { every: PROGRESS_EVERY, report: &mut |tally| open &= send(Ok(fields(tally, false))) };
+    let open = std::cell::Cell::new(true);
+    // A progress line nobody takes ends the walk at once instead of counting for nobody.
+    let stopped = || {
+        if let Some(pace) = test_pace() { std::thread::sleep(pace); }
+        cancel.check().is_err() || !open.get()
+    };
+    let mut report = |tally: &Tally| {
+        if !send(Ok(fields(tally, false))) { open.set(false); }
+    };
+    let progress = Progress { every: PROGRESS_EVERY, report: &mut report };
     let tally = walk_counted(&folder, &stopped, Some(progress));
     // A cancelled walk is a floor and never says done; close has already told the card to leave.
     let last = if stopped() { format!(r#"{},"cancelled":true"#, fields(&tally, false)) } else { fields(&tally, true) };
-    open && send(Ok(last))
+    open.get() && send(Ok(last))
+}
+
+// What the remote worker hands back: the walk's own tally, or the refusal before any walk started.
+struct RemoteDone {
+    tally: Tally,
+    cancelled: bool,
+}
+
+// The worker's lines to the menu thread: throttled progress, then the one ending.
+enum RemoteMsg {
+    Report(Tally),
+    Done(Result<RemoteDone, String>),
+}
+
+// The floor so far and the stop both sides share; the worker never touches the replies channel.
+struct RemoteShared {
+    stop: AtomicBool,
+    floor: Mutex<Tally>,
+}
+
+// A remote walk runs beside the menu worker under the bulk deadline; past it the menu answers the floor so far.
+fn serve_remote(line: &str, item: &Selected, replies: &Sender<OpMsg>, cancel: &Cancellation, deadline: Duration) -> bool {
+    let shared = Arc::new(RemoteShared { stop: AtomicBool::new(false), floor: Mutex::new(Tally { bytes: 0, items: 0, partial: true }) });
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    let worker_item = item.clone();
+    let worker_cancel = cancel.clone();
+    let worker_shared = Arc::clone(&shared);
+    let pace = test_pace();
+    std::thread::spawn(move || remote_walk(&worker_item, &worker_cancel, &worker_shared, pace, &done_tx));
+    remote_wait(line, replies, cancel, &shared, &done_rx, deadline)
+}
+
+// The single syscall that decides the folder happens on the worker too, so a hung mount never holds the menu worker.
+fn remote_walk(item: &Selected, cancel: &Cancellation, shared: &RemoteShared, pace: Option<Duration>, done: &std::sync::mpsc::Sender<RemoteMsg>) {
+    let outcome = match item.current() {
+        Ok(meta) if meta.is_dir() => {
+            shared.floor.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).bytes = meta.len();
+            let stop = || {
+                if let Some(pace) = pace { std::thread::sleep(pace); }
+                cancel.check().is_err() || shared.stop.load(Ordering::Relaxed)
+            };
+            let mut forwarded = Instant::now();
+            let mut report = |tally: &Tally| {
+                *shared.floor.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = *tally;
+                if forwarded.elapsed() >= PROGRESS_EVERY {
+                    forwarded = Instant::now();
+                    let _ = done.send(RemoteMsg::Report(*tally));
+                }
+            };
+            let tally = walk_counted(&item.path, &stop, Some(Progress { every: Duration::ZERO, report: &mut report }));
+            Ok(RemoteDone { tally, cancelled: cancel.check().is_err() || shared.stop.load(Ordering::Relaxed) })
+        }
+        Ok(_) => Err("Only a folder has contents to count.".into()),
+        Err(error) => Err(error),
+    };
+    let _ = done.send(RemoteMsg::Done(outcome));
+}
+
+// Every wire line leaves from the menu worker, so a progress line never lands past the final one.
+fn remote_wait(line: &str, replies: &Sender<OpMsg>, cancel: &Cancellation, shared: &RemoteShared, done: &std::sync::mpsc::Receiver<RemoteMsg>, deadline: Duration) -> bool {
+    let bound = Instant::now() + deadline;
+    let mut progress_due = Instant::now();
+    loop {
+        match done.recv_timeout(Duration::from_millis(20)) {
+            Ok(RemoteMsg::Report(tally)) => {
+                if Instant::now() >= progress_due {
+                    progress_due = Instant::now() + PROGRESS_EVERY;
+                    if !send(replies, line, Ok(fields(&tally, false))) {
+                        shared.stop.store(true, Ordering::Relaxed);
+                        return false;
+                    }
+                }
+            }
+            Ok(RemoteMsg::Done(outcome)) => return land_remote(line, replies, outcome),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                // A walk blocked in a syscall never sees the cancel, so the menu thread answers it here.
+                if cancel.check().is_err() {
+                    shared.stop.store(true, Ordering::Relaxed);
+                    return send(replies, line, Ok(format!(r#"{},"cancelled":true"#, fields(&timed_out_floor(shared), false))));
+                }
+                if Instant::now() >= bound {
+                    shared.stop.store(true, Ordering::Relaxed);
+                    return send(replies, line, Ok(fields(&timed_out_floor(shared), true)));
+                }
+            }
+            // A dead worker leaves the floor already reported, marked partial rather than exact.
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                return send(replies, line, Ok(fields(&timed_out_floor(shared), true)));
+            }
+        }
+    }
+}
+
+fn timed_out_floor(shared: &RemoteShared) -> Tally {
+    let mut floor = *shared.floor.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    floor.partial = true;
+    floor
+}
+
+fn land_remote(line: &str, replies: &Sender<OpMsg>, outcome: Result<RemoteDone, String>) -> bool {
+    match outcome {
+        Err(error) => send(replies, line, Err(error)),
+        Ok(done) if done.cancelled => send(replies, line, Ok(format!(r#"{},"cancelled":true"#, fields(&done.tally, false)))),
+        Ok(done) => send(replies, line, Ok(fields(&done.tally, true))),
+    }
+}
+
+// Test-only stretch of each stop check; production passes None through test_pace, so the walk is unpaced.
+#[cfg(test)]
+thread_local! {
+    static TEST_PACE: std::cell::Cell<Option<Duration>> = const { std::cell::Cell::new(None) };
+}
+
+// Read on the menu thread and moved onto the worker, so holding it never races the walk.
+#[cfg(test)]
+fn test_pace() -> Option<Duration> {
+    TEST_PACE.with(|slot| slot.get())
+}
+
+// Holds the stretch until the guard drops, so one test's slow walk never leaks into the next.
+#[cfg(test)]
+pub(crate) struct PaceGuard;
+
+// Starts the stretch; the worker takes the value, so the hold itself is race free.
+#[cfg(test)]
+pub(crate) fn test_hold_pace(pace: Duration) -> PaceGuard {
+    TEST_PACE.with(|slot| slot.set(Some(pace)));
+    PaceGuard
+}
+
+// Dropping the guard hands the walk back its unpaced stop, so no later test walks slowly.
+#[cfg(test)]
+impl Drop for PaceGuard {
+    fn drop(&mut self) {
+        TEST_PACE.with(|slot| slot.set(None));
+    }
+}
+
+#[cfg(not(test))]
+fn test_pace() -> Option<Duration> {
+    None
 }
 
 // The one captured item, and only while it is still a folder: a link to one is described as the link.
@@ -38,143 +210,5 @@ fn fields(tally: &Tally, done: bool) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::backend::dirsize::{walk_core, walk_while, DevLookup};
-    use crate::backend::testdir::TestDir;
-    use crate::json::{field_bool, field_usize as number};
-    use std::cell::Cell;
-    use std::fs;
-    use std::os::unix::fs::{symlink, MetadataExt};
-    use std::path::Path;
-    use std::time::{Duration, Instant};
-
-    fn tree(tag: &str) -> (TestDir, PathBuf) {
-        let sandbox = TestDir::new(tag);
-        let root = sandbox.dir("tree");
-        (sandbox, root)
-    }
-    fn size_of(path: &Path) -> u64 { fs::symlink_metadata(path).unwrap().size() }
-    // A file, a folder and two files in it: four entries below the start.
-    fn nested(root: &Path) {
-        fs::write(root.join("a.txt"), "abc").unwrap();
-        fs::create_dir(root.join("sub")).unwrap();
-        fs::write(root.join("sub/b.txt"), "de").unwrap();
-        fs::write(root.join("sub/c.txt"), "f").unwrap();
-    }
-    fn nested_bytes(root: &Path) -> u64 {
-        ["", "a.txt", "sub", "sub/b.txt", "sub/c.txt"].iter().map(|name| size_of(&root.join(name))).sum()
-    }
-    fn lines(rx: &std::sync::mpsc::Receiver<OpMsg>) -> Vec<String> {
-        let mut out = Vec::new();
-        while let Ok(OpMsg::Meta { line }) = rx.try_recv() { out.push(line); }
-        out
-    }
-    // The snapshot holds `id`; the request line names `asked`.
-    fn contents(path: &Path, id: usize, asked: usize, cancel: &Cancellation) -> Vec<String> {
-        let (tx, rx) = std::sync::mpsc::channel();
-        let items = [Selected::inspect(&path.to_string_lossy()).unwrap()];
-        assert!(serve(&format!(r#"{{"c":"menuaction","op":"contents","id":{}}}"#, asked), id, &items, &tx, cancel));
-        lines(&rx)
-    }
-
-    #[test]
-    fn the_walk_counts_the_entries_below_the_folder_and_not_the_folder() {
-        let (_sandbox, root) = tree("contents-count");
-        assert_eq!(walk_counted(&root, &|| false, None).items, 0, "an empty folder holds nothing");
-        nested(&root);
-        let tally = walk_counted(&root, &|| false, None);
-        assert_eq!(tally.items, 4, "two files, a folder and the file in it, not the start itself");
-        assert!(!tally.partial);
-    }
-
-    #[test]
-    fn a_nested_mount_and_a_symlink_count_once_and_are_not_entered() {
-        let (_sandbox, root) = tree("contents-mount");
-        let (_target_sandbox, target) = tree("contents-link-target");
-        fs::write(target.join("far.bin"), vec![0u8; 5_000]).unwrap();
-        fs::create_dir(root.join("keep")).unwrap();
-        fs::write(root.join("keep/in.txt"), "12345678").unwrap();
-        fs::create_dir(root.join("other")).unwrap();
-        fs::write(root.join("other/out.txt"), "12345678").unwrap();
-        symlink(&target, root.join("link")).unwrap();
-        let start_dev = fs::symlink_metadata(&root).unwrap().dev();
-        let other = root.join("other");
-        let dev_of = |p: &Path| (p == other).then_some(start_dev.wrapping_add(1));
-        let lookup: DevLookup<'_> = Some(&dev_of);
-        let tally = walk_core(&root, &|| false, lookup, None);
-        assert_eq!(tally.items, 4, "keep, keep/in.txt, the mount's own entry and the link's own entry");
-        let want = size_of(&root) + size_of(&root.join("keep")) + size_of(&root.join("keep/in.txt")) + size_of(&other) + size_of(&root.join("link"));
-        assert_eq!(tally.bytes, want, "neither the mount's payload nor the link's target adds bytes");
-    }
-
-    #[test]
-    fn the_listing_numbers_are_the_counted_walks_numbers() {
-        let (_sandbox, root) = tree("contents-listing");
-        nested(&root);
-        let counted = walk_counted(&root, &|| false, None);
-        let sized = walk_while(&root, &|| false);
-        assert_eq!((counted.bytes, counted.partial), (sized.bytes, sized.partial));
-        assert_eq!(counted.bytes, nested_bytes(&root));
-    }
-
-    #[test]
-    fn progress_arrives_on_the_cadence_and_never_per_entry() {
-        let (_sandbox, root) = tree("contents-cadence");
-        for n in 0..16 { fs::write(root.join(format!("f{}", n)), "x").unwrap(); }
-        // A slow stop makes the walk last well past the cadence without any assertion on how long it took.
-        let slow = || { std::thread::sleep(Duration::from_millis(25)); false };
-        let seen: std::cell::RefCell<Vec<(Instant, u64)>> = Default::default();
-        let tally = walk_counted(&root, &slow, Some(Progress { every: PROGRESS_EVERY, report: &mut |t| seen.borrow_mut().push((Instant::now(), t.items)) }));
-        let seen = seen.into_inner();
-        assert!(!seen.is_empty(), "a walk past the cadence reports");
-        assert!((seen.len() as u64) < tally.items, "{} reports for {} entries is per entry", seen.len(), tally.items);
-        for pair in seen.windows(2) {
-            assert!(pair[1].0 - pair[0].0 >= PROGRESS_EVERY, "two reports closer than the cadence");
-            assert!(pair[1].1 > pair[0].1, "each report carries more than the last");
-        }
-    }
-
-    #[test]
-    fn a_walk_that_ends_inside_the_cadence_sends_only_its_final_line() {
-        let (_sandbox, root) = tree("contents-final");
-        nested(&root);
-        let sent = contents(&root, 4, 4, &Cancellation::default().next());
-        assert_eq!(sent.len(), 1, "{:?}", sent);
-        assert!(field_bool(&sent[0], "ok") && field_bool(&sent[0], "done") && !field_bool(&sent[0], "partial"));
-        assert_eq!(number(&sent[0], "items"), Some(4));
-        assert_eq!(number(&sent[0], "bytes"), Some(nested_bytes(&root) as usize));
-    }
-
-    #[test]
-    fn a_cancelled_walk_stops_at_once_and_never_says_done() {
-        let (_sandbox, root) = tree("contents-cancel");
-        nested(&root);
-        let cancel = Cancellation::default().next();
-        let _ = cancel.next();
-        let sent = contents(&root, 4, 4, &cancel);
-        assert_eq!(sent.len(), 1);
-        assert!(field_bool(&sent[0], "cancelled") && !field_bool(&sent[0], "done"), "{}", sent[0]);
-        assert_eq!(number(&sent[0], "items"), Some(0), "no directory was read after the cancel");
-        // Mid walk: the cancel lands inside the first listing, and nothing is counted after it.
-        let live = Cancellation::default().next();
-        let calls = Cell::new(0);
-        let reported = Cell::new(0u64);
-        let stop = || { calls.set(calls.get() + 1); if calls.get() == 4 { let _ = live.next(); } live.check().is_err() };
-        let tally = walk_counted(&root, &stop, Some(Progress { every: Duration::ZERO, report: &mut |t| reported.set(t.items) }));
-        assert!(tally.partial && tally.items < 4, "the walk is a floor of what it counted");
-        assert_eq!(tally.items, reported.get(), "nothing was counted after the stop fired");
-    }
-
-    #[test]
-    fn only_a_captured_folder_has_contents() {
-        let (_sandbox, root) = tree("contents-refuse");
-        nested(&root);
-        symlink(&root, root.join("link")).unwrap();
-        let cancel = Cancellation::default().next();
-        for (path, id, asked) in [(root.join("a.txt"), 4, 4), (root.join("link"), 4, 4), (root.clone(), 4, 5), (root.clone(), 0, 0)] {
-            let sent = contents(&path, id, asked, &cancel);
-            assert!(sent.len() == 1 && !field_bool(&sent[0], "ok"), "{} answers {:?}", path.display(), sent);
-        }
-    }
-}
+#[path = "menucontents_tests.rs"]
+mod tests;

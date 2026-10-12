@@ -35,9 +35,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     timeout 60 qs -p "$test_root/config" 2>&1)
 qs_status=$?
 
-# Sample input, one probe line: "  INFO qml: MENUCONTENTS PASS Size opens on the folder's own entry as a floor".
-# Sample input, the receipt: "  INFO qml: MENUCONTENTS DONE checks=37 failed=0".
-# The owned termination is the probe's own self-kill (SIGTERM, 143) after its one DONE receipt; a PASS beside any other status is a double's, never a proof.
+# Sample input, the receipt: "  INFO qml: MENUCONTENTS DONE checks=37 failed=0"; the probe self-kills (143) after it, and a PASS beside any other status is a double's.
 expected_checks=37
 pass_count=$(printf '%s\n' "$output" | grep -c 'MENUCONTENTS PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'MENUCONTENTS FAIL')

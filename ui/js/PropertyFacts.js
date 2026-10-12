@@ -11,10 +11,10 @@ function begin(facts) {
     return {bytes: facts.bytes, items: 0, partial: false, done: false}
 }
 
-// A progress or final reply folded into the walk; a refused request ends as the floor already counted, so the card never counts forever.
+// A progress or final reply folded into the walk; a cancelled or refused walk ends as the floor already counted, so the card never counts forever.
 function next(walk, reply) {
     if (reply.cancelled)
-        return walk
+        return walk.done ? walk : {bytes: walk.bytes, items: walk.items, partial: true, done: true}
     if (!reply.ok)
         return {bytes: walk.bytes, items: walk.items, partial: true, done: true}
     return {bytes: reply.bytes, items: reply.items, partial: reply.partial === true, done: reply.done === true}

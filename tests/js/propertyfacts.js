@@ -35,7 +35,8 @@ function run(check) {
     check("a progress reply moves both numbers and keeps counting", JSON.stringify(progress), JSON.stringify({bytes: 9000, items: 5, partial: false, done: false}))
     var last = PropertyFacts.next(progress, {ok: true, bytes: 9500, items: 6, partial: false, done: true})
     check("the final reply ends the count", last.done, true)
-    check("a cancelled reply changes nothing", PropertyFacts.next(progress, {ok: true, cancelled: true, bytes: 1, items: 1, partial: false, done: false}), progress)
+    check("a cancelled walk settles as the floor already counted", JSON.stringify(PropertyFacts.next(progress, {ok: true, cancelled: true, bytes: 1, items: 1, partial: false, done: false})), JSON.stringify({bytes: 9000, items: 5, partial: true, done: true}))
+    check("a cancelled reply after done changes nothing", PropertyFacts.next(last, {ok: true, cancelled: true, bytes: 1, items: 1, partial: false, done: false}), last)
     var refused = PropertyFacts.next(progress, {ok: false, error: "Menu selection expired; reopen the menu."})
     check("a refused request ends as the floor already counted", JSON.stringify(refused), JSON.stringify({bytes: 9000, items: 5, partial: true, done: true}))
 

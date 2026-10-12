@@ -151,14 +151,16 @@ or restores its survivors before cancellation stops the next root. The undo jour
 cover permanent deletion.
 
 `{"c":"menuaction","op":"contents","id":4}` counts what the one captured folder holds, for Properties on a folder.
-It walks with the folder size walker and no deadline: it never crosses into a nested mount and never follows a
-symbolic link. `items` counts every entry the walk visits below the folder (files, folders, links and other
-entries), not the folder itself, and `bytes` is the folder size walk's total, which includes the folder's own entry.
-The walk runs on the menu worker under the request's own cancellation, so `close` or a newer `snapshot` stops it
-within one directory read. It answers a progress line every 150 ms while it walks, and none for a folder that
+It walks with the folder size walker and never crosses into a nested mount or follows a symbolic link. A local folder
+walks on the menu worker with no deadline. A folder on a remote mount walks on a worker beside the menu worker under
+the bulk deadline (15 s): past it the reply is the floor counted so far, `partial:true` and `done:true`, and the walk
+stops. `items` counts every entry the walk visits below the folder (files, folders, links and other entries), not the
+folder itself, and `bytes` is the folder size walk's total, which includes the folder's own entry.
+The walk runs under the request's own cancellation, so `close` or a newer `snapshot` stops it within one directory
+read, and a remote one is answered at once. It answers a progress line every 150 ms while it walks, and none for a folder that
 finishes sooner: `{"t":"menuaction","id":4,"op":"contents","ok":true,"bytes":2104332800,"items":812,"partial":false,"done":false}`.
 The last line carries `done:true`. `partial` is true when the walk could not read a directory or one vanished, and the
-numbers are then a floor. A cancelled walk answers once with `cancelled:true` and no `done`. An `id` that is not the
+numbers are then a floor. A cancelled walk answers once with `cancelled:true` and `"done":false`. An `id` that is not the
 captured snapshot, a selection of several items, or an item that is not a directory (a symbolic link to one is a link)
 answers `ok:false` with an `error`.
 
