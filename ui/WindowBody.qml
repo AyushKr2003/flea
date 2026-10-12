@@ -214,7 +214,8 @@ Rectangle {
     // peeks the same wire for the primaryPane's ancestors, goes on taking its own.
     Connections {
         target: view.currentPane.backend
-        function onPeeked(path, hidden, total, rows, readFailed, mode) { chrome.completeWith(path, hidden, rows) }
+        // A first-0 reply is a crumb's device ask and carries no rows, so it never reaches the bar's completion.
+        function onPeeked(path, hidden, total, rows, readFailed, mode, hiddenLast, first) { if (first > 0) chrome.completeWith(path, hidden, rows) }
         // A bar never opened sent no ask, so an answer with no jump is dropped like a stale one.
         function onJumped(id, favourites, zoxide, recent, frecency) { if (chrome.jump !== null) chrome.jump.take(id, favourites, zoxide, recent, frecency) }
     }

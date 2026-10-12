@@ -137,13 +137,35 @@ function run(check) {
           Drag.verbFor(true, false, false, 56, 32, true), "copy")
     // The crumb hands verbFor the device the peek answer carried, never the listing's guess.
     var dropSrc = Source.source("ui/CrumbDrop.qml")
-    var askBody = Source.block(dropSrc, "function askDev()", "ui/CrumbDrop.qml")
     var asked = []
-    var askRoot = { dest: "/media/usb", destDev: 77,
-        pane: { backend: { peek: function (path, first) { asked.push(path + "|" + first) } } } }
-    new Function("root", "return function () {" + askBody + "}")(askRoot)()
-    check("a new destination resets the verb to copy and asks the backend for its device",
-        askRoot.destDev + "|" + asked.join(","), "0|/media/usb|0")
+    var peekPane = { backend: { peek: function (path, first) { asked.push(path + "|" + first) } } }
+    var askRoot = { dest: "/media/usb", destDev: 77, asked: "", containsDrag: false, crumb: {}, pane: peekPane }
+    askRoot.askDev = new Function("root", "return function () {" + Source.block(dropSrc, "function askDev()", "ui/CrumbDrop.qml") + "}")(askRoot)
+    var dragChanged = new Function("root", "return function () {" + Source.block(dropSrc, "onContainsDragChanged:", "ui/CrumbDrop.qml") + "}")(askRoot)
+    var destChanged = new Function("root", "return function () {" + Source.block(dropSrc, "onDestChanged:", "ui/CrumbDrop.qml") + "}")(askRoot)
+    check("a crumb made by a navigation, with no drag over it, sends no peek", asked.length + "|" + dropSrc.indexOf("Component.onCompleted"), "0|-1")
+    destChanged()
+    check("a new destination with no drag over it resets the verb to copy and still sends no peek", askRoot.destDev + "|" + asked.length, "0|0")
+    askRoot.containsDrag = true
+    dragChanged()
+    check("the first drag over the crumb asks the backend for its device", asked.join(","), "/media/usb|0")
+    dragChanged()
+    askRoot.containsDrag = false
+    dragChanged()
+    askRoot.containsDrag = true
+    dragChanged()
+    check("a second drag over the same destination asks nothing more", asked.length, 1)
+    askRoot.dest = "/media/other"
+    destChanged()
+    check("a destination change under a drag asks for the new one", asked.join(","), "/media/usb|0,/media/other|0")
+    // A crumb made before its pane marks nothing asked, so the pane's arrival still gets its ask.
+    var late = { dest: "/media/usb", destDev: 0, asked: "", containsDrag: true, crumb: {}, pane: null }
+    late.askDev = new Function("root", "return function () {" + Source.block(dropSrc, "function askDev()", "ui/CrumbDrop.qml") + "}")(late)
+    late.askDev()
+    check("a crumb with no pane yet asks nothing and marks nothing asked", late.asked + "|" + asked.length, "|2")
+    late.pane = peekPane
+    late.askDev()
+    check("and asks once its pane arrives", asked.slice(2).join(","), "/media/usb|0")
     var landBody = Source.block(dropSrc, "function landDev(path, first, readFailed, dev)", "ui/CrumbDrop.qml")
     function landed(dest, path, first, readFailed, dev) {
         var root = { dest: dest, destDev: 0 }
@@ -154,4 +176,25 @@ function run(check) {
     check("a reply for another path lands nowhere", landed("/media/usb", "/home/gm", 0, false, 56), 0)
     check("nor does a column's own reply", landed("/media/usb", "/media/usb", 200, false, 32), 0)
     check("a failed read stays a copy", landed("/media/usb", "/media/usb", 0, true, 32), 0)
+    // Backend's own declared signal order feeds the Connections handler, so a moved parameter lands the wrong device.
+    var declared = /signal peeked\(([^)]*)\)/.exec(Source.source("ui/Backend.qml"))[1].split(",").map(function (one) { return one.trim().split(/\s+/)[1] })
+    var wired = { dest: "/media/usb", destDev: 0 }
+    wired.landDev = new Function("root", "return function (path, first, readFailed, dev) {" + landBody + "}")(wired)
+    var onPeeked = new Function("root", "return (" + Source.slice(dropSrc, "function onPeeked(", "\n    }") + ")")(wired)
+    onPeeked.apply(null, declared.map(function (name) {
+        return { path: "/media/usb", hidden: false, total: 0, rows: [], readFailed: false, mode: 0, hiddenLast: false, first: 0, dev: 32 }[name] }))
+    check("a peeked emitted in Backend's declared order lands its device through the handler", wired.destDev, 32)
+    // The other two peeked readers drop the first-0 device ask, which carries no rows.
+    var seen = []
+    var chromeHandler = new Function("chrome", "return (" + Source.slice(Source.source("ui/WindowBody.qml"), "function onPeeked(", "\n") + ")")({ completeWith: function (path) { seen.push("chrome " + path) } })
+    var repairHandler = new Function("root", "return (" + Source.slice(Source.source("ui/NetworkMounts.qml"), "function onPeeked(", "\n") + ")")({ repairPeeked: function (path) { seen.push("repair " + path) } })
+    function emit(handler, first) {
+        handler.apply(null, declared.map(function (name) { return { path: "/p", hidden: false, total: 0, rows: [], readFailed: false, mode: 0, hiddenLast: false, first: first, dev: 1 }[name] }))
+    }
+    emit(chromeHandler, 0)
+    emit(repairHandler, 0)
+    check("a crumb's first-0 reply reaches neither the bar's completion nor the mount repair", seen.length, 0)
+    emit(chromeHandler, 200)
+    emit(repairHandler, 512)
+    check("while their own replies still do", seen.join(","), "chrome /p,repair /p")
 }

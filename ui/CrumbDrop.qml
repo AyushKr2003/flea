@@ -9,21 +9,25 @@ Flea.DropInto {
     anchors.fill: parent
     enabled: root.crumb.inputLive && root.pane !== null
     refuseLoading: root.pane ? root.pane.listInFlight === true : true
-    // The crumb's own device, asked once per destination, 0 until the answer lands, which copies.
+    // The crumb's own device, 0 until its answer lands, which copies.
     destDev: 0
-    onContainsDragChanged: root.crumb.dropTarget = root.containsDrag
+    onContainsDragChanged: {
+        root.crumb.dropTarget = root.containsDrag
+        if (root.containsDrag) root.askDev()
+    }
 
-    // The peek wire answers any path's device without touching the listing: one first-0 peek per
-    // destination, asked at creation and again if the crumb is reused for another path.
+    // The peek wire answers a path's device without touching the listing; one first-0 peek per destination, sent when a drag first rests on this crumb.
     property string asked: ""
     function askDev() {
-        if (root.dest === root.asked) return
+        if (!root.pane || !root.pane.backend || root.dest.length === 0 || root.dest === root.asked) return
         root.asked = root.dest
-        root.destDev = 0
-        if (root.dest.length > 0 && root.pane && root.pane.backend) root.pane.backend.peek(root.dest, 0, false, false, undefined)
+        root.pane.backend.peek(root.dest, 0, false, false, undefined)
     }
-    onDestChanged: root.askDev()
-    Component.onCompleted: root.askDev()
+    onDestChanged: {
+        root.destDev = 0
+        root.asked = ""
+        if (root.containsDrag) root.askDev()
+    }
     // Only a first-0 reply for this destination lands; columns and repairs ask other counts.
     function landDev(path, first, readFailed, dev) {
         if (first !== 0 || path !== root.dest) return

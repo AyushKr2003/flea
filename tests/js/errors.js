@@ -114,7 +114,10 @@ function run(check) {
           "The destination is not a directory.")
     check("an archive that died with the backend names the archive, not the backend",
           Errors.sentence("archive", "the backend is not running", "doc.zip"),
-          "That archive doc.zip could not be started; reopen Flea and try again.")
+          "doc.zip could not be opened because the Flea backend stopped; reopen Flea and try again.")
+    check("and with no archive name it still says what stopped",
+          Errors.sentence("archive", "the backend is not running"),
+          "This archive could not be opened because the Flea backend stopped; reopen Flea and try again.")
     check("any other archive failure reads back as the backend's own sentence",
           Errors.sentence("archive", "that archive is encrypted"),
           "That archive is encrypted.")

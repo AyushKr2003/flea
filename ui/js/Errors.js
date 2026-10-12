@@ -75,8 +75,8 @@ function sentence(where, message, named) {
     }
     // A password request refused before the child started names its archive, like the read sentence names Flea.
     if (where === "archive" && String(message) === "the backend is not running") {
-        return named ? Format.fill("That archive %1 could not be started; reopen Flea and try again.", named)
-                     : "That archive could not be started; reopen Flea and try again."
+        return named ? Format.fill("%1 could not be opened because the Flea backend stopped; reopen Flea and try again.", named)
+                     : "This archive could not be opened because the Flea backend stopped; reopen Flea and try again."
     }
     if (where === "transfer" || where === "archive" || where === "convert"
             || where === "link" || where === "linktarget" || where === "rename-stranded" || where === "pasteimage") {
