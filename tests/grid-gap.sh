@@ -37,3 +37,28 @@ if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then
     exit 1
 fi
 printf '%s\n' "$output" | grep -o 'GRID_GAP PASS.*'
+printf '%s\n' "$output" | grep -aE 'GRID_GAP (ROWS|LIFT)' | head -12
+
+# Mutant control in a scratch copy: with the lift off the bottom check must fail.
+mutant_ui="$test_root/mutant-ui"
+cp -r "$PWD/ui" "$mutant_ui" || exit 1
+sed -i 's#if (root.contentHeight + root.topMargin + root.bottomMargin <= root.height || root.columns < 1 || view < 0) return#return // mutant-nolift: the lift stays off#' "$mutant_ui/GridArea.qml" || exit 1
+[ "$(grep -c 'mutant-nolift' "$mutant_ui/GridArea.qml")" = 1 ] || { printf 'FAIL the nolift mutant patch missed\n'; exit 1; }
+mkdir -p "$test_root/mutant-config" || exit 1
+ln -s "$mutant_ui" "$test_root/mutant-config/flea" || exit 1
+ln -s "$(readlink -f ui/boot/Commons)" "$test_root/mutant-config/Commons" || exit 1
+ln -s "$(readlink -f ui/boot/Ui)" "$test_root/mutant-config/Ui" || exit 1
+cp tests/grid-gap.qml "$test_root/mutant-config/shell.qml" || exit 1
+
+mutant_output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
+    HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_RUNTIME_DIR="$test_root/runtime" \
+    QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
+    timeout 30 qs -p "$test_root/mutant-config" 2>&1)
+
+printf 'MUTANT-NOLIFT BEGIN\n'
+printf '%s\n' "$mutant_output" | grep -aE 'GRID_GAP (LIFT|FAIL)' | sed 's/GRID_GAP FAIL/MUTANT-NOLIFT expected-failure:/' | head -30
+printf 'MUTANT-NOLIFT END\n'
+if ! printf '%s\n' "$mutant_output" | grep -aq 'GRID_GAP FAIL.*last tile bottom'; then
+    printf 'FAIL the nolift mutant kept the bottom gap, so the suite cannot feel the lift\n'
+    exit 1
+fi

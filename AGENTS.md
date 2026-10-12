@@ -9092,3 +9092,5 @@ The shared prebuild driver (`ui/PrebuildDriver.qml`, 146 lines, under the QML ca
 The key log's tick cap check moves one ceiling, re-derived with `wc -l`: `tests/columnsprebuild.qml` 415 to 416 for the check that fails once the tick log reaches `keepTicks`, where a key's stored tick index no longer holds.
 
 The picker path strip fix moves two ceilings, each re-derived with `wc -l`: `ui/PickerChrome.qml` 426 to 429 for the strip's `pickerWhere` name, its centring in the band above the rule and the parents' width held to their text, and `tests/picker-grid.qml` 450 to 465 for the cursor and marked tile frame check.
+
+The Grid bottom gap moves one ceiling, re-derived with `wc -l`: `ui/GridArea.qml` 481 to 491 for the `bottomMargin` of one gap and `keepLastRowClear`, which lifts a last-row cursor one gap off the view bottom after a reveal and after the hidden restore. `tests/grid-gap.qml` is 267 and `tests/grid-gap.sh` 64, with a mutant leg that turns the lift off.
