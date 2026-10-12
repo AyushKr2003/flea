@@ -537,7 +537,7 @@ transferlive_batch() {
     transferlive_enter_to "$dir" 1
     key p >/dev/null
     menus_expect collideState '.opened and .title == "b.bin already exists in to" and .names == ["b.bin"] and .more == ""
-        and .focus == "keep" and ([.buttons[].visible] | all)' "batch: the paste asks once about b.bin, on Keep both, with every button up"
+        and .focus == "keep" and ([.buttons[] | select(.name != "merge") | .visible] | all) and ([.buttons[] | select(.name == "merge") | .visible] | any | not)' "batch: the paste asks once about b.bin, on Keep both, with every file button up and Merge hidden"
     key h >/dev/null
     menus_expect collideState '.opened and .focus == "skip"' "batch: h moves the focus to Skip"
     key -k Return >/dev/null
@@ -574,7 +574,7 @@ transferlive_replace() {
     transferlive_enter_to "$dir" 1
     key p >/dev/null
     menus_expect collideState '.opened and .title == "big.bin already exists in to" and .names == ["big.bin"] and .more == ""
-        and .focus == "keep" and ([.buttons[].visible] | all)' "replace: the paste asks about big.bin, on Keep both, with every button up"
+        and .focus == "keep" and ([.buttons[] | select(.name != "merge") | .visible] | all) and ([.buttons[] | select(.name == "merge") | .visible] | any | not)' "replace: the paste asks about big.bin, on Keep both, with every file button up and Merge hidden"
     key l >/dev/null
     menus_expect collideState '.opened and .focus == "replace"' "replace: l moves the focus to Replace"
     key -k Return >/dev/null
