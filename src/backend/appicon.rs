@@ -29,6 +29,8 @@ const MAX_LIST_BYTES: u64 = 16 << 20;
 const MAX_LINK_BYTES: u64 = 4096;
 // 7z's own words for a file that is not an archive, which is the one tool failure that judges the file.
 const NOT_AN_ARCHIVE: [&str; 2] = ["Cannot open the file as", "Can not open the file as"];
+// 7z's own words for an archive it opened and could not read to the end, the other tool failure that judges the file; sample last stderr line: "ERROR: Data Error : .DirIcon".
+const DATA_ERROR: [&str; 4] = ["Data Error", "Headers Error", "Unexpected end of archive", "CRC Failed"];
 const WATCH_STEP: Duration = Duration::from_millis(50);
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
 const SVG_SCAN_BYTES: usize = 4096;
@@ -229,11 +231,11 @@ fn within(inner: Vec<String>, image: &Path, work: &mut Work, limit: Duration) ->
     }
 }
 
-// Only 7z saying the file is not an archive judges the file; a jail that would not start, a signal and a bad exit are the machine's.
+// Only 7z saying the file is not an archive, or that its data is damaged, judges the file; a jail that would not start, a signal and a bad exit are the machine's.
 fn stop_for(err: &FleaError, timed_out: bool) -> Stop {
     if timed_out {
         Stop::TimedOut
-    } else if NOT_AN_ARCHIVE.iter().any(|words| err.msg.contains(words)) {
+    } else if NOT_AN_ARCHIVE.iter().chain(&DATA_ERROR).any(|words| err.msg.contains(words)) {
         Stop::Refused
     } else {
         Stop::Fault
@@ -366,3 +368,6 @@ pub(crate) fn resolve(listing: &str, read_link: &mut dyn FnMut(&str) -> Result<S
 #[cfg(test)]
 #[path = "appicon_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "appicon_damage_tests.rs"]
+mod damage_tests;

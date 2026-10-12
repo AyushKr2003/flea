@@ -24,7 +24,7 @@ fn unjailed(inner: Vec<String>, _image: &Path, _work: &mut Work, _limit: Duratio
 }
 
 // The decoder argv as it is, for a box whose bwrap cannot start.
-fn plain(inner: &[String], _input: &Path, _out: &Path) -> Vec<String> {
+pub(super) fn plain(inner: &[String], _input: &Path, _out: &Path) -> Vec<String> {
     inner.to_vec()
 }
 
@@ -49,7 +49,7 @@ fn stub_links(member: &[u8], links: &[(&str, &str)]) -> Vec<String> {
 }
 
 // Sample records: ("A.png", "Symbolic Link = B.png") is a link, ("B.png", "") a file.
-fn listing(records: &[(&str, &str)]) -> String {
+pub(super) fn listing(records: &[(&str, &str)]) -> String {
     let mut text = String::from("Path = /x/app.AppImage\nType = SquashFS\n\n----------\n");
     for (path, extra) in records {
         text.push_str(&format!("Path = {}\nSize = 67\nFolder = -\n{}\n\n", path, extra));
@@ -63,13 +63,13 @@ fn png(dir: &TestDir) -> Vec<u8> {
     std::fs::read(path).unwrap()
 }
 
-struct Fixture {
+pub(super) struct Fixture {
     _dir: TestDir,
-    tables: Tables,
-    job: Job,
+    pub(super) tables: Tables,
+    pub(super) job: Job,
 }
 
-fn fixture(tag: &str, text: &str) -> Fixture {
+pub(super) fn fixture(tag: &str, text: &str) -> Fixture {
     let dir = TestDir::new(tag);
     dir.file("app.AppImage", text);
     let aliases = Arc::new(Aliases::load());
@@ -83,7 +83,7 @@ fn published(f: &Fixture) -> usize {
     std::fs::read_dir(f.tables.cache.large_dir()).map(|d| d.count()).unwrap_or(0)
 }
 
-fn failed_and_recorded(f: &Fixture, out: Outcome) {
+pub(super) fn failed_and_recorded(f: &Fixture, out: Outcome) {
     assert!(matches!(out, Outcome::Failed));
     assert!(matches!(f.tables.cache.lookup(&f.job.path, MTIME), Hit::Failed), "no fail marker was recorded");
     assert_eq!(published(f), 0, "a failed job left a file in large/");
