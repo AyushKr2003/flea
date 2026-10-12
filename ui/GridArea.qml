@@ -113,12 +113,15 @@ GridView {
     onCurrentIndexChanged: { root.prebuild.kick(); Qt.callLater(root.revealCursor) }
     function revealCursor() {
         // StableModel.resize parks currentIndex on row 0 mid-change and a reveal queued then can run inside it; onResized places the view.
-        if (root.visible && !root.hiddenHeld && root.count > 0 && root.cursorView >= 0 && root.currentIndex === root.cursorView)
+        if (root.visible && !root.hiddenHeld && root.count > 0 && root.cursorView >= 0 && root.currentIndex === root.cursorView) {
             root.positionViewAtIndex(root.cursorView, GridView.Contain)
+            root.keepLastRowClear(root.cursorView)
+        }
     }
-    // One gap of bare ground along the left and the top; GridTile's hairline inset stays.
+    // One gap of bare ground along the left, the top and below the last row; the hairline inset stays.
     leftMargin: Theme.spacing.gap
     topMargin: Theme.spacing.gap
+    bottomMargin: Theme.spacing.gap
     cellWidth: GridGeometry.cellWidthFor(root.width, root.columns, Theme.spacing.gap, Theme.spacing.rowPaddingX)
     cellHeight: root.cellHeightPx
     cacheBuffer: root.cellHeightPx * GridGeometry.cacheRows
@@ -370,6 +373,12 @@ GridView {
             root.restoreCursorView()
         else root.revealCursor()
     }
+    // Contain parks a last-row cursor flush on the view bottom, so lift it one gap; middle rows keep Contain.
+    function keepLastRowClear(view) {
+        if (root.contentHeight + root.topMargin + root.bottomMargin <= root.height || root.columns < 1 || view < 0) return
+        if (Math.floor(view / root.columns) !== root.tileRows - 1) return
+        root.contentY = Math.min(root.originY + root.contentHeight + root.bottomMargin - root.height, root.contentY + Theme.spacing.gap)
+    }
     function restoreCursorView() {
         // A queued turn arriving after the hold ended is stale.
         if (!root.hiddenHeld || !root.visible)
@@ -391,6 +400,7 @@ GridView {
         }
         root.forceLayout()
         root.positionViewAtIndex(view, GridView.Contain)
+        root.keepLastRowClear(view)
         // Only a value stable across turns ends the hold; an optimistic position never releases it.
         if (root.coversCursor(view) && root.contentY === root.restoreY) {
             root.hiddenHeld = false
