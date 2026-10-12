@@ -263,7 +263,7 @@ function write(name, text) {
     fs.writeFileSync(file, text);
 }
 // Use the complete product view, model, tile and editor. Only unrelated chrome and services are stubbed.
-for (const name of ["GridArea", "StableModel", "CursorMark", "GridTile", "RenameField", "FastScrollHandler"])
+for (const name of ["GridArea", "StableModel", "CursorMark", "GridTile", "RenameField", "PrebuildDriver", "FastScrollHandler"])
     write(`flea/${name}.qml`, fs.readFileSync(path.join(name === "FastScrollHandler" ? repo : productRoot, "ui", `${name}.qml`), "utf8"));
 fs.cpSync(path.join(repo, "ui/js"), path.join(testRoot, "flea/js"), {recursive: true});
 write("flea/qmldir", ["Theme", "ViewState", "Style", "Util"].map(name => `singleton ${name} 1.0 ${name}.qml`).join("\n") + "\n");
@@ -276,6 +276,7 @@ QtObject {
     property int chromeHeight: 23
     property real bodySmallAdvance: 8
     property real disabledOpacity: 0.5
+    property int clipMarkSize: 12
     property var spacing: ({rowPaddingY: 4, rowPaddingX: 14, gap: 8, hairline: 1})
     property var grid: ({captionHeight: 34, captionLineHeight: 17, minCellWidth: 146})
     property var color: ({background: "#101315", surface: "#181825", foreground: "#eeeeee", muted: "#aaaaaa", error: "#ff7777", accent: "#77aaff"})
@@ -306,7 +307,7 @@ QtObject {
 write("flea/Util.qml", "pragma Singleton\nimport QtQuick\nQtObject { function alpha(color, value) { return color } }\n");
 write("flea/Glyph.qml", "import QtQuick\nItem { property int maxSize: 128; property string name; property color color }\n");
 write("flea/ViewportScrollBar.qml", "import QtQuick\nItem { property var flickable; property var ctrlWheelAction }\n");
-write("flea/SelectionBand.qml", "import QtQuick\nItem { property var pane; property var flickable; property int columns; property real cellWidth; property real cellHeight }\n");
+write("flea/SelectionBand.qml", "import QtQuick\nItem { property var pane; property var flickable; property int columns; property real cellWidth; property real cellHeight; property var rowAt }\n");
 write("flea/FileDrag.qml", "import QtQuick\nItem { property var pane; property int dropIndex: -1; property bool dragCopy: false; property bool dragLink: false }\n");
 write("flea/RowDrag.qml", "import QtQuick\nItem { property var session; property int listingIndex; property var row }\n");
 let fixture = fs.readFileSync(path.join(repo, "tests/rename-grid-bottom.qml"), "utf8");
