@@ -1,5 +1,6 @@
 .import "../../ui/js/Trash.js" as Trash
 .import "../../ui/js/Ops.js" as Ops
+.import "../../ui/js/Format.js" as Format
 .import "sourcefixture.js" as Source
 
 // The dd pair, issue 7. A single d used to trash and sat among the letters a name is typed with, so
@@ -87,4 +88,21 @@ function run(check) {
         windowDispatch && focusSrc.indexOf("root.pathBarRequested()") >= 0, true)
     check("wire pin: host asks the size through the pane signal",
         windowDispatch && focusSrc.indexOf("root.textSizeRequested(") >= 0, true)
+
+    // R0: the delete card shows its whole filled state or nothing, so an unfilled snapshot says no word at all.
+    var unfilled = [{}, { all: true }, { count: "3" }, { token: 1 }]
+    for (var u = 0; u < unfilled.length; u++)
+        check("an unfilled snapshot " + JSON.stringify(unfilled[u]) + " draws no title and no body",
+              Trash.confirmTitle(unfilled[u]) + "|" + Trash.confirmBody(unfilled[u], "Trash items"), "|")
+    check("a filled delete asks one whole sentence, singular and plural",
+          Trash.confirmTitle({ count: 1 }) + " // " + Trash.confirmTitle({ count: 1234 }),
+          "Delete 1 item permanently? // Delete 1,234 items permanently?")
+    check("a filled Empty Trash keeps its question and its body",
+          Trash.confirmTitle({ all: true, count: 3, bytes: 4096 }) + " // " + Trash.confirmBody({ all: true, count: 3, bytes: 4096 }, "Trash items"),
+          "Empty Trash? // 3 items, " + Format.size(4096) + ". This deletes them from disk. This cannot be undone.")
+    check("a filled scoped body keeps its own words",
+          Trash.confirmBody({ count: 2 }, "items"), "These items are deleted from disk. This cannot be undone.")
+    var confirmSrc = Source.source("ui/TrashConfirm.qml")
+    check("wire pin: the card draws its words from the unfilled guard",
+          confirmSrc.indexOf("Trash.confirmTitle(root.snapshot)") >= 0 && confirmSrc.indexOf("Trash.confirmBody(root.snapshot, root.scopeName)") >= 0, true)
 }
