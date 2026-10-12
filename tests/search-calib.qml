@@ -12,6 +12,7 @@ ShellRoot {
     property int generation: 0
     property real keyAt: 0
     property real changedAt: 0
+    property real wheelAt: 0
     property bool swapPending: false
 
     function change() {
@@ -87,6 +88,21 @@ ShellRoot {
                     root.change()
                 else
                     later.restart()
+            }
+
+            // The first wheel event that carries pixels is logged on this client's clock and drawn as one generation change.
+            WheelHandler {
+                onWheel: event => {
+                    if (root.wheelAt > 0)
+                        return
+                    if (event.pixelDelta.x === 0 && event.pixelDelta.y === 0) {
+                        console.log("CALIB wheel-skip angle=" + event.angleDelta.y)
+                        return
+                    }
+                    root.wheelAt = Date.now()
+                    console.log("CALIB wheel at=" + root.wheelAt + " px=" + event.pixelDelta.y)
+                    root.change()
+                }
             }
         }
 
