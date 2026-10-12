@@ -10160,15 +10160,21 @@ case_hanglisting() {
     launch "$dir"
     flea_bin="$real_bin"
     wait_marker "$dir/reload-delayed" "hanglisting: the proxy never held the third listing"
-    local reload_mark_ms=$(date +%s%3N)
+    # The marker's own write time is the proxy's hold start, so the poll lag above never shifts the bound.
+    local hold_s="${FLEA_HANGLISTING_DELAY:-15}"
+    [[ "$hold_s" =~ ^[0-9]+$ ]] || fail "hanglisting: FLEA_HANGLISTING_DELAY is '$hold_s', not whole seconds"
+    local reload_mark_ms
+    reload_mark_ms=$(stat -c %.3Y "$dir/reload-delayed" | tr -d .) || fail "hanglisting: the hold marker has no write time"
     wait_pane_waiting hanglisting
     key -k F5 >/dev/null
     wait_listing 6
+    # Sampled before the ipc reads below, which cost hundreds of milliseconds each.
+    local reload_rows_ms=$(date +%s%3N)
     [[ "$(ipc path)" == "$dir" ]] || fail "hanglisting: F5 past the wait navigated to $(ipc path)"
     [[ "$(ipc state)" != "waiting" && -z "$(ipc stateMessage)" ]] \
         || fail "hanglisting: F5 left the pane $(ipc state) with $(ipc stateMessage)"
-    # The held first list lands DELAY seconds after the mark, so rows already here came from the re-list.
-    (( $(date +%s%3N) < reload_mark_ms + FLEA_HANGLISTING_DELAY * 1000 )) \
+    # The held first list lands DELAY seconds after the hold start, so rows here sooner came from the re-list.
+    (( reload_rows_ms < reload_mark_ms + hold_s * 1000 )) \
         || fail "hanglisting: F5 rows landed only with the held reply, not the re-list"
     shot hanglisting-reloaded
 

@@ -39,6 +39,25 @@ function lcg(seed) {
     var s = seed
     return function () { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff }
 }
+// BulkRename.reasons run from its own source with Map swapped for a wrapper that counts has, get and set.
+function countedReasons() {
+    var request = new XMLHttpRequest()
+    request.open("GET", Qt.resolvedUrl("../../ui/js/BulkRename.js"), false)
+    request.send()
+    var source = request.responseText.replace(/^\.(pragma|import) .*$/gm, "")
+    var total = 0
+    function CountingMap() {
+        var inner = new Map()
+        this.has = function (k) { total += 1; return inner.has(k) }
+        this.get = function (k) { total += 1; return inner.get(k) }
+        this.set = function (k, v) { total += 1; inner.set(k, v); return this }
+    }
+    var reasons = new Function("Map", "Format", source + "\nreturn reasons")(CountingMap, {})
+    return {
+        reasons: function (names) { total = 0; return reasons(names) },
+        ops: function () { return total }
+    }
+}
 function run(check) {
     check("find replaces every hit",
         BulkRename.applyFindReplace(["IMG_1.HEIC", "notes.txt"], "IMG_", "trip-").join(","),
@@ -108,9 +127,14 @@ function run(check) {
     var wcBig = oracleCounts(oldBig, newBig)
     var gcBig = BulkRename.counts(oldBig, newBig, gotBig)
     check("seeded 2000 counts triple matches", JSON.stringify(gcBig), JSON.stringify(wcBig))
-    // Patched builtin prototypes never run in this engine, so each name counts its own read instead.
+    // The engine ignores patched Map prototypes and a reassigned global Map, so the library source runs again with a counting Map passed in.
+    var counted = countedReasons()
+    var measured = counted.reasons(newBig)
+    check("the counted run gives the same reasons", sameReasons(measured, wantBig), true)
+    check("one pass costs at most four map ops per name", counted.ops() <= 4 * newBig.length, true)
+    // A name read twice is a second pass over the input, which the map count cannot see.
     var reads = 0
     var counting = newBig.map(function (s) { return { toString: function () { reads += 1; return s } } })
-    BulkRename.reasons(counting)
+    check("the counting names give the same reasons", sameReasons(BulkRename.reasons(counting), wantBig), true)
     check("one pass reads each name once", reads, newBig.length)
 }

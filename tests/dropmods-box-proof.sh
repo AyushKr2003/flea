@@ -22,9 +22,10 @@ cat > "$test_root/bin/hyprctl" <<'EOF'
 printf '%s' '[{"class":"com.thisisgm.flea","pid":5,"at":[10,20],"size":[800,600]},{"class":"com.thisisgm.flea","pid":9,"at":[30,40],"size":[640,480]}]'
 EOF
 chmod +x "$test_root/bin/hyprctl" || exit 1
-# The stub hold never touches hardware: press and release only need ydotool to exit 0.
+# The stub hold never touches hardware: it exits 0 and logs each call for the order checks.
 cat > "$test_root/bin/ydotool" <<'EOF'
 #!/usr/bin/env bash
+printf '%s\n' "$*" >> "$XDG_RUNTIME_DIR/ydotool.log"
 exit 0
 EOF
 chmod +x "$test_root/bin/ydotool" || exit 1
@@ -45,12 +46,53 @@ assert_focus() { return 0; }
 pointer_glide() { return 0; }
 settle() { return 0; }
 ipc() { printf '{"opened":false}\n'; }
-cap_dropmods_probe_pid=""
-trap cap_dropmods_cleanup EXIT
-cap_drops_press 1 1 || fail "stub press refused"
-[[ "$(trap -p EXIT)" == *"cap_dropmods_cleanup"* ]] || fail "press replaced the case trap: $(trap -p EXIT)"
-cap_drops_release || fail "stub release refused"
-[[ "$(trap -p EXIT)" == *"cap_dropmods_cleanup"* ]] || fail "release cleared the case trap: $(trap -p EXIT)"
-trap cleanup EXIT
-printf 'DROPMODSBOX PASS traphold=cap_dropmods_cleanup\n'
-printf 'DROPMODSBOX DONE checks=2 failed=0\n'
+# Each case runs in a subshell of its own, so a failing case cannot swap out this script's own cleanup trap.
+ylog="$test_root/ydotool.log"
+holdlog="$test_root/hold.log"
+# Sample input: a case trap set before the press runs on exit and is back after cap_drops_release or cap_drops_abandon.
+reset_logs() { : > "$ylog"; : > "$holdlog"; }
+case_trap() { printf 'case-trap\n' >> "$holdlog"; }
+reset_logs
+( trap case_trap EXIT
+  cap_drops_press 1 1 || fail "stub press refused"
+  [[ "$(trap -p EXIT)" == *cap_drops_exit_chain* ]] || fail "press left the exit unreleased: $(trap -p EXIT)"
+  cap_drops_release || fail "stub release refused"
+  [[ "$(trap -p EXIT)" == "trap -- 'case_trap' EXIT" ]] || fail "release did not restore the case trap: $(trap -p EXIT)"
+  : > "$ylog"
+  cap_drops_press 1 1 || fail "stub press refused"
+  cap_drops_abandon
+  [[ "$(trap -p EXIT)" == "trap -- 'case_trap' EXIT" ]] || fail "abandon did not restore the case trap: $(trap -p EXIT)"
+) || exit 1
+[[ "$(cat "$holdlog")" == "case-trap" ]] || fail "the case trap ran '$(tr '\n' ' ' < "$holdlog")', want once on exit"
+printf 'DROPMODSBOX PASS traphold=case_trap\n'
+# A fail between the press and the release: the button comes up first, then the case trap runs.
+reset_logs
+( trap case_trap EXIT
+  cap_drops_press 1 1 || fail "stub press refused"
+  : > "$ylog"
+  exit 3
+)
+[[ $? -eq 3 ]] || fail "the held exit status was lost"
+[[ "$(cat "$ylog")" == "click 0x80" ]] || fail "an exit with a case trap and a held button clicked '$(tr '\n' ' ' < "$ylog")', want click 0x80 once"
+[[ "$(cat "$holdlog")" == "case-trap" ]] || fail "an exit with a held button skipped the case trap: '$(tr '\n' ' ' < "$holdlog")'"
+printf 'DROPMODSBOX PASS exithold=release-then-case-trap\n'
+# A bare press has no trap before it: the press arms the release, release and abandon clear it.
+reset_logs
+( trap - EXIT
+  cap_drops_press 1 1 || fail "stub press refused"
+  [[ "$(trap -p EXIT)" == *cap_drops_exit_chain* ]] || fail "a bare press armed no release: '$(trap -p EXIT)'"
+  cap_drops_release || fail "stub release refused"
+  [[ -z "$(trap -p EXIT)" ]] || fail "release left a trap behind: $(trap -p EXIT)"
+  cap_drops_press 1 1 || fail "stub press refused"
+  cap_drops_abandon
+  [[ -z "$(trap -p EXIT)" ]] || fail "abandon left a trap behind: $(trap -p EXIT)"
+  : > "$ylog"
+  cap_drops_press 1 1 || fail "stub press refused"
+  : > "$ylog"
+  exit 4
+)
+[[ $? -eq 4 ]] || fail "the bare exit status was lost"
+[[ "$(cat "$ylog")" == "click 0x80" ]] || fail "a bare held exit clicked '$(tr '\n' ' ' < "$ylog")', want click 0x80"
+[[ "$(trap -p EXIT)" == "trap -- 'cleanup' EXIT" ]] || fail "the script's own cleanup trap is gone: $(trap -p EXIT)"
+printf 'DROPMODSBOX PASS barepress=armed-and-cleared\n'
+printf 'DROPMODSBOX DONE checks=4 failed=0\n'
