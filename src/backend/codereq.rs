@@ -64,8 +64,9 @@ impl Ask {
         }
     }
 
-    fn range(&self) -> String {
-        format!("{}:{}", self.first, self.first + self.count - 1)
+    // None when the window would end past usize::MAX, which a client can ask for and no file reaches.
+    fn range(&self) -> Option<String> {
+        Some(format!("{}:{}", self.first, self.first.checked_add(self.count - 1)?))
     }
 }
 
@@ -164,16 +165,20 @@ pub fn spawn(ask: Ask, tx: Sender<OpMsg>) {
     });
 }
 
-// The first bat on the path, only when the jail can see it: it binds /usr, and /bin and /sbin are links into it.
-// Sample input: "/usr/local/bin:/usr/bin" with /usr/bin/bat gives Some("/usr/bin/bat"); a bat under /home gives None.
+// The first bat on the path, only when the jail can see it: the jail binds /usr, so the file the link resolves to must lie under it.
+// Sample input: "/usr/local/bin:/usr/bin" with /usr/bin/bat gives Some("/usr/bin/bat"); a bat under /home, or a link from /usr into it, gives None.
 fn bat_in(path: &str) -> Option<String> {
-    let found = path.split(':').filter(|d| !d.is_empty()).map(|d| Path::new(d).join("bat")).find(|p| p.is_file())?;
-    let found = found.to_string_lossy().into_owned();
-    ["/usr/", "/bin/", "/sbin/"].iter().any(|root| found.starts_with(root)).then_some(found)
+    bat_under(path, Path::new("/usr"))
+}
+
+fn bat_under(path: &str, root: &Path) -> Option<String> {
+    let found = path.split(':').filter(|d| !d.is_empty()).map(|d| Path::new(d).join("bat")).find(|p| p.is_file())?.canonicalize().ok()?;
+    found.starts_with(root.canonicalize().ok()?).then(|| found.to_string_lossy().into_owned())
 }
 
 // None means a newer request took the slot while this one ran.
 fn answer(ask: &Ask, bat: Option<&str>, ticket: &Ticket) -> Option<String> {
+    let Some(range) = ask.range() else { return Some(reply(ask, "failed", 0, &[])) };
     let Some(data) = load(&ask.source) else { return Some(reply(ask, "failed", 0, &[])) };
     let formatted = takes_jq(&ask.source, &data);
     let verdict = judge(&data, formatted);
@@ -183,7 +188,7 @@ fn answer(ask: &Ask, bat: Option<&str>, ticket: &Ticket) -> Option<String> {
         _ => {}
     }
     let Some(bat) = bat.filter(|_| !ask.raw && verdict == Verdict::Styled) else { return Some(plain(ask, &data)) };
-    let line = match colour(ask, &data, bat, formatted, ticket)? {
+    let line = match colour(ask, &data, (bat, &range), formatted, ticket)? {
         Colour::Lines { total, lines } => reply(ask, "styled", total.unwrap_or_else(|| line_count(&data)), &lines),
         Colour::Plain => plain(ask, &data),
         Colour::Failed => reply(ask, "failed", 0, &[]),
@@ -268,26 +273,22 @@ enum Colour {
     Failed,
 }
 
-// Runs bat (and jq for a one-line .json file) in one jail; None when a newer request ended the job.
-fn colour(ask: &Ask, data: &[u8], bat: &str, formatted: bool, ticket: &Ticket) -> Option<Colour> {
+// Runs bat (and jq for a one-line .json file) in one jail on the bytes the verdict was made on, which the jail gets on stdin and never opens the file; None when a newer request ended the job.
+fn colour(ask: &Ask, data: &[u8], (bat, range): (&str, &str), formatted: bool, ticket: &Ticket) -> Option<Colour> {
     if ticket.superseded() {
         return None;
     }
-    let (inner, bind) = match &ask.source {
-        Source::File(path) if formatted => (json_argv(bat, path, &ask.range()), Some(Path::new(path))),
-        Source::File(path) => (file_argv(bat, path, &ask.range()), Some(Path::new(path))),
-        Source::Text { name, lang, .. } => (text_argv(bat, name, lang, &ask.range()), None),
+    let inner = match &ask.source {
+        Source::File(_) if formatted => json_argv(bat, range),
+        Source::File(path) => text_argv(bat, path, "", range),
+        Source::Text { name, lang, .. } => text_argv(bat, name, lang, range),
     };
-    let mut full = match bind {
-        Some(path) => sandbox::wrap_readonly(&inner, path),
-        None => sandbox::wrap_readonly_extra(&inner, &[]),
-    };
+    let mut full = sandbox::wrap_readonly_extra(&inner, &[]);
     sandbox::add_status(&mut full, inner.len());
-    let piped = bind.is_none();
     let spawned = jail::spawn_jailed(&full, |cmd| {
         cmd.env_clear().env("PATH", std::env::var_os("PATH").unwrap_or_default());
         cmd.env("LANG", std::env::var_os("LANG").unwrap_or_else(|| "C.UTF-8".into()));
-        cmd.stdin(if piped { Stdio::piped() } else { Stdio::null() }).stdout(Stdio::piped()).stderr(Stdio::null());
+        cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
     });
     let Ok(mut jailed) = spawned else { return Some(Colour::Failed) };
     let (stdin, stdout) = (jailed.child.stdin.take(), jailed.child.stdout.take());
@@ -330,12 +331,6 @@ fn bat_cmd(bat: &str) -> Vec<String> {
     ["env", "HOME=/tmp", bat].iter().chain(BAT_FLAGS.iter()).map(|arg| arg.to_string()).collect()
 }
 
-fn file_argv(bat: &str, path: &str, range: &str) -> Vec<String> {
-    let mut argv = bat_cmd(bat);
-    argv.extend([format!("--line-range={range}"), path.to_string()]);
-    argv
-}
-
 fn text_argv(bat: &str, name: &str, lang: &str, range: &str) -> Vec<String> {
     let mut argv = bat_cmd(bat);
     if !lang.is_empty() {
@@ -347,14 +342,14 @@ fn text_argv(bat: &str, name: &str, lang: &str, range: &str) -> Vec<String> {
     argv
 }
 
-// jq writes the jail's own /tmp so its exit status is not lost in a pipe; a file jq refuses is coloured as it is.
-fn json_argv(bat: &str, path: &str, range: &str) -> Vec<String> {
+// The stdin bytes go to the jail's own /tmp (a private tmpfs in every jail) so jq's exit status is not lost in a pipe; a file jq refuses is coloured as it is.
+fn json_argv(bat: &str, range: &str) -> Vec<String> {
     let flags = BAT_FLAGS.join(" ");
     let script = format!(
-        "export HOME=/tmp; if jq --indent 2 . \"$1\" > /tmp/j 2>/dev/null; then wc -l < /tmp/j; exec \"$3\" {flags} --language=json --line-range=\"$2\" /tmp/j; \
-         else echo x; exec \"$3\" {flags} --line-range=\"$2\" \"$1\"; fi"
+        "export HOME=/tmp; cat > /tmp/i; if jq --indent 2 . /tmp/i > /tmp/j 2>/dev/null; then wc -l < /tmp/j; exec \"$2\" {flags} --language=json --line-range=\"$1\" /tmp/j; \
+         else echo x; exec \"$2\" {flags} --language=json --line-range=\"$1\" /tmp/i; fi"
     );
-    ["sh", "-c", &script, "sh", path, range, bat].iter().map(|arg| arg.to_string()).collect()
+    ["sh", "-c", &script, "sh", range, bat].iter().map(|arg| arg.to_string()).collect()
 }
 
 // Sample output: {"t":"code","token":4,"slot":"look","state":"styled","first":1,"total":2,"lines":[[5,"fn",0," main"],[]]}

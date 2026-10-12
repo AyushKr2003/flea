@@ -146,8 +146,28 @@ fn bat_counts_only_where_the_jail_can_see_it() {
     d.file("bat", "");
     assert_eq!(bat_in(&d.path().to_string_lossy()), None, "a bat outside /usr is not in the jail");
     if Path::new("/usr/bin/bat").is_file() {
-        assert_eq!(bat_in("/nonexistent:/usr/bin").as_deref(), Some("/usr/bin/bat"));
+        assert_eq!(bat_in("/nonexistent:/usr/bin").as_deref().map(Path::new).map(|p| p.starts_with("/usr")), Some(true));
     }
+}
+
+#[test]
+fn a_bat_counts_by_where_its_link_leads_and_not_by_where_the_path_names_it() {
+    let d = TestDir::new("codereqlink");
+    let (system, home) = (d.join("usr"), d.join("home"));
+    for dir in ["bin", "local/bin", "../home"] {
+        std::fs::create_dir_all(system.join(dir)).unwrap();
+    }
+    let real = d.file("usr/bin/bat", "");
+    let outside = d.file("home/bat", "");
+    std::os::unix::fs::symlink(&outside, system.join("local/bin/bat")).unwrap();
+    let on = |dirs: &[&str]| dirs.iter().map(|dir| system.join(dir).to_string_lossy().into_owned()).collect::<Vec<_>>().join(":");
+    assert_eq!(bat_under(&on(&["local/bin"]), &system), None, "a link out of the prefix is not in the jail");
+    assert_eq!(bat_under(&on(&["../home"]), &system), None, "a path that climbs out of the prefix is not in the jail");
+    assert_eq!(bat_under(&home.to_string_lossy(), &system), None);
+    assert_eq!(bat_under(&on(&["bin"]), &system).as_deref(), Some(real.canonicalize().unwrap().to_str().unwrap()));
+    std::fs::remove_file(system.join("local/bin/bat")).unwrap();
+    std::os::unix::fs::symlink(&real, system.join("local/bin/bat")).unwrap();
+    assert_eq!(bat_under(&on(&["local/bin"]), &system).as_deref(), Some(real.canonicalize().unwrap().to_str().unwrap()), "a link inside the prefix resolves to its target");
 }
 
 #[test]
@@ -211,9 +231,9 @@ fn the_json_rule_takes_one_line_json_files_only() {
     assert_eq!(formatted("pretty.json", "{\n\"a\": 1\n}\n"), (false, 3));
     assert_eq!(formatted("min.txt", "{\"a\":1}"), (false, 1));
     assert_eq!(formatted("empty.json", ""), (false, 0));
-    let argv = json_argv("/usr/bin/bat", "/d/a.json", "1:400");
-    assert_eq!((argv[0].as_str(), argv[4].as_str(), argv[5].as_str(), argv[6].as_str()), ("sh", "/d/a.json", "1:400", "/usr/bin/bat"));
-    assert!(argv[2].contains("jq --indent 2 .") && argv[2].contains("--language=json"), "{}", argv[2]);
+    let argv = json_argv("/usr/bin/bat", "1:400");
+    assert_eq!((argv[0].as_str(), argv[4].as_str(), argv[5].as_str()), ("sh", "1:400", "/usr/bin/bat"));
+    assert!(argv[2].contains("cat > /tmp/i") && argv[2].contains("jq --indent 2 . /tmp/i") && argv[2].contains("--language=json"), "{}", argv[2]);
 }
 
 #[test]
@@ -228,16 +248,41 @@ fn the_requests_read_their_fields_and_clamp_the_count() {
         assert_eq!(ask(&format!(r#"{{"c":"code","path":"/a","count":{given}}}"#)).count, want, "count {given}");
     }
     assert_eq!(ask(r#"{"c":"code","path":"/a","first":0}"#).first, 1);
-    assert_eq!(ask(r#"{"c":"code","path":"/a","count":3,"first":5}"#).range(), "5:7");
+    assert_eq!(ask(r#"{"c":"code","path":"/a","count":3,"first":5}"#).range().as_deref(), Some("5:7"));
+}
+
+#[test]
+fn a_window_that_ends_past_the_largest_line_is_refused_and_not_wrapped() {
+    let last = usize::MAX;
+    let edge = ask(&format!(r#"{{"c":"code","path":"/a","first":{},"count":2}}"#, last - 1));
+    assert_eq!(edge.range().as_deref(), Some("18446744073709551614:18446744073709551615"), "the last window that fits");
+    let over = ask(&format!(r#"{{"c":"code","path":"/a","first":{last},"count":2}}"#));
+    assert_eq!(over.range(), None);
+    assert_eq!(ask(&format!(r#"{{"c":"code","path":"/a","first":{last}}}"#)).range(), None, "an absent count is the capped 400");
+    let d = TestDir::new("codereqrange");
+    let path = d.file("a.rs", "fn a() {}\n");
+    let line = answered("codereq-range", &file_ask(&path, &format!(r#","first":{last},"count":2"#)), None);
+    assert_eq!((state(&line), total(&line), line_total(&line)), ("failed".to_string(), 0, 0), "refused with the failed shape, no panic");
+    let text = answered("codereq-range-text", &ask(&format!(r#"{{"c":"code","token":1,"slot":"t","text":"a\n","name":"x.rs","first":{last}}}"#)), None);
+    assert_eq!(state(&text), "failed");
+}
+
+#[test]
+fn a_jail_gets_a_private_tmpfs_tmp_and_no_bind_of_the_file() {
+    let jail = sandbox::wrap_readonly_extra(&text_argv("/usr/bin/bat", "/d/a.rs", "", "1:9"), &[]);
+    let at = jail.iter().position(|a| a == "--tmpfs").expect("a tmpfs");
+    assert_eq!(jail[at + 1], "/tmp", "the json script's scratch names are the jail's own, not the host's");
+    assert!(jail.iter().any(|a| a == "--unshare-all") && !jail.iter().any(|a| a == "--bind" || a == "/d/a.rs"));
 }
 
 #[test]
 fn the_argv_names_exactly_the_asked_range() {
-    let flags = file_argv("/usr/bin/bat", "/d/a.rs", "40:59");
+    let flags = text_argv("/usr/bin/bat", "/d/a.rs", "", "40:59");
     assert_eq!(&flags[..3], ["env", "HOME=/tmp", "/usr/bin/bat"]);
     assert!(flags.contains(&"--theme=ansi".to_string()) && flags.contains(&"--no-config".to_string()));
     assert!(flags.contains(&"--no-custom-assets".to_string()) && flags.contains(&"--wrap=never".to_string()));
-    assert_eq!(&flags[flags.len() - 2..], ["--line-range=40:59", "/d/a.rs"]);
+    assert_eq!(&flags[flags.len() - 2..], ["--file-name=/d/a.rs", "--line-range=40:59"], "the file reaches bat on stdin, named only for its language");
+    assert!(!flags.iter().any(|a| a == "/d/a.rs"), "no argument opens the path");
     assert!(text_argv("bat", "x.rs", "", "1:9").contains(&"--file-name=x.rs".to_string()));
     let both = text_argv("bat", "x.rs", "toml", "1:9");
     assert!(both.contains(&"--language=toml".to_string()) && !both.iter().any(|a| a.starts_with("--file-name")));

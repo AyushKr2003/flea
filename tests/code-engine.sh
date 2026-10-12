@@ -62,10 +62,17 @@ stop_backend() {
   end_backend
 }
 
-# Every bwrap the backend starts goes through this wrapper first, so the jails are counted and not timed.
+# Every bwrap the backend starts goes through this wrapper first, so the jails are counted and not timed, and its arguments are kept.
+# While $SB/hold exists the jail is a held process instead: its pid is written to $SB/held.pid, so a test knows the jail started and can tell whether it was ended.
 make_shim() {
   mkdir -p "$SB/shim"
-  printf '#!/bin/sh\necho jail >> "%s/jails"\nexec "%s" "$@"\n' "$SB" "$REAL_BWRAP" > "$SB/shim/bwrap"
+  cat > "$SB/shim/bwrap" <<EOF
+#!/bin/sh
+echo jail >> "$SB/jails"
+printf '%s\n' "\$@" >> "$SB/jail-args"
+if [ -f "$SB/hold" ]; then echo \$\$ > "$SB/held.pid"; exec sleep 15; fi
+exec "$REAL_BWRAP" "\$@"
+EOF
   chmod +x "$SB/shim/bwrap"
 }
 
@@ -123,7 +130,6 @@ head -c 1048577 /dev/zero | tr '\0' a > "$D/over.txt"
 head -c 1048576 /dev/zero | tr '\0' a > "$D/at.txt"
 { printf 'fn a() {}\n'; head -c 5001 /dev/zero | tr '\0' x; printf '\n'; } > "$D/long.rs"
 printf '<img src="http://127.0.0.1:9/x">\n' > "$D/img.html"
-for n in $(seq 1 30000); do printf 'fn f%d() { let s = "x"; }\n' "$n"; done > "$D/big.rs"
 printf 'fn a() {}\n' > "$D/small.rs"
 
 start_backend "$SB/shim:$PATH"
@@ -136,6 +142,7 @@ check "the fn run is magenta" "5 fn" "$(field '.lines[0][0:2]|join(" ")' "$r")"
 check "a string run is green" "2" "$(field '[.lines[0] as $l | range(0; $l|length; 2) | select($l[.+1] | contains("\"x\"")) | $l[.]] | first' "$r")"
 check "no escape byte reaches the wire" "0" "$(printf '%s' "$r" | grep -c -a -e '\\u001b' -e "$(printf '\033')")"
 check "exactly one jail answered it" "1" "$(cat "$SB/delta")"
+check "the jail is given the file on stdin and never its path" "0" "$(grep -a -c -x -F -e "$D/a.rs" "$SB/jail-args")"
 
 r=$(ask "$(file_req 2 look "$D/data.json" 1 400)" 2) || r=""
 check "minified JSON is answered styled" "styled" "$(field .state "$r")"
@@ -179,20 +186,32 @@ check "a toml table header is yellow" "3 package" "$(field '[.lines[0][] ] | [.[
 r=$(ask "$(text_req 12 fence:3 $'hello\n' '' nosuchlang)" 12) || r=""
 check "an unknown language is plain" "plain" "$(field .state "$r")"
 
-# Two requests on one slot: the second is answered, the first never is, and its bat does not outlive it.
-slow=$(file_req 20 column "$D/big.rs" 29000 400)
-quick=$(file_req 21 column "$D/small.rs" 1 400)
-printf '%s\n%s\n' "$slow" "$quick" >&3
+# Two requests on one slot: the first job's jail is running, held by the shim, when the second arrives.
+# The second is answered, the first never is, and the first jail is ended by the second request.
+touch "$SB/hold"
+before=$(jails)
+printf '%s\n' "$(file_req 20 column "$D/a.rs" 1 5)" >&3
+for _ in $(seq 1 $((ANSWER_BOUND * 20))); do [ -s "$SB/held.pid" ] && break; sleep 0.05; done
+rm -f "$SB/hold"
+check "the first request's jail started before the second was sent" "1" "$(( $(jails) - before ))"
+# The job attaches its jail right after the spawn; this is long beside that.
+sleep 0.3
+printf '%s\n' "$(file_req 21 column "$D/small.rs" 1 400)" >&3
 r=$(reply 21) || r=""
 check "the second request on a slot is answered" "styled" "$(field .state "$r")"
 sleep "$SILENCE"
 check "the first request on that slot is never answered" "0" "$(grep -a -c '"token":20,' "$SB/out")"
 check "the second is answered once" "1" "$(grep -a -c '"token":21,' "$SB/out")"
-check "the superseded bat is gone" "0" "$(pgrep -f -- "$D/big.rs" | wc -l | tr -d ' ')"
+held=$(cat "$SB/held.pid" 2>/dev/null)
+for _ in $(seq 1 100); do [ -n "$held" ] && kill -0 "$held" 2>/dev/null || break; sleep 0.1; done
+alive=gone; [ -n "$held" ] && kill -0 "$held" 2>/dev/null && alive=alive
+check "the superseded jail is ended" "gone" "$alive"
 stop_backend
 
 # A path without bat answers plain from a direct read and starts no jail.
-for tool in bwrap prlimit; do ln -sf "$(command -v "$tool")" "$SB/nobat/$tool"; done
+# Its bwrap is the counting shim, so a jail it started would move the count.
+ln -sf "$(command -v prlimit)" "$SB/nobat/prlimit"
+ln -sf "$SB/shim/bwrap" "$SB/nobat/bwrap"
 before=$(jails)
 start_backend "$SB/nobat"
 r=$(ask "$(file_req 30 look "$D/a.rs" 1 5)" 30) || r=""
