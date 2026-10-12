@@ -681,6 +681,7 @@ def stub_allowances():
         ('tests/js/reload.js', 'windowed'): 'Records requested backend windows.',
         ('tests/js/runfile.js', 'acted'): 'Records act calls through stub methods.',
         ('tests/js/runfile.js', 'qlOpened'): 'Records Quick Look opens through the stub preview.',
+        ('tests/js/runfile.js', 'ranText'): 'Records Open as text calls through the stub run lane.',
         ('tests/js/runfile.js', 'said'): 'Records messages emitted by the stub message signal.',
         ('tests/js/search.js', 'relisted'): 'Records openWithoutHistory inputs.',
         ('tests/js/search.js', 'sent'): 'Records backend requests emitted by stub methods.',
