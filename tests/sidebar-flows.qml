@@ -84,9 +84,9 @@ ShellRoot {
         var point = row.mapFromItem(null, centre[0], centre[1])
         root.click(row, point.x, point.y)
     }
-    function ipc() {
+    function ipc(whole) {
         for (var i = 0; i < body.data.length; i++)
-            if (String(body.data[i].item).indexOf("Ipc_") === 0) return body.data[i].item.seam
+            if (String(body.data[i].item).indexOf("Ipc_") === 0) return whole ? body.data[i].item : body.data[i].item.seam
         return null  // the seam is built after the first listing, and it is the item a Loader of the body holds
     }
     function find(item, type) {
@@ -441,7 +441,7 @@ ShellRoot {
             root.railRecent = rail.entries.findIndex(function (e) { return e.kind === "recent" })
             root.railTrash = rail.entries.findIndex(function (e) { return e.kind === "trash" })
             check("lit-place: the rail lights Home in a folder under it", rail.litIndex, root.railHome)
-            check("lit-place: the rail rows draw the lit look on Home only", root.railLit(), [root.railHome])
+            check("lit-place: the rail rows draw the lit look on Home only, and the IPC Trash row is not current", [root.railLit(), root.ipc(true).trashRail().current], [[root.railHome], false])
             check("lit-place: an unfocused rail draws no cursor frame", root.railIndices("frame"), [])
             rail.activate(root.railRecent)
             check("lit-place: the request moves the cursor and not the lit place", [rail.cursorIndex, rail.litIndex], [root.railRecent, root.railHome])
@@ -455,6 +455,8 @@ ShellRoot {
             rail.cursorIndex = root.railHome
             pane.focusView = "rail"
             check("lit-place: a focused rail draws the cursor frame on the cursor row, apart from the lit one", [root.railIndices("frame"), root.railLit()], [[root.railHome], [root.railRecent]])
+            rail.cursorIndex = root.railTrash
+            check("lit-place: the cursor on Trash, not lit, draws its frame and the IPC does not read it as current", [root.railIndices("frame"), root.railLit(), root.ipc(true).trashRail().current], [[root.railTrash], [root.railRecent], false])
             rail.cursorIndex = root.railRecent
             check("lit-place: the cursor on the lit row draws both", [root.railIndices("frame"), root.railLit()], [[root.railRecent], [root.railRecent]])
             pane.focusView = "list"
@@ -470,7 +472,11 @@ ShellRoot {
         },
         function () {
             if (!pane.trash.opened) return false
-            check("lit-place: an open Trash lights the Trash row alone", [pane.sidebar.litIndex, root.railLit()], [root.railTrash, [root.railTrash]])
+            check("lit-place: an open Trash lights the Trash row alone, and the IPC reads it as current with the list holding focus", [pane.sidebar.litIndex, root.railLit(), root.ipc(true).trashRail().current], [root.railTrash, [root.railTrash], true])
+            pane.sidebar.cursorIndex = root.railHome
+            pane.focusView = "rail"
+            check("lit-place: an open Trash with the rail cursor off it is still current over the IPC", [root.railIndices("frame"), root.railLit(), root.ipc(true).trashRail().current], [[root.railHome], [root.railTrash], true])
+            pane.focusView = "list"
             pane.trash.close()
             return true
         },
