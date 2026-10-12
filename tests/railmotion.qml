@@ -67,10 +67,18 @@ ShellRoot {
         { name: "a release in flight", set: function (d) { d.polling = false; d._unmounting = true },
           clear: function (d) { d._unmounting = false; d.polling = Qt.binding(function () { return root.sidebar().polling }) } }
     ]
+    // The DEVICES poll's own Timer, found by its interval; running false is the parked state.
+    function pollParked() {
+        var d = root.find(root.sidebar(), "DeviceMounts")
+        for (var i = 0; d && i < d.data.length; i++)
+            if (d.data[i].interval === d.pollMs && d.data[i].triggeredOnStart) return !d.data[i].running
+        return false
+    }
+    // Each hold starts parked and ends parked, so a step's growth is its own and never the case before's leftover polling.
     function holdSteps() {
         var out = []
         root.holds.forEach(function (hold) {
-            out.push(function () { return until("the rail withdrawn before " + hold.name, root.gone()) })
+            out.push(function () { return until("the rail withdrawn and the poll parked before " + hold.name, root.gone() && root.pollParked()) })
             out.push(function () { root.polls = root.devicePolls(); hold.set(root.find(root.sidebar(), "DeviceMounts")); root.mark("hold"); return true })
             out.push(function () {
                 var d = root.find(root.sidebar(), "DeviceMounts")
@@ -78,6 +86,11 @@ ShellRoot {
                 if (!grew && root.since("hold") < 1500) return false
                 check(hold.name + " keeps a parked poll running", [d.polling === false, grew], [true, true])
                 hold.clear(d)
+                return true
+            })
+            out.push(function () {
+                if (!until("the poll parked again after " + hold.name, root.pollParked())) return false
+                check(hold.name + " parks the poll again once cleared", [root.find(root.sidebar(), "DeviceMounts").firstAnswered, root.pollParked()], [true, true])
                 return true
             })
         })
