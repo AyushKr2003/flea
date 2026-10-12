@@ -227,9 +227,14 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
         }
         Event::SearchHeld => super::searchhold::on_search_held(out, st, tb, pool),
         Event::ReadError(e) => {
-            // The framing cannot be trusted past a decode failure, so this reports and stops, as before.
+            // The framing cannot be trusted past a decode failure, so this reports at once and the reader reads no further.
             writeln!(out, "{}", error_line(&e)).ok();
             out.flush().ok();
+            // The requests read before the failure are sound, so a scan still out is answered first, as for Closed.
+            if gate.holds() {
+                gate.close();
+                return Control::Continue;
+            }
             return Control::Quit;
         }
         // A scan still out is answered before the process leaves, so no client loses its listing.
