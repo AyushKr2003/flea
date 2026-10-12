@@ -12,8 +12,6 @@ thread_local! {
     static FORCE: RefCell<Vec<PathBuf>> = const { RefCell::new(Vec::new()) };
     // Sample input: Some("... vfat /dev/sda1 ...") batches a marked dest, so batch tests drive begin without two mounts.
     static FAKE_MOUNTINFO: RefCell<Option<String>> = const { RefCell::new(None) };
-    // Paths the link walk issued readlink on, so a test pins that none lands inside a mount that can wedge.
-    static LINK_READS: RefCell<Vec<PathBuf>> = const { RefCell::new(Vec::new()) };
     static FAIL_FILE: Cell<bool> = const { Cell::new(false) };
     static FAIL_DIR: Cell<bool> = const { Cell::new(false) };
     static FILE_FLUSHES: Cell<usize> = const { Cell::new(0) };
@@ -146,59 +144,6 @@ pub(crate) fn batch_syncfs_for(dest: &Path, body: &str, durable: bool, rclone: b
     }
 }
 
-// A link into a mount that can wedge a syscall (a share, a FUSE mount) stops the walk before any syscall lands there, so the path up to that mount answers.
-fn resolved_dest(dest: &Path, body: &str) -> PathBuf {
-    use std::path::Component;
-    if !dest.is_absolute() || crate::backend::extclass::gvfs_class(dest).is_some() {
-        return dest.to_path_buf();
-    }
-    let parts = |path: &Path| -> Vec<std::ffi::OsString> {
-        path.components().filter(|c| matches!(c, Component::Normal(_) | Component::ParentDir)).rev().map(|c| c.as_os_str().to_owned()).collect()
-    };
-    let mut todo = parts(dest);
-    let mut at = PathBuf::from("/");
-    let mut hops = 0;
-    while let Some(name) = todo.pop() {
-        if name == ".." {
-            at.pop();
-            continue;
-        }
-        let next = at.join(&name);
-        let wedges = crate::backend::extclass::gvfs_class(&next).is_some()
-            || crate::backend::mountinfo::mount_entry_in(&next, body).is_some_and(|e| crate::backend::netfs::can_wedge(&e.fstype));
-        if wedges {
-            let mut out = next;
-            out.extend(todo.iter().rev());
-            return out;
-        }
-        match read_link(&next) {
-            Ok(target) => {
-                hops += 1;
-                if hops > MAX_LINK_HOPS {
-                    return dest.to_path_buf();
-                }
-                if target.is_absolute() {
-                    at = PathBuf::from("/");
-                }
-                todo.extend(parts(&target));
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::InvalidInput => at = next,
-            Err(_) => return dest.to_path_buf(),
-        }
-    }
-    at
-}
-
-// The kernel's own bound on links followed in one path, past which the walk answers the raw path as realpath fails.
-const MAX_LINK_HOPS: usize = 40;
-
-// The one syscall the walk makes, on a path whose mount is already known not to wedge.
-fn read_link(path: &Path) -> std::io::Result<PathBuf> {
-    #[cfg(test)]
-    LINK_READS.with(|v| v.borrow_mut().push(path.to_path_buf()));
-    std::fs::read_link(path)
-}
-
 fn rclone_in(dest: &Path, body: &str) -> bool {
     crate::backend::mountinfo::mount_entry_in(dest, body).is_some_and(|e| fstype_is_rclone(&e.fstype))
 }
@@ -303,7 +248,7 @@ impl Durability {
 
     // Sample input: Some("... vfat /dev/sda1 ...") batches a durable dest, None never does without a mount table.
     fn begin_from(dest: &Path, mountinfo: Option<&str>) -> Durability {
-        let real = mountinfo.map_or_else(|| dest.to_path_buf(), |body| resolved_dest(dest, body));
+        let real = mountinfo.map_or_else(|| dest.to_path_buf(), |body| crate::backend::extclass::resolved_in(dest, body));
         let rclone = mountinfo.map_or_else(|| dest_is_rclone(dest), |body| rclone_in(dest, body) || rclone_in(&real, body));
         let durable = !rclone && dest_is_durable(dest);
         let batch_syncfs = match mountinfo {
@@ -703,7 +648,7 @@ fn confirm_finish(id: usize, tx: &std::sync::mpsc::Sender<crate::backend::opsreq
 pub fn test_reset() {
     FORCE.with(|v| v.borrow_mut().clear());
     FAKE_MOUNTINFO.with(|v| *v.borrow_mut() = None);
-    LINK_READS.with(|v| v.borrow_mut().clear());
+    crate::backend::extclass::test_reset_link_reads();
     FAIL_FILE.with(|v| v.set(false));
     FAIL_DIR.with(|v| v.set(false));
     FILE_FLUSHES.with(|v| v.set(0));
@@ -852,12 +797,6 @@ pub fn test_set_fail_clone(fail: bool) {
 #[cfg(test)]
 pub fn test_set_fake_mountinfo(body: Option<&str>) {
     FAKE_MOUNTINFO.with(|v| *v.borrow_mut() = body.map(|s| s.to_string()));
-}
-
-// The paths the link walk read since the last reset.
-#[cfg(test)]
-pub(crate) fn test_link_reads() -> Vec<PathBuf> {
-    LINK_READS.with(|v| v.borrow().clone())
 }
 
 #[cfg(test)]
