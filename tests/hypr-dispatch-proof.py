@@ -62,12 +62,14 @@ def functions(text, names):
     return "\n".join(match.group() for match in re.finditer(pattern, text))
 
 
-# Sample input: repo="$(cd "$(dirname "$0")/.." && pwd)" followed by . "$repo/tests/lib/hypr-dispatch.sh".
+# Sample input: cd "$(dirname "$0")/.." then repo=$(pwd) followed by . "$repo/tests/lib/hypr-dispatch.sh".
 def helper_source_block(text):
     setup = []
     sources = []
     for line in text.splitlines():
         stripped = line.lstrip()
+        if stripped.startswith('cd "$(dirname "$0")/.."') and not sources:
+            setup.append(line)
         if stripped.startswith("repo=") and not sources:
             setup.append(line)
         if stripped.startswith((". ", "source ", ".\t", "source\t")) and "hypr-dispatch.sh" in line:
