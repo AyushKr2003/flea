@@ -2343,7 +2343,7 @@ failure fails the check rather than passing it.
   `ui/SettingsRail.qml` the section rail and `ui/SettingsRow.qml` one row of the pane.
   `ui/SettingsPane.qml` builds View and the open section's rows at the first open and the rest one section per 150 ms
   tick (`idleBuild`), so the cold open builds about 2.3k objects, not 11.9k; a section shown first builds when shown and
-  none is torn down. `tests/settings-tail.qml` pins both.
+  none is torn down. `tests/settings-tail.qml` pins the first-open build, a show of a section the held walk has not reached, and the Columns subpage keeping every section column.
 - `ui/js/SettingsAbout.js` is the About section's rows, the Updates group among them; `ui/js/Settings.js`
   routes `rows("about")` to it.
 - `ui/UpdateCheck.qml` is the updater singleton: the check and launch processes and the six hour poll,

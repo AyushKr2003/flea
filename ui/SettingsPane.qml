@@ -12,6 +12,8 @@ Flickable {
     property var values: ({})
     property int cursor: 0
     property string side: "pane"
+    // The idle walk that builds the sections nobody has shown yet.
+    readonly property alias walk: idleBuild
     readonly property real compactHeight: sections.count > 0 && sections.itemAt(0) ? sections.itemAt(0).implicitHeight : 0
 
     signal activated(int index)
@@ -117,8 +119,7 @@ Flickable {
             root.contentY = Math.max(0, Math.min(root.contentHeight - root.height, bottom - root.height))
     }
 
-    // The first open builds View and the open section only, so the first frame does not wait on every section's rows;
-    // the walk builds the rest one per tick once the fade is over, and a section shown earlier builds when shown.
+    // The first open builds View and the open section only; from the pane's creation this walk builds one more section per 150 ms tick, and a section shown sooner builds when shown.
     Timer {
         id: idleBuild
         interval: 150
