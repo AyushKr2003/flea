@@ -548,10 +548,10 @@ case_capsweep() { sweep_run current; }
 # Cool Dawn repeats the entire native sweep without editing the user's theme or text setting.
 case_capsweeplow() { sweep_run cool-dawn; }
 
-# Quick Look on an STL keeps the seeded cache thumbnail as its picture, at text size 14, with no thumbnailer run.
+# Quick Look on an STL keeps the seeded cache thumbnail as its picture, at text size 14, with no thumbnailer run; a second STL whose thumbnail is still being made waits on the loading state and ends on the thumbnail.
 case_capsweepstl() {
     local dir="$fixture_root/capsweepstl" stl_home="$fixture_root/capsweepstl-home"
-    local real_home="$HOME" key stl_mtime cache_png stl_uri key_uri
+    local real_home="$HOME" key stl_mtime cache_png stl_uri key_uri seen end
     command -v magick >/dev/null || fail 'capsweepstl: magick is missing, so the thumbnail fixture cannot be built'
     command -v python3 >/dev/null || fail 'capsweepstl: python3 is missing, so the cache entry cannot be keyed'
     sandbox_scratch "$dir"
@@ -559,7 +559,8 @@ case_capsweepstl() {
         || fail 'capsweepstl: the STL fixture failed'
     fixture_home_make "$stl_home"
     mkdir -p "$stl_home/.local/share/thumbnailers"
-    printf '[Thumbnailer Entry]\nExec=/bin/true %%i %%o %%s\nMimeType=model/stl;model/3mf;\n' \
+    # The seeded STL is a cache hit and never runs this; the second one makes its thumbnail in six seconds, so Quick Look opens first.
+    printf '[Thumbnailer Entry]\nExec=/bin/sh -c "/usr/bin/sleep 6; exec /usr/bin/magick -size 256x192 xc:#9ece6a png:\\$0" %%o\nMimeType=model/stl;model/3mf;\n' \
         > "$stl_home/.local/share/thumbnailers/stl-seed.thumbnailer"
     stl_mtime=$(stat -c %Y "$dir/model.stl")
     magick -size 256x192 xc:'#7aa2f7' "$dir/.stl-thumb-tmp.png" \
@@ -612,7 +613,29 @@ PY
     sweep_shot quicklook-stl-thumbnail
     key -k Escape >/dev/null
     sweep_wait previewOpen false
-    printf 'CAPSWEEPSTL column=thumbnail quicklook=image\n'
+    # A file made after the listing has no cache entry, so Space meets the row before its thumbnail exists.
+    printf 'solid capsweepstl-late\nendsolid capsweepstl-late\n' > "$dir/model-late.stl" \
+        || fail 'capsweepstl: the late STL fixture failed'
+    wait_listing 2
+    seek_row_named model-late.stl
+    key -k Space >/dev/null
+    sweep_wait previewOpen true
+    sweep_wait previewKind image
+    [[ "$(ipc previewState)" == loading ]] || fail "capsweepstl: an STL with no thumbnail yet read '$(ipc previewState)', want loading"
+    sweep_shot quicklook-stl-pending
+    # Every sample until the thumbnail lands is the loading state, and none is the sentence.
+    seen=loading
+    end=$((SECONDS + sweep_wait_seconds))
+    while (( SECONDS < end )) && [[ "$seen" == loading ]]; do
+        seen=$(ipc previewState) || fail 'capsweepstl: previewState unavailable'
+        [[ "$seen" == 'This image could not be read.' ]] && fail 'capsweepstl: the late STL showed the unreadable sentence before its thumbnail'
+        sleep 0.1
+    done
+    [[ "$seen" == image ]] || fail "capsweepstl: the late STL ended on '$seen', want image"
+    sweep_shot quicklook-stl-late-thumbnail
+    key -k Escape >/dev/null
+    sweep_wait previewOpen false
+    printf 'CAPSWEEPSTL column=thumbnail quicklook=image late=image\n'
     kill_flea
     export HOME="$real_home"
 }
