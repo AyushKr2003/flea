@@ -83,6 +83,15 @@ XDG_DATA_HOME="$second_root/data"
 got=$(sandbox_trash_files_dir "$second_root/item.txt" "$home_same") || { XDG_DATA_HOME="$data_real"; fail "data-device branch refused"; }
 [[ "$got" == "$second_root/data/Trash/files" ]] || { XDG_DATA_HOME="$data_real"; fail "data-device branch gave $got, not $second_root/data/Trash/files"; }
 ok "item on the data home's device, HOME elsewhere: $got"
+# The same layout through a direct gio trash: GLib compares with HOME's device only, so the data home on the item's device does not keep it home.
+got=$(sandbox_trash_gio_dir "$second_root/item.txt" "$home_same") || { XDG_DATA_HOME="$data_real"; fail "gio rule refused the data-device layout"; }
+[[ "$got" != "$second_root/data/Trash/files" && "$got" == */.Trash*/files ]] || { XDG_DATA_HOME="$data_real"; fail "gio rule gave $got for the data-device layout"; }
+gio_want=$got
+got=$(sandbox_trash_gio_dir "$second_root/gone/deeper/item.txt" "$home_same") || { XDG_DATA_HOME="$data_real"; fail "gio rule refused a moved-away folder"; }
+[[ "$got" == "$gio_want" ]] || { XDG_DATA_HOME="$data_real"; fail "gio rule gave $got for a moved-away folder, not $gio_want"; }
+got=$(sandbox_trash_gio_dir "$test_root/item.txt" "$home_same") || { XDG_DATA_HOME="$data_real"; fail "gio rule refused the HOME-device item"; }
+[[ "$got" == "$second_root/data/Trash/files" ]] || { XDG_DATA_HOME="$data_real"; fail "gio rule gave $got for the HOME-device item"; }
+ok "direct gio trash, data home on the item's device and HOME elsewhere: $gio_want"
 # A Trash root not made yet is judged by the nearest folder above it that exists, as the backend does.
 XDG_DATA_HOME="$second_root/not/yet/made"
 got=$(sandbox_trash_files_dir "$second_root/item.txt" "$home_same") || { XDG_DATA_HOME="$data_real"; fail "unmade data home refused"; }
@@ -93,6 +102,13 @@ XDG_DATA_HOME="$data_real"
 got=$(sandbox_trash_files_dir "$second_root/item.txt" "$home_same") || fail "third-device item refused"
 [[ "$got" != "$data_real/Trash/files" && "$got" == */.Trash*/files ]] || fail "third-device item gave $got"
 ok "item off the data home's device and HOME's: $got"
+# A folder moved away is judged by its nearest existing ancestor, as when a Restore finds its parent gone.
+want=$got
+got=$(sandbox_trash_files_dir "$second_root/gone/deeper/item.txt" "$home_same") || fail "moved-away folder on a third device refused"
+[[ "$got" == "$want" ]] || fail "moved-away folder on a third device gave $got, not $want"
+got=$(sandbox_trash_files_dir "$test_root/gone/deeper/item.txt" "$home_same") || fail "moved-away folder on HOME's device refused"
+[[ "$got" == "$XDG_DATA_HOME/Trash/files" ]] || fail "moved-away folder on HOME's device gave $got"
+ok "item under a missing folder follows the nearest existing ancestor: $want"
 # An item whose own device differs from its folder's (a nested volume) goes to gio, never into the data home Trash, though its folder shares the data home's device.
 printf 'body\n' > "$second_root/nested.txt" || fail "no nested-volume item"
 stat() {
@@ -108,6 +124,26 @@ unset -f stat
 XDG_DATA_HOME="$data_real"
 [[ "$got" != "$second_root/data/Trash/files" && "$got" == */.Trash*/files ]] || fail "nested-volume item gave $got"
 ok "item on its own device inside the data home's folder goes to gio: $got"
+# trash_guard_rows judges each row by one rule: Flea's rename by the files rule, a gio trash by the gio rule, never either.
+. "$repo/tests/ui-trash.sh"
+trash_box=$second_root
+trash_private() { :; }
+trash_backing() { printf '%s\n' "$stub_backing"; }
+rows_item="$second_root/item.txt"
+rows_listing=$(printf 'trash:///item.txt\t%s' "$rows_item")
+XDG_DATA_HOME="$second_root/data"
+rows_flea=$(sandbox_trash_files_dir "$rows_item" "$home_same") || { XDG_DATA_HOME="$data_real"; fail "rows: Flea rule refused"; }
+rows_gio=$(sandbox_trash_gio_dir "$rows_item" "$home_same") || { XDG_DATA_HOME="$data_real"; fail "rows: gio rule refused"; }
+[[ "$rows_flea" != "$rows_gio" ]] || { XDG_DATA_HOME="$data_real"; fail "rows: the two rules agree, so the layout proves nothing"; }
+rows_judge() { ( trash_gio_rows=(); [[ "$1" == gio ]] && trash_gio_rows[$rows_item]=1; stub_backing="$2/item.txt"; trash_guard_rows "$rows_listing" "$home_same" ) >/dev/null 2>&1; }
+rows_judge flea "$rows_flea" || { XDG_DATA_HOME="$data_real"; fail "rows: a Flea row in Flea's store was refused"; }
+rows_judge gio "$rows_gio" || { XDG_DATA_HOME="$data_real"; fail "rows: a gio row in the gio store was refused"; }
+! rows_judge flea "$rows_gio" || { XDG_DATA_HOME="$data_real"; fail "rows: a Flea row in the gio store passed"; }
+! rows_judge gio "$rows_flea" || { XDG_DATA_HOME="$data_real"; fail "rows: a gio row in Flea's store passed"; }
+# A Flea row never asks the gio rule, so a mount-top trash that cannot resolve leaves it passing.
+( sandbox_trash_gio_dir() { return 1; }; rows_judge flea "$rows_flea" ) || { XDG_DATA_HOME="$data_real"; fail "rows: a Flea row failed when the gio rule could not resolve"; }
+XDG_DATA_HOME="$data_real"
+ok "row guard: each row is judged by its own rule, both wrong stores refused"
 # The remaining mount-top cases keep the data home on the other device, apart from the item.
 export XDG_DATA_HOME="$second_root/data"
 
