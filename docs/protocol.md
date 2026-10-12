@@ -1229,7 +1229,7 @@ responding) may succeed on a later request, except that a converter error (an ex
 PDF) is remembered for that file until its modification time changes; a timeout is not.
 The path is resolved and its cache entry looked up beside the loop under the mount deadline, so a
 hung mount costs one `failed` line and never the window. One conversion runs at a time and the
-newest request replaces the one queued behind it, whichever request finished its lookup first.
+newest request replaces the one queued behind it, whichever request finished its lookup first; a request older than the one running is answered replaced at once and never converts.
 
 ### settags
 

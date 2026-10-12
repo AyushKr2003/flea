@@ -36,6 +36,35 @@ fn an_older_request_that_finishes_its_probe_last_is_replaced_and_the_newer_stays
 }
 
 #[test]
+fn a_request_older_than_the_running_job_is_dropped_and_never_converts() {
+    let d = TestDir::new("officepdf-stale");
+    let r = rig(&d, GATED, CONVERT_TIMEOUT);
+    let gate = d.join("running.docx");
+    mkfifo(&gate);
+    let (stale, fresh) = (d.file("stale.docx", "s"), d.file("fresh.docx", "f"));
+    r.svc.request(1, 1, 2, &gate, &r.tx);
+    assert!(matches!(r.rx.recv_timeout(BOUND), Ok(OpMsg::Meta { line }) if line == converting_line(1)));
+    while r.jobs() == 0 {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(r.svc.locked().queued.is_none(), "the newer job left the queue and runs");
+    r.svc.request(2, 2, 1, &stale, &r.tx);
+    assert!(matches!(r.rx.recv_timeout(BOUND), Ok(OpMsg::Meta { line }) if line == converting_line(2)));
+    let (reg, line) = r.end();
+    assert!(reg == 2 && line.contains(r#""state":"failed""#) && line.contains("replaced"), "the older request is answered replaced: {reg} {line}");
+    assert!(r.svc.locked().queued.is_none(), "an older request is never queued");
+    r.svc.request(3, 3, 3, &fresh, &r.tx);
+    assert!(matches!(r.rx.recv_timeout(BOUND), Ok(OpMsg::Meta { line }) if line == converting_line(3)));
+    within("the gate opens", move || drop(std::fs::OpenOptions::new().write(true).open(&gate).unwrap()));
+    let mut ends = vec![r.end(), r.end()];
+    ends.sort();
+    assert_eq!(ends.iter().map(|e| e.0).collect::<Vec<_>>(), vec![1, 3]);
+    assert!(ends.iter().all(|e| e.1.contains(r#""state":"ready""#)), "{ends:?}");
+    assert_eq!(r.jobs(), 2, "the older request never ran, the newer one did");
+    assert!(r.svc.locked().running.is_none(), "the running sequence is cleared when the work ends");
+}
+
+#[test]
 fn the_conversion_takes_the_canonical_input_the_probe_resolved() {
     let d = TestDir::new("officepdf-canonical");
     let mut r = rig(&d, MAKE_PDF, CONVERT_TIMEOUT);

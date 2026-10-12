@@ -178,7 +178,8 @@ struct Job {
 
 #[derive(Default)]
 struct Queue {
-    running: Option<Vec<Waiter>>,
+    // The running job's sequence, which an older request is answered against, and the waiters it answers.
+    running: Option<(u64, Vec<Waiter>)>,
     queued: Option<Job>,
 }
 
@@ -244,9 +245,12 @@ impl Service {
         self.enqueue(Job { key, program, input, mtime, seq, waiters: vec![Waiter { wire, reg, tx: tx.clone() }] });
     }
 
-    // The running job is never replaced; the higher sequence keeps the queue, the other is answered replaced, and the same file shares one job.
+    // The running job is never replaced; a request older than it is answered replaced, as is the lower sequence of two queued, and the same file shares one job.
     fn enqueue(self: &Arc<Self>, mut job: Job) {
         let mut q = self.locked();
+        if q.running.as_ref().is_some_and(|r| job.seq < r.0) {
+            return answer(job.waiters, Err("replaced by a newer request".to_string()));
+        }
         if let Some(old) = q.queued.take() {
             let (mut keep, lose) = if job.seq > old.seq { (job, old) } else { (old, job) };
             if keep.key == lose.key {
@@ -260,7 +264,7 @@ impl Service {
             q.queued = Some(job);
             return;
         }
-        q.running = Some(std::mem::take(&mut job.waiters));
+        q.running = Some((job.seq, std::mem::take(&mut job.waiters)));
         let me = Arc::clone(self);
         std::thread::spawn(move || me.work(job));
     }
@@ -269,10 +273,10 @@ impl Service {
         loop {
             let outcome = self.convert(&job);
             let mut q = self.locked();
-            let done = q.running.take().unwrap_or_default();
+            let done = q.running.take().map(|r| r.1).unwrap_or_default();
             let mut next = q.queued.take();
             if let Some(n) = next.as_mut() {
-                q.running = Some(std::mem::take(&mut n.waiters));
+                q.running = Some((n.seq, std::mem::take(&mut n.waiters)));
             }
             drop(q);
             answer(done, outcome);
