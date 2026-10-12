@@ -15,7 +15,6 @@ verdict=0
 for line in 'Accessible.role: Accessible.Slider' 'Accessible.name: "Volume"'; do
     grep -qF "$line" ui/MediaVolume.qml || { printf 'FAIL ui/MediaVolume.qml no longer holds %s\n' "$line"; verdict=1; }
 done
-grep -qF 'width: Theme.space(60)' ui/MediaStrip.qml || { printf 'FAIL ui/MediaStrip.qml does not size the track in board pixels\n'; verdict=1; }
 # Both tracks fill and draw their handle in the accent frame ink, never the raw accent, which a low-chroma theme leaves under 3:1 on the strip.
 [ "$(grep -c 'color: Theme.color.accentFrame' ui/MediaTrack.qml)" -eq 2 ] && ! grep -qE 'Theme\.color\.accent([^F]|$)' ui/MediaTrack.qml ui/MediaStrip.qml ui/MediaVolume.qml \
     || { printf 'FAIL the media tracks do not draw their fill and handle in Theme.color.accentFrame alone\n'; verdict=1; }

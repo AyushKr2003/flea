@@ -171,7 +171,8 @@ Item {
         anchors.rightMargin: Theme.spacing.gap
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        width: Theme.space(60)
+        // Media040 draws a 60 px track at bodySmall 13, in resolved pixels, so space() would scale it twice.
+        width: Math.round(60 * Theme.font.bodySmall / 13)
         sourceComponent: Flea.MediaVolume {}
         onLoaded: item.touched.connect(root.touched)
     }

@@ -75,6 +75,7 @@ Item {
     readonly property bool muted: Flea.MediaSound.muted
     // fleaWindow.itemRect needs the real Item, the same seam rowCentre already reads through pane.
     readonly property var seekSlider: mediaStrip.seekItem
+    readonly property var volumeSlider: mediaStrip.volumeItem
     readonly property string status: {
         if (!root.active) return ""
         // A fresh media item still carries its empty path until onLoaded binds it; its
@@ -212,7 +213,7 @@ Item {
     // Shown on open, hidden stripHideMs after the last reveal, video only: audio has nothing else to look at.
     property bool stripShown: true
     // StatusBar.messageMs, the OEM's own transient interval, which Sidebar's unmount arm reuses for the same reason.
-    readonly property int stripHideMs: 4000
+    property int stripHideMs: 4000
 
     function revealStrip() {
         root.stripShown = true
@@ -475,7 +476,11 @@ Item {
         id: stripHideTimer
         interval: root.stripHideMs
         repeat: false
-        onTriggered: root.stripShown = false
+        // A held seek or volume press is contact too, so the strip waits for the release before it goes.
+        onTriggered: {
+            if (mediaStrip.scrubbing || (mediaStrip.volumeItem && mediaStrip.volumeItem.pressing)) stripHideTimer.restart()
+            else root.stripShown = false
+        }
     }
 
     MouseArea {

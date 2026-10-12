@@ -15,6 +15,9 @@ ShellRoot {
     property int step: 0
     property int touches: 0
     property bool done: false
+    // Ticks the script waits before its next step, for the one leg that lets a short hide delay pass.
+    property int hold: 0
+    property var late: null
     property var bare: null
     property var boxed: null
 
@@ -58,6 +61,26 @@ ShellRoot {
         TestEvent { id: driver }
     }
 
+    // The Quick Look overlay gets a window of its own only for the legs that need it, so the strip legs above never share a display with it.
+    property var previewWindow: null
+    readonly property var quick: shell.previewWindow ? shell.previewWindow.preview : null
+    readonly property var quickDriver: shell.previewWindow ? shell.previewWindow.driver : null
+    Component {
+        id: quickWindow
+        FloatingWindow {
+            property alias preview: preview
+            property alias driver: previewDriver
+            implicitWidth: 700
+            implicitHeight: 300
+            color: "#303030"
+            Flea.Preview {
+                id: preview
+                anchors.fill: parent
+            }
+            TestEvent { id: previewDriver }
+        }
+    }
+
     Component {
         id: stripComponent
         Flea.MediaStrip {
@@ -90,12 +113,13 @@ ShellRoot {
     // The unframed strip builds with the stored level already on its track, in the call that creates it.
     function stepCreate() {
         shell.check("setup: the stored level is what MediaSound reads", [Flea.MediaSound.volume, Flea.MediaSound.muted], [shell.storedLevel, false])
+        // Text size 14 draws a 60 px track, where every multiple of 5 is a whole pixel; the lane's own Omarchy size would move the width under the legs.
+        shell.pinTextSize(14)
         shell.boxed = stripComponent.createObject(holder, { framed: true, y: 100 })
         shell.bare = stripComponent.createObject(holder, { framed: false, y: 0 })
         var track = shell.bare.volumeItem
         shell.check("first frame: the unframed strip holds its volume track at once", track !== null, true)
         shell.check("first frame: the track draws the stored level", track ? track.fraction : null, shell.storedLevel / 100)
-        shell.check("first frame: the track is 60 board px wide", track ? track.width : null, Flea.Theme.space(60))
         shell.check("framed: no volume track exists", shell.boxed.volumeItem === null, true)
     }
 
@@ -233,10 +257,98 @@ ShellRoot {
         driver.mouseRelease(holder, 5, 5, Qt.LeftButton, Qt.NoModifier, 0)
     }
 
+    // Media040 draws the track 60 px wide at bodySmall 13: text size 14 pins 13 and text size 12 pins 11, so the width is 60 and 51 by number.
+    function pinTextSize(stop) {
+        var doc = JSON.parse(JSON.stringify(Flea.ViewState.state))
+        doc.display = { textSize: { mode: stop } }
+        Flea.ViewState.state = doc
+    }
+
+    function stepSize14() {
+        shell.late = stripComponent.createObject(holder, { framed: false, y: 0 })
+        shell.pinTextSize(14)
+        shell.check("size: text size 14 draws bodySmall 13", Flea.Theme.font.bodySmall, 13)
+        shell.check("size: the track is 60 px wide at text size 14", shell.late.volumeItem.width, 60)
+    }
+
+    function stepSize12() {
+        shell.pinTextSize(12)
+        shell.check("size: text size 12 draws bodySmall 11", Flea.Theme.font.bodySmall, 11)
+        shell.check("size: the track is 51 px wide at text size 12", shell.late.volumeItem.width, 51)
+    }
+
+    // A screen reader's increase and decrease step the level by 5 and store it as a release does.
+    function stepAccess() {
+        var track = shell.late.volumeItem
+        shell.check("access: the level starts where the cancel leg left it", Flea.MediaSound.volume, 35)
+        track.Accessible.increaseAction()
+        shell.check("access: increase steps up by 5 and keeps it", [Flea.MediaSound.volume, Flea.ViewState.mediaVolume, Flea.MediaSound.held], [40, 40, -1])
+    }
+
+    function stepAccessDown() {
+        var track = shell.late.volumeItem
+        shell.check("access: increase stored one patch", shell.saves().slice(3), ['{"preview":{"volume":40}}'])
+        track.Accessible.decreaseAction()
+        track.Accessible.decreaseAction()
+        shell.check("access: decrease steps down by 5 each time", [Flea.MediaSound.volume, Flea.ViewState.mediaVolume, Flea.MediaSound.held], [30, 30, -1])
+    }
+
+    // A video Quick Look: a short hide delay, a press held past it, and the strip stays until the button is up.
+    function stepHoldOpen() {
+        shell.late.destroy()
+        shell.previewWindow = quickWindow.createObject(shell)
+        quick.kind = "video"
+        quick.active = true
+        // The hold shield takes a press until the card is revealed, and the card then fades in over Motion's open duration; an item at zero opacity takes no press.
+        quick.revealNow()
+        shell.hold = 15
+    }
+
+    function stepHoldVolume() {
+        var track = quick.volumeSlider
+        shell.check("hold: the video strip holds its volume track", track !== null, true)
+        shell.check("hold: the video strip is shown", quick.stripShown, true)
+        // A short delay set only now, or the pointer's first hover over the opening overlay hides the strip before the press.
+        quick.stripHideMs = 60
+        quick.revealStrip()
+        quickDriver.mousePress(track, 10, track.height / 2, Qt.LeftButton, Qt.NoModifier, 0)
+        shell.check("hold: the press is down on the track", track.pressing, true)
+        shell.hold = 8
+    }
+
+    function stepHoldVolumeAfter() {
+        var track = quick.volumeSlider
+        shell.check("hold: the strip is still shown past the hide delay under a held volume press", quick.stripShown, true)
+        quickDriver.mouseRelease(track, 10, track.height / 2, Qt.LeftButton, Qt.NoModifier, 0)
+        shell.hold = 8
+    }
+
+    function stepHoldVolumeReleased() {
+        shell.check("hold: the strip hides once the volume press is released", quick.stripShown, false)
+        quick.revealStrip()
+        var seek = quick.seekSlider
+        quickDriver.mousePress(seek, 10, seek.height / 2, Qt.LeftButton, Qt.NoModifier, 0)
+        shell.check("hold: the seek track is on screen to press", quick.seekSlider.visible, true)
+        shell.hold = 8
+    }
+
+    function stepHoldSeekAfter() {
+        var seek = quick.seekSlider
+        shell.check("hold: the strip is still shown past the hide delay under a held seek press", quick.stripShown, true)
+        quickDriver.mouseRelease(seek, 10, seek.height / 2, Qt.LeftButton, Qt.NoModifier, 0)
+        shell.hold = 8
+    }
+
+    function stepHoldSeekReleased() {
+        shell.check("hold: the strip hides once the seek press is released", quick.stripShown, false)
+    }
+
     readonly property var script: [
         shell.stepCreate, shell.stepLayout, shell.stepGain, shell.stepDrag, shell.stepStored,
         shell.stepHover, shell.stepClick, shell.stepClickStored, shell.stepMute,
-        shell.stepCancel, shell.stepCancelStored, shell.stepDestroy, shell.stepDestroyed
+        shell.stepCancel, shell.stepCancelStored, shell.stepDestroy, shell.stepDestroyed,
+        shell.stepSize14, shell.stepSize12, shell.stepAccess, shell.stepAccessDown,
+        shell.stepHoldOpen, shell.stepHoldVolume, shell.stepHoldVolumeAfter, shell.stepHoldVolumeReleased, shell.stepHoldSeekAfter, shell.stepHoldSeekReleased
     ]
 
     function finish() {
@@ -256,6 +368,7 @@ ShellRoot {
         onTriggered: {
             shell.ticks++
             if (shell.done || shell.ticks < 4 || Flea.ViewState.writeBook.inflight.length > 0) return
+            if (shell.hold > 0) { shell.hold--; return }
             if (shell.step >= shell.script.length) { shell.finish(); return }
             var run = shell.script[shell.step]
             shell.step++

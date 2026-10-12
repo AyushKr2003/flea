@@ -17,6 +17,14 @@ Flea.MediaTrack {
 
     Accessible.role: Accessible.Slider
     Accessible.name: "Volume"
+    // A screen reader steps the level by 5 and stores it as a release would.
+    Accessible.onIncreaseAction: root.nudge(5)
+    Accessible.onDecreaseAction: root.nudge(-5)
+
+    function nudge(delta) {
+        Flea.MediaSound.setVolume(Math.max(0, Math.min(100, Flea.MediaSound.volume + delta)))
+        Flea.MediaSound.keepVolume()
+    }
 
     MouseArea {
         anchors.fill: parent
