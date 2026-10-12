@@ -1,5 +1,6 @@
 // Folder merge: everything missing copied or moved in, files that exist in both asked about once.
 use crate::backend::collide::{MenuCapture, Place, Policy, Question, SHOWN};
+use crate::backend::fatnames::{self, Choice};
 use crate::backend::undo::ItemIdentity;
 use crate::json::escape;
 use std::collections::HashMap;
@@ -72,11 +73,12 @@ pub(crate) fn count_tree(path: &Path) -> usize {
     count
 }
 
-// One walk of the sources against the destination, before anything is written.
-pub fn walk(paths: &[String], dest: &Path) -> Vec<Found> {
+// One walk of the sources against the destination, before anything is written; under Rename the names below a merging folder are the renamed ones.
+pub fn walk(paths: &[String], dest: &Path, fat: Option<Choice>) -> Vec<Found> {
     let mut found = Vec::new();
     let Ok(dest_path) = crate::backend::opsreq::usable_dest(&dest.to_string_lossy()) else { return found };
     let dest_real = dest_path.canonicalize().unwrap_or_else(|_| dest_path.clone());
+    let rename = fatnames::renames(fat, fatnames::answered_on_fat(fat, &dest_path));
     // One merging folder shows its own relative names; several share the destination's.
     let single = paths.iter().filter(|raw| is_merging_folder(Path::new(raw), &dest_path, &dest_real)).count() == 1;
     for raw in paths {
@@ -91,7 +93,7 @@ pub fn walk(paths: &[String], dest: &Path) -> Vec<Found> {
             continue;
         }
         if meta.is_dir() && !meta.file_type().is_symlink() && real_dir(&dst_top) {
-            walk_into(src, &dst_top, &dest_path, single, &mut found);
+            walk_into(src, &dst_top, &dest_path, single, rename, &mut found);
         } else if dst_top.symlink_metadata().is_ok() {
             found.push(Found { src: src.to_path_buf(), dst: dst_top.clone(),
                 rel: rel_of(&dst_top, &dst_top, &dest_path, false), dir: meta.is_dir(), mode: meta.mode() });
@@ -114,19 +116,19 @@ fn is_merging_folder(src: &Path, dest_path: &Path, dest_real: &Path) -> bool {
     meta.is_dir() && !meta.file_type().is_symlink() && real_dir(&dst_top)
 }
 
-// Every name under a merging folder the destination already holds, except folders merging further down.
-fn walk_into(src_top: &Path, dst_top: &Path, dest: &Path, single: bool, found: &mut Vec<Found>) {
+// Every name under a merging folder the destination already holds, except folders merging further down; rename says each lands as Rename names it.
+fn walk_into(src_top: &Path, dst_top: &Path, dest: &Path, single: bool, rename: bool, found: &mut Vec<Found>) {
     let Ok(entries) = std::fs::read_dir(src_top) else { return };
     for entry in entries.flatten() {
         let name = entry.file_name();
-        let (src_inner, dst_inner) = (src_top.join(&name), dst_top.join(&name));
+        let (src_inner, dst_inner) = (src_top.join(&name), dst_top.join(fatnames::inside_leaf(&name, rename)));
         // d_type answers dir-ness for free; each colliding entry pays one lstat for the mode the card draws.
         let dir = entry.file_type().is_ok_and(|kind| kind.is_dir());
         if dst_inner.symlink_metadata().is_err() {
             continue;
         }
         if dir && real_dir(&dst_inner) {
-            walk_into(&src_inner, &dst_inner, dest, single, found);
+            walk_into(&src_inner, &dst_inner, dest, single, rename, found);
         } else {
             let Ok(meta) = src_inner.symlink_metadata() else { continue };
             found.push(Found { src: src_inner, dst: dst_inner.clone(),
@@ -188,13 +190,14 @@ pub(crate) fn ask_beside(
         (None, _) => Vec::new(),
     };
     let base = walk_base(outer);
+    let fat = outer.and_then(|q| q.fat);
     ops.asked += 1;
     let (turn, tx, dest, mime, icons) = (ops.asked, ops.tx.clone(), dest.to_string(), std::sync::Arc::clone(mime), std::sync::Arc::clone(icons));
     std::thread::spawn(move || {
-        let inner = walk(&paths, Path::new(&dest));
+        let inner = walk(&paths, Path::new(&dest), fat);
         let total = inner.len();
         let names = names_line(&inner, &mime, &icons);
-        let mut question = Question { id, dest: PathBuf::from(&dest), seen: HashMap::new(), menu: None };
+        let mut question = Question { id, dest: PathBuf::from(&dest), seen: HashMap::new(), menu: None, fat };
         if let Some((dest, seen, menu)) = base {
             question.dest = dest;
             question.seen = seen;

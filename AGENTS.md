@@ -2676,6 +2676,11 @@ request dispatcher here, checking read responsiveness, the operation slot, compl
 Each ceiling is re-derived with `wc -l`; `src/backend/proto.rs` is 363, below the 400-line hard cap,
 so its unused recorded exception is removed. Global limits stay unchanged.
 
+The FAT card's Rename reaching the names inside a copied folder records `src/backend/durable.rs` at 803 (the
+`rename_fat` field and its comment, lines 224 to 225) and `src/backend/opsreq.rs` at 617 (the line that sets it from
+the policy, 289, and the one that journals it on the copy steps, 493), each re-derived with `wc -l`; `Durability` is the one per-operation object every copy
+already carries down to `copy_dir_entries`, so the flag rides it rather than a new `Progress` field at 29 literals.
+
 `src/vulkan.rs` is 0.3.2's own exception, recorded rather than split. PR119's display-GPU pin took
 it from 472 to 604 lines, the growth being `icd_for_displays`, `display_pin` and the tests that
 drive a hybrid tree this box cannot produce. The file has one subject, which is what Vulkan can be
@@ -6624,8 +6629,8 @@ before deleting anything. Removing the duplicate is the operator's call, not Ctr
 
 **One undo history for every Flea window.** Each backend keeps its in-memory journal until the session dir validates, then every push and take goes through the file under `$XDG_RUNTIME_DIR/flea/` (`FLEA_UNDO_DIR` when set) under an flock, so the newest entry from any window is what Ctrl+Z undoes. A take is one locked read-modify-write, so two windows pressing Ctrl+Z undo two different operations; the filesystem work runs after the claim, so a slow undo never holds the lock. The published doc stays under 32 MiB by dropping oldest undo then redo records until it fits; an entry too big alone stores a small barrier through the normal store path, its op name only and no paths, and no window keeps the payload. Any window's undo that claims a barrier consumes it in the same locked claim and answers `That operation was too large to undo.`, the next undo continues with older entries, and a barrier never enters redo. The codec versions the file: a decoder meeting a newer version treats the file as unavailable, falls back to memory, and never rewrites the newer file. A key added to an existing record is optional and keeps the version: an older decoder ignores it and its re-render drops it, so a reader treats a record without it as the older record (`gen` reads 0, a trash step without `before` and `time` refuses its undo as 0.3.8 did). Only a record an older decoder would reject moves the version, as the barrier moved it to 2. A claim stamps the push generation, and the finish replays only when no push ran since, otherwise the stale replay is dropped.
 
-**The journal records only what an operation created or moved.** `undo.rs`'s `Step` has nine shapes the
-product writes: `Moved` (rename back), `Copied` (remove the copy; a failed tree copy carries a manifest, a success carries none; a merge top carries `merge: true` and never takes the whole-tree fallback), `MadeDir` (remove it
+**The journal records only what an operation created or moved.** `undo.rs`'s `Step` has eight shapes the
+product writes: `Moved` (rename back), `Copied` (remove the copy; a failed tree copy carries a manifest, a success carries none; a merge top carries `merge: true` and never takes the whole-tree fallback; a copy made under the FAT card's Rename carries `rename_fat: true`, and so does a `Moved` step made under it because a cross-device move copies first, journaled as `"fat":1` only when set, so a redo writes the same names, an older journal reads as made without it, and the journal version stays 3 because an older build that ignores the key undoes the copy alike and only redoes it under the names as they were, which the drive refuses and names), `MadeDir` (remove it
 while it is still empty, because whatever is inside it now was put there by someone else), `MadeFile`
 (remove it while it is still the untouched empty file), `Trashed` (restore it, written by a trash and
 by a transfer that replaced an item, ahead of that item's own step), `Linked` (remove the link only while it is still that link), `RemovedEmptyDir` (recreate an emptied merge source with its mode), `Mode` (restore bits, skipping a replaced file with a note) and `Tags` (restore tags, one step per changed file, skipping a replaced file with a note); `Created` exists only
@@ -6650,8 +6655,9 @@ corner: a copy is not snapshot-isolated, so a concurrent write into a recorded p
 decides it from the create that failed, in a copy and in a move's first half alike: a link refused with
 `EOPNOTSUPP` or `ENOSYS`, or `EPERM` under vfat or exfat, whose kernel drivers have no symlink or mknod operation;
 a fifo, socket or device node refused the same way; a name refused with `EINVAL`, `EILSEQ` or `ENAMETOOLONG`;
-`EEXIST` under vfat or exfat beside a source sibling that differs only in case or in trailing dots and spaces, which
-is the drive folding two names into one (on any other drive, or with no such sibling, the name is another writer's
+`EEXIST` under vfat or exfat beside a source sibling that differs only in case, in trailing dots and spaces, or in
+the characters the FAT card's Rename replaces (only in a copy that answered Rename, `Durability.rename_fat`, where two names that land as one after Rename, inside a folder, are
+named here and not a hard failure; under Skip or no answer the names are compared as they are), which is the drive folding two names into one (on any other drive, or with no such sibling, the name is another writer's
 and the item still fails, so a stray planted mid-copy keeps the undo guarantee `undo_tests.rs` pins); and a file of
 4 GiB or more onto vfat.
 `copy_dir_entries` records it and goes on with the next entry, naming the first 100 and counting the rest, so a tree
@@ -6758,7 +6764,7 @@ corner: replacing N items through gio costs two `gio` lists per batch, one befor
 `gio trash --restore` refuses an original path (`Location given doesn't start with trash:///`), and two
 files trashed from one path both list that same original, so a later lookup cannot tell them apart.
 `trash.rs` therefore reads `gio trash --list` before and after the call and keeps the entries that are
-new. When the settle list itself fails, a Replace step keeps the before list's URIs for its own path and the trash time, and undo resolves it from a fresh list only when exactly one entry for that path is new since; a step with no trash time (an old journal record, or the corner where gio listed nothing) and a path with two new entries both refuse with "cannot be restored" rather than guess, and a list that fails at undo refuses with "the Trash could not be listed", never claiming the item is gone. The operations design says restore takes the original path; it does not, and this is the deviation. Undo puts a top-level home Trash entry back in-process (`homerestore.rs`), as gvfsd-trash does, when its info file's `Path=` names the step's own path byte for byte, refusing an occupied original and leaving the entry; any other entry goes through `gio trash --restore`.
+new. When a settle list fails or lists nothing new, a trash step (`trash_checked`) and a Replace step both keep the before list's URIs for their own path (none when the before list itself failed) and a time (the moment the chunk holding the path went to `gio trash`; a Replace trashes one path and keeps the moment its call began, taken before `gio` runs like a chunk's), and undo resolves the step from a fresh list only when exactly one entry for that path is new since and its deletion date falls from five seconds before that time to five seconds past the longest a `gio` call runs (`CHUNK_SECS`, the 10 s timeout and 1 s kill delay); a step with no trash time (an old journal record only) and a path with two new entries both refuse with "cannot be restored" rather than guess, and a list that fails at undo refuses with "the Trash could not be listed", never claiming the item is gone. The operations design says restore takes the original path; it does not, and this is the deviation. Undo puts a top-level home Trash entry back in-process (`homerestore.rs`), as gvfsd-trash does, when its info file's `Path=` names the step's own path byte for byte, refusing an occupied original and leaving the entry; any other entry goes through `gio trash --restore`.
 
 **Which paths were trashed is read off the filesystem, not off `gio`'s exit status**, which covers the
 whole batch. A path still present afterwards is counted `failed`.

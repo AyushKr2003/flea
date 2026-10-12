@@ -286,6 +286,7 @@ pub(crate) fn run_transfer_checked(
     let merging = policy.is_merge();
     spawn_total(&paths, &dest, policy.skipping(), &cancel, &settled, &sweep.flag);
     let mut durability = crate::backend::durable::Durability::begin(&dest);
+    durability.rename_fat = policy.renames_inside();
     let mut steps: Vec<Step> = Vec::new();
     // One deferred trash session for every Replace in the batch, begun only by the first one.
     let mut deferred: Option<super::mergeapply::Deferred> = None;
@@ -489,6 +490,7 @@ pub(crate) fn run_transfer_checked(
         slot.settle(&mut steps);
     }
     // Entries that waited on a batch join the counts where they land, copy or move alike.
+    if durability.rename_fat { steps.iter_mut().for_each(super::fatnames::mark_step); }
     let entry = Entry { op: if merging && !moving { "merge".to_string() } else if moving { "move".to_string() } else { "copy".to_string() }, steps };
     let finished = crate::backend::durable::finish(id, &tx, &mut durability, &dest, ok + landed_partly);
     let note = finished.note;

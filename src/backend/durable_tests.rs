@@ -433,7 +433,7 @@ fn a_copy_onto_rclone_says_it_uploads_in_the_background_and_never_claims_the_dri
     test_reset();
     let d = TestDir::new("durable-rclone-note");
     let out = d.dir("out");
-    let mut durability = Durability { durable: false, rclone: true, file_failed: false, batch_syncfs: false, unsettled: false,
+    let mut durability = Durability { durable: false, rclone: true, file_failed: false, batch_syncfs: false, rename_fat: false, unsettled: false,
         held: Vec::new(), wave: Wave::default(), touched: std::collections::HashSet::new(), last: None };
     let (tx, rx) = channel();
     let done = finish(9, &tx, &mut durability, &out, 1);
@@ -480,7 +480,7 @@ fn finish_with_nothing_landed_on_rclone_says_nothing() {
     test_reset();
     let d = TestDir::new("durable-rclone-empty");
     let out = d.dir("out");
-    let mut durability = Durability { durable: false, rclone: true, file_failed: false, batch_syncfs: false, unsettled: false,
+    let mut durability = Durability { durable: false, rclone: true, file_failed: false, batch_syncfs: false, rename_fat: false, unsettled: false,
         held: Vec::new(), wave: Wave::default(), touched: std::collections::HashSet::new(), last: None };
     let (tx, rx) = channel();
     let done = finish(12, &tx, &mut durability, &out, 0);

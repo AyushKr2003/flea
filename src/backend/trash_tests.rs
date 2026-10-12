@@ -4,14 +4,14 @@ use std::os::unix::process::ExitStatusExt;
 use std::rc::Rc;
 
 // An exited-0 gio answer with empty streams, the shape a stand-in returns for a call it absorbs.
-fn ok_output() -> std::process::Output {
+pub(super) fn ok_output() -> std::process::Output {
     std::process::Output { status: std::process::ExitStatus::from_raw(0), stdout: Vec::new(), stderr: Vec::new() }
 }
 
 // Holds this thread's gio stand-in until the test ends, so a failure never leaks it into the next test.
-struct StandIn;
+pub(super) struct StandIn;
 impl StandIn {
-    fn hold(stand_in: StandInFn) -> StandIn {
+    pub(super) fn hold(stand_in: StandInFn) -> StandIn {
         STAND_IN.with(|slot| *slot.borrow_mut() = Some(stand_in));
         StandIn
     }

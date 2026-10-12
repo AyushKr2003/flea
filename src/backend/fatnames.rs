@@ -16,7 +16,25 @@ pub fn fs_type_of(dest: &Path) -> Option<String> {
 
 // Whether dest sits on a mount whose name rules the card enforces; one that cannot be read is not one.
 pub fn on_fat(dest: &Path) -> bool {
+    #[cfg(test)]
+    if STOOD_FAT.lock().unwrap().iter().any(|root| dest.starts_with(root)) {
+        return true;
+    }
     fs_type_of(dest).is_some_and(|fs| is_fat_fstype(&fs))
+}
+
+// Roots read as FAT-family mounts on every thread, because the question runs on a thread of its own; a sandbox root keeps one test from reaching another.
+#[cfg(test)]
+static STOOD_FAT: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
+
+// Sample input: test_stand_fat(root, true) makes every destination under root read as a FAT-family mount; false ends it.
+#[cfg(test)]
+pub fn test_stand_fat(root: &Path, on: bool) {
+    let mut roots = STOOD_FAT.lock().unwrap();
+    roots.retain(|stood| stood != root);
+    if on {
+        roots.push(root.to_path_buf());
+    }
 }
 
 // Sample input: "clip: final.mp4" -> "clip_ final.mp4".
@@ -31,6 +49,24 @@ pub fn sanitize(name: &str) -> String {
     }
     let trimmed = out.trim_end_matches(['.', ' ']);
     if trimmed.is_empty() { "_".to_string() } else { trimmed.to_string() }
+}
+
+// The name a file or folder below the top lands under: Rename sanitizes a text name, any other answer or a name that is not text keeps it.
+pub fn inside_leaf(name: &std::ffi::OsStr, rename: bool) -> std::ffi::OsString {
+    match name.to_str() {
+        Some(text) if rename && needs_rename(text) => sanitize(text).into(),
+        _ => name.to_os_string(),
+    }
+}
+
+// Whether the card's Rename answer covers a destination on a FAT-family mount, and with it every name below the top.
+pub fn renames(fat: Option<Choice>, on_fat: bool) -> bool {
+    fat == Some(Choice::Rename) && on_fat
+}
+
+// Whether the card's answer applies to dest: an answer sent to any other filesystem changes nothing.
+pub fn answered_on_fat(fat: Option<Choice>, dest: &Path) -> bool {
+    fat.is_some() && on_fat(dest)
 }
 
 // Whether the name cannot sit on the target as it is.
@@ -53,6 +89,25 @@ impl Choice {
             _ => None,
         }
     }
+}
+
+// A copy or move made under the card's Rename keeps that answer, so a redo writes the same names.
+pub fn mark_step(step: &mut super::undo::Step) {
+    if let super::undo::Step::Copied { rename_fat, .. } | super::undo::Step::Moved { rename_fat, .. } = step {
+        *rename_fat = true;
+    }
+}
+
+// A copy or move made under Rename journals `"fat":1` beside its fields; an older journal has no key and reads as a copy made without it.
+pub(crate) fn mark_renamed(mut pairs: Vec<(&'static str, crate::jsondoc::Json)>, renamed: bool) -> Vec<(&'static str, crate::jsondoc::Json)> {
+    if renamed {
+        pairs.push(("fat", super::undocodec::n(1)));
+    }
+    pairs
+}
+
+pub(crate) fn decode_renamed(pairs: &[(String, crate::jsondoc::Json)]) -> bool {
+    super::undocodec::get(pairs, "fat").and_then(super::undocodec::parse_u32) == Some(1)
 }
 
 // Where dst lands under this answer on a FAT destination, decided before anything is written.

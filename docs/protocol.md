@@ -783,14 +783,17 @@ already expired answers a `total` of 0, and the `transfer` then answers `Menu se
 from a name) and the question carries no `fat`, a source whose name that filesystem refuses is answered
 with one `fatnames` line (below) in place of the `collisions` line. The client asks the same question
 again with `"fat":"rename"` or `"fat":"skip"` and gets the `collisions` line for the names that will
-land: Rename and copy asks about the renamed leaves, Skip them leaves the refused names out. The
+land: Rename and copy asks about the renamed leaves, Skip them leaves the refused names out. Rename and
+copy also renames, by the same rule, every UTF-8 name the transfer writes inside a folder it copies or merges into, and writes a name that is not UTF-8 as it is;
+Skip them skips only the listed top-level names and leaves the names inside as they are. A redo of that copy writes the same names. The
 `transfer` or `link` that follows names the same answer in `fat` beside `collideId`, so the names the
 card promised are the names the operation takes, and a skipped name never lands at all. Each forbidden
 character (`: ? * " < > |`) becomes an underscore, trailing dots and spaces are trimmed, and a name of
 only dots becomes `_`. A `dest` on any other filesystem, or one whose mount cannot be read, never
 answers `fatnames`, and a `fat` sent to it changes nothing, so nothing is ever renamed on a guess.
 Without `fat` both requests behave exactly as before, which is every older client. The merge walk
-asks about the sources as named and does not read `fat`.
+takes the answer from the `collisions` question it follows, so under Rename a name inside a merging folder
+is asked about under the name the transfer writes, and a renamed name that meets an existing one gets the second card's question.
 
 ### mergecollisions
 
