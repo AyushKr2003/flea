@@ -855,7 +855,15 @@ def put_back(fixture, want, typed):
     have, want = set(os.listdir(fixture)), set(want)
     for name in sorted(have - want):
         stem, ext = os.path.splitext(name)
-        old = stem[:len(stem) - len(typed)] + ext if typed and stem.endswith(typed) else name
+        old = name
+        if typed and stem.endswith(typed):
+            old = stem[:len(stem) - len(typed)] + ext
+        elif typed:
+            for w in sorted(want):
+                wstem, wext = os.path.splitext(w)
+                if ext == wext and stem.startswith(wstem) and 0 < len(stem) - len(wstem) <= len(typed):
+                    old = w
+                    break
         if old in want and old not in have:
             os.rename(os.path.join(fixture, name), os.path.join(fixture, old))
 
@@ -2326,8 +2334,7 @@ def selftest():
     sess.columns = lambda *a: a[1]
     check("sample_hides_first", (sess.sample("j", ("key", ("l",)), 1), sent),
           (7, [("shift",), "quiet", ("l",), "quiet"]))
-    # A restoring cycle that leaves its fixture as found returns its rows; one that renames a file fails the series
-    # and puts the name back; an exception mid-cycle puts it back too; a fixture off its names at the start refuses.
+    # Rows come only from a cycle that leaves the fixture as found; a rename or an exception fails the series and is put back; a dirty start refuses.
     with tempfile.TemporaryDirectory() as td:
         def fresh(name):
             for old in os.listdir(td):
@@ -2363,6 +2370,18 @@ def selftest():
         except OSError as e:
             check("restores_raise", str(e), "boom")
         check("restores_raise_put_back", sorted(os.listdir(td)), ["f_0001.txt"])
+        fresh("f_0001.txt")
+
+        def rename_partial(*_):
+            os.rename(os.path.join(td, "f_0001.txt"), os.path.join(td, "f_0001a.txt"))
+            return {}
+        fake.sample = rename_partial
+        try:
+            series_cycle(fake, spec, 1)
+            fail.append("restores_partial: a partial-suffix rename was not refused")
+        except RuntimeError as e:
+            check("restores_partial", "f_0001.txt, f_0001a.txt" in str(e), True)
+        check("restores_partial_put_back", sorted(os.listdir(td)), ["f_0001.txt"])
         fresh("f_0001ab.txt")
         fake.sample = lambda *a: sampled.append(a) or {}
         del sampled[:]
