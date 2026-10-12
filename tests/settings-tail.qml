@@ -84,6 +84,78 @@ ShellRoot {
         onTriggered: shell.advance()
     }
 
+    // The pane's section columns in model order (the Repeater is among its content item's children and carries no built).
+    function sectionItems(pane) {
+        var out = []
+        for (var i = 0; i < pane.contentItem.children.length; i++)
+            if (pane.contentItem.children[i].built !== undefined) out.push(pane.contentItem.children[i])
+        return out
+    }
+
+    // Sections whose rows are built: the first open builds View and the open section only, the idle walk builds the rest.
+    function builtSections(pane) {
+        var n = 0
+        var items = shell.sectionItems(pane)
+        for (var i = 0; i < items.length; i++)
+            if (items[i].built === true) n++
+        return n
+    }
+
+    // The pane's idle walk, read through the pane's own alias for it.
+    function walkOf(pane) { return pane.walk }
+
+    // A section the walk has not reached, other than About (which starts the update check) and the Columns subpage.
+    function unreached(pane) {
+        var items = shell.sectionItems(pane)
+        for (var i = items.length - 1; i >= 0; i--)
+            if (!items[i].built && items[i].modelData.id !== shell.updateCheckSection && items[i].modelData.id !== "columns") return items[i]
+        return null
+    }
+
+    // The pane builds lazily and a section shown before the walk reaches it builds on that show: the walk is held while one such section is shown, and its rows must be there at once.
+    function checkLazyBuild() {
+        var pane = shell.findType(panel, "SettingsPane")
+        var walk = shell.walkOf(pane)
+        shell.check("the pane's idle walk is found", !!walk, true)
+        if (!walk) return
+        // The walk restarts only if the pane had it running, so the later all-built check cannot pass from this test's own start.
+        var wasRunning = walk.running
+        walk.stop()
+        // View is the open section, so the walk's own k builds are the only others: k <= walk.next at any tick.
+        var built = shell.builtSections(pane)
+        shell.check("the pane builds View and only what the walk has reached before the walk is under way", built >= 1 && built <= 1 + walk.next, true)
+        var target = shell.unreached(pane)
+        shell.check("a section the walk has not reached exists to be shown", !!target, true)
+        if (target) {
+            var id = target.modelData.id
+            // A column shows only while the panel does, and a closed panel's sections stay as they were.
+            panel.open(null)
+            panel.showSection(id)
+            shell.check("section " + id + " builds when it is shown with the walk held", target.built, true)
+            shell.check("section " + id + " shows every row at once", panel.rows.length > 0 && pane.current.rows.count === panel.rows.length, true)
+        }
+        if (wasRunning) walk.start()
+    }
+
+    // After the walk: the Columns subpage opens over the same section columns, none recreated, and every section then shows every row at once.
+    function checkSubpage(pane) {
+        var before = shell.sectionItems(pane)
+        panel.showSection("columns")
+        var after = shell.sectionItems(pane)
+        var same = after.length === before.length
+        for (var i = 0; same && i < before.length; i++) same = after[i] === before[i]
+        shell.check("opening the Columns subpage keeps every section column", same, true)
+        shell.check("the Columns subpage shows every row at once", panel.rows.length > 0 && pane.current.rows.count === panel.rows.length, true)
+        var empty = []
+        for (var s = 0; s < Settings.SECTIONS.length; s++) {
+            var id = Settings.SECTIONS[s].id
+            if (id === shell.updateCheckSection) continue
+            panel.showSection(id)
+            if (panel.rows.length === 0 || pane.current.rows.count !== panel.rows.length) empty.push(id)
+        }
+        shell.check("every section shown after the Columns subpage has its rows at once", empty, [])
+    }
+
     // The row item the cursor is on, in the pane's content, against the pane's own window.
     function cursorInside(pane) {
         var item = pane.rowItem(panel.cursor)
@@ -176,6 +248,9 @@ ShellRoot {
             if (id !== shell.updateCheckSection && shell.headingTargets(Settings.rows(id, panel.settingsState)).length > 0) found.push(id)
         }
         shell.sweepSections = found
+        var pane = shell.findType(panel, "SettingsPane")
+        shell.check("the idle walk has built every section and the Columns subpage", shell.builtSections(pane), Settings.SECTIONS.length + 1)
+        shell.checkSubpage(pane)
         shell.check("the sweep covers Menus and another section", found.indexOf("menus") >= 0 && found.length >= 2, true)
         shell.sweeping = true
         shell.sweepIndex = 0
@@ -196,6 +271,8 @@ ShellRoot {
         shell.ticks++
         if (shell.sweeping) { shell.advanceSweep(); return }
         if (shell.step < 0) {
+            // The panel is built at once here, as its Loader builds it at the first open; the checks read the walk's own state, not the tick.
+            if (shell.ticks === 1) shell.checkLazyBuild()
             if (shell.ticks < shell.settleTicks) return
             panel.open(null)
             panel.showSection("menus")
