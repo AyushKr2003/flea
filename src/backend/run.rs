@@ -230,6 +230,11 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
             // The framing cannot be trusted past a decode failure, so this reports and stops, as before.
             writeln!(out, "{}", error_line(&e)).ok();
             out.flush().ok();
+            // The requests read before the failure are sound, so a scan still out is answered first, as for Closed.
+            if gate.holds() {
+                gate.close();
+                return Control::Continue;
+            }
             return Control::Quit;
         }
         // A scan still out is answered before the process leaves, so no client loses its listing.

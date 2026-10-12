@@ -83,7 +83,7 @@ pub fn read_raw(path: &Path) -> Result<Option<Vec<u8>>, FleaError> {
             msg: "the stored tags are larger than any filesystem writes".into(),
         });
     }
-    // Sized by the probe above; a concurrent write growing it past that answers short rather than torn.
+    // Sized by the probe above; a concurrent write growing it past that fails ERANGE below, one shrinking it answers short.
     let mut buf = vec![0u8; size as usize];
     let got = unsafe { lgetxattr(cpath.as_ptr(), name.as_ptr(), buf.as_mut_ptr() as *mut c_void, buf.len()) };
     if got < 0 {
