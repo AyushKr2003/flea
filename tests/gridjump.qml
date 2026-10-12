@@ -319,7 +319,7 @@ ShellRoot {
     function verdict() {
         // A late reply (a piped backend) lands after the layout: a tile clears, then takes the row, and the first G builds one tile; a sync reply beats the layout.
         ["G", "g", "End", "Home"].forEach(function (name) {
-            [{ key: name, created: 1, rebinds: 2 }, { key: name + ".sync", created: 0, rebinds: 1 }].forEach(function (bound) {
+            [{ key: name, created: name === "G" ? 1 : 0, rebinds: 2 }, { key: name + ".sync", created: 0, rebinds: 1 }].forEach(function (bound) {
                 var d = root.moves[bound.key]
                 root.check(bound.key + ": a far jump creates at most " + bound.created + " tile once the pool is warm", d.created <= bound.created, "created=" + d.created)
                 root.check(bound.key + ": a far jump rebinds a tile at most " + bound.rebinds + " times", d.max <= bound.rebinds, "max=" + d.max)
