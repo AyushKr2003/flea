@@ -310,9 +310,9 @@ function run(check) {
           "SONY ILCE-7M3|FUJIFILM X-T4")
     check("a make or a model alone is the camera, and neither is no camera",
           Facts.photoFacts({ make: "Canon" }).camera + "|" + Facts.photoFacts({ model: "X100V" }).camera + "|" + Facts.photoFacts({}).camera, "Canon|X100V|")
-    check("an exposure under a second is a fraction and from a second it is a number of seconds",
-          [[1, 8000], [10, 2500], [1, 1], [2, 1], [3, 2], [30, 1]].map(function (e) { return Facts.photoFacts({ exp: e }).exposure }).join("|"),
-          "1/8000 s|1/250 s|1 s|2 s|1.5 s|30 s")
+    check("an exposure under 0.3 s is a fraction and from 0.3 s it is a number of seconds, the way a camera shows it",
+          [[1, 8000], [10, 2500], [1, 4], [3, 10], [1, 3], [1, 2], [6, 10], [8, 10], [1, 1], [2, 1], [3, 2], [30, 1]].map(function (e) { return Facts.photoFacts({ exp: e }).exposure }).join("|"),
+          "1/8000 s|1/250 s|1/4 s|0.3 s|0.3 s|0.5 s|0.6 s|0.8 s|1 s|2 s|1.5 s|30 s")
     check("the aperture keeps one decimal and drops a trailing zero",
           [[28, 10], [4, 1], [18, 10], [56, 10], [14, 10]].map(function (f) { return Facts.photoFacts({ fnum: f }).exposure }).join("|"),
           "f/2.8|f/4|f/1.8|f/5.6|f/1.4")

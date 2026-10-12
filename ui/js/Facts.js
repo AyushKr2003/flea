@@ -117,7 +117,8 @@ function photoFacts(photo) {
     var seconds = ratio(p.exp)
     var parts = []
     if (seconds > 0) {
-        parts.push(seconds < 1 ? "1/%1 s".arg(Math.round(p.exp[1] / p.exp[0])) : "%1 s".arg(tenths(seconds)))
+        // The way a camera shows it: 1/N under 0.3 s, one-place seconds from there on.
+        parts.push(seconds < 0.3 ? "1/%1 s".arg(Math.round(p.exp[1] / p.exp[0])) : "%1 s".arg(tenths(seconds)))
     }
     if (ratio(p.fnum) > 0) {
         parts.push("f/%1".arg(tenths(ratio(p.fnum))))

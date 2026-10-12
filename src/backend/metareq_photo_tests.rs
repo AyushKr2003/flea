@@ -35,13 +35,17 @@ fn camera_tiff() -> Vec<u8> {
     t.b
 }
 
-// FF D8 | APP0 | filler segments | APP1 "Exif" TIFF | SOF0, with `pad` bytes of APP2 before the Exif segment.
+// FF D8 | APP0 | filler segments | APP1 "Exif" TIFF | SOF0, with `pad` payload bytes of APP2 segments before the Exif segment.
+// Every segment carries its true length, so the walk reaches the Exif segment only by reading as far as it lies.
 fn jpeg_with_exif(tiff: &[u8], pad: usize) -> Vec<u8> {
     let mut v = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x08, 1, 2, 3, 4, 5, 6];
-    if pad > 0 {
+    let mut left = pad;
+    while left > 0 {
+        let chunk = left.min(65_533);
         v.extend_from_slice(&[0xFF, 0xE2]);
-        v.extend_from_slice(&((pad + 2) as u16).to_be_bytes());
-        v.resize(v.len() + pad, 0);
+        v.extend_from_slice(&u16::try_from(chunk + 2).expect("one APP2 segment fits its length").to_be_bytes());
+        v.resize(v.len() + chunk, 0);
+        left -= chunk;
     }
     v.extend_from_slice(&[0xFF, 0xE1]);
     v.extend_from_slice(&((tiff.len() + 8) as u16).to_be_bytes());
@@ -133,8 +137,12 @@ fn the_jpeg_read_stops_at_64_kib() {
     // An Exif segment starting inside the cap is read; one starting past it is never reached.
     let near = write(&d, "near.jpg", &jpeg_with_exif(&tiff, 60_000));
     assert_eq!(photo_json(&photo(&near, true)), WIRE);
-    let far = write(&d, "far.jpg", &jpeg_with_exif(&tiff, 66_000));
+    // Two well-formed APP2 segments put the Exif segment past 64 KiB; only the read cap hides it.
+    let far_bytes = jpeg_with_exif(&tiff, 66_000);
+    assert!(far_bytes.len() > JPEG_EXIF_READ as usize, "the whole file is longer than the cap");
+    let far = write(&d, "far.jpg", &far_bytes);
     assert_eq!(photo_json(&photo(&far, true)), "null");
+    assert_eq!(exif_segment(&far_bytes).map(|t| t.len() >= tiff.len()), Some(true), "the uncut file does carry its Exif segment");
     assert_eq!(JPEG_EXIF_READ, 65_536);
 }
 
