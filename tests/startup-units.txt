@@ -99,6 +99,7 @@ js/Devices.js
 js/DirSizes.js
 js/Drag.js
 js/DragOut.js
+js/DropDev.js
 js/Dropbox.js
 js/Eject.js
 js/Errors.js
@@ -106,6 +107,7 @@ js/ExtThumbs.js
 js/Filter.js
 js/Focus.js
 js/FolderSorts.js
+js/FolderViews.js
 js/Format.js
 js/Grid.js
 js/GvfsBridge.js
@@ -170,4 +172,4 @@ js/Trash.js
 js/TrashDates.js
 js/UiState.js
 js/Update.js
-bytes 1611090
+bytes 1614048
