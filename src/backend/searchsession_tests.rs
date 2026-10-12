@@ -345,8 +345,10 @@ fn a_tag_term_filters_the_session_answer() {
     crate::backend::tags::write_names(&d.join("holiday.jpg"), &["Red".to_string()]).unwrap();
     let root = d.path().to_str().expect("utf-8").to_string();
     let mut s = Session::open_sync(&root, &root, false);
-    // The first tag term starts the read off the loop and answers partial; the names are in for the asks after it.
+    // The first tag term starts the read off the loop and answers partial; held, so a fast read cannot land before the answer.
+    s.tags.hold_read();
     assert!(s.query(1, "tag:Red", 100).expect("the tag query answers").walking, "the first ask stands on unread names");
+    s.tags.release_read();
     s.tags.wait_read();
     let answer = s.query(2, "tag:Red", 100).expect("the tag query answers");
     let names: Vec<String> = answer.rows.iter().map(|(path, _)| path.clone()).collect();
