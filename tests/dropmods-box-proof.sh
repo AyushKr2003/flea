@@ -57,13 +57,20 @@ cap_drops_release || fail "stub release refused"
 [[ "$(trap -p EXIT)" == "$case_trap" ]] || fail "release did not restore the case trap exactly: $(trap -p EXIT)"
 trap cleanup EXIT
 printf 'DROPMODSBOX PASS traphold=cap_dropmods_cleanup\n'
-# A generic EXIT command that never releases, and an exit mid-hold: the release click runs, then the command.
+# A generic EXIT command that never releases, and an exit mid-hold: the release click runs, then the command, which still sees the exit status.
 : > "$YDOTOOL_EVENTS"
-( trap - EXIT; trap 'printf "generic\n" >> "$YDOTOOL_EVENTS"' EXIT; cap_drops_press 1 1; exit 3 )
+( trap - EXIT; trap 'printf "generic %s\n" "$?" >> "$YDOTOOL_EVENTS"' EXIT; cap_drops_press 1 1; exit 3 )
 [[ $? == 3 ]] || fail "the mid-hold exit status was lost"
-[[ "$(tr '\n' ',' < "$YDOTOOL_EVENTS")" == "ydotool click 0x40,ydotool click 0x80,generic," ]] \
-    || fail "a generic trap exit did not release then run: $(tr '\n' ',' < "$YDOTOOL_EVENTS")"
+[[ "$(tr '\n' ',' < "$YDOTOOL_EVENTS")" == "ydotool click 0x40,ydotool click 0x80,generic 3," ]] \
+    || fail "a generic trap exit did not release then run with status 3: $(tr '\n' ',' < "$YDOTOOL_EVENTS")"
 printf 'DROPMODSBOX PASS genericexit=release-then-generic\n'
+# The same exit under errexit, which tests/ui.sh sets for every case: the relayed status must not end the chain before the command runs.
+: > "$YDOTOOL_EVENTS"
+( trap - EXIT; set -e; trap 'printf "generic %s\n" "$?" >> "$YDOTOOL_EVENTS"' EXIT; cap_drops_press 1 1; exit 3 )
+[[ $? == 3 ]] || fail "the mid-hold exit status was lost under errexit"
+[[ "$(tr '\n' ',' < "$YDOTOOL_EVENTS")" == "ydotool click 0x40,ydotool click 0x80,generic 3," ]] \
+    || fail "under errexit the exit did not release then run with status 3: $(tr '\n' ',' < "$YDOTOOL_EVENTS")"
+printf 'DROPMODSBOX PASS genericexit-errexit=release-then-generic\n'
 # A bare press arms the release alone and a release clears it; an abandon puts a generic trap back exactly.
 ( trap - EXIT; cap_drops_press 1 1; [[ "$(trap -p EXIT)" == *"click 0x80"* ]] || exit 4
   cap_drops_release; [[ -z "$(trap -p EXIT)" ]] || exit 5 ) || fail "a bare hold left or lost its trap, status $?"
@@ -79,4 +86,4 @@ printf 'DROPMODSBOX PASS bare=armed-then-cleared abandon=restored\n'
   cap_drops_press 1 1; cap_drops_press 2 2; cap_drops_release; [[ "$(trap -p EXIT)" == "$generic_trap" ]] || exit 4 ) \
     || fail "a second press while held lost the saved trap, status $?"
 printf 'DROPMODSBOX PASS doublepress=first-save-kept\n'
-printf 'DROPMODSBOX DONE checks=6 failed=0\n'
+printf 'DROPMODSBOX DONE checks=7 failed=0\n'

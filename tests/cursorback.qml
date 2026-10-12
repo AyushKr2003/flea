@@ -130,6 +130,7 @@ ShellRoot {
             next("backlistsub")
         } else if (stage === "backlistsub") {
             if (shell.running && !timedOut) return
+            if (timedOut) { check("the mid insertion settled", false, true); finish(); return }
             if (!settled(p, fixture)) return
             check("the mid insertion landed", shell.exitCode, 0)
             beginLeg("list", fixture + "/mid", 2)
@@ -143,7 +144,12 @@ ShellRoot {
             runShell(["rmdir", fixture + "/mid/0-sub"])
             next("midlistsub")
         } else if (stage === "midlistsub") {
+            track(p, p.path)
             if (shell.running && !timedOut) return
+            if (timedOut) { check("the mid removal settled", false, true); finish(); return }
+            // The watched re-read drops the row; only then is the pane still, so the view switch starts clean.
+            if (indexOf(p, "0-sub") >= 0 || !settled(p, fixture + "/mid")) return
+            check("the mid removal landed", shell.exitCode, 0)
             runShell(["rmdir", fixture + "/0-newdir"])
             next("viewgrid")
         } else if (stage === "viewgrid") {
@@ -188,6 +194,7 @@ ShellRoot {
             next("backgridsub")
         } else if (stage === "backgridsub") {
             if (shell.running && !timedOut) return
+            if (timedOut) { check("the mid insertion settled", false, true); finish(); return }
             if (!settled(p, fixture)) return
             check("the mid insertion landed", shell.exitCode, 0)
             beginLeg("grid", fixture + "/mid", 2)
@@ -201,7 +208,12 @@ ShellRoot {
             runShell(["rmdir", fixture + "/mid/0-sub"])
             next("midgridsub")
         } else if (stage === "midgridsub") {
+            track(p, p.path)
             if (shell.running && !timedOut) return
+            if (timedOut) { check("the mid removal settled", false, true); finish(); return }
+            // The watched re-read drops the row; only then is the pane still, so the view switch starts clean.
+            if (indexOf(p, "0-sub") >= 0 || !settled(p, fixture + "/mid")) return
+            check("the mid removal landed", shell.exitCode, 0)
             runShell(["rmdir", fixture + "/0-newdir"])
             next("viewcolumns")
         } else if (stage === "viewcolumns") {
@@ -246,6 +258,7 @@ ShellRoot {
             next("backcolumnssub")
         } else if (stage === "backcolumnssub") {
             if (shell.running && !timedOut) return
+            if (timedOut) { check("the mid insertion settled", false, true); finish(); return }
             if (!settled(p, fixture)) return
             check("the mid insertion landed", shell.exitCode, 0)
             beginLeg("columns", fixture + "/mid", 2)
@@ -259,7 +272,12 @@ ShellRoot {
             runShell(["rmdir", fixture + "/mid/0-sub"])
             next("midcolumnssub")
         } else if (stage === "midcolumnssub") {
+            track(p, p.path)
             if (shell.running && !timedOut) return
+            if (timedOut) { check("the mid removal settled", false, true); finish(); return }
+            // The watched re-read drops the row; only then is the pane still, so the view switch starts clean.
+            if (indexOf(p, "0-sub") >= 0 || !settled(p, fixture + "/mid")) return
+            check("the mid removal landed", shell.exitCode, 0)
             runShell(["rmdir", fixture + "/0-newdir"])
             next("wrap")
         } else if (stage === "dualready") {

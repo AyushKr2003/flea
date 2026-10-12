@@ -5,11 +5,12 @@ cap_drops_fat_skip() {
     return 0
 }
 # Chain the release ahead of the EXIT command in force, so an exit mid-hold releases the button, then runs it as saved.
+# The saved command reads $? for the status the script exits with, so the chain hands it that status again; errexit, on in every case, would end the chain at that relay.
 cap_drops_arm() {
     [[ "${cap_drops_held:-0}" == "1" ]] && return 0
     eval "set -- $(trap -p EXIT)"
     cap_drops_saved_exit=${3-}
-    trap 'YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true; '"$cap_drops_saved_exit" EXIT
+    trap 'cap_drops_status=$?; YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true; set +e; (exit "$cap_drops_status"); '"$cap_drops_saved_exit" EXIT
     cap_drops_held=1
 }
 # Put back the exact EXIT command cap_drops_arm saved.
