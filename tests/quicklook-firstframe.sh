@@ -87,11 +87,15 @@ run_leg() {
     local leg_root="$test_root/$leg" log="$test_root/$leg/run.log" status
     mkdir -p "$leg_root"/{home,state/flea,cache,runtime} || exit 1
     chmod 700 "$leg_root/runtime" || exit 1
-    printf '{}\n' > "$leg_root/state/flea/ui.json"
+    if [ -n "${QLFF_DUAL:-}" ]; then
+        printf '{"view":"dual","dual":{"paths":["%s","%s"],"focus":1}}\n' "$test_root/fixture" "$test_root/fixture" > "$leg_root/state/flea/ui.json"
+    else
+        printf '{}\n' > "$leg_root/state/flea/ui.json"
+    fi
     ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u QML_DISABLE_DISK_CACHE \
         HOME="$leg_root/home" XDG_STATE_HOME="$leg_root/state" XDG_CACHE_HOME="$leg_root/cache" \
         XDG_RUNTIME_DIR="$leg_root/runtime" FLEA_BIN="$PWD/target/debug/flea" FLEA_PATH="$test_root/fixture" \
-        FLEA_REDUCED_MOTION="$reduced" QLFF_UI="$test_root/config/flea" QLFF_DIR="$test_root/fixture" QLFF_STEPS="$steps" QLFF_CLASS="$class" QLFF_SWEEP="$sweep" QLFF_MODE="${QLFF_MODE:-call}" QLFF_REENTER="${QLFF_REENTER:-}" QLFF_LATEROWS="${QLFF_LATEROWS:-}" QLFF_NOOPEN="${QLFF_NOOPEN:-}" \
+        FLEA_REDUCED_MOTION="$reduced" QLFF_UI="$test_root/config/flea" QLFF_DIR="$test_root/fixture" QLFF_STEPS="$steps" QLFF_CLASS="$class" QLFF_SWEEP="$sweep" QLFF_MODE="${QLFF_MODE:-call}" QLFF_REENTER="${QLFF_REENTER:-}" QLFF_LATEROWS="${QLFF_LATEROWS:-}" QLFF_NOOPEN="${QLFF_NOOPEN:-}" QLFF_DUAL="${QLFF_DUAL:-}" \
         QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 QT_LOGGING_RULES="$(qslog_rules "qt.qml.diskcache.debug=true")" \
         dbus-run-session -- bash -c 'timeout "$1" qs -p "$2" > "$3" 2>&1' _ "$limit" "$test_root/config" "$log" 2> "$leg_root/bus.log" ) 2>/dev/null
     status=$?
@@ -156,5 +160,7 @@ fi
 run_leg capped "c-mid.md:capped" "" 1 "" 60
 # The latecapped leg pins the harness's own restore of a late rows reply on a loaded host: the stale size is put back and the cursor rests again.
 QLFF_LATEROWS=1 run_leg latecapped "c-mid.md:capped" "" 1 "" 60
+# The right pane of a restored dual view opens Quick Look on its own first Space, through the shared loader.
+QLFF_DUAL=1 QLFF_MODE=key run_leg dual "a-notes.md:inline" "" 1 "" 60
 printf 'quicklook-firstframe: %s legs, %s failed\n' "$legs" "$failures"
 [ "$failures" -eq 0 ]

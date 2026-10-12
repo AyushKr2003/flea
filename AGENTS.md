@@ -9016,6 +9016,8 @@ The Dual divider's cancel moves no file ceiling (`ui/WindowBody.qml` stays 798: 
 
 The Dual divider keeps its grab through a real drag: the divider zone overlays the second listing's row padding, where each row's `DragHandler` in `ui/RowDrag.qml` takes over from an item grab after its threshold, so the handle's `MouseArea` in `ui/ResizeHandle.qml` sets `preventStealing` (the Columns edges, above any row, are unaffected). `tests/dualdivider.qml` drives a real press and two moves through `TestEvent` and fails on a canceled grab. No file ceiling moves; the `tests/startup-units.txt` byte line goes from 1601388 to 1601521 for the comment and property in `ui/ResizeHandle.qml`.
 
+The dual pane Quick Look fix qualifies the right pane's `previewLoader` binding in `ui/WindowBody.qml` as `primaryPane.previewLoader`, since the bare name resolved to the right pane's own property and stayed null. `tests/startup-units.txt` keeps its 170 units while its `bytes` line moves from 1596965 to 1596977, the 12 characters of `primaryPane.`, and `tests/quicklook-firstframe.qml` moves its ceiling from 438 to 452 for the dual leg's checks.
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one

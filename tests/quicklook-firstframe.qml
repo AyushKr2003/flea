@@ -19,6 +19,8 @@ ShellRoot {
     // A storage class the leg forces, or "unknown" to hold the pane before its class reply (storageKnown false, class "").
     readonly property string forcedClass: Quickshell.env("QLFF_CLASS")
     readonly property bool realKey: Quickshell.env("QLFF_MODE") === "key"
+    // QLFF_DUAL=1 restores a dual view with the right pane focused, so the first Space comes from the right pane.
+    readonly property bool dual: Quickshell.env("QLFF_DUAL") === "1"
     // The fixture documents that link a local picture, which a step on them must find drawn.
     readonly property var pictureDocs: ["a-notes.md", "h-html.md", "i-maths.md"]
     // The documents whose inline formula makes the first picture decode of the process a cost the rest must pay, and whether the card found the decoder warm at the key.
@@ -228,6 +230,11 @@ ShellRoot {
         root.stageAt = Date.now()
         root.keyAt = Date.now()
         root.loadsAtKey = root.cardLoads
+        if (root.dual && !(pane.listOnly === true && pane.previewLoader !== null)) {
+            root.fail("the right pane has listOnly=" + pane.listOnly + " and previewLoader=" + pane.previewLoader + " before the first Space")
+            root.finish()
+            return
+        }
         root.log("KEY " + (root.step + 1) + " " + step.name + " " + step.via + " built=" + (root.pv() !== null) + " cards=" + root.cardLoads)
         // The first Space after a rest on a Markdown file finds the card built and closed, so it builds nothing and only opens it.
         if (root.step === 0 && (root.pv() === null || root.pv().active || root.pv().visible))
@@ -236,6 +243,13 @@ ShellRoot {
             PreviewKeys.act(root.indexOf(step.name) > pane.cursorIndex ? "cursorDown" : "cursorUp", pane)
         } else if (root.realKey) {
             root.press()
+            var card = body.item.quickLook
+            if (root.dual && !(card !== null && card.active && card.pane === pane)) {
+                root.fail("the right pane's first Space left quickLook=" + card + " active=" + (card ? card.active : "") + " on its own pane=" + (card ? card.pane === pane : ""))
+                root.finish()
+                return
+            }
+            root.syncPictures = root.pictureState()
         } else {
             root.warmAtKey = root.prepare.decoderWarm === true
             PreviewKeys.open(pane)
