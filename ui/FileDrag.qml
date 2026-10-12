@@ -172,7 +172,7 @@ Item {
 
     function liftEnded() {
         root.Drag.active = false
-        if (root.host) { root.host.dragHolding = false; root.host.awaitingPaths = false }
+        if (root.host) { root.host.dragHolding = false; root.host.awaitingPaths = false; root.host.pointerHeld = false }
         root.dragRows = []
         root.dragListing = 0
         root.dragMime = ({})

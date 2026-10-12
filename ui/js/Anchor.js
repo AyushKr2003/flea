@@ -16,7 +16,7 @@ function busy(pane, anchor) {
         return true
     if (pane.menuActions && (pane.menuActions.pendingAction || pane.menuActions.pendingActivation === true))
         return true
-    if (pane.dragActive === true || pane.awaitingPaths === true)
+    if (pane.dragActive === true || pane.awaitingPaths === true || pane.pointerHeld === true)
         return true
     if (pane.pathsPending)
         return true
