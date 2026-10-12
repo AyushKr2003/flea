@@ -69,7 +69,7 @@ ShellRoot {
         if (shell.guardMap.hasOwnProperty(i))
             return { n: shell.guardMap[i], d: false, t: true, s: 1000, m: 1000, p: 33188, i: "image-x-generic" }
         if (i === shell.interimRowOverride && shell.interimOrig !== "")
-            return { n: shell.interimOrig, d: false, t: true, s: 1000, m: 1000, p: 33188, i: "image-x-generic" }
+            return { n: shell.interimOrig, d: false, t: shell.interimRowT, s: 1000, m: 1000, p: 33188, i: "image-x-generic" }
         if (i < 0 || i > shell.restRow) return null
         if (i === 0) return { n: "note.txt", d: false, t: false, s: 64, m: 1000, p: 33188, i: "text-x-generic" }
         if (i === shell.restRow) return { n: "big.png", d: false, t: true, s: 2000000, m: 1051, p: 33188, i: "image-x-generic" }
@@ -625,8 +625,10 @@ ShellRoot {
             }
         }
     }
-    // The same model with no thumbnail: the generic file pane stands, and no Image takes the model file.
+    // The same model no thumbnailer serves: the generic file pane stands, and no Image takes the model file.
+    property bool interimRowT: true
     function beginStlNoThumb() {
+        shell.interimRowT = false
         shell.interimPhase = "stlnothumb"
         shell.interimOrig = "model.stl"
         shell.interimCache = ""
@@ -656,6 +658,7 @@ ShellRoot {
         }
     }
     function beginStlControl() {
+        shell.interimRowT = true
         shell.interimPhase = "stlcontrol"
         shell.interimOrig = "bad.png"
         shell.interimCache = ""
@@ -692,7 +695,7 @@ ShellRoot {
 
     // #263: Quick Look opened on an image whose thumbnail the grid is still making, one step per poll tick.
     readonly property string sentence: "This image could not be read."
-    property var lateLegs: ["landed", "refused", "asked", "forgot", "relist", "vanish", "off", "hold", "move", "drift", "decodable"]
+    property var lateLegs: ["model", "landed", "refused", "asked", "forgot", "relist", "vanish", "off", "hold", "move", "drift", "decodable"]
     property string lateLeg: ""
     property var lateSteps: []
     property int lateAt: 0
@@ -725,7 +728,7 @@ ShellRoot {
         shell.thumbGate = Qt.createQmlObject('import QtQuick\nimport "file://' + shell.uiDir
             + '/js/Thumbs.js" as Thumbs\nimport "file://' + shell.uiDir
             + '/js/ExtThumbs.js" as Ext\nimport "file://' + shell.uiDir
-            + '" as Flea\nQtObject {\nfunction replyTo(state, row, file, cap, known, storageClass) {\nif (file === "" && state.file[row] === Thumbs.CACHE_ASKED && (!known || !Ext.cacheOnly(storageClass, Flea.ViewState.preview))) return Thumbs.miss(state, row, true, cap)\nreturn Thumbs.remember(state, row, file, cap)\n}\nfunction applyTo(state, work) { return Thumbs.applied(state, work) }\nfunction dropRow(state, row) { Thumbs.forget(state, row); return { file: state.file, order: state.order } }\n}', shell, "thumbGate")
+            + '" as Flea\nQtObject {\nfunction replyTo(state, row, file, cap, known, storageClass) { return Ext.thumbReply(state, row, file, cap, known, storageClass, Flea.ViewState.preview).state }\nfunction applyTo(state, work) { return Thumbs.applied(state, work) }\nfunction dropRow(state, row) { Thumbs.forget(state, row); return { file: state.file, order: state.order } }\n}', shell, "thumbGate")
     }
     // ViewState is the singleton Preview.qml reads; the harness imports the ui directory to reach that same instance.
     function thumbnails(mode, storageClass) {
@@ -780,9 +783,10 @@ ShellRoot {
         var failed = function () { return shell.undecodable() && shell.pausedFor(150) }
         var done = function () { shell.lateLog(); shell.lateNext() }
         var steps
-        if (shell.lateLeg === "landed" || shell.lateLeg === "refused") {
-            var landed = shell.lateLeg === "landed"
-            shell.lateOpen({ 7: "late.png" }, { 7: "cache-asked" })
+        if (shell.lateLeg === "landed" || shell.lateLeg === "refused" || shell.lateLeg === "model") {
+            var landed = shell.lateLeg !== "refused"
+            // The model leg is a 3D model whose thumbnailer is still working: Quick Look opens on the image pane and waits on the reply.
+            shell.lateOpen({ 7: shell.lateLeg === "model" ? "model.stl" : "late.png" }, { 7: "cache-asked" })
             steps = [
                 { wait: failed, run: function () { shell.pendNow(); shell.reply(7, "") } },
                 { wait: function () { return shell.fullAsks().length >= 1 }, run: function () { shell.reply(7, landed ? shell.photoDir + "/stl-cache.png" : "") } },
