@@ -12,6 +12,8 @@ pub(crate) struct Table {
 
 impl Table {
     pub(crate) fn read(dest: &Path) -> Table {
+        #[cfg(test)]
+        crate::backend::opsprobe::table_read();
         Table::of(std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default(), dest)
     }
 
@@ -31,4 +33,27 @@ pub(crate) fn identity_in(dst: &Path, table: &Table) -> Result<ItemIdentity, cra
         return ItemIdentity::inspect_in(dst, &table.body);
     }
     dst.symlink_metadata().map(|meta| ItemIdentity::record(&meta)).map_err(|e| crate::error::from_io("journal", &dst.to_string_lossy(), &e))
+}
+
+// The folders one question has resolved: a selection shares a few, and a canonicalize is a readlink per component.
+#[derive(Default)]
+pub(crate) struct Parents(HashMap<PathBuf, PathBuf>);
+
+impl Parents {
+    pub(crate) fn resolve(&mut self, parent: &Path) -> &Path {
+        if !self.0.contains_key(parent) {
+            #[cfg(test)]
+            crate::backend::opsprobe::resolve();
+            self.0.insert(parent.to_path_buf(), parent.canonicalize().unwrap_or_else(|_| parent.to_path_buf()));
+        }
+        &self.0[parent]
+    }
+
+    // What canonicalize gives a source that is not itself a symlink: its folder resolved once for the batch, then its own name.
+    pub(crate) fn real_of(&mut self, src: &Path) -> PathBuf {
+        match (src.parent(), src.file_name()) {
+            (Some(parent), Some(name)) => self.resolve(parent).join(name),
+            _ => src.canonicalize().unwrap_or_else(|_| src.to_path_buf()),
+        }
+    }
 }

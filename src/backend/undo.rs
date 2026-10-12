@@ -32,7 +32,7 @@ impl ItemIdentity {
     pub(crate) fn from_parts(dev: u64, ino: u64, kind: u32, len: u64, mtime: (i64, i64), changed: (i64, i64), born: Option<(u64, u32)>) -> Self {
         Self { dev, ino, kind, len, mtime, changed, born }
     }
-    pub fn inspect(path: &std::path::Path) -> Result<Self, FleaError> { Self::inspect_in(path, &std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default()) }
+    pub fn inspect(path: &std::path::Path) -> Result<Self, FleaError> { #[cfg(test)] super::opsprobe::table_read(); Self::inspect_in(path, &std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default()) }
     // The same against a mount table the caller read once, so a pass over a thousand names does not read it a thousand times.
     pub fn inspect_in(path: &std::path::Path, body: &str) -> Result<Self, FleaError> {
         let owned = path.to_path_buf();

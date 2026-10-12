@@ -195,4 +195,22 @@ function run(check) {
     var bigLater = Transfer.sampled(bigAt, 2, "big.mkv", 2000 * megabyte, 4200 * megabyte, 0)
     check("the line after it still names the size",
           Transfer.fileLine(bigLater), "big.mkv · 4.2 GB")
+
+    // A thousand ok item lines held back and folded in one write make the card the lines would have made one by one.
+    var thousand = { id: 7, n: 1000, moving: false, index: 0, name: "", done: 0, bytes: 0, total: 0, moved: 0,
+                     scanned: 4096000, running: true, failureReported: false }
+    var held = []
+    var oneByOne = Transfer.sampled(thousand, 0, "f0000.bin", 4096, 0, 0)
+    var heldFirst = oneByOne
+    for (var i = 0; i < 1000; i++) {
+        held.push({ index: i, name: "f" + i + ".bin" })
+        oneByOne = Transfer.itemDone(oneByOne, i, "f" + i + ".bin")
+    }
+    var folded = Transfer.itemsDone(heldFirst, held)
+    check("held ok items fold to the same card as a thousand single lines",
+          JSON.stringify(folded), JSON.stringify(oneByOne))
+    check("and the card counts every file with the last one named",
+          folded.done + "|" + folded.name, "1000|f999.bin")
+    check("no held items leave the card untouched",
+          Transfer.itemsDone(thousand, []), thousand)
 }

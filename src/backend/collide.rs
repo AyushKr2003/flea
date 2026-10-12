@@ -262,19 +262,6 @@ pub fn already_there(src: &Path, name: &str, dst: &Path, dest_real: &Path) -> bo
     already_there_in(src, name, dst, dest_real, &mut Parents::default())
 }
 
-// The folders one question has resolved: a selection shares a few, and a canonicalize is a readlink per component.
-#[derive(Default)]
-pub(crate) struct Parents(HashMap<PathBuf, PathBuf>);
-
-impl Parents {
-    fn resolve(&mut self, parent: &Path) -> &Path {
-        if !self.0.contains_key(parent) {
-            self.0.insert(parent.to_path_buf(), parent.canonicalize().unwrap_or_else(|_| parent.to_path_buf()));
-        }
-        &self.0[parent]
-    }
-}
-
 pub(crate) fn already_there_in(src: &Path, name: &str, dst: &Path, dest_real: &Path, parents: &mut Parents) -> bool {
     let src_here = match src.parent() {
         Some(parent) => parents.resolve(parent).join(name),
@@ -382,7 +369,7 @@ pub(crate) fn landed(ops: &mut Ops, turn: usize, question: Question) -> bool {
 
 #[path = "collide_table.rs"]
 mod table;
-pub(crate) use table::{identity_in, Table};
+pub(crate) use table::{identity_in, Parents, Table};
 
 #[cfg(test)]
 #[path = "collide_tests.rs"]

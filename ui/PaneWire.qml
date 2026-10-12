@@ -119,6 +119,17 @@ Item {
         onTriggered: root.reread()
     }
 
+    // Ok item lines wait here and join the card at the next other line or this beat, so a run of small files writes it once; a failure never waits.
+    property var heldItems: []
+    Timer { id: heldItemBeat; interval: 100; onTriggered: root.flushItems() }
+    function flushItems() {
+        heldItemBeat.stop()
+        if (root.heldItems.length === 0) return
+        root.pane.transfer = Transfer.itemsDone(root.pane.transfer, root.heldItems)
+        root.heldItems = []
+        root.pane.sticky(Ops.progressLine(root.pane.transfer))
+    }
+
     // A debt owed for the directory the pane has left is not owed by the one it arrived in: without
     // this, a change in A held back by a selection is paid by a full re-list of B.
     Connections {
@@ -252,6 +263,7 @@ Item {
         // The verb comes off the wire, never off the clipboard: paste spends a cut before this line
         // arrives, and a Dropbox move never touches the clipboard at all.
         function onTransferStarted(id, n, moving, extract) {
+            root.heldItems = []
             root.retryId = 0
             root.retryPaths = []
             root.retrySelectionText = ""
@@ -265,6 +277,7 @@ Item {
             if (id !== pane.transfer.id) {
                 return
             }
+            root.flushItems()
             // Reassigned rather than mutated in place: an in-place write re-evaluates no binding,
             // so the card would never see a sample. The bytes and the total ride along with it.
             // The writing phase names the drive instead of a file: every file is already complete,
@@ -281,6 +294,8 @@ Item {
             if (id !== pane.transfer.id) {
                 return
             }
+            if (ok) { root.heldItems.push({ index: index, name: name }); if (!heldItemBeat.running) heldItemBeat.start(); return }
+            root.flushItems()
             var firstFailure = !ok && err !== "cancelled" && !pane.transfer.failureReported
             pane.transfer = Object.assign(Transfer.itemDone(pane.transfer, index, name),
                                           { failureReported: pane.transfer.failureReported || firstFailure })
@@ -295,6 +310,7 @@ Item {
             if (id !== pane.transfer.id) {
                 return
             }
+            root.flushItems()
             // A merge carries into on its own line; every other transfer keeps today's line.
             var line = into && pane.collide ? pane.collide.doneLine(pane.transfer,
                 { into: into, merged: merged, keptBoth: keptBoth, ok: ok, failed: failed, skipped: skipped, cancelled: cancelled, durable: durable, note: note })

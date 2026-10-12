@@ -1,6 +1,5 @@
 // The operations request layer: the response lines, and the one thread an operation runs on.
-use crate::backend::collide::{already_there, cancelled, Place, Policy, Skipping, CANCELLED};
-use crate::backend::copyfile::{copy_any, move_any, Progress};
+use crate::backend::collide::{cancelled, Place, Policy, Skipping, CANCELLED};
 use crate::backend::ops;
 use crate::backend::trash;
 use crate::backend::undo::{self, Entry, ItemIdentity, Step};
@@ -18,6 +17,8 @@ pub(crate) const PROGRESS_EVERY: Duration = Duration::from_millis(150);
 #[path = "opspace.rs"]
 pub(crate) mod opspace;
 use opspace::Pace;
+#[path = "transferitem.rs"]
+mod transferitem;
 
 // Test builds only: set the cancel flag at this item, past the loop-top check, so a mid-item cancel is deterministic.
 #[cfg(test)]
@@ -308,6 +309,8 @@ pub(crate) fn run_transfer_checked(
     let dest_real = dest.canonicalize().unwrap_or_else(|_| dest.clone());
     // Cross-device moves confirm folders once per batch; copies never enter it, so an empty batch closes to nothing.
     let mut batch = super::movebatch::MoveBatch::new();
+    // The folders the sources sit in and the mount table the journal reads, each resolved once for the batch and not once per item.
+    let (mut parents, table) = (super::collide::Parents::default(), super::collide::Table::read(&dest));
     for (index, raw) in paths.iter().enumerate() {
         // The flag stops the batch, and so does an item whose own error says it was cancelled, see collide::cancelled.
         if was_cancelled || cancel.load(Ordering::Relaxed) {
@@ -362,7 +365,7 @@ pub(crate) fn run_transfer_checked(
         }
         // A symlink is copied or moved as the link itself (copy_any, move_any), so it holds nothing and its target's tree is not its own; only a real directory can contain the destination.
         let src_is_link = metadata.file_type().is_symlink();
-        let src_real = if src_is_link { src.clone() } else { src.canonicalize().unwrap_or_else(|_| src.clone()) };
+        let src_real = if src_is_link { src.clone() } else { parents.real_of(&src) };
         // A folder into itself or its own subtree: copy_dir would read its own fresh copy until the disk
         // is full, so the refusal ui/js/Drag.js canDropInto makes is made again here, per item.
         if !src_is_link && dest_real.starts_with(&src_real) {
@@ -372,7 +375,7 @@ pub(crate) fn run_transfer_checked(
             continue;
         }
         // An item dropped into the folder it already lives in: copy_file would truncate it onto itself.
-        let here = already_there(&src, &name, &dst, &dest_real);
+        let here = super::collide::already_there_in(&src, &name, &dst, &dest_real, &mut parents);
         // A folder landing on a folder folds in, closing any open batch first so earlier items report first; files take the second card's answer.
         let (mut folded_top, mut kept_top) = (false, false);
         enum Landed { Now(Result<(), FleaError>), Later }
@@ -405,7 +408,7 @@ pub(crate) fn run_transfer_checked(
             }
         };
         if merging { kept_top = super::merge::kept_name(&dst, &name); }
-        let mut land = |steps: &mut Vec<Step>| one_item(id, index, &name, moving, &src, &dst, source.clone(), &cancel, &tx, (&settled, &pace), steps, &mut durability);
+        let mut land = |steps: &mut Vec<Step>| transferitem::one_item(id, index, &name, moving, &src, &dst, source.clone(), &cancel, &tx, (&settled, &pace, &table), steps, &mut durability);
         // A replace trashes through the batch's deferred session, so its copy still follows its own trash.
         if replace {
             let slot = deferred.get_or_insert_with(super::mergeapply::Deferred::begin);
@@ -421,7 +424,7 @@ pub(crate) fn run_transfer_checked(
                 }
             } else {
                 if !batch.is_empty() { let closed = close_open(&mut batch, id, &tx, &mut steps, &mut durability, [&mut ok, &mut failed, &mut skipped], &mut retry); close_merged(&closed, merging, &mut merged_total, &mut kept_total); }
-                Landed::Now(one_item(id, index, &name, moving, &src, &dst, source.clone(), &cancel, &tx, (&settled, &pace), &mut steps, &mut durability))
+                Landed::Now(transferitem::one_item(id, index, &name, moving, &src, &dst, source.clone(), &cancel, &tx, (&settled, &pace, &table), &mut steps, &mut durability))
             }
         } else {
             Landed::Now(land(&mut steps))
@@ -530,44 +533,6 @@ fn close_merged(closed: &super::movebatch::CloseCounts, merging: bool, merged_to
         *merged_total += closed.ok;
         *kept_total += closed.kept_ok;
     }
-}
-
-// A directory reports the bytes its tree has copied so far and no total, see copyfile.rs Progress.
-// Its journal steps land in `steps` either way: a failure that created its destination left a partial there.
-fn one_item(
-    id: usize,
-    index: usize,
-    name: &str,
-    moving: bool,
-    src: &Path,
-    dst: &Path,
-    source: ItemIdentity,
-    cancel: &AtomicBool,
-    tx: &Sender<OpMsg>,
-    (settled, pace): (&AtomicU64, &Pace),
-    steps: &mut Vec<Step>,
-    durability: &mut super::durable::Durability,
-) -> Result<(), FleaError> {
-    // scanned is still 0 while the sweep counts, and the batch's own total from the moment it settles.
-    let mut sink = |done: u64, total: u64| pace.report(tx, id, (index, name), (done, total), settled);
-    let mut p = Progress { cancel, on_bytes: &mut sink, partial: None, tree: None, manifest: if moving { super::copymanifest::writer_for_move(src, dst) } else { super::copymanifest::writer_for(src, dst) }, durability: Some(durability), for_move: moving };
-    let mut outcome = if moving { move_any(src, dst, &mut p) } else { copy_any(src, dst, &mut p) };
-    pace.ended(index, name);
-    match &outcome {
-        Ok(()) if moving => steps.push(undo::moved(src, dst, source)?),
-        Ok(()) => steps.push(undo::copied(src, dst, source)?),
-        // The partial is this operation's, so it is journaled and undo removes it like any created path.
-        Err(_) => {
-            if let Some(path) = p.partial.take() {
-                let (manifest, loud) = super::copymanifest::finish_loud(p.manifest.take());
-                if let (Err(outcome), Some(e)) = (&mut outcome, loud) {
-                    outcome.msg.push_str(&format!("; copy manifest failed: {e}"));
-                }
-                steps.push(undo::copied_partial(src, &path, source, manifest)?);
-            }
-        }
-    }
-    outcome
 }
 
 pub(crate) fn run_trash(paths: Vec<String>, tx: Sender<OpMsg>, selection: Option<Vec<super::menu_actions::Selected>>) {
