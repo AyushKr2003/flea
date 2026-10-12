@@ -2,7 +2,7 @@
 use crate::backend::fuzzy::{fold_packed, rank_order, Hay, Packed};
 use std::borrow::Cow;
 use std::cmp::Ordering as CmpOrdering;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
@@ -229,7 +229,7 @@ impl Index {
             .filter(|(name, _)| hidden || !is_hidden(name))
             .map(|(name, is_dir)| ([prefix.as_slice(), name.as_bytes()].concat(), is_dir))
             .collect();
-        let names: HashSet<&[u8]> = seen.iter().map(|(child, _)| child.as_slice()).collect();
+        let kinds: HashMap<&[u8], bool> = seen.iter().map(|(child, is_dir)| (child.as_slice(), *is_dir)).collect();
         let mut kept = Vec::with_capacity(self.rows.len());
         let mut present: HashSet<Vec<u8>> = HashSet::new();
         for row in 0..self.rows.len() {
@@ -241,7 +241,13 @@ impl Index {
                 continue;
             };
             let child = &path[..prefix.len() + below.iter().position(|&byte| byte == b'/').unwrap_or(below.len())];
-            if names.contains(child) {
+            // A name that changed kind is a new entry: its old row and the rows below it go, and the push below adds it again.
+            let holds = match kinds.get(child) {
+                Some(&is_dir) if child.len() == path.len() => is_dir == self.rows[row].is_dir(),
+                Some(&is_dir) => is_dir,
+                None => false,
+            };
+            if holds {
                 kept.push(row);
                 if child.len() == path.len() {
                     present.insert(path.to_vec());

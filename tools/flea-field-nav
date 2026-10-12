@@ -1285,6 +1285,25 @@ def selftest():
     except SystemExit:
         pass
     check("view_rival", check_arm_view({"id": "n", "entrant": "nautilus", "view": "grid"}), None)
+    # explore ends every target the search table names, so it refuses over a running one as measure does.
+    explore_ran, saved_idle, saved_explore = [], S.require_idle, {n: globals()[n] for n in ("make_ctx", "run_cursor")}
+
+    def busy():
+        explore_ran.append("idle")
+        raise SystemExit("already running")
+    S.require_idle = busy
+    globals()["make_ctx"] = lambda out: explore_ran.append("ctx") or {"keys": None}
+    globals()["run_cursor"] = lambda *a: explore_ran.append("cursor") or []
+    try:
+        with redirect_stdout(io.StringIO()):
+            explore(["flea", "fixture", "cursor"])
+        fail.append("explore_idle: explore started over a running target")
+    except SystemExit as stop:
+        check("explore_idle_refusal", str(stop), "already running")
+    finally:
+        S.require_idle = saved_idle
+        globals().update(saved_explore)
+    check("explore_idle_ran", explore_ran, ["idle"])
     # Settle from the rows wait end: quiet history falls back, a busy run caps there.
     det = [(1100 * ms, 0, 50, 0, 0, 50, 50, 60), (1200 * ms, 0, 200, 110, 300, 120, 700, 10)]
     cols = launch_columns(det, 1000 * ms, win, content, 20000 * ms, settle_from_ns=5000 * ms)
@@ -1421,11 +1440,12 @@ def explore(argv):
         os.environ.get("TMPDIR", "."), "flea-navexplore")
     view = argv[argv.index("--view") + 1] if "--view" in argv else arm_view({"entrant": ent})
     mode = argv[argv.index("--preview") + 1] if "--preview" in argv else None
-    ctx = make_ctx(out)
     arm = {"id": ent, "entrant": ent, "flea_dir": flea, "view": view}
     check_arm_view(arm)
     if flea:
         S.UI_TOKENS.append(flea + "/ui")
+    S.require_idle()
+    ctx = make_ctx(out)
     keys = ctx["keys"]
     opts = {"tag": "x", "evidence": True, "inview_steps": INVIEW_STEPS, "scroll_steps": SCROLL_STEPS,
             "pace_ms": CURSOR_PACE_MS}

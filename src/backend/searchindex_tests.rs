@@ -35,6 +35,25 @@ fn a_local_walk_takes_no_bound_call() {
     assert_eq!(crate::backend::iomount::test_calls(), 0, "0 bound calls over 1 directory walked");
 }
 
+// A name that changed kind between two patches is a new entry: a folder now a file keeps no rows below it, a file now a folder is walked.
+#[test]
+fn a_patch_follows_a_name_that_changed_kind() {
+    let d = TestDir::new("sessionkind");
+    d.file("was-dir", "");
+    d.dir("was-file");
+    d.file("was-file/new.txt", "");
+    d.dir("same");
+    d.file("same/in.txt", "");
+    let mut index = Index::new();
+    for (path, is_dir) in [("was-dir", true), ("was-dir/inner.txt", false), ("was-file", false), ("same", true), ("same/in.txt", false)] {
+        index.push(path, is_dir);
+    }
+    assert!(index.patch_dir(root(&d), std::path::Path::new(""), false, &crate::backend::mountinfo::read_body()), "a local scope answers its patch");
+    let mut rows: Vec<(&str, bool)> = (0..index.len()).map(|row| (index.path(row), index.is_dir(row))).collect();
+    rows.sort();
+    assert_eq!(rows, [("same", true), ("same/in.txt", false), ("was-dir", false), ("was-file", true), ("was-file/new.txt", false)]);
+}
+
 // A patch that drops two children ahead of a deeper row keeps every surviving row and drops only the gone ones.
 #[test]
 fn a_patch_dropping_two_children_keeps_the_rows_after_them() {

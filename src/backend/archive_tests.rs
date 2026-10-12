@@ -212,3 +212,19 @@ fn the_table_is_what_is_installed_and_never_a_fixed_list() {
         assert!(!a.iter().any(|s| s.contains("--evil") && s.starts_with('-')),
                 "no 7z argument may start with the member's own dashes: {:?}", a);
     }
+
+// An encrypted zip needs 7z even where bsdtar is the zip's plain reader: the probe and the password extract name 7z, the plain extract stays.
+#[test]
+fn a_zip_is_probed_and_unlocked_by_7z_while_its_plain_extract_stays_with_bsdtar() {
+    use crate::backend::archivepass::{extract_argv, reads_password, runs_on_seven};
+    let both = Formats::from_tools(true, true);
+    let zip = Path::new("/x/a.ZIP");
+    assert_eq!(both.technical_list_argv(zip).expect("7z probes a zip")[0], "7z");
+    assert!(reads_password(&both, zip));
+    assert_eq!(extract_argv(&both, zip, Path::new("/out")).expect("7z unlocks a zip")[0], "7z");
+    assert!(runs_on_seven(&both, zip, Some("pw")));
+    assert!(!runs_on_seven(&both, zip, None), "a plain zip extract runs bsdtar's argv");
+    assert_eq!(both.extract_argv(zip, Path::new("/out")).expect("a plain zip extracts")[0], "bsdtar");
+    let tar_only = Formats::from_tools(true, false);
+    assert!(tar_only.technical_list_argv(zip).is_none() && !reads_password(&tar_only, zip), "no 7z, no password route");
+}

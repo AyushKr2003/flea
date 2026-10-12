@@ -11,7 +11,7 @@ known_over_cap="shelf/Model.js 683
 shelf/Panel.qml 443
 shelf/ShelfCard.qml 444
 shelf/ShelfService.qml 481
-src/backend/copyfile.rs 732
+src/backend/copyfile.rs 737
 src/backend/tags.rs 401
 src/backend/searchsession.rs 372
 src/backend/searchtags.rs 444
@@ -61,7 +61,7 @@ src/tui/actions.rs 1054
 src/tui/hold_tests.rs 426
 src/tui/input.rs 455
 src/tui/model.rs 1266
-src/tui/mod.rs 416
+src/tui/mod.rs 418
 src/tui/render.rs 889
 src/uischema.rs 549
 src/uistate.rs 810

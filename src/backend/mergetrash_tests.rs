@@ -133,7 +133,7 @@ fn an_item_gone_before_its_move_is_refused_and_nothing_moves() {
     assert_eq!(std::fs::read_dir(xdg.join("Trash/files")).map(|i| i.count()).unwrap_or(0), 0, "nothing moved");
     let mut deferred = crate::backend::mergeapply::Deferred::begin();
     let mut steps = Vec::new();
-    let r = crate::backend::mergeapply::replacing_deferred(&gone, &mut steps, &mut deferred, |_| panic!("land never runs for a gone item"));
+    let r = crate::backend::mergeapply::replacing_deferred(&gone, &mut steps, &mut deferred, &std::sync::atomic::AtomicBool::new(false), |_| panic!("land never runs for a gone item"));
     assert_eq!(r.unwrap_err().msg, crate::backend::collide::TRASH_REFUSED);
     assert!(steps.is_empty() && calls.borrow().is_empty(), "nothing journaled, no gio: {steps:?} {:?}", calls.borrow());
 }

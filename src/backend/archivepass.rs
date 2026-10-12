@@ -45,15 +45,19 @@ pub fn compress_argv(format: &str, staged: &Path, parent: &Path, names: &[String
 }
 
 pub fn reads_password(formats: &Formats, archive: &Path) -> bool {
-    formats.reader_for(archive) == Some(Reader::SevenZip)
+    formats.seven_reads(archive)
+}
+
+// Whether the extract's argv is 7z's: a zip bsdtar reads still goes to 7z once a password is in hand.
+pub fn runs_on_seven(formats: &Formats, archive: &Path, password: Option<&str>) -> bool {
+    // archiveops::extract refused any password 7z cannot read before this, so a password alone picks 7z.
+    password.is_some() || formats.reader_for(archive) == Some(Reader::SevenZip)
 }
 
 // An extract carries no -p: 7z reads a bare one as an empty password and never asks on stdin.
 pub fn extract_argv(formats: &Formats, archive: &Path, staged: &Path) -> Option<Vec<String>> {
-    if !reads_password(formats, archive) {
-        return None;
-    }
-    formats.extract_argv(archive, staged)
+    // archiveops::extract refused a disk image before this, so only the 7z reader is checked here.
+    reads_password(formats, archive).then(|| formats.seven_extract(archive, staged))
 }
 
 // A failed extract's code; 7z exits 2 on a non-archive too, so wrong-password needs `guarded` to prove a password.

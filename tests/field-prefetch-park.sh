@@ -105,5 +105,48 @@ check "restore_prefetch runs at the end" 1 "$(grep -c '^restore_prefetch$' "$ben
 check "the EXIT trap restores in a subshell, so a failure there skips no later step" 1 "$(grep -c '^  ( restore_prefetch )$' "$bench")"
 check "the warm launch refuses to leave no list" 1 "$(grep -c 'the warm launch recorded no prefetch list' "$bench")"
 
+# A TERM during the warm launch runs the bench's EXIT trap, and that must end the warm Flea: a fake one that carries the bench token, wired with the bench's own blocks.
+export WARM_TEXT=$(sed -n '/^# warm launch begin$/,/^# warm launch end$/p' "$bench") SWEEP_TEXT=$(sed -n '/^# entrant sweep begin$/,/^# entrant sweep end$/p' "$bench")
+export CLEAN_TEXT=$(sed -n '/^clean_bench() {$/,/^}$/p' "$bench") CLEANUP_TEXT=$(sed -n '/^bench_cleanup() {$/,/^}$/p' "$bench")
+warm="$scratch/warm"; mkdir -p "$warm/cg" "$warm/qml" "$warm/state/flea"
+printf '#!/bin/bash\necho $$ > "$FAKE_PIDFILE"\n: > "$QML_DISK_CACHE_PATH/unit"\necho list > "$FAKE_PREFETCH"\nexec sleep 300\n' > "$warm/flea"; chmod +x "$warm/flea"
+cat > "$warm/run.sh" <<'EOS'
+set -uo pipefail
+fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
+now_ms() { NOW_MS=$(( $(date +%s%N) / 1000000 )); }
+wait_for_window() { return 0; }
+kill_entrant() { :; }
+close_entrant_dialogs() { :; }
+watch_kill() { :; }
+release_run_cg() { :; }
+restore_thumbs() { :; }
+restore_prefetch() { :; }
+cg_empty() { local p; while read -r p; do kill -0 "$p" 2>/dev/null && return 1; done < "$1/cgroup.procs"; return 0; }
+KILL_TARGETS=(); SWEEP_TERM_POLLS=20; SWEEP_KILL_POLLS=20; TUI_CONF=""
+BENCH_TOKEN="warm-test-$$-$RANDOM"; BENCH_CG=$W/cg; FLEA_QMLCACHE=$W/qml; FLEA_STATE=$W/state
+FLEA_BIN=$W/flea; FLEA_UI=$W/ui; FIXTURE=$W; PREFETCH=$W/prefetch; ENTRANT_LAUNCHED=""; ROWS_PID=""
+export FAKE_PIDFILE=$W/pid FAKE_PREFETCH=$W/prefetch
+eval "$WARM_TEXT"; eval "$SWEEP_TEXT"; eval "$CLEAN_TEXT"; eval "$CLEANUP_TEXT"
+WARM_QUIET_POLLS=600
+trap bench_cleanup EXIT
+trap 'exit 143' TERM
+warm_qml_cache
+EOS
+W=$warm bash "$warm/run.sh" > "$warm/run.log" 2>&1 &
+harness=$!
+for _ in $(seq 100); do [ -s "$warm/pid" ] && break; sleep 0.1; done
+sleep 0.5
+kill -TERM "$harness"; wait "$harness"
+fake=$(cat "$warm/pid" 2>/dev/null)
+# A missing or bare pid would make kill reach this test's own process group, so only a real child pid is probed.
+if [[ "$fake" =~ ^[0-9]+$ ]] && [ "$fake" -gt 1 ]; then
+    for _ in $(seq 40); do kill -0 "$fake" 2>/dev/null || break; sleep 0.1; done
+    alive=no; kill -0 "$fake" 2>/dev/null && alive=yes
+    [ "$alive" = yes ] && kill "$fake"
+else
+    alive="no-pid:$fake"
+fi
+check "a signal during the warm launch ends the warm Flea through the EXIT trap" "alive=no" "alive=$alive"
+
 [ "$fail" = 0 ] && echo "field-prefetch-park: all passed" || echo "field-prefetch-park: failures above"
 exit "$fail"

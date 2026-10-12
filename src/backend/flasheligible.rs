@@ -25,6 +25,9 @@ pub struct Roots<'a> {
 
 // Sample sysfs: <sys>/block/sda with removable, ro, size, diskseq, dev, vendor, model and holders/.
 pub fn list_drives(roots: &Roots, mountinfo: &str, swaps: &str, image: Option<&Path>, image_bytes: Option<u64>) -> Vec<Drive> {
+    // The pane's path may run through a link into a mount; mountinfo names the real one.
+    let real = image.map(|path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf()));
+    let image = real.as_deref();
     let mut excluded = excluded_disks(roots, mountinfo, swaps);
     let _ = excluded.insert(String::new());
     let mut out = Vec::new();

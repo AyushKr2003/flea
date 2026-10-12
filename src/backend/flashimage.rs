@@ -33,7 +33,9 @@ pub fn probe(path: &Path) -> Probe {
     if named.is_empty() {
         return Probe { kind: String::new(), bytes, unpacked: 0, known: false, member: String::new() };
     }
-    let head = read_head(path);
+    let Some(head) = read_head(path) else {
+        return Probe { kind: String::new(), bytes, unpacked: 0, known: false, member: String::new() };
+    };
     if !magic_holds(named, &head) {
         return Probe { kind: String::new(), bytes, unpacked: 0, known: false, member: String::new() };
     }
@@ -77,10 +79,11 @@ fn magic_holds(kind: &str, head: &[u8]) -> bool {
     }
 }
 
-fn read_head(path: &Path) -> Vec<u8> {
+// None for anything but a regular file: a fifo's open never returns and would hold the loop.
+fn read_head(path: &Path) -> Option<Vec<u8>> {
     use std::io::Read;
     let mut buf = vec![0u8; HEAD_BYTES];
-    let Ok(mut file) = std::fs::File::open(path) else { return Vec::new(); };
+    let mut file = crate::backend::regfile::open_regular(path)?;
     let mut got = 0;
     while got < HEAD_BYTES {
         match file.read(&mut buf[got..]) {
@@ -90,7 +93,7 @@ fn read_head(path: &Path) -> Vec<u8> {
         }
     }
     buf.truncate(got);
-    buf
+    Some(buf)
 }
 
 // Sample robot line: "file\t1\t1\t100072\t100000\t..." answers 100000.

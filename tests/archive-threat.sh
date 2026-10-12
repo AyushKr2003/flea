@@ -134,6 +134,14 @@ phase_a() {
   check "and the files read back whole" "alpha|beta" "$(cat "$D/ex_ok/a.txt" 2>/dev/null)|$(cat "$D/ex_ok/b.txt" 2>/dev/null)"
   extract out.7z ex_ok "$CANARY"
   check "an extract onto an existing folder is refused, separately" "1" "$(answered 'already exists')"
+  # A zip is bsdtar's to extract plainly, so only the probe and the password path reach 7z for it.
+  extract pw.zip zx_none
+  check "a password zip asks for its password before any extract" "1" "$(answered '"err":"encrypted"')"
+  extract pw.zip zx_wrong "$WRONG"
+  check "a wrong password on a zip answers wrong-password" "1" "$(answered '"err":"wrong-password"')"
+  extract pw.zip zx_ok "$CANARY"
+  check "the right password extracts a zip" "1" "$(answered '"ok":true')"
+  check "and the zip's file reads back whole" "alpha" "$(cat "$D/zx_ok/a.txt" 2>/dev/null)"
   extract src/locked.7z ex_locked "$CANARY"
   check "a file that is no archive fails without asking" "1" "$(answered '"ok":false')"
   check "and a password on it never loops the card" "0" "$(printf '%s\n' "$ANSWER" | grep -c -e '"err":"encrypted"' -e '"err":"wrong-password"')"

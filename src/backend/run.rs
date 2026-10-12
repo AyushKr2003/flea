@@ -206,10 +206,7 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
         Event::Op(m) => {
             if let Some(session) = st.search_session.as_mut() {
                 // An own write under the scope patches the index, and a due batch re-runs the standing query.
-                let mut patched = false;
-                for path in op_write_paths(&m) {
-                    patched |= session.patch_after_write(&path);
-                }
+                let patched = session.patch_after_writes(&op_write_paths(&m));
                 // A late or redone tag write changes names only: the cache swaps them, and the landing re-runs the query.
                 session.note_tags_written(&op_tag_paths(&m));
                 if patched && session.batch_due() {
@@ -566,7 +563,7 @@ fn handle_line(
                 else { super::opsdispatch::do_menu_rename(out, ops, &path, &to, menu_id) };
             patch_session_paths(st, touched);
         }
-        Request::BulkRename { paths, names } => super::bulkrename::do_bulkrename(out, ops, paths, names),
+        Request::BulkRename { paths, names } => patch_session_paths(st, super::bulkrename::do_bulkrename(out, ops, paths, names)),
         Request::MkDir { path, name } => patch_session_paths(st, do_mkdir(out, ops, &path, &name)),
         Request::NewFile { path, name, id } => patch_session_paths(st, do_newfile(out, ops, &path, &name, id)),
         Request::Duplicate { path, menu_id } => start_duplicate(out, ops, &path, menu_id),
@@ -659,9 +656,7 @@ fn handle_line(
 // An own write's landed paths patch the session index; out-of-scope paths patch nothing.
 fn patch_session_paths(st: &mut State, touched: Vec<PathBuf>) {
     if let Some(session) = st.search_session.as_mut() {
-        for path in touched {
-            session.patch_after_write(&path);
-        }
+        session.patch_after_writes(&touched);
     }
 }
 

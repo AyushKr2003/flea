@@ -250,6 +250,25 @@ fn a_drive_holding_the_image_is_refused() {
 }
 
 #[test]
+fn a_drive_holding_the_image_through_a_symlinked_folder_is_refused() {
+    let f = fake("eligible-holds-link");
+    system(&f.sys);
+    stick(&f.sys);
+    let mount = f._dir.dir("mnt/stick");
+    std::fs::create_dir_all(mount.join("dl")).unwrap();
+    std::fs::write(mount.join("dl/raspios.img"), b"x").unwrap();
+    std::fs::create_dir_all(f._dir.join("home")).unwrap();
+    std::os::unix::fs::symlink(mount.join("dl"), f._dir.join("home/dl")).unwrap();
+    let info = root_mountinfo() + &format!("40 28 8:17 / {} rw - vfat /dev/sda1 rw\n", mount.display());
+    let image = f._dir.join("home/dl/raspios.img");
+    let (exe, ui) = roots();
+    let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui };
+    let got = list_drives(&r, &info, "Filename Type Size Used Priority\n", Some(&image), None);
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].refused, "holdsimage", "the pane's path runs through a link into the stick, the stick still holds the image");
+}
+
+#[test]
 fn a_drive_smaller_than_the_image_is_refused() {
     let f = fake("eligible-small");
     system(&f.sys);
