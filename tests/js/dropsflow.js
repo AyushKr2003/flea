@@ -242,6 +242,53 @@ function wire(check) {
           before + "|" + verb(usb, "/home/u/docs", 7, back.pathDevs), "0|copy|9|copy")
 }
 
+// A peek or carried column row names no device, so a drag entering the pane asks the backend for the visible folder rows' paths once.
+function columnasks(check) {
+    var pane = { join: function (base, name) { return base === "/" ? "/" + name : base + "/" + name } }
+    var rows = [{ n: "deep", d: true, i: "folder" }, { n: "a.txt", d: false, i: "text-x-generic" }, { n: "big", d: true, v: 5 }, { n: "late", d: true }]
+    check("only the visible folder rows with no device of their own are asked, by full path",
+          JSON.stringify(DropDev.folderAsks(rows, "/home/u", 0, 2, pane)) + JSON.stringify(DropDev.folderAsks(rows, "/", 2, 9, pane))
+          + JSON.stringify(DropDev.folderAsks(null, "/", 0, 3, pane)), '["/home/u/deep"]["/late"][]')
+    var sent = []
+    var back = { pickerOnly: false, _dropAsked: "", pathDevs: { "/a/deep": 7, "/keep": 9 }, send: function (message) { sent.push(JSON.stringify(message)) } }
+    back.askDropDevs = new Function("root", "DropDev", "return function (token, paths) {"
+        + Source.block(Source.source("ui/Backend.qml"), "function askDropDevs(", "ui/Backend.qml") + "}")(back, DropDev)
+    back.askDropDevs("3", ["/a/deep", "/a/more"])
+    back.askDropDevs("3", ["/a/deep", "/a/more"])
+    check("one drag asks a set once, and a known answer stands until its new one lands",
+          sent.join("") + JSON.stringify(back.pathDevs), '{"c":"devs","paths":["/a/deep","/a/more"]}{"/a/deep":7,"/keep":9}')
+    back.askDropDevs("4", ["/a/deep", "/a/more"])
+    back.askDropDevs("4", [])
+    check("another drag asks again, and an empty set asks nothing", sent.length, 2)
+    back.pickerOnly = true
+    back.askDropDevs("5", ["/x"])
+    check("the chooser's backend asks nothing", sent.length, 2)
+    // The columns area's real ask: the drawn neighbour columns' answers in one request, nothing when the area is hidden, nothing for a column that is not drawn.
+    var asked = []
+    var drawn = function (name, paths) { return name ? { dropAsks: function () { return paths } } : null }
+    var area = { visible: true, pane: { backend: { askDropDevs: function (token, paths) { asked.push(token + ":" + paths.join(",")) } } } }
+    var ask = function (grandparent, parent, child) {
+        return new Function("root", "greatGrandparentLoader", "grandparentLoader", "parentColumn", "childColumn",
+            "return function (token) {" + Source.block(Source.source("ui/ColumnsArea.qml"), "function askDropDevs(", "ui/ColumnsArea.qml") + "}")(
+            area, { item: null }, { item: grandparent }, parent, child)
+    }
+    ask(drawn("g", ["/g/a"]), drawn("p", ["/p/b", "/p/c"]), drawn("c", ["/c/d"]))("7")
+    area.visible = false
+    ask(drawn("g", ["/g/a"]), drawn("p", ["/p/b"]), drawn("c", ["/c/d"]))("8")
+    area.visible = true
+    ask(null, drawn("p", []), drawn("c", ["/c/d"]))("9")
+    check("the columns area asks every drawn neighbour column's rows in one request, and nothing while hidden",
+          asked.join("|"), "7:/g/a,/p/b,/p/c,/c/d|9:/c/d")
+    // The reply lands through the real handler, as a merge, so the listing's ancestor answers and the drag's folder answers live in one map.
+    var landed = { pathDevs: { "/home": 6 } }
+    Messages.route(landed, { t: "devs", devs: { "/home/u/deep": 7 } })
+    var first = landed.pathDevs
+    Messages.route(landed, { t: "devs", devs: { "/home/u/more": 8 } })
+    check("a devs reply merges into the map as a new object, and the earlier answers stand",
+          JSON.stringify(landed.pathDevs) + (first !== landed.pathDevs) + JSON.stringify(first),
+          '{"/home":6,"/home/u/deep":7,"/home/u/more":8}true{"/home":6,"/home/u/deep":7}')
+}
+
 function run(check) {
     flow(check)
     hover(check)
@@ -250,4 +297,5 @@ function run(check) {
     crumbflow(check)
     dropdev(check)
     wire(check)
+    columnasks(check)
 }

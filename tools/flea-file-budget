@@ -65,6 +65,7 @@ src/uistore.rs 551
 src/vulkan.rs 751
 tests/js/columns.js 687
 tests/js/drag.js 481
+tests/js/dropsflow.js 301
 tests/js/collide.js 321
 tests/js/devices.js 363
 tests/js/previewswap.js 463
@@ -112,10 +113,10 @@ tests/search-live.qml 419
 tests/sidebar-flows.qml 669
 tests/touchpad.qml 882
 tests/xwsettings-tabs.qml 444
-ui/Backend.qml 567
+ui/Backend.qml 576
 ui/ChromeBar.qml 342
-ui/ColumnsArea.qml 539
-ui/ColumnPane.qml 438
+ui/ColumnsArea.qml 547
+ui/ColumnPane.qml 446
 ui/ContextMenu.qml 751
 ui/ConvertDialog.qml 446
 ui/GridArea.qml 481
