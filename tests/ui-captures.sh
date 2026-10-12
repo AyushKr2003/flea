@@ -220,7 +220,7 @@ case_cap_rename() {
 cap_seek_named() {
     local want="$1" idx got
     [[ "$(ipc viewMode)" == grid ]] || { seek_row_named "$want"; return; }
-    idx=$(row_index_of "$want") || exit 1
+    idx=$(row_index_of "$want") || fail "cap_seek_named: no row named $want in the grid listing"
     goto_row "$idx"
     got=$(ipc renameState | jq -r .cursorName)
     [[ "$got" == "$want" ]] || fail "cap_seek_named: the grid cursor is on [$got] at index $(ipc cursor), not $want at index $idx"
