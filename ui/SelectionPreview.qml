@@ -66,15 +66,18 @@ Flea.PreviewColumn {
         : (root.loadedIndex >= 0 ? Thumbs.fileFor(root.pane.thumbState, root.loadedIndex) : "")) : ""
     noThumbComing: root.row !== null && (root.row.t !== true || !root.pane
         || Thumbs.refused(root.pane.thumbState, root.loadedIndex))
-    loadingHeldOff: root.swap !== null && root.swap.fellBack
+    // True from a move's clear until the next plain clear, the load's own; only then may the swap's fallback end, and its held-off mark show.
+    property bool moved: false
+    loadingHeldOff: root.swap !== null && root.swap.fellBack && !root.moved
 
     // What the swap waits for: the cursor row's preview whole, or nothing more coming for it.
     // A held frame is whole from the listing alone, cached thumbnail or not.
     readonly property bool ready: {
         if (root.manualHold)
             return !root.pending
+        // A move's clear writes pending false and then true, and ready must not read true between the two: that ends the swap's fallback at every step of a held key.
         if (root.pane === null || root.row === null)
-            return !root.pending
+            return !root.pending && !root.moved
         if (root.loadedIndex !== root.pane.cursorIndex)
             return false
         return PreviewSwap.columnReady({ state: root.previewState, thumb: root.thumb.length > 0,
@@ -105,11 +108,13 @@ Flea.PreviewColumn {
 
     function clear() {
         settle.stop()
+        root.moved = false
         root.clearShown()
     }
 
     // A move's clear: the loading state stands under the swap's picture until the settle loads the new row.
     function clearForMove() {
+        root.moved = true
         root.clearShown()
         root.pending = true
     }
@@ -121,6 +126,8 @@ Flea.PreviewColumn {
         // A true duplicate preserves the frame and timer; a changed identity lets a same-key refresh proceed.
         // A queued load stands for the same key: clearing behind it would wipe the load when it lands.
         if (key === root.lastMoveKey && (root.isShown() || root.loadQueuedKey === key)) return
+        // A burst's move for this key already waits on its settle, so a rows landing under it holds nothing again.
+        if (key === root.lastMoveKey && root.moved && settle.running && root.settleKey === key) return
         if (root.swap && ViewState.previewAutomatic && root.canRead) {
             // The picture first, the exact contract a deferred load keeps; the scheduler may load under it at once.
             root.swap.hold(root.clearForMove, key)
