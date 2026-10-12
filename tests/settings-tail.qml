@@ -118,10 +118,12 @@ ShellRoot {
         var walk = shell.walkOf(pane)
         shell.check("the pane's idle walk is found", !!walk, true)
         if (!walk) return
+        // The walk restarts only if the pane had it running, so the later all-built check cannot pass from this test's own start.
+        var wasRunning = walk.running
         walk.stop()
         // View is the open section, so the walk's own k builds are the only others: k <= walk.next at any tick.
         var built = shell.builtSections(pane)
-        shell.check("the pane builds View and only what the walk has reached before the walk is under way", built <= 1 + walk.next, true)
+        shell.check("the pane builds View and only what the walk has reached before the walk is under way", built >= 1 && built <= 1 + walk.next, true)
         var target = shell.unreached(pane)
         shell.check("a section the walk has not reached exists to be shown", !!target, true)
         if (target) {
@@ -132,7 +134,7 @@ ShellRoot {
             shell.check("section " + id + " builds when it is shown with the walk held", target.built, true)
             shell.check("section " + id + " shows every row at once", panel.rows.length > 0 && pane.current.rows.count === panel.rows.length, true)
         }
-        walk.start()
+        if (wasRunning) walk.start()
     }
 
     // After the walk: the Columns subpage opens over the same section columns, none recreated, and every section then shows every row at once.
