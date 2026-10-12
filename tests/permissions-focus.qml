@@ -326,6 +326,17 @@ ShellRoot {
             if (dialog().opened || pane.listInFlight || pane.wire.anchor || pane.backend.listRequests <= beforeLists) return
             check("batch Apply returns the keyboard to the visible view", pane.listArea.activeFocus, true)
             checkSelection("batch Apply")
+            // A watched change owes a re-read that lands after this click: it must keep the click's one mark and cursor, not restore the batch's.
+            pane.backend.changed(pane.path)
+            check("a watched change owes the re-read", pane.wire.stale, true)
+            beforeLists = pane.backend.listRequests
+            click(pane.visibleItemFor(0), Qt.LeftButton)
+            rememberSelection()
+            check("click before the re-read marks its row", keptMarks, "0")
+            next("owedPaid")
+        } else if (stage === "owedPaid") {
+            if (pane.listInFlight || pane.wire.anchor || pane.wire.stale || pane.backend.listRequests <= beforeLists) return
+            checkSelection("click before the re-read")
             beforeLists = pane.backend.listRequests
             beforeUndoReplies = undoReplies
             undoInspectSent = false
