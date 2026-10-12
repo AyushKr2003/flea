@@ -40,11 +40,14 @@ permissions_expect() {
 }
 
 permissions_point() {
-    local centre="$1" button="${2:-left}" cx cy wx wy ww wh
+    local centre="$1" button="${2:-left}" cx cy wx wy ww wh scene
     read -r cx cy <<< "$centre"
     [[ "$cx" =~ ^[0-9]+$ && "$cy" =~ ^[0-9]+$ ]] || fail "permissions: native control has no centre"
     read -r wx wy ww wh < <(window_box) || fail "native window coordinates unavailable"
-    (( cx < ww && cy < wh )) || fail "permissions: control centre $cx,$cy is outside the actual viewport ${ww}x${wh} (window at $wx,$wy)"
+    # permissions_control names the control it clicks; a bare point reports as "control".
+    scene=$(ipc windowSize 2>&1) || scene="unavailable"
+    (( cx < ww && cy < wh )) \
+        || fail "permissions: ${permissions_target:-control} centre $cx,$cy is outside the actual viewport ${ww}x${wh} (window at $wx,$wy; QML scene $scene)"
     assert_focus
     omarchy-drive click "$((wx + cx))" "$((wy + cy))" "$button" >/dev/null \
         || fail "permissions: native pointer activation failed"
@@ -54,12 +57,13 @@ permissions_control() {
     local name="$1" centre
     centre=$(ipc permissionsState | jq -er --arg name "$name" '.controls[] | select(.name == $name and .visible) | .centre') \
         || fail "permissions: no visible $name control"
+    local permissions_target="$name"
     permissions_point "$centre"
 }
 
 permissions_viewport() {
     local target_width="${1:-1100}" target_height="${2:-800}"
-    local client address result wx wy width height end=$((SECONDS + 20))
+    local client address result wx wy width height scene end=$((SECONDS + 20))
     client=$(hyprctl clients -j | jq -ec --argjson pid "$(flea_pid)" '.[] | select(.pid == $pid)') \
         || fail "permissions: owned window unavailable"
     address=$(jq -er '.address' <<< "$client") || fail "permissions: owned window has no address"
@@ -72,10 +76,15 @@ permissions_viewport() {
     omarchy-drive window center "$address" || fail "permissions: owned window could not center"
     while (( SECONDS < end )); do
         read -r wx wy width height < <(window_box) || fail "native window coordinates unavailable"
-        [[ "$width" == "$target_width" && "$height" == "$target_height" ]] && return
+        if [[ "$width" == "$target_width" && "$height" == "$target_height" ]]; then
+            # hyprctl reports the size the compositor asked for; the QML scene is what the dialogs centre in,
+            # so wait for the client to report the same size before any centre is read against it.
+            scene=$(ipc windowSize 2>/dev/null) || scene=unavailable
+            [[ "$scene" == "$target_width $target_height" ]] && return
+        fi
         sleep 0.05
     done
-    fail "permissions: viewport did not reach ${target_width}x${target_height}"
+    fail "permissions: viewport did not reach ${target_width}x${target_height}: hyprctl ${width}x${height} at $wx,$wy, QML scene ${scene:-unread}"
 }
 
 permissions_setup() {

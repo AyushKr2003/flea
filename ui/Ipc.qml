@@ -73,6 +73,8 @@ QtObject {
         target: "flea"
         function ready(): bool { return true }
         function themeLoaded(): bool { return Theme.ready }
+        // Sample output: 1100 800; the content the dialogs centre in, which ui-permissions.sh waits to equal hyprctl's size.
+        function windowSize(): string { var c = root.fleaWindow.contentItem; return Math.round(c.width) + " " + Math.round(c.height) }
         function themeForeground(): string { return String(Theme.color.foreground) }
         // Sample output: {"clear":true,"alpha":0.3411764705882353,"window":"#00000000","early":true}; tests/glass-boot.sh reads the window the entry made.
         function glass(): string { return JSON.stringify({ clear: Glass.clear, alpha: Glass.alpha, window: String(root.fleaWindow.color), early: root.fleaWindow.clearedEarly }) }
