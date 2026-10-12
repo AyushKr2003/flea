@@ -242,6 +242,7 @@ Item {
                 size: root.row ? root.row.s : 0
                 maxBytes: root.textLimit
                 truncate: root.truncateText
+                backend: root.pane ? root.pane.backend : null
                 numbered: root.previewState === Facts.CODE
             }
             // RenderedPreviews: the Markdown document rendered, flowing tall with no toggle; a file-path Loader compiles it only when needed.
@@ -557,6 +558,7 @@ Item {
     // Why the frame is showing a mark instead of the thing it meant to draw. Empty for every state
     // whose mark is simply what it draws, so the line only ever appears when something went wrong.
     function frameNote() {
+        if (lines.note.length > 0) return lines.note
         if (root.manualHold) {
             return "Ctrl+Space loads it"
         }

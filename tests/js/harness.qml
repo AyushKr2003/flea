@@ -14,6 +14,7 @@ import "columns.js" as ColumnsSuite
 import "columnskeep.js" as ColumnsKeepSuite
 import "columnsback.js" as ColumnsBackSuite
 import "watchgate.js" as WatchGateSuite
+import "codelines.js" as CodeLinesSuite
 import "contrast.js" as ContrastSuite
 import "copyas.js" as CopyAsSuite
 import "invert.js" as InvertSuite
@@ -172,7 +173,7 @@ Item {
 
         var suites = [
             ["clipboard", ClipboardSuite],
-            ["archive", ArchiveSuite], ["archives", ArchivesSuite], ["archivecards", ArchiveCardsSuite], ["background", BackgroundSuite], ["buttons", ButtonsSuite], ["bulkrename", BulkRenameSuite], ["bulksheet", BulkSheetSuite], ["collide", CollideSuite], ["collidemerge", CollideMergeSuite], ["clipmarks", ClipMarksSuite], ["columns", ColumnsSuite], ["columnskeep", ColumnsKeepSuite], ["columnsback", ColumnsBackSuite], ["watchgate", WatchGateSuite], ["contrast", ContrastSuite],
+            ["archive", ArchiveSuite], ["archives", ArchivesSuite], ["archivecards", ArchiveCardsSuite], ["background", BackgroundSuite], ["buttons", ButtonsSuite], ["bulkrename", BulkRenameSuite], ["bulksheet", BulkSheetSuite], ["collide", CollideSuite], ["collidemerge", CollideMergeSuite], ["clipmarks", ClipMarksSuite], ["columns", ColumnsSuite], ["columnskeep", ColumnsKeepSuite], ["columnsback", ColumnsBackSuite], ["watchgate", WatchGateSuite], ["codelines", CodeLinesSuite], ["contrast", ContrastSuite],
             ["dirsizes", DirSizesSuite], ["drag", DragSuite], ["dragout", DragOutSuite], ["dropkeys", DropKeysSuite], ["drops", DropsSuite], ["dropsflow", DropsFlowSuite], ["dst", DstSuite], ["ddtarget", DdtargetSuite],
             ["copyas", CopyAsSuite], ["invert", InvertSuite],
             ["edmonton", DstSuite],

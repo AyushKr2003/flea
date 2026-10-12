@@ -75,6 +75,9 @@ Item {
     // The system clipboard for files, one line for set, get and clear alike.
     signal clipResult(var message)
     property int metaToken: 0
+    // The coloured lines of one slot's file or text, answered late with the token askCode returned.
+    signal codeResult(var message)
+    property int codeToken: 0
     // One counter numbers every PDF fetch, so two viewers never share an id.
     property int pdfCopySeq: 0
     signal meta(int row, int w, int h, int orient, real durationMs, int sampleRate, int entries, real unpacked, bool archiveFailed, var names, real lines, bool partial, bool linesFailed, string target, bool targetDir, string owner)
@@ -313,6 +316,13 @@ Item {
         root.metaToken += 1
         root.send({ c: "meta", row: row, text: text, media: media, archive: archive, token: root.metaToken })
         return root.metaToken
+    }
+
+    // source is {path} for a file the backend opens or {text, name, lang} for bytes the UI holds; a newer ask on a slot ends the older one.
+    function askCode(slot, source, first, count) {
+        root.codeToken += 1
+        root.send(Object.assign({ c: "code", token: root.codeToken, slot: slot, first: first, count: count }, source))
+        return root.codeToken
     }
 
     function askFsInfo() {

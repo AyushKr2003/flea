@@ -107,7 +107,7 @@ tests/search-live.qml 419
 tests/sidebar-flows.qml 473
 tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
-ui/Backend.qml 550
+ui/Backend.qml 560
 ui/ChromeBar.qml 336
 ui/ColumnsArea.qml 539
 ui/ColumnPane.qml 438
@@ -134,7 +134,7 @@ ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 797
 ui/Preview.qml 739
-ui/PreviewColumn.qml 585
+ui/PreviewColumn.qml 586
 ui/PickerChrome.qml 426
 ui/DeviceMounts.qml 528
 ui/PreviewMarkdown.qml 625
@@ -143,7 +143,7 @@ ui/SettingsPanel.qml 543
 ui/SettingsRow.qml 409
 ui/Sidebar.qml 693
 ui/StatusBar.qml 463
-ui/Theme.qml 443
+ui/Theme.qml 446
 ui/TrashView.qml 468
 ui/UnlockDialog.qml 439
 ui/ViewState.qml 536

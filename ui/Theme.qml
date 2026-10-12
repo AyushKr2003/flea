@@ -18,6 +18,8 @@ Singleton {
 
     readonly property string stateDir: Quickshell.env("HOME") + "/.local/state/omarchy/current"
 
+    // The parsed colors.toml, for the code inks CodeLines lifts.
+    property var palette: ({})
     // True only once colors.toml parsed to a palette, so a test can tell one from a fallback.
     property bool ready: false
 
@@ -346,6 +348,7 @@ Singleton {
             Palette.pick(found, ["cyan", "color6"], root.fallbackColor.symlink), bg, 4.5);
         root.color.executable = Contrast.ensureRatio(
             Palette.pick(found, ["green", "color2"], root.fallbackColor.executable), bg, 4.5);
+        root.palette = found;
         // Urgent is the palette's own red: seven of the 23 installed themes leave it under 4.5:1 on their own ground, so it is lifted the way symlink and executable are, and the three whose red carries no chroma at all (solitude, white, vantablack) fall back to the foreground, because a destructive row drawn in the same grey as an unavailable one reads as switched off rather than as dangerous.
         root.color.error = Commons.Color.urgent.hsvSaturation > root.hueFloor ? Contrast.ensureRatio(Commons.Color.urgent, bg, 4.5) : String(Commons.Color.foreground);
         // The status bar draws that same ink on the surface, where four themes land under 4.5.

@@ -1192,6 +1192,24 @@ on a thread, because an open on a hung mount never returns and the loop waits on
 keeps the newest `id` and drops any line naming an older one. A path that is not a regular file,
 or that cannot be read, answers `hasShebang` false rather than an error, so the row stays absent.
 
+### code
+
+`{"c":"code","token":<uint>,"slot":"<string>","path":"<string>"|"text":"<string>","name":"<string>","lang":"<string>","first":<uint>,"count":<uint>,"raw":<bool>}`
+
+Example: `{"c":"code","token":4,"slot":"look","path":"/home/gm/a.rs","first":40,"count":20}` and
+`{"c":"code","token":5,"slot":"fence:2","text":"fn main() {}","name":"x.rs","lang":"","first":1,"count":10}`
+
+The syntax-coloured lines `first` to `first + count - 1` of **one file or one text a client
+actually asked for**, never a sweep. A request holding `text` sends the bytes the client already
+holds, with `name` picking the language when `lang` is empty (a Markdown info string names it in
+its first word); without `text` the backend opens `path`, which a client never sends for a file on
+a network or phone mount. `first` counts from 1 and `count` is capped at 400, absent meaning the
+cap. `raw` true skips the colouring and answers the lines plain. Answers one `code` line on a
+thread. A newer request on the same `slot` ends the older job and the older reply is never sent,
+so a client matches the `token` of what it last sent and drops any other. At most 1,048,576 bytes
+of a file are ever read, and `bat` runs in the same read-only jail as the other helpers, on the
+bytes the verdict was made on.
+
 ### pdfcopy
 
 `{"c":"pdfcopy","id":<uint>,"slot":"<string>","path":"<string>"}`
@@ -1773,6 +1791,22 @@ path opened as a regular file and its first two bytes were `#!`; anything else, 
 FIFO, a missing path or an unreadable file, answers false. The open is the backend's own
 regular-file open, so a FIFO is refused before any open and a row swapped for one inside that
 window is closed again, the same rule `meta` follows.
+
+### code
+
+`{"t":"code","token":<uint>,"slot":"<string>","state":"<string>","first":<uint>,"total":<uint>,"lines":[[<role>,"<string>",...],...]}`
+
+Example: `{"t":"code","token":4,"slot":"look","state":"styled","first":1,"total":2,"lines":[[5,"fn",0," main"],[]]}`
+
+The answer to one `code` request, echoing its `token`, `slot` and `first`. `state` is `styled`
+(`bat` coloured the lines), `plain` (the lines are the file's own text, every role 0: a line over
+5,000 bytes, or no `bat` on the host), `binary` (a NUL in the first 1,024 bytes), `large` (over
+1,048,576 bytes) or `failed` (unreadable, or `bat` refused it); the last three carry no lines.
+`total` is the line count of the whole text. Each entry of `lines` is one line as a flat run list,
+a role from 0 to 6 then the run's text, in order, an empty line being an empty list; the lines
+returned are those asked for that exist. The roles are the foreground (0) and bat's ANSI colours
+31 to 36 in order: red, green, yellow, blue, magenta, cyan. A one-line `.json` file is formatted
+with `jq` first, so its `total` and lines are those of the formatted text.
 
 ### collisions
 

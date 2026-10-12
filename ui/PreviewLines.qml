@@ -2,9 +2,8 @@ import QtQuick
 import Quickshell.Io
 import qs.Commons
 
-// The first lines of a text file, in the preview column's frame. The canvas is explicit that this
-// invents no highlighting: "first lines verbatim, mono" for text, "line numbers muted, text
-// foreground, still just text" for code. A gutter is the only difference between the two.
+// The first lines of a text file, in the preview column's frame: coloured by the backend's code engine for code, plain for text,
+// with a muted number gutter for code. A file on network or phone storage is read here, under the size gate, and its text sent.
 Item {
     id: root
 
@@ -13,86 +12,69 @@ Item {
     property int size: 0
     // Code gets the muted number gutter; plain text does not.
     property bool numbered: false
+    // The backend that colours the lines; a bare stub leaves the file's own text drawn plain.
+    property var backend: null
 
     // The same gate ui/PreviewText.qml uses: FileView reads the whole file, so a row over it is
     // refused on every class; truncating would still read all of it first, a 2 GB log over SMB.
     property int maxBytes: 1048576
-    // Retained for its callers; over-limit rows are refused, never truncated, so it reads nothing.
+    // True on network and phone storage, where the backend is never given the path.
     property bool truncate: false
-    readonly property bool tooLarge: root.size > root.maxBytes
+    readonly property bool overSize: root.size > root.maxBytes
+    // Over the gate by the listing's size, or by the backend's own count when the file grew since.
+    readonly property bool tooLarge: root.overSize || root.answer === "large"
     // More than a small frame can show is wasted work, so only this many are ever built into rows.
     readonly property int maxLines: 14
 
-    readonly property string shownText: file.text()
-    readonly property var lines: {
-        if (!root.active || (!file.loaded))
-            return []
-        if (root.tooLarge)
-            return []
-        return root.shownText.split("\n").slice(0, root.maxLines)
-    }
+    // The caller reads the file when the backend must not open it, or when it cannot colour it.
+    readonly property bool engine: root.backend !== null && typeof root.backend.askCode === "function"
+    readonly property bool fromFile: root.truncate || !root.engine
+    readonly property string fileText: file.text()
+    // The line view, built the first time a text or code file is previewed so a launch that never previews one loads none of it.
+    readonly property var code: codeLoader.item
+    readonly property string answer: root.code ? root.code.answer : ""
+    readonly property string shownText: root.fromFile ? root.fileText : root.lines.join("\n")
+    readonly property var lines: root.code ? root.code.lines : []
 
     // Surfaced so the column can show the canvas's Error tile instead of an empty frame.
-    property bool readFailed: false
+    property bool fileFailed: false
+    readonly property bool readFailed: root.fileFailed || root.answer === "failed"
+    // The sentence under the kind's mark when the file has nothing to draw, "" otherwise; the column adds it to the mark it already draws.
+    readonly property string note: root.answer === "binary" ? "binary file" : ""
     // True when the reader has settled with nothing to put in the frame, so the column stands the
-    // kind's mark in rather than draw a bordered empty box: refused for size, or a file with no bytes.
-    readonly property bool blank: root.tooLarge
-        || (root.active && !root.readFailed && file.loaded && root.shownText.length === 0)
-    readonly property bool loading: root.active && !root.readFailed && !file.loaded && !root.tooLarge
+    // kind's mark in rather than draw a bordered empty box: refused for size, binary, or a file with no bytes.
+    readonly property bool blank: root.tooLarge || root.answer === "binary"
+        || (root.active && !root.readFailed && root.code !== null && root.code.settled && root.code.total === 0)
+    readonly property bool loading: root.active && !root.readFailed && !root.tooLarge && root.answer === ""
 
     FileView {
         id: file
-        path: (root.active && !root.tooLarge) ? root.path : ""
+        path: (root.active && !root.overSize && root.fromFile) ? root.path : ""
         printErrors: false
-        onLoadFailed: root.readFailed = true
-        onPathChanged: root.readFailed = false
+        onLoadFailed: root.fileFailed = true
+        onPathChanged: root.fileFailed = false
     }
 
-    // The gutter's width is the widest number it will draw, so the text column never shifts as it scrolls.
-    TextMetrics {
-        id: gutterMetrics
-        font.family: Theme.font.family
-        font.pixelSize: Theme.font.caption
-        text: "00 "
-    }
+    property bool built: false
+    onActiveChanged: if (root.active) root.built = true
+    Component.onCompleted: if (root.active) root.built = true
 
-    Column {
+    Loader {
+        id: codeLoader
         anchors.fill: parent
         anchors.margins: Theme.spacing.gap
-        clip: true
-        spacing: 0
-
-        Repeater {
-            model: root.lines
-
-            delegate: Row {
-                required property string modelData
-                required property int index
-                spacing: 0
-
-                Text {
-                    visible: root.numbered
-                    width: root.numbered ? gutterMetrics.width : 0
-                    text: String(index + 1)
-                    horizontalAlignment: Text.AlignRight
-                    color: Theme.color.muted
-                    opacity: 0.6
-                    font.family: Theme.font.family
-                    font.pixelSize: Theme.font.caption
-                    textFormat: Text.PlainText
-                }
-
-                // corner: file contents are arbitrary text, so PlainText, the same rule every name follows.
-                Text {
-                    text: "  " + modelData
-                    color: Theme.color.foreground
-                    font.family: Theme.font.family
-                    font.pixelSize: Theme.font.caption
-                    textFormat: Text.PlainText
-                    // One line per row, never wrapped: the canvas shows the file's own line breaks.
-                    elide: Text.ElideRight
-                }
-            }
+        active: root.built
+        source: "CodeLines.qml"
+        onLoaded: {
+            item.backend = Qt.binding(function () { return root.backend })
+            item.path = Qt.binding(function () { return root.path })
+            item.fromText = Qt.binding(function () { return root.fromFile })
+            item.text = Qt.binding(function () { return root.fromFile && file.loaded ? root.fileText : null })
+            item.active = Qt.binding(function () { return root.active && !root.overSize })
+            item.numbered = Qt.binding(function () { return root.numbered })
+            item.limit = root.maxLines
+            item.margin = 0
+            item.pixelSize = Theme.font.caption
         }
     }
 }
