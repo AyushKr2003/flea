@@ -371,7 +371,7 @@ providers_sharelink_checks() {
             share-missing)
                 providers_mode dropbox-cli vanish 'Up to date'
                 warning="Process failed to start, likely because the binary could not be found. Command: QList(\"dropbox-cli\", \"sharelink\", \"$menu_box/Dropbox/b-cursor.txt\")"
-                reason='The Dropbox share link helper could not start.' ;;
+                reason='Dropbox could not be asked for a share link.' ;;
             clipboard-failed)
                 providers_mode wl-copy ready '' 'fixture clipboard refusal' 7
                 reason='The share link could not be copied to the clipboard.'
@@ -379,7 +379,7 @@ providers_sharelink_checks() {
             clipboard-missing)
                 providers_install wl-copy no
                 warning='Process failed to start, likely because the binary could not be found. Command: QList("wl-copy", "https://fixture.invalid/share")'
-                reason='The clipboard helper could not start; the share link was not copied.' ;;
+                reason='The share link could not be copied to the clipboard.' ;;
         esac
         providers_choose sharelink
         menus_error "$reason" "$scenario reports its own plain failure"
@@ -457,7 +457,7 @@ providers_dropbox_move_checks() {
     menus_guard "$menu_dir/a-marked.txt"
     menus_guard "$menu_box/Dropbox/a-marked.txt"
     key z >/dev/null || fail 'providers: native Dropbox Undo failed'
-    menus_message 'Undid the move.' 'native Undo restores the same Dropbox source'
+    menus_message 'Undid the move' 'native Undo restores the same Dropbox source'
     wait_listing 2
     [[ ! -e "$menu_box/Dropbox/a-marked.txt" ]] || fail 'providers: Undo retained its moved destination'
     menus_equal 'Dropbox Undo restores original source bytes' 'list/a-marked.txt original' "$(cat "$menu_dir/a-marked.txt")"
@@ -496,7 +496,7 @@ providers_localsend_checks() {
     cursor_before=$(cat "$menu_dir/a-marked.txt")
     providers_choose localsend
     providers_localsend_diag cursor-only
-    menus_message 'Sending a-marked.txt to Fixture Phone with LocalSend.' 'a cursor-only send names the single cursor file'
+    menus_message 'Sending a-marked.txt to Fixture Phone with LocalSend' 'a cursor-only send names the single cursor file'
     providers_localsend_release
     providers_call localsend-cli "$(jq -cn --arg p "$menu_dir/a-marked.txt" '["-f", $p]')" 1
     menus_message 'LocalSend finished the transfer.' 'and the verdict follows it'
@@ -521,7 +521,7 @@ providers_localsend_checks() {
     second_before=$(cat "$menu_dir/b-cursor.txt")
     providers_choose localsend
     providers_localsend_diag two-selected
-    menus_message 'Sending 2 items to Fixture Phone with LocalSend.' 'the dispatch names the device the flyout chose'
+    menus_message 'Sending 2 items to Fixture Phone with LocalSend' 'the dispatch names the device the flyout chose'
     providers_localsend_release
     # The send run names both selected sources as one -f pair each, in the selection's own order.
     providers_call localsend-cli "$(jq -cn --arg a "$menu_dir/a-marked.txt" --arg b "$menu_dir/b-cursor.txt" '["-f", $a, "-f", $b]')" "$before"

@@ -4327,8 +4327,8 @@ waits for its consumer.
   `w` field, and a drag from it copies unless Shift is held. Qt's platform drag runs a nested
   loop in which the window receives no keys, so Ctrl
   or Shift pressed after the drag starts cannot change the verb. The status line says
-  `ctrl at lift copies` rather than claiming the key still works
-  mid-drag, and a Ctrl with Shift lift links, its Link line naming the verb outright. `drag.sh` proves a same-device move and a Ctrl copy but needs the display and a
+  `Ctrl copies, Shift moves`, naming both keys,
+  and a Ctrl with Shift lift links, its Link line naming the verb outright. `drag.sh` proves a same-device move and a Ctrl copy but needs the display and a
   real pointer, so `dragwire.sh` carries the offer into the headless battery: a leaving drag
   must offer copy alone and `text/uri-list`, a link lift must offer `Qt.LinkAction`,
   and the shelf drag stays copy only.
@@ -7200,7 +7200,7 @@ over the matched row or the cursor target, and Open with taking an optional path
 Removed in v0.1.3 for issue 7. The type-ahead was the fallback for a printable key that
 `keys.toml` did not bind, so it only ever worked for the letters nothing else had claimed:
 typing `Vid` toggled the selection on `v`, jumped on `i`, and trashed the row on `d`. An
-unbound letter now answers `Press / to filter this listing by name.`, which is the filter
+unbound letter now answers `Press / to filter this folder by name`, which is the filter
 that already narrows the held rows without a walk.
 
 Bare `d` is `trashArm`, not `trash`: `ui/js/Trash.js` owns the pair, the first press arms and
@@ -7770,7 +7770,7 @@ the rail. Pinned in `tests/sidebar-flows-rail.js`; 0.3.7 had the same defect.
 the cursor row into view (a wheel scroll in the grid can leave it off screen), opens the one
 `ContextMenu` at that delegate's bottom-left through `openAt`, and answers whether a delegate was
 there at all; an empty directory, a listing still loading and a filter that hid every row all
-answer false, and the status line says `No row under the cursor to open a menu on.` rather than
+answer false, and the status line says `No item under the cursor to open a menu on` rather than
 nothing. Right click and `m` reach the same menu, so a selection is honoured the same way by both.
 `m` stopped being a type-ahead letter for this. The menu's own `keyCatcher` reads
 `Keymap.lookup`, so `j` and `k` step it exactly as Down and Up do, and Space chooses like Enter.
@@ -8527,7 +8527,7 @@ Both halves are fixed. The `mountTimeout` `Timer` is restarted by `runInfo()`, s
 open carries the same 15 s bound; whichever leg is still running when it fires is the one it ends,
 `_infoTimedOut` keeps that leg's own `onExited` from reporting a second, contradictory failure, and
 the bar gets the same "did not respond" sentence a hung mount already produced. The guard itself
-now says so too: "Another network location is still opening; give it a moment." `tests/ui.sh`
+now says so too: "Another network location is still opening. Try again when it opens" `tests/ui.sh`
 `case_hangshare` drives all three against a `gio` stub that hangs `info` on one share and answers
 for the other, and it went red on the guard's own silence before the fix.
 
@@ -9203,3 +9203,7 @@ The Grid caption IPC (`gridCaptionState` in `ui/Ipc.qml`) now answers `wrapAt`, 
 
 The tag-write reach moves two ceilings, each re-derived with `wc -l`: `src/backend/undo.rs` 661 to 675 for `Reached`, which carries the files a reversal changed only in tags apart from the directories it touched, and `src/backend/run.rs` 1091 to 1105 for the calls that hand an own tag write to the open search session.
 Joining the tag place into the 0.3.10 stage moves `ui/js/Search.js` 383 to 391, re-derived with `wc -l`, for `openScope`, the one opener `f` and a tag place share, and the branch in `openQuery` that opens a fresh Home session when the tag walk was cancelled.
+
+The 0.3.10 copy list keeps `tests/startup-units.txt` at its units except two: `js/GvfsBridge.js` leaves because `ui/js/Status.js` no longer imports it (the busy mark now follows a typed `starting` flag, not the text of a line), and `js/KeyName.js` joins because the hints that draw a key from the user's preset import it. Its `bytes` line moves from 1652484 to 1660494, the sum `tests/startup-objects.sh` takes over them with the whole-sentence `WORDS` tables and the typed arm, starting and connect-failed channels. `tests/staticgates-unqualified.tsv` is remapped for both profiles by line content, the present profile from the gate's own findings and the missing profile by line mapping against the stage.
+
+The 0.3.10 copy list moves thirty-nine ceilings in `tools/flea-file-budget`, each re-derived with `wc -l`, for whole-sentence text tables, typed channels in place of sentence reads, keymap-built hints and the one selection-changed sentence: `src/tui/model.rs` 1266 to 1268, `src/tui/render.rs` 889 to 913, `src/tui/mod.rs` 416 to 417, `src/tui/actions.rs` 1054 to 1058, `src/backend/tags.rs` 401 to 408, `src/backend/menu_actions.rs` 647 to 654, `src/backend/undo.rs` 675 to 678, `src/backend/menu_registry.rs` 564 to 569, `src/backend/undoshare_tests.rs` 550 to 563, `src/backend/localsend.rs` 406 to 413, `src/backend/iomount.rs` 629 to 634, `src/backend/ops.rs` 423 to 440, `src/backend/renamecompat.rs` 706 to 721, `src/backend/opsreq/tests.rs` 487 to 502, `src/backend/permissions.rs` 699 to 703, `src/backend/opsdispatch.rs` 2258 to 2275, `src/backend/undo_tests.rs` 423 to 439, `ui/PaneMenuActions.qml` 522 to 523, `ui/NetworkMounts.qml` 909 to 913, `ui/Pane.qml` 1224 to 1228, `ui/PreviewColumn.qml` 586 to 589, `ui/StatusBar.qml` 471 to 476, `ui/js/Settings.js` 461 to 471, `ui/js/Picker.js` 335 to 349, `ui/js/UiState.js` 435 to 438, `ui/js/Ops.js` 480 to 538, `ui/js/Search.js` 391 to 396, `ui/js/Devices.js` 380 to 383, `ui/js/Mounts.js` 298 to 319, `ui/js/Focus.js` 476 to 483, `ui/js/Drag.js` 343 to 351, `ui/OpenWithDialog.qml` 612 to 613, `ui/WindowBody.qml` 810 to 815, `ui/TrashView.qml` 468 to 472, `ui/ConvertDialog.qml` 453 to 456, `shelf/Model.js` 683 to 702, `tests/js/focus.js` 837 to 843, `tests/js/keymap.js` 324 to 327 and `tests/js/watch.js` 540 to 541. The `unheld` summary check moved to `src/backend/unheld_summary_tests.rs` so `src/backend/unheld_tests.rs` stays under the cap. The copy port's second pass moves two of them again, each re-derived with `wc -l`: `ui/js/Ops.js` 538 to 539 for the cancelled-note table entry and `src/backend/trashbrowse.rs` 778 to 780 for the one helper that shows "The Trash could not be read." and logs the cause.

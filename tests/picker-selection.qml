@@ -204,7 +204,7 @@ Item {
             {path: "/virtual/locked", why: "permission denied"}
         ]})
         check("F20 partial selection names first skipped path and remaining count", picker.message,
-            "Selected 1 of 3; 2 left alone: /virtual/broken: file or folder not found; and 1 more")
+            "Selected 1 of 3. 2 were left out: /virtual/broken (file or folder not found) and 1 more.")
         check("F20 partial selection keeps valid mark", picker.marks.map(function(mark) { return mark.path }), ["/virtual/A"])
 
         reset()
@@ -213,7 +213,7 @@ Item {
         selection.all()
         check("F23 unavailable listing clears pending", selection.pending, null)
         check("F23 unavailable listing clears mark request", picker.markRequest, 0)
-        check("F23 unavailable listing names failure", picker.message, "The listing backend is not running; reopen this folder.")
+        check("F23 unavailable listing names failure", picker.message, "Flea stopped responding. Reopen this folder.")
         check("F23 unavailable listing sends no selection check", requests.length, 0)
         listing.running = true
 
@@ -260,7 +260,7 @@ Item {
         deliverPaths(["/b/first"])
         selection.received({op: "select", ok: false, error: refusal})
         var validations = requests.length
-        selection.received({op: "validate", ok: false, error: "The picker check stopped; reopen this request."})
+        selection.received({op: "validate", ok: false, error: "The check stopped; open the file chooser again."})
         check("F34 refused validation never asks again", requests.length, validations)
         check("F34 refused validation clears guard", picker.markRequest, 0)
 
@@ -332,7 +332,7 @@ Item {
             root.check("F33 stalled paths resets sentinel", picker.markRequest, 0)
             root.check("F33 stalled paths clears pending", selection.pending, null)
             root.check("F33 stalled paths clears queue", selection.queued, [])
-            var refusal = "The listing backend did not answer the selection request; try again."
+            var refusal = "Flea did not confirm the selection. Try again."
             root.check("F33 stalled paths names visible refusal", picker.message, refusal)
             root.check("F33 stalled paths keeps error visible", picker.messageError, true)
             root.deliverPaths(["/b/late"], root.expiredPathsRequest)

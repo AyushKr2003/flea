@@ -147,7 +147,7 @@ case_cap_sysrefusal() {
     # The sentence stands 4 s and the wait ends 25 s on, so the last read is blank either way; this names the branch Ctrl+E took.
     holders='[.[] | select((.path // "") != "") | select(.path as $m | $p == $m or ($p | startswith($m + "/"))) | {group, kind, label, path, mounted}]'
     diag='printf "release stubs ran: [%s], rail rows holding %s: %s, keys: %s" "$(cat "$stub_log")" "$listing" "$(ipc railEntries | jq -c --arg p "$listing" "$holders")" "$(ipc keyDeliveryState)"'
-    wait_message "This folder is on a system volume, which Flea never unmounts." "$diag"
+    wait_message "This folder is on a system volume, which Flea never unmounts" "$diag"
     shot sysrefusal-listing
     entries=$(ipc railEntries) || fail "sysrefusal: the rail has no entries"
     label=$(jq -r '[.[] | select(.group == "device" and .kind == "disk" and .path == "/") | .label] | first // empty' <<< "$entries") || fail "sysrefusal: the system disk row is unreadable"
@@ -158,7 +158,7 @@ case_cap_sysrefusal() {
     settle
     rail_seek "$label"
     key -M ctrl -k e -m ctrl >/dev/null
-    wait_message "$label is the system drive, which Flea never unmounts."
+    wait_message "$label is the system drive, which Flea never unmounts"
     shot sysrefusal-rail
     [[ ! -s "$stub_log" ]] || fail "sysrefusal: a release stub ran: $(cat "$stub_log")"
     export PATH="$saved_path"

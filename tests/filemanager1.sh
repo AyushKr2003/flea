@@ -423,7 +423,7 @@ case_default_skips_without_the_packaged_registration() {
         > "$sysdata/dbus-1/services/com.thisisgm.flea.FileManager1.service"
     [[ -e "$userservices" ]] && { fail "skip: a registration was written with none installed"; return; }
     [[ "$rc" == 0 ]] || { fail "skip: flea --default exited $rc with no packaged registration: $out"; return; }
-    printf '%s\n' "$out" | grep -Fq 'is not installed in any data directory' \
+    printf '%s\n' "$out" | grep -Fq 'is not installed in any data folder' \
         || { fail "skip: the skip did not name the missing registration: $out"; return; }
     if printf '%s\n' "$out" | grep -Fq 'undo both with:'; then
         pass "skip: with no packaged registration installed, the step names what is missing, writes nothing and does not stop the run"

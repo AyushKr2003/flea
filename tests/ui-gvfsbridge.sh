@@ -92,10 +92,10 @@ EOS
     local seen_sticky=""
     for _attempt in $(seq 1 200); do
         seen_sticky=$(ipc stickyMessage)
-        [[ "$seen_sticky" == "Starting the GVFS bridge for Bridge slow" ]] && break
+        [[ "$seen_sticky" == "Opening Bridge slow" ]] && break
         sleep 0.05
     done
-    [[ "$seen_sticky" == "Starting the GVFS bridge for Bridge slow" ]] \
+    [[ "$seen_sticky" == "Opening Bridge slow" ]] \
         || fail "gvfsbridge: the Starting line never stood, sticky says $seen_sticky"
     shot gvfsbridge-starting
     wait_path "$runtime/gvfs/$leaf_slow"
@@ -109,7 +109,7 @@ EOS
     fail_index=$(ipc railEntries | jq -r 'map(.label) | index("Bridge fail")')
     [[ "$fail_index" != null ]] || fail "gvfsbridge: no rail row labelled Bridge fail"
     click_rail_row "$fail_index" left
-    wait_message "Bridge fail needs the GVFS bridge, and it would not start · waiting for the folder timed out"
+    wait_message "Bridge fail could not be opened because a system service did not start · waiting for the folder timed out"
     [[ "$(ipc statusError)" == "true" ]] || fail "gvfsbridge: the failure line is not in the error role"
     shot gvfsbridge-failed
     printf 'GVFSBRIDGE fail=error-line\n'

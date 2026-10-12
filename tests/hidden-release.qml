@@ -163,7 +163,7 @@ ShellRoot {
         },
         function () {
             if (!until("the busy sentence", root.said.length > 0)) return false
-            check("a second unmount while one runs says what it waits for", root.said, ["Still unmounting Slow; wait for its result."])
+            check("a second unmount while one runs says what it waits for", root.said, ["Still unmounting Slow; wait for its result"])
             return true
         },
         function () {

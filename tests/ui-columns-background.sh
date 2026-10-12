@@ -21,12 +21,12 @@ columnsbg_click_x() {
     omarchy-drive click "$((wx + cx))" "$((wy + wh / 2))" right >/dev/null
 }
 
-# The deferred menu already stands open: click its New Folder row by centre, never menu_click, which would reopen the middle column's own background instead.
+# The deferred menu already stands open: click its New folder row by centre, never menu_click, which would reopen the middle column's own background instead.
 columnsbg_choose_new_folder() {
     local index cx cy wx wy
-    index=$(menu_row_index "New Folder") || fail "columnsbackground: the menu has no New Folder row in $(ipc contextMenuEntries)"
+    index=$(menu_row_index "New folder") || fail "columnsbackground: the menu has no New folder row in $(ipc contextMenuEntries)"
     read -r cx cy <<< "$(ipc contextMenuRowCentre "$index")"
-    [[ -n "$cy" ]] || fail "columnsbackground: New Folder has no on-screen centre"
+    [[ -n "$cy" ]] || fail "columnsbackground: New folder has no on-screen centre"
     read -r wx wy _ww _wh < <(window_box) || fail "native window coordinates unavailable"
     omarchy-drive click "$((wx + cx))" "$((wy + cy))" left >/dev/null
 }
@@ -71,7 +71,7 @@ case_columnsbackground() {
     settle
     columnsbg_click_column "$(ipc columnParentRowCentre 0)"
     columnsbg_wait_menu_on "$root/P"
-    [[ "$(ipc contextMenuEntries)" == *"New Folder"* ]] || fail "columnsbackground: parent menu lacks New Folder in $(ipc contextMenuEntries)"
+    [[ "$(ipc contextMenuEntries)" == *"New folder"* ]] || fail "columnsbackground: parent menu lacks New folder in $(ipc contextMenuEntries)"
     columnsbg_choose_new_folder
     settle
     [[ -d "$root/P/New Folder" ]] || fail "columnsbackground: parent New Folder created nothing in $root/P"
@@ -109,7 +109,7 @@ case_columnsbackground() {
     settle
     columnsbg_click_column "$(ipc columnChildRowCentre 0)"
     columnsbg_wait_menu_on "$root/P/A/B"
-    [[ "$(ipc contextMenuEntries)" == *"New Folder"* ]] || fail "columnsbackground: child menu lacks New Folder in $(ipc contextMenuEntries)"
+    [[ "$(ipc contextMenuEntries)" == *"New folder"* ]] || fail "columnsbackground: child menu lacks New folder in $(ipc contextMenuEntries)"
     columnsbg_choose_new_folder
     settle
     [[ -d "$root/P/A/B/New Folder" ]] || fail "columnsbackground: child New Folder created nothing in $root/P/A/B"
@@ -151,7 +151,7 @@ case_columnsbackground() {
     [[ -n "$parent_cx" && -n "$active_cx" ]] || fail "columnsbackground: no column pitch to aim the empty child with"
     columnsbg_click_x "$((active_cx + active_cx - parent_cx))"
     columnsbg_wait_menu_on "$root/P/A/E"
-    [[ "$(ipc contextMenuEntries)" == *"New Folder"* ]] || fail "columnsbackground: empty child menu lacks New Folder in $(ipc contextMenuEntries)"
+    [[ "$(ipc contextMenuEntries)" == *"New folder"* ]] || fail "columnsbackground: empty child menu lacks New folder in $(ipc contextMenuEntries)"
     columnsbg_choose_new_folder
     settle
     [[ -d "$root/P/A/E/New Folder" ]] || fail "columnsbackground: empty child New Folder created nothing in $root/P/A/E"

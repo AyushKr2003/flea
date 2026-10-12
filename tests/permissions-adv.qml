@@ -269,7 +269,7 @@ ShellRoot {
             shell.check("apply-sends-batch", batch !== null && batch.paths.length === 2, JSON.stringify(batch))
             dialog.backendFailed("the backend stopped")
             shell.check("transport-clears-applying", dialog.applyingMany === false, String(dialog.applyingMany))
-            shell.check("transport-outcome-unknown", dialog.errorText.indexOf("outcome is unknown") >= 0, dialog.errorText)
+            shell.check("transport-outcome-unknown", dialog.errorText.indexOf("may not have finished") >= 0, dialog.errorText)
             dialog.close()
             shell.check("transport-close-works", dialog.opened === false, String(dialog.opened))
             shell.phase = 7

@@ -144,7 +144,7 @@ Item {
     if (paths.length === 0) {
       return
     }
-    root.runQuiet(["shelf", pinned ? "pin" : "unpin"].concat(paths), "The shelf could not pin that one.")
+    root.runQuiet(["shelf", pinned ? "pin" : "unpin"].concat(paths), "The shelf could not pin that item.")
   }
 
   // Main rule 6: the reference leaves the pile and the file it names is not touched.
@@ -336,7 +336,7 @@ Item {
   // Keys: enter opens the file with its own handler, or reveals a folder in Flea. Actions rule 1: it
   // is a flea shelf call like every other, because the plugin draws and nothing else.
   function open(path) {
-    root.runQuiet(["shelf", "open", path], "That one could not be opened.")
+    root.runQuiet(["shelf", "open", path], "That item could not be opened.")
   }
 
   // ShelfEmpty rule 5: a click on a capture adds it to the pile, the same call a drop makes, and a
@@ -349,7 +349,7 @@ Item {
     if (paths.length === 0) {
       return
     }
-    root.runQuiet(["shelf", "add"].concat(paths), "The shelf could not take that one.")
+    root.runQuiet(["shelf", "add"].concat(paths), "The shelf could not take that item.")
   }
 
   Process {
@@ -440,7 +440,7 @@ Item {
       }
     }
     stderr: StdioCollector { waitForEnd: true }
-    onExited: function (code) { if (code !== 0) root.failed("The shelf could not do that.") }
+    onExited: function (code) { if (code !== 0) root.failed("That action could not be completed.") }
   }
 
   // Summon rule 4: one shelf, plus the last five piles, which the card's own menu lists.

@@ -61,7 +61,7 @@ ShellRoot {
             network.unmount(at)
         }
         onMessage: function (text, isError) {
-            if (text === "Unmounted iso-images." && !isError) {
+            if (text === "Unmounted iso-images" && !isError) {
                 root.ok("unmount")
                 var rt = root.indexOf("/mnt/kmount-rclone")
                 if (rt < 0) {
@@ -69,7 +69,7 @@ ShellRoot {
                     return
                 }
                 network.unmount(rt)
-            } else if (text === "Unmounted kmount-rclone." && !isError) {
+            } else if (text === "Unmounted kmount-rclone" && !isError) {
                 root.ok("funmount")
                 var hd = root.indexOf(Quickshell.env("HOME") + "/gdrive")
                 if (hd < 0) {
@@ -77,7 +77,7 @@ ShellRoot {
                     return
                 }
                 network.unmount(hd)
-            } else if (text === "Unmounted gdrive." && !isError) {
+            } else if (text === "Unmounted gdrive" && !isError) {
                 root.ok("funmount-home")
                 root.finish("NETWORK_KERNEL_MOUNTS DONE checks=" + root.checks)
             } else if (text !== "") {

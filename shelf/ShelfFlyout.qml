@@ -163,7 +163,7 @@ Item {
 
       Text {
         anchors.centerIn: parent
-        text: "Nothing to send to on this box"
+        text: "Nothing to send to from this computer"
         color: root.muted
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption

@@ -43,9 +43,15 @@ check(first.form.password, 'fixture-password', 'mount request leaves the draft p
 first.root.mountFinished('old-request', first.form.uri, true, '');
 first.root.mountFinished(first.root.requestId, 'smb://other/share', true, '');
 check(first.events.length, 1, 'stale request and wrong endpoint completions cannot save');
-first.root.mountFinished(first.root.requestId, first.form.uri, false, 'Connect failed: refused');
+first.root.mountFinished(first.root.requestId, first.form.uri, false, 'Could not connect: the server refused the connection.', true);
 check([first.root.opened, first.root.saving, first.root.retrying], [true, false, true], 'failed mount retains a retryable form');
+check(first.root.failedConnect, true, 'a connection failure is told by the flag the service sent');
 check(first.events.length, 1, 'failed mount creates no favourite');
+// The same words with the flag down are not a connection failure: the dialog never reads the sentence.
+const unflagged = dialog();
+unflagged.root.submitLocation();
+unflagged.root.mountFinished(unflagged.root.requestId, unflagged.form.uri, false, 'Could not connect: the server refused the connection.', false);
+check(unflagged.root.failedConnect, false, 'the words alone do not make a connection failure');
 check(first.form.password, 'fixture-password', 'failed mount retains its draft password');
 
 const draft = dialog();
