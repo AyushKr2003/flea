@@ -94,6 +94,7 @@ ShellRoot {
             property var clipPending: null
             property bool awaitingPaths: false
             property bool dragHolding: false
+            property bool pointerHeld: false
             property var selection: Selection.create()
             property int selectionVersion: 0
             property int selectionAnchor: -1
