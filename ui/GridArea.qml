@@ -227,7 +227,7 @@ GridView {
         property int markRow: -1
         // Built ahead of a landing past the shown rows: parked and unparented until the landing adopts it.
         property bool prebuilt: false
-        // Where a press, tap or drag reaches this tile; hover keeps the whole cell.
+        // Where hover, a press, a tap or a drag reaches this tile: its icon box and painted caption.
         readonly property QtObject pressMask: QtObject { function contains(point: point): bool { return root.hitsTile(cell, point) } }
         readonly property Item rowDrag: rowDragItem
         Component.onCompleted: if (!root.prebuild.built(cell)) cursorMark.place(cell)
@@ -296,9 +296,9 @@ GridView {
 
     // One hover index for every tile: a per-tile HoverHandler costs a delegate each in the landing turn.
     property int hoveredIndex: -1
-    // The view index under a view point, or -1 past the tiles; content offsets keep it exact.
+    // The tile under a view point, or -1 on a cell's bare margin or past the tiles: only the icon box and the caption hover.
     function hoverAt(x, y) {
-        root.hoveredIndex = root.indexAt(x + root.contentX, y + root.contentY)
+        root.hoveredIndex = root.tileAt(x + root.contentX, y + root.contentY)
     }
     HoverHandler {
         id: hoverProbe
