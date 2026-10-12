@@ -84,6 +84,14 @@ ShellRoot {
         onTriggered: shell.advance()
     }
 
+    // Sections whose rows are built: the first open builds View and the open section only, the idle walk builds the rest.
+    function builtSections(pane) {
+        var n = 0
+        for (var i = 0; i < pane.contentItem.children.length; i++)
+            if (pane.contentItem.children[i].built === true) n++
+        return n
+    }
+
     // The row item the cursor is on, in the pane's content, against the pane's own window.
     function cursorInside(pane) {
         var item = pane.rowItem(panel.cursor)
@@ -176,6 +184,7 @@ ShellRoot {
             if (id !== shell.updateCheckSection && shell.headingTargets(Settings.rows(id, panel.settingsState)).length > 0) found.push(id)
         }
         shell.sweepSections = found
+        shell.check("the idle walk has built every section and the Columns subpage", shell.builtSections(shell.findType(panel, "SettingsPane")), Settings.SECTIONS.length + 1)
         shell.check("the sweep covers Menus and another section", found.indexOf("menus") >= 0 && found.length >= 2, true)
         shell.sweeping = true
         shell.sweepIndex = 0
@@ -196,6 +205,11 @@ ShellRoot {
         shell.ticks++
         if (shell.sweeping) { shell.advanceSweep(); return }
         if (shell.step < 0) {
+            // The panel is built at once here, as its Loader builds it at the first open; the idle walk's first tick is 150 ms on.
+            if (shell.ticks === 1) {
+                var built = shell.builtSections(shell.findType(panel, "SettingsPane"))
+                shell.check("the pane builds View and at most one more section before the idle walk is under way", built >= 1 && built <= 2, true)
+            }
             if (shell.ticks < shell.settleTicks) return
             panel.open(null)
             panel.showSection("menus")
