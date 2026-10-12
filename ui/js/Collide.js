@@ -156,13 +156,14 @@ function mergeDest(request, outerNames) {
     return request.dest
 }
 
-// The board's merged line as whole %1/%2 labels, joined once; the undo hint stays its suffix.
-var MERGED_LINE = "Merged %1 into %2"
+// The board's merged line as whole sentences, one per count, joined once; the undo hint stays its suffix.
+var MERGED_ONE = "Merged 1 item into %1"
+var MERGED_MANY = "Merged %1 items into %2"
 var MERGED_KEPT = "%1 kept both"
 var MERGED_FAILED = "%1 failed"
 var MERGED_SKIPPED = "%1 skipped"
 function merged(count, keptBoth, leaf, failed, skipped, cancelled, note) {
-    var segments = [MERGED_LINE.replace("%1", Ops.items(count)).replace("%2", leaf)]
+    var segments = [count === 1 ? MERGED_ONE.replace("%1", leaf) : MERGED_MANY.replace("%1", Format.count(count)).replace("%2", leaf)]
     if (keptBoth > 0) segments.push(MERGED_KEPT.replace("%1", Format.count(keptBoth)))
     if (failed > 0) segments.push(MERGED_FAILED.replace("%1", Format.count(failed)))
     if (skipped > 0) segments.push(MERGED_SKIPPED.replace("%1", Format.count(skipped)))

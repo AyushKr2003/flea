@@ -12,6 +12,9 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+// The one sentence every backend refusal of a menu selection that no longer matches uses, the one the UI shows for a stale route.
+pub(crate) const SELECTION_CHANGED: &str = "Selected items changed; reopen the menu.";
+
 pub struct MenuActions {
     slot: Arc<MenuSlot>,
     replies: Sender<OpMsg>,
@@ -71,13 +74,13 @@ impl MenuActions {
     pub(crate) fn selection(&self, id: usize) -> Result<Vec<Selected>, String> {
         let snapshot = self.snapshot.lock().map_err(|_| "The menu service stopped; reopen this window.")?;
         if id == 0 || snapshot.id != id || snapshot.items.is_empty() {
-            return Err("Menu selection expired; reopen the menu.".into());
+            return Err(SELECTION_CHANGED.into());
         }
         Ok(snapshot.items.clone())
     }
     pub(crate) fn provider_destination(&self, id: usize, dest: &Path) -> Result<Option<Selected>, String> {
         let snapshot = self.snapshot.lock().map_err(|_| "The menu service stopped; reopen this window.")?;
-        if snapshot.id != id { return Err("Menu selection expired; reopen the menu.".into()); }
+        if snapshot.id != id { return Err(SELECTION_CHANGED.into()); }
         if snapshot.provider_transfer {
             snapshot.check_provider_destination(dest)?;
             return Ok(snapshot.provider_destination.clone());
@@ -86,7 +89,7 @@ impl MenuActions {
     }
     pub(crate) fn selected_path(&self, id: usize, path: &Path) -> Result<Selected, String> {
         let snapshot = self.snapshot.lock().map_err(|_| "The menu service stopped; reopen this window.")?;
-        if id == 0 || snapshot.id != id { return Err("Menu selection expired; reopen the menu.".into()); }
+        if id == 0 || snapshot.id != id { return Err(SELECTION_CHANGED.into()); }
         snapshot.items.iter().find(|item| item.path == path).cloned()
             .ok_or_else(|| "This path was not in the menu selection; reopen the menu.".into())
     }
@@ -215,7 +218,7 @@ impl Snapshot {
     }
     fn perform(&mut self, id: usize, op: &str, line: &str, registry: &Registry, cancel: &Cancellation) -> Result<String, String> {
         if id == 0 || id != self.id || self.items.is_empty() {
-            return Err("Menu selection expired; reopen the menu.".into());
+            return Err(SELECTION_CHANGED.into());
         }
         if op == "delete" {
             let review = self.take_deletion(field_usize(line, "token").unwrap_or(0))?;
@@ -533,7 +536,7 @@ mod tests {
         let mut snapshot = Snapshot::default();
         assert!(snapshot.handle(r#"{"op":"snapshot","id":3}"#, vec![path.to_string_lossy().into()]).contains(r#""ok":true"#));
         assert!(snapshot.handle(r#"{"op":"activate","id":3,"action":"addFavourite"}"#, vec![]).contains(&format!(r#""paths":["{}"]"#, path.display())));
-        assert!(snapshot.handle(r#"{"op":"validate","id":2}"#, vec![]).contains("expired"));
+        assert!(snapshot.handle(r#"{"op":"validate","id":2}"#, vec![]).contains(crate::backend::menu_actions::SELECTION_CHANGED));
         let moved = sandbox.join("old");
         assert!(path.is_absolute() && path.starts_with(sandbox.path()) && moved.starts_with(sandbox.path()));
         std::fs::rename(&path, moved).unwrap();
@@ -639,6 +642,6 @@ mod tests {
         assert!(line.contains(r#""symlink":true"#));
         assert_eq!(field_str(&line, "target"), Some(target.to_string_lossy().into()));
         snapshot.handle(r#"{"op":"close","id":9}"#, vec![]);
-        assert!(snapshot.handle(r#"{"op":"properties","id":9}"#, vec![]).contains("expired"));
+        assert!(snapshot.handle(r#"{"op":"properties","id":9}"#, vec![]).contains(crate::backend::menu_actions::SELECTION_CHANGED));
     }
 }

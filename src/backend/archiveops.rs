@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 // The sentence both the request and the job refuse a disk image extract with.
-pub const DISK_IMAGE_REFUSAL: &str = "disk images list and are never extracted";
+pub const DISK_IMAGE_REFUSAL: &str = "a disk image opens as a listing and is never extracted";
 
 // A password compress is a 7z job whatever the format: bsdtar writes no encryption at all.
 pub struct Password<'a> {
@@ -38,7 +38,10 @@ pub fn compress(formats: &Formats, parent: &Path, names: &[String], format: &str
         if !formats.has_7z() {
             return Err(op_err("archive", format, "a password needs 7-Zip, which is not installed"));
         }
-        if !formats.offers(format) || (format != "7z" && format != "zip") {
+        if format != "7z" && format != "zip" {
+            return Err(op_err("archive", format, "a password needs the 7z or zip format"));
+        }
+        if !formats.offers(format) {
             return Err(op_err("archive", format, "this box offers no tool for that format"));
         }
     }

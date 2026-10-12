@@ -171,9 +171,14 @@ pub enum SlowWrite<T> {
     Ready(Result<T, FleaError>),
     Slow { mount: PathBuf, rx: std::sync::mpsc::Receiver<Result<T, FleaError>> },
 }
-// One sentence naming the mount: "<mount> is slow. The <verb> continues and will finish on its own."
-pub fn slow_sentence(mount: &Path, verb: &str) -> String {
-    format!("{} is slow. The {} continues and will finish on its own.", mount.display(), verb)
+// One whole sentence per operation, each with {mount} for the slow mount.
+pub const SLOW_RENAME: &str = "{mount} is slow. The rename will finish on its own.";
+pub const SLOW_MKDIR: &str = "{mount} is slow. The new folder will finish on its own.";
+pub const SLOW_BULK_RENAME: &str = "{mount} is slow. The bulk rename will finish on its own.";
+pub const SLOW_TAGS: &str = "{mount} is slow. The tag change will finish on its own.";
+// The operation's sentence with its mount filled in.
+pub fn slow_sentence(mount: &Path, sentence: &str) -> String {
+    sentence.replace("{mount}", &mount.display().to_string())
 }
 // A remote write runs on its own worker with the deadline, a local write runs inline with no hop; the deadline is a parameter so tests hold a worker past a short bound instead of the production five seconds.
 pub fn slow_write_with<T: Send + 'static>(
@@ -429,6 +434,17 @@ mod tests {
         assert!(!stuck_ran.load(std::sync::atomic::Ordering::SeqCst), "the stuck fast path runs no worker");
         assert!(fast < TEST_FAST_BOUND, "the stuck fast path answers at once: {:?}", fast);
         drop(tx_hung);
+    }
+    #[test]
+    fn every_slow_operation_has_its_own_whole_sentence() {
+        let mount = Path::new("/hung");
+        let said: Vec<String> = [SLOW_RENAME, SLOW_MKDIR, SLOW_BULK_RENAME, SLOW_TAGS].iter().map(|s| slow_sentence(mount, s)).collect();
+        assert_eq!(said, [
+            "/hung is slow. The rename will finish on its own.",
+            "/hung is slow. The new folder will finish on its own.",
+            "/hung is slow. The bulk rename will finish on its own.",
+            "/hung is slow. The tag change will finish on its own.",
+        ]);
     }
     #[test]
     fn a_worker_that_dies_marks_nothing_stuck_and_says_so() {

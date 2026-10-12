@@ -1,6 +1,6 @@
 // Clipboard image paste as a named file: the backend runs wl-paste itself, so the bytes never cross JSON.
 use crate::backend::opsreq::{op_err, usable_dest, OpMsg};
-use crate::backend::proto::error_line;
+use crate::backend::proto::{error_line, error_line_with_code};
 use crate::backend::undo::{Entry, Step};
 use crate::json::field_str;
 use std::io::{Read, Write};
@@ -10,8 +10,10 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-// The sentence an empty clipboard has always answered to p, so Flea says one thing whichever way it finds out.
-const NOTHING_TO_PASTE: &str = "There is nothing to paste; y copies and x cuts.";
+// The code an empty clipboard answers with; the UI shows Menu.EMPTY_CLIPBOARD for it, so the sentence has one copy.
+const EMPTY_CODE: &str = "emptyclipboard";
+// What a client that ignores the code reads; the UI never shows it.
+const EMPTY_MSG: &str = "the clipboard holds no image";
 // A clipboard image bigger than this is refused rather than buffered, so it is headroom and not a limit anyone reaches.
 const IMAGE_MAX_BYTES: u64 = 256 * 1024 * 1024;
 // A clipboard owner that never answers must not hold the backend, and wl-paste is local, so this is a hang.
@@ -116,7 +118,7 @@ fn execute(dest: &Path, name: &str, argv: &[String]) -> (String, Option<Entry>) 
     }
     let bytes = match read_paste(argv) {
         Ok(bytes) if !bytes.is_empty() => bytes,
-        Ok(_) => return fail(NOTHING_TO_PASTE),
+        Ok(_) => return (error_line_with_code(&op_err("pasteimage", name, EMPTY_MSG), EMPTY_CODE), None),
         Err(e) => return fail(&e),
     };
     let Some(leaf) = valid_name(name, dest) else {
@@ -192,8 +194,9 @@ fn read_paste(argv: &[String]) -> Result<Vec<u8>, String> {
                 if bytes.len() as u64 > IMAGE_MAX_BYTES {
                     return Err("the clipboard image is too large to paste".to_string());
                 }
+                // A tool that exits non-zero holds no image, which reads as the empty clipboard.
                 if !status.success() {
-                    return Err(NOTHING_TO_PASTE.to_string());
+                    return Ok(Vec::new());
                 }
                 return Ok(bytes);
             }
@@ -260,11 +263,23 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_clipboard_is_a_sentence_not_a_file() {
+    fn an_empty_clipboard_is_a_code_not_a_file() {
         let d = TestDir::new("pasteimage-empty");
         let dest = d.dir("dest");
         let (line, entry) = execute(&dest, "a.png", &["true".to_string()]);
-        assert!(line.contains(NOTHING_TO_PASTE), "got {}", line);
+        assert!(line.contains(r#""code":"emptyclipboard""#), "the empty clipboard rides a code, got {}", line);
+        assert!(!line.contains("y copies"), "the sentence has one copy, in the UI: {}", line);
+        assert!(entry.is_none());
+        assert!(std::fs::symlink_metadata(dest.join("a.png")).is_err(), "nothing was written");
+    }
+
+    #[test]
+    fn a_failing_tool_reads_as_the_empty_clipboard() {
+        let d = TestDir::new("pasteimage-failing");
+        let dest = d.dir("dest");
+        let argv = ["sh".to_string(), "-c".to_string(), "printf PNGDATA; exit 1".to_string()];
+        let (line, entry) = execute(&dest, "a.png", &argv);
+        assert!(line.contains(r#""code":"emptyclipboard""#), "a non-zero exit rides the empty code even with bytes, got {}", line);
         assert!(entry.is_none());
         assert!(std::fs::symlink_metadata(dest.join("a.png")).is_err(), "nothing was written");
     }

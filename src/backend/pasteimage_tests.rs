@@ -79,5 +79,5 @@ fn an_oversize_image_is_too_large_even_when_the_writer_dies() {
 #[test]
 fn a_failed_clipboard_with_little_output_is_nothing_to_paste() {
     let argv = ["sh".to_string(), "-c".to_string(), "printf 'x'; exit 3".to_string()];
-    assert_eq!(read_paste(&argv), Err(NOTHING_TO_PASTE.to_string()));
+    assert_eq!(read_paste(&argv), Ok(Vec::new()));
 }

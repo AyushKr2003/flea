@@ -1,5 +1,5 @@
 // The wire side of file tags: one write and one read, each naming rows of the listing in force.
-use crate::backend::iomount::{internal_failure, is_remote, mount_body, slow_sentence, slow_write_with, CALL_DEADLINE, SlowWrite};
+use crate::backend::iomount::{internal_failure, is_remote, mount_body, slow_sentence, slow_write_with, CALL_DEADLINE, SlowWrite, SLOW_TAGS};
 use crate::backend::opsdispatch::{pending_busy_for, resolve_rows, Ops, SlowClaim};
 use crate::backend::opsreq::OpMsg;
 use crate::backend::rowguard::stamped;
@@ -148,7 +148,7 @@ where
         SlowWrite::Slow { mount, rx } => {
             // The slow line names the row's own directory, as the parent key did.
             let path = first.parent().unwrap_or(Path::new("/")).to_string_lossy().into_owned();
-            writeln!(out, "{}", slow_line("settags", &path, &slow_sentence(&mount, "tag change"))).ok();
+            writeln!(out, "{}", slow_line("settags", &path, &slow_sentence(&mount, SLOW_TAGS))).ok();
             out.flush().ok();
             // The pending id is only a number: settags never takes the slot, so the transfer beside it keeps its own.
             let id = ops.claim_id();

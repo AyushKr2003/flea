@@ -289,6 +289,32 @@ fn a_password_compress_without_7z_is_refused_before_any_tool_runs() {
     }
 }
 
+// A password on a format that is neither 7z nor zip names the format rule, whatever the box offers.
+#[test]
+fn a_password_compress_of_another_format_names_the_format_rule() {
+    let d = TestDir::new("archpwformat");
+    let formats = Formats::from_tools(true, true);
+    assert!(formats.offers("tar.gz"), "the box offers tar.gz, so only the format rule can refuse it");
+    let pw = Password { secret: "s3cret", encrypt_names: false };
+    let dest = d.join("out.tar.gz");
+    let e = compress(&formats, d.path(), &["a.txt".to_string()], "tar.gz", &dest, &AtomicBool::new(false), Some(pw)).unwrap_err();
+    assert_eq!(e.msg, "a password needs the 7z or zip format");
+    assert!(!dest.exists(), "a refused compress wrote a destination");
+}
+
+// A password zip on a box whose table lacks zip is a missing tool, not a format the password refuses.
+#[test]
+fn a_password_zip_on_a_box_without_a_zip_tool_names_the_missing_tool() {
+    let d = TestDir::new("archpwnozip");
+    let formats = Formats::from_tools(false, true);
+    assert!(formats.has_7z() && !formats.offers("zip"), "7-Zip is present and zip is not offered");
+    let pw = Password { secret: "s3cret", encrypt_names: false };
+    let dest = d.join("out.zip");
+    let e = compress(&formats, d.path(), &["a.txt".to_string()], "zip", &dest, &AtomicBool::new(false), Some(pw)).unwrap_err();
+    assert_eq!(e.msg, "this box offers no tool for that format");
+    assert!(!dest.exists(), "a refused compress wrote a destination");
+}
+
 // AA12: a password runs through 7z's reader alone; any other reader refuses with one sentence and never sees the secret.
 #[test]
 fn a_password_extract_of_a_tar_is_refused_with_one_sentence() {

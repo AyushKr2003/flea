@@ -1,6 +1,8 @@
 .import "../../ui/js/Clipboard.js" as Clipboard
 .import "../../ui/js/Collide.js" as Collide
 .import "../../ui/js/DragOut.js" as DragOut
+.import "../../ui/js/Menu.js" as Menu
+.import "../../ui/js/Messages.js" as Messages
 .import "../../ui/js/Settings.js" as Settings
 .import "clipboard.js" as ClipboardSuite
 
@@ -73,7 +75,15 @@ function imagePaste(check) {
     var links = ClipboardSuite.pane()
     Clipboard.paste(links, "relative", false)
     check("Paste as links has no image to make, so it says so itself", links.said.join("|") + "|" + links.sent.length,
-          "There is nothing to paste; y copies and x cuts.|0")
+          Menu.EMPTY_CLIPBOARD + "|0")
+    // Row 148: the backend names the empty clipboard by code, and the pane shows the one sentence Menu owns.
+    var failures = []
+    var wire = { failed: function (where, path, msg) { failures.push([where, path, msg]) } }
+    Messages.route(wire, { t: "error", where: "pasteimage", path: "a.png", msg: "the clipboard holds no image", code: "emptyclipboard" })
+    Messages.route(wire, { t: "error", where: "pasteimage", path: "a.png", msg: "the clipboard could not be read" })
+    check("an empty-clipboard code reads as the one sentence, any other error keeps its own",
+          JSON.stringify(failures),
+          JSON.stringify([["pasteimage", "a.png", Menu.EMPTY_CLIPBOARD], ["pasteimage", "a.png", "the clipboard could not be read"]]))
     var held = ClipboardSuite.pane()
     ClipboardSuite.changed(held, "copy", ["/s/a.txt"])
     Clipboard.paste(held, "", false)
