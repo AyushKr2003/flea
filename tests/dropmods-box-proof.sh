@@ -83,6 +83,18 @@ reset_logs
 [[ "$(tr '\n' ' ' < "$orderlog")" == "release case-trap " ]] || fail "the held exit ran '$(tr '\n' ' ' < "$orderlog")', want release before case-trap"
 [[ "$(cat "$trapstatus")" == "3" ]] || fail "the case trap was entered with status '$(cat "$trapstatus")', want the held exit status 3"
 printf 'DROPMODSBOX PASS exithold=release-then-case-trap\n'
+# The same exit under errexit, which tests/ui.sh sets for every case: the relayed status must not end the trap early.
+reset_logs
+( trap - EXIT; set -e
+  trap case_trap EXIT
+  cap_drops_press 1 1 || fail "stub press refused"
+  : > "$ylog"
+  exit 3
+)
+[[ $? -eq 3 ]] || fail "the held exit status was lost under errexit"
+[[ "$(tr '\n' ' ' < "$orderlog")" == "release case-trap " ]] || fail "the held exit under errexit ran '$(tr '\n' ' ' < "$orderlog")', want release before case-trap"
+[[ "$(cat "$trapstatus")" == "3" ]] || fail "under errexit the case trap was entered with status '$(cat "$trapstatus")', want 3"
+printf 'DROPMODSBOX PASS exithold-errexit=release-then-case-trap\n'
 # A bare press has no trap before it: the press arms the release, release and abandon clear it.
 reset_logs
 ( trap - EXIT

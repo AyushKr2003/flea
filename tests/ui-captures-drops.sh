@@ -14,7 +14,8 @@ cap_drops_exit_chain() {
     [[ -n "${cap_drops_saved_trap:-}" ]] || return "$st"
     # trap -p prints: trap -- 'command' EXIT, so the quoted command is the third word.
     eval "set -- $cap_drops_saved_trap"
-    # The saved trap reads $? for the status the script is exiting with, so hand it that status again.
+    # The saved trap reads $? for the status the script is exiting with, so hand it that status again; errexit, on in every case, would end the trap at that relay.
+    set +e
     (exit "$st")
     eval "${3:-:}"
     return "$st"
