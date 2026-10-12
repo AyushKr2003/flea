@@ -542,6 +542,33 @@ mod tests {
         assert!(patched(&current, &fav).is_ok(), "a favourites list is any length");
     }
 
+    // The Dual divider's remembered share is a whole number of ten-thousandths, 0 to 10000, and 5000 is the equal split.
+    #[test]
+    fn dual_split_is_a_whole_share_and_a_bad_one_costs_that_leaf_alone() {
+        let current = from_file("{}");
+        for good in ["0", "5000", "10000"] {
+            let p = jsondoc::parse(&format!(r#"{{"dual":{{"split":{}}}}}"#, good)).expect("patch parses");
+            let stored = patched(&current, &p).expect("a share in range is stored");
+            assert_eq!(stored.get("dual").and_then(|d| d.get("split")).and_then(Json::as_f64), Some(good.parse::<f64>().unwrap()));
+        }
+        for bad in ["5000.5", "-1", "10001", r#""x""#] {
+            let p = jsondoc::parse(&format!(r#"{{"dual":{{"split":{}}}}}"#, bad)).expect("patch parses");
+            let message = patched(&current, &p).expect_err("the patch must be refused");
+            assert!(message.contains("dual.split"), "{} should name dual.split, got {}", bad, message);
+            let read = from_file(&format!(r#"{{"dual":{{"paths":["/tmp/left","/tmp/right"],"focus":1,"split":{}}}}}"#, bad));
+            let dual = read.get("dual").expect("dual group");
+            assert_eq!(dual.get("split").and_then(Json::as_f64), Some(5000.0), "{} reads back as the equal split", bad);
+            assert_eq!(dual.get("focus").and_then(Json::as_f64), Some(1.0));
+            assert_eq!(dual.get("paths").and_then(Json::as_array).map(<[Json]>::len), Some(2));
+        }
+        // The pane's own save is a {focus, paths} patch, and it must leave a stored share alone.
+        let held = from_file(r#"{"dual":{"split":6500}}"#);
+        let patch = jsondoc::parse(r#"{"dual":{"focus":1,"paths":["/tmp/left","/tmp/right"]}}"#).expect("patch parses");
+        let saved = patched(&held, &patch).expect("the pane's save is accepted");
+        assert_eq!(saved.get("dual").and_then(|d| d.get("split")).and_then(Json::as_f64), Some(6500.0));
+        assert_eq!(saved.get("dual").and_then(|d| d.get("focus")).and_then(Json::as_f64), Some(1.0));
+    }
+
     // keys.toml holds 48 unique action ids and 32 of them are camelCase, so a hideable row named
     // like one of those has to survive a read rather than take the whole array down with it.
     #[test]

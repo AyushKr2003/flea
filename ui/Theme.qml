@@ -218,6 +218,9 @@ Singleton {
         readonly property real nameMin: 180 * root.font.bodySmall / 13
     }
 
+    // The narrowest Dual listing: the name floor Columns.dualSet protects, with the row padding, mark and gap before it.
+    readonly property real dualMinWidth: 2 * root.spacing.rowPaddingX + root.markSize + root.spacing.gap + root.dualColumn.nameMin
+
     function dualColumns(width, hidden) {
         return Columns.dualSet(width, {rowPaddingX: root.spacing.rowPaddingX, gap: root.spacing.gap,
             iconSize: root.markSize, nameMin: root.dualColumn.nameMin,
