@@ -58,7 +58,7 @@ mutant_output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE
 printf 'MUTANT-NOLIFT BEGIN\n'
 printf '%s\n' "$mutant_output" | grep -aE 'GRID_GAP (LIFT|FAIL)' | sed 's/GRID_GAP FAIL/MUTANT-NOLIFT expected-failure:/' | head -30
 printf 'MUTANT-NOLIFT END\n'
-if ! printf '%s\n' "$mutant_output" | grep -aq 'GRID_GAP FAIL.*last tile bottom'; then
+if ! printf '%s\n' "$mutant_output" | grep -aq 'GRID_GAP FAIL last tile bottom'; then
     printf 'FAIL the nolift mutant kept the bottom gap, so the suite cannot feel the lift\n'
     exit 1
 fi
