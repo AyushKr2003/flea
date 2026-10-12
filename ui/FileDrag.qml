@@ -17,6 +17,9 @@ Item {
     // The numbering dragRows were read in, fixed at the lift so a drop after a re-list is refused rather than resolved anew.
     property real dragListing: 0
     property int dropIndex: -1
+    // The hovered folder a drop lands in after it opens: a swap may rebuild the lit delegate on another row.
+    property string dropDest: ""
+    property int dropDestDev: 0
     property bool dragCopy: false
     property bool dragShift: false
     property bool dragLink: false
@@ -47,6 +50,8 @@ Item {
         root.dragRows = DragOps.carried(root.pane, index)
         root.dragListing = root.pane.backend ? root.pane.backend.heldListing : 0
         root.dropIndex = -1
+        root.dropDest = ""
+        root.dropDestDev = 0
         // Ctrl is the threshold's, and a paths reply must not sample it again.
         root.dragCopy = DragOps.copying(centroid.modifiers)
         root.dragShift = DragOps.shifting(centroid.modifiers)
@@ -84,6 +89,8 @@ Item {
         root.dragRows = []
         root.dragListing = 0
         root.dropIndex = -1
+        root.dropDest = ""
+        root.dropDestDev = 0
         root.dragCopy = DragOps.copying(centroid.modifiers)
         root.dragShift = DragOps.shifting(centroid.modifiers)
         root.dragLink = DragOps.linking(centroid.modifiers)
@@ -170,6 +177,8 @@ Item {
         root.dragListing = 0
         root.dragMime = ({})
         root.dropIndex = -1
+        root.dropDest = ""
+        root.dropDestDev = 0
         root.dragCopy = false
         root.dragShift = false
         root.dragLink = false

@@ -29,6 +29,7 @@ cap_dropmods_abandon() {
 # The case's one exit trap: a fail anywhere lets go of the pointer and keys and closes the probe window if it runs.
 cap_dropmods_cleanup() {
     ipc_pid=""
+    cap_drops_wait_abort=""
     cap_dropmods_abandon
     [[ -z "$cap_dropmods_probe_pid" ]] || kill "$cap_dropmods_probe_pid" 2>/dev/null || true
     cap_dropmods_probe_pid=""
@@ -36,20 +37,6 @@ cap_dropmods_cleanup() {
 cap_dropmods_release() {
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || fail "cap_dropmods: pointer release failed"
     settle
-}
-# statusActivityState prints {"activities":[{"id":0,"text":"Copy 1 item to sub","running":false,...}],...}; a drag line always has id 0.
-cap_dropmods_wait_s=15
-# Same-window rows keep the floor signal dark, so the status line a drag shows over the row, in the leg's own words, is the hover.
-cap_dropmods_wait_target() {
-    [[ "$#" -eq 1 ]] || fail "cap_dropmods: wait_target needs the drag line, got $#"
-    local want="$1" seen="" end=$((SECONDS + cap_dropmods_wait_s))
-    while (( SECONDS < end )); do
-        seen=$(ipc statusActivityState 2>/dev/null | jq -r --arg w "$want" '.activities[] | select(.id == 0 and .running == false and .text == $w) | .text' 2>/dev/null | head -n 1 || true)
-        [[ -n "$seen" ]] && return 0
-        sleep 0.1
-    done
-    seen=$(ipc statusActivityState 2>/dev/null | jq -r '[.activities[] | select(.running == false) | .text] | join(" | ")' 2>/dev/null || true)
-    fail "cap_dropmods: no drag line reading \"$want\" (status lines: ${seen:-none})"
 }
 # ydotool key 29 is left Ctrl and 42 left Shift.
 cap_dropmods_key() {
@@ -61,7 +48,7 @@ cap_dropmods_wait_file() {
     [[ "$#" -eq 1 ]] || fail "cap_dropmods: wait_file needs a path, got $#"
     local end=$((SECONDS + 15))
     while (( SECONDS < end )); do [[ -e "$1" ]] && return 0; sleep 0.1; done
-    fail "cap_dropmods: $1 never landed"
+    fail "cap_dropmods: $1 never landed (said $(ipc lastMessage 2>/dev/null); found at $(find "$fixture_root" -maxdepth 3 -name "$(basename "$1")" | tr '\n' ' '))"
 }
 cap_dropmods_wait_gone() {
     [[ "$#" -eq 1 ]] || fail "cap_dropmods: wait_gone needs a path, got $#"
@@ -82,24 +69,14 @@ cap_dropmods_launch_second() {
     done
     fail "cap_dropmods: the second window never arrived (saw $count flea clients)"
 }
-cap_dropmods_addr_of_pid() {
-    [[ "$#" -eq 1 ]] || fail "cap_dropmods: addr needs a qs pid, got $#"
-    hyprctl clients -j 2>/dev/null | jq -er --argjson pid "$1" \
-        '[.[] | select(.class == "com.thisisgm.flea" and .pid == $pid)] | select(length == 1) | .[0].address' \
-        || fail "cap_dropmods: no client address for qs pid $1"
-}
-# Sample input, hyprctl activewindow -j: {"class":"com.thisisgm.flea","pid":11,...}; the pid is the qs pid the keys and the pointer reach.
-cap_dropmods_active_pid() {
-    hyprctl activewindow -j 2>/dev/null | jq -er '.pid | select(type == "number")' 2>/dev/null || printf unavailable
-}
 # Focuses a window and points ipc at it, since the path route reaches only the newest of two windows.
 cap_dropmods_focus_pid() {
     [[ "$#" -eq 2 ]] || fail "cap_dropmods: focus needs a pid and a path, got $#"
     local addr seen
-    addr=$(cap_dropmods_addr_of_pid "$1") || exit 1
+    addr=$(window_addr_of_pid "$1") || exit 1
     hypr_window_focus "$addr" >/dev/null || fail "cap_dropmods: focuswindow $addr refused"
     sleep 0.4
-    seen=$(cap_dropmods_active_pid)
+    seen=$(focused_pid)
     [[ "$seen" == "$1" ]] || fail "cap_dropmods: focus did not land on qs pid $1 (the active window is $seen)"
     ipc_pid="$1"
     seen=$(ipc path 2>/dev/null || printf unavailable)
@@ -110,6 +87,7 @@ case_cap_dropmods() {
     local src_pt dst_pt cx cy tx ty wx wy ww wh seen win1 win2 probe_log probe_box
     cap_dropmods_probe_pid=""
     trap cap_dropmods_cleanup EXIT
+    cap_drops_wait_abort=cap_dropmods_abandon
     sandbox_scratch "$dir"
     sandbox_scratch "$dir2"
     mkdir -p "$dir/sub" "$dir2/sub2"
@@ -128,7 +106,7 @@ case_cap_dropmods() {
     dst_pt=$(ipc rowCentre "$(row_index_of sub)"); read -r tx ty <<< "$dst_pt"
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_dropmods_wait_target "Move 1 item to sub · ctrl at lift copies"
+    cap_drops_wait_target "Move 1 item to sub · ctrl at lift copies"
     cap_dropmods_key 29 1
     cap_drops_release
     cap_dropmods_key 29 0
@@ -143,7 +121,7 @@ case_cap_dropmods() {
     cap_dropmods_key 29 1
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_dropmods_wait_target "Copy 1 item to sub"
+    cap_drops_wait_target "Copy 1 item to sub"
     cap_dropmods_key 29 0
     cap_dropmods_key 42 1
     cap_drops_release
@@ -171,8 +149,10 @@ case_cap_dropmods() {
     cap_dropmods_press_at "$((cx + wx))" "$((cy + wy))"
     cap_dropmods_steer_to "$tx" "$ty"
     sleep 0.5
-    seen=$(cap_dropmods_active_pid)
+    seen=$(focused_pid)
     [[ "$seen" == "$win2" ]] || { cap_dropmods_abandon; fail "cap_dropmods: focus never followed the drag to qs pid $win2 (the active window is $seen), so no mid-drag key could reach it"; }
+    # Win2 must show the hover line before Ctrl, or the release can land on its listing floor.
+    ipc_pid="$win2"; cap_drops_wait_target "Move 1 item to sub2 · ctrl at lift copies"; ipc_pid="$win1"
     cap_dropmods_key 29 1
     cap_dropmods_release
     cap_dropmods_key 29 0
@@ -196,8 +176,9 @@ case_cap_dropmods() {
     cap_dropmods_press_at "$cx" "$cy"
     cap_dropmods_steer_to "$tx" "$ty"
     sleep 0.5
-    seen=$(cap_dropmods_active_pid)
+    seen=$(focused_pid)
     [[ "$seen" == "$win2" ]] || { cap_dropmods_abandon; fail "cap_dropmods: focus never followed the drag to qs pid $win2 (the active window is $seen), so no mid-drag key could reach it"; }
+    ipc_pid="$win2"; cap_drops_wait_target "Copy 1 item to sub2"; ipc_pid="$win1"
     cap_dropmods_key 29 0
     cap_dropmods_key 42 1
     cap_dropmods_release
@@ -225,6 +206,9 @@ case_cap_dropmods() {
     sleep 0.3
     hypr_window_float "$probe_addr" on >/dev/null || fail "cap_dropmods: the probe window would not float"
     sleep 0.3
+    # A floated window keeps its tiled width, which parks its centre past the screen edge; give it its own size first.
+    hypr_window_resize_absolute "$probe_addr" 420 300 >/dev/null || fail "cap_dropmods: the probe window would not take its size"
+    sleep 0.3
     read -r wx wy ww wh <<< "$(window_box)"
     hypr_window_move_absolute "$probe_addr" "$((wx + ww - 480))" "$((wy + 60))" >/dev/null \
         || fail "cap_dropmods: the probe window would not park"
@@ -232,6 +216,8 @@ case_cap_dropmods() {
     probe_box=$(hyprctl clients -j 2>/dev/null | jq -er '[.[] | select(.title == "DropProbe")] | select(length == 1) | .[0] | [.at[0] + .size[0] / 2, .at[1] + .size[1] / 2] | select(all(.[]; . == floor)) | @tsv' 2>/dev/null || printf "")
     [[ -n "$probe_box" ]] || fail "cap_dropmods: the probe window has no geometry to aim at"
     read -r tx ty <<< "$probe_box"
+    (( tx > wx && tx < wx + ww && ty > wy && ty < wy + wh )) \
+        || fail "cap_dropmods: the probe centre $tx,$ty lies outside the Flea window $wx,$wy,$ww,$wh, so the pointer cannot reach it"
     cap_dropmods_focus_pid "$(flea_pid)" "$dir"
     seek_row_named "probe1.txt" || fail "cap_dropmods: probe1.txt never came under the cursor"
     src_pt=$(ipc rowCentre "$(row_index_of probe1.txt)"); read -r cx cy <<< "$src_pt"

@@ -442,20 +442,46 @@ focused_class() {
     hyprctl activewindow -j 2>/dev/null | jq -r 'select(.class != null) | .class' 2>/dev/null
 }
 
-# Positive equality against the expected class: a negated test reads an empty class as a pass.
+# Sample input, hyprctl activewindow -j: {"class":"com.thisisgm.flea","pid":11,...}; the pid is the qs pid the keys and the pointer reach.
+focused_pid() {
+    hyprctl activewindow -j 2>/dev/null | jq -er '.pid | select(type == "number")' 2>/dev/null || printf unavailable
+}
+
+# The Hyprland address of the one Flea window a qs pid owns, which is what narrows omarchy-drive between two windows.
+window_addr_of_pid() {
+    [[ "$#" -eq 1 ]] || fail "window_addr_of_pid needs a qs pid, got $#"
+    hyprctl clients -j 2>/dev/null | jq -er --arg class "$flea_window_class" --argjson pid "$1" \
+        '[.[] | select(.class == $class and .pid == $pid)] | select(length == 1) | .[0].address' \
+        || fail "no client address for qs pid $1"
+}
+
+# Positive equality against the expected class: a negated test reads an empty class as a pass; with ipc_pid set the pid is the identity, since two Flea windows share a class.
 assert_focus() {
     local seen
+    if [[ -n "$ipc_pid" ]]; then
+        seen=$(focused_pid)
+        [[ "$seen" == "$ipc_pid" ]] \
+            || fail "focus is on qs pid '$seen', not $ipc_pid, so this case sends no more keys"
+        return
+    fi
     seen=$(focused_class || true)
     [[ "$seen" == "$flea_window_class" ]] \
         || fail "focus is on class '$seen', not $flea_window_class, so this case sends no more keys"
 }
 
-# Every keystroke goes through here, because a rule each case has to remember is not a gate.
+# Every keystroke goes through here, because a rule each case has to remember is not a gate; with ipc_pid set the window is named by its address, since the class matches two.
 key() {
     assert_focus
+    if [[ -n "$ipc_pid" ]]; then
+        local addr
+        addr=$(window_addr_of_pid "$ipc_pid") || exit 1
+        omarchy-drive key --window "$addr" "$@"
+        return
+    fi
     omarchy-drive key --window flea "$@"
 }
 
+# omarchy-drive hotkey takes no --window and --global acts on the active window, so assert_focus is its only guard.
 hotkey() {
     assert_focus
     omarchy-drive hotkey "$@"
@@ -880,13 +906,13 @@ seek_row_named() {
     local want="$1" i n cur got
     n=$(ipc total)
     [[ "$n" =~ ^[0-9]+$ ]] && (( n > 40 )) || n=40
-    key g >/dev/null
+    key g >/dev/null || fail "seek_row_named: key g was refused on the way to $want, so no key can move the cursor"
     for i in $(seq 1 "$n"); do
         cur=$(ipc cursor)
         got=$(ipc rowAt "$cur")
         [[ "$got" == "$want|"* ]] && return 0
         [[ "$got" == loading && "$(ipc visibleRowName "$cur")" == "$want" ]] && return 0
-        key j >/dev/null
+        key j >/dev/null || fail "seek_row_named: key j was refused on the way to $want, so no key can move the cursor"
     done
     fail "could not put the cursor on $want"
 }
