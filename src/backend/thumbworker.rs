@@ -233,7 +233,6 @@ extern "C" {
     fn syscall(number: c_long, ...) -> c_long;
     fn fork() -> c_int;
     fn _exit(code: c_int) -> !;
-    fn kill(pid: c_int, sig: c_int) -> c_int;
     fn waitpid(pid: c_int, status: *mut c_int, options: c_int) -> c_int;
     fn pidfd_open(pid: c_int, flags: u32) -> c_int;
     fn poll(fds: *mut PollFd, nfds: usize, timeout: c_int) -> c_int;
@@ -418,7 +417,7 @@ struct Running {
 // Reaps one child and answers its job; a child killed by a signal, the deadline's included, ran on the file and failed.
 fn finish(job: Running, past_deadline: bool) {
     if past_deadline {
-        unsafe { kill(job.pid, SIGKILL) };
+        let _ = crate::procsignal::signal_process(job.pid, SIGKILL);
     }
     let mut status: c_int = 0;
     let verdict = if unsafe { waitpid(job.pid, &mut status, 0) } != job.pid {
@@ -460,7 +459,7 @@ fn start(message: fdpass::Received, decoder: &Decoder, abi: i64, running: &mut V
     let raw = unsafe { pidfd_open(pid, 0) };
     if raw < 0 {
         // corner: with no descriptor there is no deadline to enforce, so the child is ended now and judges nothing.
-        unsafe { kill(pid, SIGKILL) };
+        let _ = crate::procsignal::signal_process(pid, SIGKILL);
         let mut status: c_int = 0;
         unsafe { waitpid(pid, &mut status, 0) };
         let _ = fdpass::send_byte(&reply, NOT_STARTED);
@@ -621,7 +620,7 @@ mod tests {
         if pid == 0 {
             match ends {
                 Ends::Exits(code) => unsafe { _exit(*code) },
-                Ends::Dies => unsafe { kill(getpid(), SIGKILL) },
+                Ends::Dies => drop(crate::procsignal::signal_process(unsafe { getpid() }, SIGKILL)),
                 Ends::Hangs => loop {
                     unsafe { pause() };
                 },
@@ -858,7 +857,7 @@ mod tests {
         };
         let writable = |path: &str| std::fs::OpenOptions::new().write(true).open(path).is_ok();
         let wrote_before = writable(&format!("/proc/self/fd/{}", reader));
-        let signalled_before = unsafe { kill(getppid(), 0) } == 0;
+        let signalled_before = crate::procsignal::signal_process(unsafe { getppid() }, 0).is_ok();
         let mode = std::fs::metadata(&victim).map(|m| m.permissions().mode() & MODE_BITS).unwrap_or(0);
         let chmod_before = unsafe { fchmod(reader, mode) } == 0;
         let times_before = unsafe { futimens(reader, &KEEP_TIMES) } == 0;
@@ -890,7 +889,7 @@ mod tests {
             writable(&victim),
             std::fs::File::open("/proc/self/fd/3").is_ok(),
             signalled_before,
-            unsafe { kill(getppid(), 0) } == 0,
+            crate::procsignal::signal_process(unsafe { getppid() }, 0).is_ok(),
             chmod_before,
             chmod,
             times_before,

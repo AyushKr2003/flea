@@ -19,7 +19,6 @@ const POLLIN: i16 = 1;
 struct PollFd { fd: i32, events: i16, revents: i16 }
 extern "C" {
     fn pidfd_open(pid: i32, flags: u32) -> i32;
-    fn kill(pid: i32, signal: i32) -> i32;
     fn poll(fds: *mut PollFd, count: usize, timeout: i32) -> i32;
 }
 struct Running { pid: i32, pidfd: OwnedFd, group: bool }
@@ -154,8 +153,8 @@ impl Drop for OwnedChild {
 }
 
 fn terminate(pid: i32, group: bool) -> Result<(), String> {
-    if unsafe { kill(if group { -pid } else { pid }, SIGKILL) } != 0 {
-        let error = std::io::Error::last_os_error();
+    let sent = if group { crate::procsignal::signal_group(pid, SIGKILL) } else { crate::procsignal::signal_process(pid, SIGKILL) };
+    if let Err(error) = sent {
         if error.raw_os_error() != Some(ESRCH) { return Err(format!("Could not cancel owned GIO child: {}.", error)); }
     }
     Ok(())

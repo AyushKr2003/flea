@@ -26,7 +26,6 @@ extern "C" {
     fn fcntl(fd: i32, cmd: i32, ...) -> i32;
     fn dup2(oldfd: i32, newfd: i32) -> i32;
     fn close(fd: i32) -> i32;
-    fn kill(pid: i32, sig: i32) -> i32;
     fn setpgid(pid: i32, pgid: i32) -> i32;
 }
 
@@ -86,7 +85,7 @@ fn owned_by(pid: i32, bwrap: i32) -> bool {
 pub(crate) fn kill_sandbox(out: &Arc<AtomicI32>, bwrap: i32) {
     let pid = out.load(Ordering::SeqCst);
     if pid > 0 && owned_by(pid, bwrap) {
-        unsafe { kill(pid, SIGKILL) };
+        let _ = crate::procsignal::signal_process(pid, SIGKILL);
     }
 }
 
@@ -176,11 +175,11 @@ pub fn kill_tree(jailed: &mut Jailed) {
     let first = wait_for_pid(&jailed.sandbox_pid);
     let mut killed = GONE;
     if first > 0 && owned_by(first, bwrap) {
-        unsafe { kill(first, SIGKILL) };
+        let _ = crate::procsignal::signal_process(first, SIGKILL);
         killed = first;
     }
     let pid = jailed.child.id() as i32;
-    unsafe { kill(-pid, SIGKILL) };
+    let _ = crate::procsignal::signal_group(pid, SIGKILL);
     let _ = jailed.child.kill();
     let _ = jailed.child.wait();
     wait_gone(killed);
@@ -202,7 +201,7 @@ fn wait_gone(pid: i32) {
         return;
     }
     for _ in 0..WAIT_GONE_SECS * 1000 / WAIT_GONE_STEP_MS {
-        if unsafe { kill(pid, 0) } != 0 {
+        if crate::procsignal::signal_process(pid, 0).is_err() {
             return;
         }
         std::thread::sleep(Duration::from_millis(WAIT_GONE_STEP_MS));

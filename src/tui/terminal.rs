@@ -35,7 +35,6 @@ extern "C" {
     fn signal(sig: i32, handler: usize) -> usize;
     fn tcgetpgrp(fd: i32) -> i32;
     fn tcsetpgrp(fd: i32, group: i32) -> i32;
-    fn kill(pid: i32, signal: i32) -> i32;
     fn waitpid(pid: i32, status: *mut i32, options: i32) -> i32;
     fn poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32;
 }
@@ -170,7 +169,7 @@ impl EditorJob {
         let job = Self { child, foreground, handler, finished: false, restored: false };
         if unsafe { tcsetpgrp(0, job.child.id() as i32) } != 0 { return Err(io::Error::last_os_error()); }
         // A terminal reader may stop before the parent gives its new process group the foreground.
-        unsafe { kill(-(job.child.id() as i32), SIGCONT); }
+        let _ = crate::procsignal::signal_group(job.child.id() as i32, SIGCONT);
         Ok(job)
     }
     fn status(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
@@ -195,9 +194,10 @@ impl EditorJob {
         let mut cleanup = Ok(());
         if !self.finished {
             const NO_SUCH_PROCESS: i32 = 3;
-            if unsafe { kill(-(self.child.id() as i32), SIGKILL) } != 0 && io::Error::last_os_error().raw_os_error() != Some(NO_SUCH_PROCESS) {
-                cleanup = Err(io::Error::last_os_error());
-            } else { cleanup = self.child.wait().map(|_| ()); }
+            match crate::procsignal::signal_group(self.child.id() as i32, SIGKILL) {
+                Err(error) if error.raw_os_error() != Some(NO_SUCH_PROCESS) => cleanup = Err(error),
+                _ => cleanup = self.child.wait().map(|_| ()),
+            }
         }
         let restored = if unsafe { tcsetpgrp(0, self.foreground) } == 0 { Ok(()) } else { Err(io::Error::last_os_error()) };
         unsafe { signal(SIGTTOU, self.handler); }

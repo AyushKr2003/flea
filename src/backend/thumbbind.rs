@@ -201,7 +201,11 @@ mod tests {
         if meta.uid() != 0 {
             assert!(!trusted(&meta, meta.uid().wrapping_add(1)), "another user's file");
         }
-        assert!(trusted(&std::fs::metadata("/usr/bin/sh").unwrap(), 4_000_000), "root's file is trusted whoever asks");
+        // Root's half needs a file root owns: in a user namespace (cargo-west's PID namespace) root's files read as the overflow uid, and flea-ci's unwrapped run judges it.
+        let sh = std::fs::metadata("/usr/bin/sh").unwrap();
+        if sh.uid() == 0 {
+            assert!(trusted(&sh, 4_000_000), "root's file is trusted whoever asks");
+        }
     }
 
     #[test]
