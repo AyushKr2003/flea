@@ -43,6 +43,7 @@ PreviewSwap 1.0 PreviewSwap.qml
 PreviewImage 1.0 PreviewImage.qml
 PreviewImagePan 1.0 PreviewImagePan.qml
 PreviewImageSharp 1.0 PreviewImageSharp.qml
+PreviewAnimation 1.0 PreviewAnimation.qml
 ConvertDialog 1.0 ConvertDialog.qml
 BulkOldNames 1.0 BulkOldNames.qml
 BulkRenameDialog 1.0 BulkRenameDialog.qml

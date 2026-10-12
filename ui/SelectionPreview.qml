@@ -344,7 +344,7 @@ Flea.PreviewColumn {
                 entries: message.entries, unpacked: message.unpacked, archiveFailed: message.afailed,
                 names: message.names, lines: message.lines, partial: message.partial,
                 linesFailed: message.lfailed, target: message.target, targetDir: message.targetdir,
-                owner: message.owner || "", orient: message.orient || 1 }
+                owner: message.owner || "", orient: message.orient || 1, frames: message.frames || 0 }
         }
     }
     Component.onCompleted: root.followSelection()
