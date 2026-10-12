@@ -91,7 +91,7 @@ tests/js/tabs.js 710
 tests/js/search.js 336
 tests/button-members.qml 488
 tests/chromering.qml 413
-tests/columnrow-geom.qml 409
+tests/columnrow-geom.qml 426
 tests/columnscost.qml 416
 tests/rowcost.qml 417
 tests/gridmark.qml 419
@@ -116,7 +116,7 @@ tests/xwsettings-tabs.qml 444
 ui/Backend.qml 576
 ui/ChromeBar.qml 342
 ui/ColumnsArea.qml 547
-ui/ColumnPane.qml 446
+ui/ColumnPane.qml 450
 ui/ContextMenu.qml 751
 ui/ConvertDialog.qml 446
 ui/GridArea.qml 481
