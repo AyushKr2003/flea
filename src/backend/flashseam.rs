@@ -8,7 +8,12 @@ const ROOT_ENV: &str = "FLEA_FLASH_ALLOW_LOOP";
 
 // The root the bench named in the environment, unchecked: the one place production reads the variable.
 pub(crate) fn named_root() -> Option<PathBuf> {
-    std::env::var_os(ROOT_ENV).filter(|text| !text.is_empty()).map(PathBuf::from)
+    named_root_from(&|name| std::env::var_os(name))
+}
+
+// A set but empty variable names no root.
+fn named_root_from(get: &dyn Fn(&str) -> Option<std::ffi::OsString>) -> Option<PathBuf> {
+    get(ROOT_ENV).filter(|text| !text.is_empty()).map(PathBuf::from)
 }
 
 // A named root that is absolute and carries the marker; any other is no bench root.
@@ -39,5 +44,18 @@ pub(crate) fn loop_backing_inside(named: Option<&Path>, dev: &str, sys: &Path) -
     match std::fs::symlink_metadata(backing) {
         Ok(meta) if meta.is_file() => inside(&root, Path::new(backing)),
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_root_comes_from_its_one_variable_and_an_empty_one_names_none() {
+        let named = |value: &'static str| move |name: &str| (name == ROOT_ENV).then(|| std::ffi::OsString::from(value));
+        assert_eq!(named_root_from(&named("/srv/bench")), Some(PathBuf::from("/srv/bench")));
+        assert_eq!(named_root_from(&named("")), None, "a set but empty variable names no root");
+        assert_eq!(named_root_from(&|_: &str| None), None, "an unset variable names no root");
     }
 }
