@@ -259,12 +259,13 @@ function runEntrances(check) {
     waiting.listingPath = "/d/next"
     waiting.pendingSelect = ""
     waiting.opener = { opened: [], open: function (path) { this.opened.push(path) }, textOpened: [], openText: function (path) { this.textOpened.push(path) } }
-    waiting.runText = function (path) { waiting.opener.textOpened.push(path) }
+    waiting.ranText = []
+    waiting.runText = function (path) { waiting.ranText.push(path) }
     Nav.runCursor(waiting, waiting.opener, "open")
     check("Run past the wait reaches the opener on the drawn row", waiting.opener.opened.join("|"), "/d/tool.sh")
     check("Run past the wait keeps the wait, the cursor and the asked path", waiting.listingState + "|" + waiting.listInFlight + "|" + waiting.cursorIndex + "|" + waiting.listingPath + "|" + waiting.pendingSelect + "|" + waiting.said.length, "waiting|true|3|/d/next||0")
     Nav.runCursor(waiting, waiting.opener, "openText")
-    check("Open as text past the wait reaches the text editor", waiting.opener.textOpened.join("|"), "/d/tool.sh")
+    check("Open as text past the wait goes through the window's run lane, not the opener", waiting.ranText.join("|") + "|" + waiting.opener.textOpened.length, "/d/tool.sh|0")
     runLane(check)
 }
 

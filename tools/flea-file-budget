@@ -107,7 +107,7 @@ tests/preview-decode.qml 759
 tests/js/status.js 354
 tests/rename-grid-bottom.qml 438
 tests/rename-grid-bottom.js 350
-tests/js/runfile.js 304
+tests/js/runfile.js 305
 tests/ring-bounds.qml 693
 tests/search-live.qml 419
 tests/sidebar-flows.qml 669
