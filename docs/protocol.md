@@ -1321,6 +1321,21 @@ the next open skips what it names rather than wedge behind it: its whole mount w
 anywhere else. A dead share therefore holds at most one thread per source for good, not more per open, and a
 check merely slow inside its budget is run again rather than skipped.
 
+### devs
+
+`{"c":"devs","paths":[<string>,...]}`
+
+Example: `{"c":"devs","paths":["/","/home/gm","/home/gm/Documents"]}`
+
+The device number of each path named, symlinks followed, so a path reached through a link names the volume the
+link points at. The device is the number `listed`'s `v` already gives for the listing itself, which is what lets
+a client compare the two without a table of mounts: a plain drop onto a path moves when its device equals the
+drag's source device and copies otherwise. The client asks **once per listing** for the ancestors of the listed
+path, the breadcrumb's drop targets, and keeps the answers by path. Answers one `devs` line from a thread of its
+own, because a stat on a mount that stopped answering never returns and the loop waits on nothing. A path on a
+network or FUSE mount runs under the same 5 s bound a listing has, then the mount is marked stuck for 30 s and
+answers 0 at once, so a dead share costs one thread and one wait, never one per ask. An absent `paths` asks nothing.
+
 ### clipSet
 
 `{"c":"clipSet","op":"copy"|"cut","paths":[<string>,...]}`
@@ -2018,6 +2033,19 @@ zoxide also ranks is drawn as the favourite. `frecency` is zoxide's score for ev
 zoxide ranks, whichever source draws it, and the client ranks the one list by it after the match itself.
 Anything that is not an absolute path is dropped, and so is a score that is not a finite number. `ms` is
 the whole answer's time, zoxide and the existence checks together.
+
+### devs
+
+`{"t":"devs","devs":{<string>:<uint>,...}}`
+
+Example: `{"t":"devs","devs":{"/":66305,"/home":66306,"/home/gm/gone":0}}`
+
+The answer to one `devs`: each asked path once, in the order asked, with its device number. A path that cannot
+be read, a missing one, an empty one, a relative one (it would name the backend's own directory, which the client
+never means) and one on a mount that is not answering all answer 0, and the client reads 0 as unknown and copies:
+copying where a move was possible is an annoyance, and moving across volumes loses the original. The line carries
+no request id, because each answer names its own paths and stays true on its own; a late answer for a folder the
+client has left only fills facts about paths that are still what they were.
 
 ### changed
 

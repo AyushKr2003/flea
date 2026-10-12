@@ -1,5 +1,7 @@
 .pragma library
 
+.import "DropDev.js" as DropDev
+
 // Every line the backend sends, turned into the signal the front end listens for. Split out of
 // ui/Backend.qml, which owns the socket, the requests and the signals themselves: the routing is a
 // long table and a table is not a socket's business. The sample lines live with the signals there.
@@ -105,6 +107,8 @@ function route(root, message) {
         root.unmounted(message.path || "", message.parent || "")
     } else if (message.t === "jumped") {
         root.jumped(message.id || 0, message.favourites || [], message.zoxide || [], message.recent || [], message.frecency || {})
+    } else if (message.t === "devs") {
+        root.pathDevs = DropDev.merged(root.pathDevs, message.devs)
     } else if (message.t === "peeked") {
         root.peeked(message.path, message.hidden === true, message.n, message.rows || [], message.failed === true, message.mode || 0, message.hiddenLast === true, message.first || 0, message.v || 0, message.w !== false, message.by || "", message.desc === true)
     } else if (message.t === "formats") {

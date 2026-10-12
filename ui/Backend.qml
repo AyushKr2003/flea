@@ -1,6 +1,7 @@
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import "js/DropDev.js" as DropDev
 import "js/Messages.js" as Messages
 import "js/FolderSorts.js" as FolderSorts
 import "js/Swap.js" as Swap
@@ -15,6 +16,19 @@ Item {
     // False when the listed directory cannot be written. A drag from it copies. Absent on an
     // older reply stays true, which is the move that reply always described.
     property bool dirWritable: true
+    // The device of each ancestor of the listing by path, as the backend last answered; a path missing here is unknown and copies. See docs/protocol.md "devs".
+    property var pathDevs: ({})
+    // The listing the ancestors were last asked for, so a re-read or a live search answer of the same folder asks nothing.
+    property string _devsFor: ""
+    onListed: function(total, readMs, sortMs, path, changed, gen) {
+        var ancestors = DropDev.askPaths(path)
+        var asked = path + "\n" + root.dirDev
+        if (!root.pickerOnly && ancestors.length > 0 && asked !== root._devsFor) {
+            root.pathDevs = DropDev.without(root.pathDevs, ancestors)
+            root.send({ c: "devs", paths: ancestors })
+        }
+        root._devsFor = asked
+    }
     // listing is the numbering the rows are in, 0 from a backend that does not say; see docs/protocol.md "listing".
     signal rows(int start, var items, real ms, var kinds, real listing, real gen)
     // The numbering of the rows the pane holds, which every row-indexed request names back; ui/PaneSwap.qml writes it.
@@ -480,6 +494,7 @@ Item {
     // Sample input: {"t":"bulkrenamed","ok":5,"unchanged":1}
     // Sample input: {"t":"made","ok":true,"path":"/home/gm/Pictures/New Folder"}
     // Sample input: {"t":"undone","op":"move","ok":true}
+    // Sample input: {"t":"devs","devs":{"/":66305,"/home":66306,"/home/gm/gone":0}}
     // Sample input: {"t":"jumped","id":3,"favourites":["/home/gm/Projects"],"zoxide":["/home/gm/Documents"],"recent":[],"frecency":{"/home/gm/Documents":80},"ms":4.210}
     function receive(line) {
         if (!line || line.length === 0) {
