@@ -35,8 +35,8 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     FLEA_BIN="$bin" EXITCOLS_DIR="$test_root/fixture" timeout 60 qs -p "$test_root/config" 2>&1)
 
-# Sample input, the receipt: "  INFO qml: EXITCOLS DONE 24 checks, 0 failed", 8 checks for each of the 3 exits.
-done_count=$(printf '%s\n' "$output" | grep -c 'EXITCOLS DONE 24 checks, 0 failed$')
+# Sample input, the receipt: "  INFO qml: EXITCOLS DONE 27 checks, 0 failed", 9 checks for each of the 3 exits.
+done_count=$(printf '%s\n' "$output" | grep -c 'EXITCOLS DONE 27 checks, 0 failed$')
 noisy=$(printf '%s\n' "$output" | grep -av 'does not support setting window masks' | grep -aiE 'WARN|ERROR|Binding loop|failed to load|Unable to assign|Cannot assign|TypeError|ReferenceError|is not a function|is not defined')
 if [ "$done_count" -ne 1 ] || printf '%s\n' "$output" | grep -aq 'EXITCOLS FAIL' || [ -n "$noisy" ]; then
     printf 'FAIL the columns exit did not land the folder whole\n'

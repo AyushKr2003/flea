@@ -147,7 +147,7 @@ ShellRoot {
         }]
     ]
 
-    // End parks the last tile row flush with the viewport bottom, footer hidden; a cursor move inside that row must not scroll it.
+    // End parks the last tile row one gap clear of the viewport bottom, footer hidden; a cursor move inside that row must not scroll it.
     readonly property int lastTile: root.totalRows - 1
     property real parkedY: -1
     readonly property var parkedTail: [
@@ -157,7 +157,7 @@ ShellRoot {
         [function () { return root.settled() }, function () {
             root.parkedY = root.view.contentY
             var maxY = root.view.originY + root.view.contentHeight - root.view.height
-            root.check(root.parkedY === maxY - Flea.Theme.chromeHeight, "end parks the last tile row flush with the bottom, footer hidden")
+            root.check(root.parkedY === maxY - Flea.Theme.chromeHeight + Flea.Theme.spacing.gap, "end parks the last tile row one gap clear of the bottom, footer hidden")
             root.check(root.view.itemAtIndex(root.lastTile) !== null, "the last tile is held")
             root.stubPane.cursorIndex = root.lastTile - 1
         }],
@@ -173,6 +173,11 @@ ShellRoot {
         }],
         [function () { return root.settled() }, function () {
             root.check(root.view.contentY === root.parkedY, "the pane's own reveal parks the last row again")
+            root.view.contentY = root.parkedY + 2
+            root.view.keepLastRowClear(root.lastTile)
+        }],
+        [function () { return root.settled() }, function () {
+            root.check(root.view.contentY === root.parkedY + 2, "a last row already past the clear line stays where it is")
         }]
     ]
 
