@@ -98,7 +98,7 @@ tests/columnrow-geom.qml 426
 tests/dialog-board.qml 654
 tests/columnscost.qml 416
 tests/rowcost.qml 417
-tests/gridjump.qml 409
+tests/gridjump.qml 460
 tests/gridmark.qml 419
 tests/columnsfilter.qml 402
 tests/columnsfolder.qml 400
@@ -127,7 +127,7 @@ ui/ColumnsArea.qml 547
 ui/ColumnPane.qml 450
 ui/ContextMenu.qml 781
 ui/ConvertDialog.qml 453
-ui/GridArea.qml 516
+ui/GridArea.qml 533
 ui/Ipc.qml 984
 tests/gridprebuild.qml 458
 tests/columnsprebuild.qml 416
@@ -136,14 +136,14 @@ ui/List.qml 480
 tests/listprebuild.qml 412
 tests/poolpark.qml 409
 tests/touchpad-edge.qml 438
-ui/FastScrollHandler.qml 474
+ui/FastScrollHandler.qml 476
 ui/FigureService.qml 405
 ui/FlashView.qml 399
 ui/NetworkDialog.qml 435
 ui/NetworkForm.qml 426
 ui/NetworkMounts.qml 909
 ui/OpenWithDialog.qml 612
-ui/Pane.qml 1224
+ui/Pane.qml 1222
 ui/PaneMenuActions.qml 522
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674

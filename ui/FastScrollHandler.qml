@@ -428,7 +428,9 @@ MouseArea {
         return wheel.accepted
     }
 
-    onWheel: function (wheel) { root.handleWheel(wheel) }
+    // A wheel is the operator moving the view, ahead of the write it makes.
+    signal wheeled()
+    onWheel: function (wheel) { root.wheeled(); root.handleWheel(wheel) }
     // A press stops the tail and the return where they are for the row Qt picked; left
     // unaccepted it takes no grab, so the view's own release fixup returns the held overscroll.
     function handlePress(mouse) { root.stopTail(); root.stopReturn(false); mouse.accepted = false }

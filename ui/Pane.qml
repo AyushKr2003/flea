@@ -771,8 +771,7 @@ FocusScope {
     // and the scroll both happen in view space, because a filter can be narrowing what is drawn.
     // A click carries context 0; a keyboard move keeps the default 3.
     function setCursor(index, context) { Filter.setCursor(root, index, context) }
-    // The cursor keeps three rows of context above and below: the list and the columns view hold
-    // it through their own showCursor, and the grid keeps Contain after its landing window, whose tiles are not rows.
+    // The cursor keeps three rows of context: the list and the columns view hold it through their own showCursor, the grid keeps Contain after its landing window.
     function showRow(view, context) {
         if (root.viewMode === "columns" && root.columnsArea) root.columnsArea.activeColumn().showCursor(view, context)
         else if (root.viewMode === "list") list.showCursor(view, context)

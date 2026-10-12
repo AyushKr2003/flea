@@ -112,8 +112,7 @@ GridView {
     // Qt emits currentIndexChanged before it frees the old current item; positioning inside it leaves that item behind as a second delegate for its row.
     onCurrentIndexChanged: { root.prebuild.kick(); Qt.callLater(root.revealCursor) }
     function revealCursor() {
-        // StableModel.resize parks currentIndex on row 0 mid-change and a reveal queued then can run inside it; onResized places the view.
-        // A far landing waits for its window, so the tiles bind once, onto real rows; onRowsChanged lands it.
+        // StableModel.resize parks currentIndex on row 0 mid-change, so onResized places the view; a far landing waits for its window, which onRowsChanged lands.
         if (root.visible && !root.hiddenHeld && !root.landingWait && root.count > 0 && root.cursorView >= 0 && root.currentIndex === root.cursorView) {
             root.positionViewAtIndex(root.cursorView, GridView.Contain)
             root.keepLastRowClear(root.cursorView)
@@ -152,6 +151,7 @@ GridView {
         parent: root
         flickable: root
         ctrlWheelAction: function (wheel) { return root.zoomWheel(wheel) }
+        onWheeled: root.endLanding(false)
     }
 
     readonly property alias scrollBar: verticalScroll
@@ -329,6 +329,7 @@ GridView {
         var need = root.landingNeed()
         // Set before the ask: a reply that beats this call lands the view in onRowsChanged.
         root.landingWait = need !== null && root.owes()
+        root.landingStart = need === null ? -1 : need.start
         root.askWindow(need)
     }
     // The window a far cursor landing owes, null for a step, a landing the held rows reach, or a view that may not ask.
@@ -343,10 +344,20 @@ GridView {
         if (!root.landingWait) root.positionViewAtIndex(view, GridView.Contain)
     }
     property bool landingWait: false
+    // Where the landing ask's window starts, so its own reply is told from another ask's.
+    property int landingStart: -1
+    // The wait ends on the ask's outcome, rows covering the cursor or not, or its refusal; a wheel ends it for an ask never answered.
     function landIfReady() {
-        if (!root.landingWait || root.windowOwed()) return
+        if (!root.landingWait || (root.windowOwed() && root.pane.held !== root.landingStart)) return
         root.landingWait = false
         root.revealCursor()
+    }
+    // A refused or unanswered window leaves the view where it is and frees the drift asks; a wheel owns the view from here.
+    function endLanding(reveal) {
+        if (!root.landingWait) return
+        root.landingWait = false
+        if (reveal) root.revealCursor()
+        else coalesce.restart()
     }
     // No window while hidden, while a filter narrows rows already held, nor while a listing is out, whose windows are the directory asked for.
     function canAsk() { return root.visible && root.pane.total !== 0 && root.pane.shown === null && !root.pane.listInFlight }
@@ -458,6 +469,12 @@ GridView {
         }
         root.restoreTicks += 1
         Qt.callLater(root.restoreCursorView)
+    }
+
+    Connections {
+        target: root.pane.backend
+        ignoreUnknownSignals: true
+        function onFailed(where, input, message, mode) { if (where === "window") root.endLanding(true) }
     }
 
     Connections {

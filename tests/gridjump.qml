@@ -44,16 +44,19 @@ ShellRoot {
             property int replies: 0
             property real heldListing: 1
             // "sync" answers inside the call, a reply that beats the layout; "late" answers on a timer, after it.
+            // "fail" answers an error line and no rows, "lost" never answers, "short" answers rows that stop before the cursor's row.
             property string mode: "late"
+            signal failed(string where, string input, string message, int mode)
             function thumb(rows, cacheOnly) {}
             function thumbcancel(rows) {}
             function dirsize(rows) {}
             function dirsizecancel() {}
             function window(start, count) {
                 be.asks += 1
+                if (be.mode === "fail") { be.failed("window", "/probe", "/probe is not responding.", 0); return }
                 be.queue.push({ start: start, count: count })
                 if (be.mode === "sync") be.reply()
-                else answer.start()
+                else if (be.mode !== "lost") answer.start()
             }
             // A reply is a parse, every row a new object, and the two writes are PaneSwap's: held first, rows second.
             function reply() {
@@ -61,7 +64,7 @@ ShellRoot {
                 if (ask === undefined) return
                 var from = Math.max(0, Math.min(ask.start, be.pane.total))
                 be.pane.held = from
-                be.pane.rows = root.rowsFrom(from, Math.min(be.pane.total, from + ask.count))
+                be.pane.rows = root.rowsFrom(from, Math.min(be.pane.total, from + (be.mode === "short" ? 10 : ask.count)))
                 be.replies += 1
             }
             property Timer answer: Timer {
@@ -343,6 +346,51 @@ ShellRoot {
         root.runNext()
     }
 
+    function scroller() {
+        var kids = grid.children
+        for (var i = 0; i < kids.length; i++) if (kids[i].objectName === "fleaScroll") return kids[i]
+        return null
+    }
+    // A far jump whose window ask meets the given outcome, then the operator scrolls: the grid must stop waiting and ask a window again.
+    function outcome(name, mode) {
+        var s = root.script, last = root.files - 1, mine = { asks: 0 }
+        s.push(function () { root.gridPane.land(); root.warm() })
+        s.push(function () {
+            root.gridBackend.mode = mode
+            root.gridBackend.queue = []
+            mine.asks = root.gridBackend.asks
+            root.moveTo(root.gridPane, last)
+            root.later(300)
+        })
+        s.push(function () {
+            var parked = mode === "lost"
+            // An outcome that frees the wait may be followed by a drift ask for the rows the view now shows, so only a held wait is exactly one.
+            root.check(name + ": the jump asked its window", parked ? root.gridBackend.asks - mine.asks === 1 : root.gridBackend.asks - mine.asks >= 1, "windows=" + (root.gridBackend.asks - mine.asks))
+            root.check(name + ": the wait " + (parked ? "holds while the reply is out" : "ends on the ask's outcome"), grid.landingWait === parked, "landingWait=" + grid.landingWait)
+            var wheel = root.scroller()
+            root.check(name + ": the grid has a wheel handler to hear", wheel !== null && wheel.wheeled !== undefined, "")
+            if (parked && wheel !== null && wheel.wheeled !== undefined) {
+                grid.contentY = 0
+                wheel.wheeled()
+                root.check(name + ": a wheel ends a wait nothing answers", !grid.landingWait, "landingWait=" + grid.landingWait)
+            }
+            root.gridBackend.mode = "sync"
+            grid.contentY = 0
+            root.later(60)
+        })
+        s.push(function () {
+            mine.asks = root.gridBackend.asks
+            grid.contentY = Math.max(0, grid.contentHeight - grid.height)
+            root.later(150)
+        })
+        s.push(function () {
+            root.check(name + ": a scroll asks a window after it", root.gridBackend.asks > mine.asks, "windows=" + (root.gridBackend.asks - mine.asks))
+            root.check(name + ": the scrolled-to rows land", root.gridPane.rowFor(last) !== null, "held=" + root.gridPane.held)
+            root.gridBackend.mode = "late"
+            root.runNext()
+        })
+    }
+
     function build() {
         var s = root.script, last = root.files - 1
         function step(fn) { s.push(fn) }
@@ -391,6 +439,9 @@ ShellRoot {
         step(function () { root.gridPane.land(); root.warm() })
         step(root.staleCheck)
         step(root.verdict)
+        root.outcome("failed window", "fail")
+        root.outcome("short window", "short")
+        root.outcome("lost window", "lost")
     }
 
     function finish() {
