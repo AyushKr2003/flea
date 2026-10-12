@@ -95,9 +95,7 @@ function stateByExtension(name) {
     return ""
 }
 
-// The Quick Look's own answer, from the icon, the name and whether a thumbnail is served: the three tests Facts.state makes
-// before the ones only a row can answer (symlink mode, Kind name, selection count). Code renders as
-// text there, because the overlay draws no gutter, and a markdown file renders verbatim like any text.
+// Quick Look's kind from the icon, the name and a served thumbnail, Facts.state's row-free tests; code and markdown read as text.
 function quickLookKind(icon, name, thumbnailed) {
     if (isPdf(name)) return PDF
     if (isMarkdown(name)) return TEXT
