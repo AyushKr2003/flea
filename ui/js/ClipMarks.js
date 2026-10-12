@@ -1,5 +1,7 @@
 .pragma library
 
+.import "Search.js" as Search
+
 // The mark follows the pane's own clipboard, so spending a cut clears every mark at once.
 
 // Sample input: { paths: ["/home/gm/Pictures/phone/IMG_4121.jpg"], moving: true }
@@ -53,13 +55,13 @@ function markForRow(pane, name, clipboard) {
     return markFor(rowPath(pane, name), clipboard)
 }
 
-// The pane's own join, so a search result resolves against the scope its search walked.
+// The pane's own join under the listing's base, so a search result resolves against the scope its search walked.
 // Sample input: pane { path: "/home/gm/Pictures/phone" }, name "IMG_4121.jpg".
 function rowPath(pane, name) {
     if (!name) {
         return ""
     }
-    return pane.join(pane.path, name)
+    return pane.join(Search.baseOf(pane), name)
 }
 
 // A sent cut empties a cut clipboard, so the marks go with it; anything else keeps it. ui/CollideHost.qml decides through this.

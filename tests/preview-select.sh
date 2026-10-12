@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.." || exit 1
 # qs exits 128 + SIGTERM when the probe kills itself after its receipt.
 self_kill_exit=143
 # PASS lines tests/preview-select.qml prints on a clean run.
-expected=6
+expected=9
 
 if ! command -v qs >/dev/null; then
     echo "preview-select.sh: qs is not installed, cannot drive the preview"

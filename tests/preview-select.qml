@@ -56,6 +56,7 @@ ShellRoot {
         property int thumbCalls: 0
         property int token: 0
         signal metaResult(var message)
+        signal meta(var row, var w, var h, var orient, var durationMs, var sampleRate, var entries, var unpacked, var archiveFailed, var names, var lines, var partial, var linesFailed, var target, var targetDir, var owner)
         function askMeta(index, wantText, wantMedia, wantArchive) {
             metaCalls += 1
             token += 1
@@ -68,6 +69,7 @@ ShellRoot {
     QtObject {
         id: pane
         property string path: "/tmp/flea-preview-select"
+        property string searchBase: ""
         property int cursorIndex: -1
         property int selectionVersion: 0
         property int selCount: 1
@@ -101,6 +103,11 @@ ShellRoot {
             height: 600
             pane: pane
             swap: null
+        }
+
+        Flea.Preview {
+            id: quick
+            pane: pane
         }
     }
 
@@ -169,6 +176,21 @@ ShellRoot {
                 && preview.previewState !== "multi",
                 "meta=" + backend.metaCalls + " mark=" + root.metaMark
                 + " loaded=" + preview.loadedIndex + " state=" + preview.previewState)
+            // A search row names its file under the search base, never under the pane path, in both preview paths.
+            pane.path = "/d"
+            pane.searchBase = "/s"
+            pane.rows = [{ n: "sub/hit.jpg", d: false, i: "image-x-generic", p: 420, s: 1000, m: 1758835200, t: true, k: 0 }]
+            preview.holdSelection(pane.rows[0])
+            root.check("a held search row names its file under the search base", preview.path === "/s/sub/hit.jpg",
+                "path=" + preview.path)
+            root.check("the quick look names a search row under the search base", quick.namedRow(0, "/s/sub/hit.jpg") !== null
+                && quick.namedRow(0, "/d/sub/hit.jpg") === null,
+                "base=" + JSON.stringify(quick.namedRow(0, "/s/sub/hit.jpg")) + " pane=" + JSON.stringify(quick.namedRow(0, "/d/sub/hit.jpg")))
+            pane.searchBase = ""
+            pane.rows = root.buildRows()
+            preview.holdSelection(pane.rows[1])
+            root.check("a folder row keeps the pane path join", preview.path === "/d/img1.jpg" && quick.namedRow(1, "/d/img1.jpg") !== null,
+                "path=" + preview.path)
             root.done()
         }
     ]

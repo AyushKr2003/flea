@@ -253,6 +253,12 @@ function run(check) {
     check("and the new tab is shown", Tabs.currentIndex(folder), 1)
     check("and the tab left behind keeps its cursor", folder.tabs.items[0].cursorIndex, 2)
     check("and keeps its selection", folder.tabs.items[0].selected.join(","), "1")
+    var searchFolder = Fixture.pane("/tmp/base")
+    searchFolder.searchBase = "/tmp/scope"
+    searchFolder.cursorIndex = 2
+    searchFolder.rowFor = function (i) { return i === 2 ? { n: "deep/sub", d: true } : null }
+    Tabs.openCursorTab(searchFolder)
+    check("a search result folder opens its tab under the search base", searchFolder.tabs.items[1].path, "/tmp/scope/deep/sub")
     var filePane = Fixture.pane("/tmp/base")
     filePane.cursorIndex = 2
     filePane.selection.toggle(1)

@@ -72,6 +72,14 @@ function run(check) {
     ClipMarks.markForRow(home, "IMG_4121.jpg", { paths: [], moving: false })
     check("emptying through markForRow drops it too", ClipMarks._cached, null)
 
+    // A search result is marked by the path it was copied under, the search base, never the pane path.
+    var found = pane("/home/gm/Pictures/phone")
+    found.searchBase = "/home/gm/Pictures"
+    var foundCopy = { paths: ["/home/gm/Pictures/trip/IMG_1.jpg"], moving: false }
+    check("a copied search result carries the copy mark", ClipMarks.markForRow(found, "trip/IMG_1.jpg", foundCopy), "copy")
+    check("a same-named file under the pane path is not the search result",
+          ClipMarks.markForRow(found, "trip/IMG_1.jpg", { paths: ["/home/gm/Pictures/phone/trip/IMG_1.jpg"], moving: false }), "")
+
     // The hoisted guard reads once per clipboard, so no row calls the library while it is empty.
     check("an empty clipboard reads empty through the hoisted helper",
           ClipMarks.isEmpty({ paths: [], moving: false }), true)

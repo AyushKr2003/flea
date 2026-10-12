@@ -3,6 +3,7 @@ import qs.Commons
 import "." as Flea
 import "js/Facts.js" as Facts
 import "js/Kinds.js" as Kinds
+import "js/Search.js" as Search
 import "js/Thumbs.js" as Thumbs
 import "js/ExtThumbs.js" as ExtThumbs
 import "js/MarkdownPrepared.js" as Prepared
@@ -379,11 +380,11 @@ Item {
             show()
     }
 
-    // The row at index while its name under the pane's path is path, else null: how this file identifies a row.
+    // The row at index while its name under the listing's base is path, else null: how this file identifies a row.
     function namedRow(index, path) {
         if (!root.pane || index < 0) return null
         var row = root.pane.rowFor(index)
-        return row !== null && root.pane.join(root.pane.path, row.n) === path ? row : null
+        return row !== null && root.pane.join(Search.baseOf(root.pane), row.n) === path ? row : null
     }
 
     function show(newPath, newIcon, newSize, newKind, newThumb, newRow) {
