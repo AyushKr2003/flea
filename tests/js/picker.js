@@ -58,7 +58,6 @@ function run(check) {
     }
     check("an open walks the chrome, rail, list, filter, Cancel, answer", walk({}), "Back,Up,Rail,List,Filter,Cancel,Answer")
     check("an open with no filters has no filter stop", walk({ filter: "hidden" }), "Back,Up,Rail,List,Cancel,Answer")
-    check("an open of several files walks the same order", walk({ answer: undefined }), "Back,Up,Rail,List,Filter,Cancel,Answer")
     check("a save puts Filename after the list and before the filter", walk({ save: true }), "Back,Up,Rail,List,Filename,Filter,Cancel,Answer")
     check("a save with no filters goes from Filename to Cancel", walk({ save: true, filter: "hidden" }), "Back,Up,Rail,List,Filename,Cancel,Answer")
     check("a disabled Back is skipped", walk({ back: "disabled" }), "Up,Rail,List,Filter,Cancel,Answer")

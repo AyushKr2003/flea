@@ -162,7 +162,9 @@ ShellRoot {
     }
     // The 0.3.10 save area: the column under the listing, the collision review, the marked rows and the Tab walk.
     property bool expectAnswer: false
-    readonly property var saveScenarios: ["collision", "replace", "replace-button", "cancel", "tab", "marked"]
+    readonly property var saveScenarios: ["collision", "replace", "replace-button", "return-twice", "ends", "cancel", "tab", "marked"]
+    property int endAt: 0
+    property string rootPath: ""
     property real listingBefore: 0
     property int objectsBefore: 0
     property var walkOrder: []
@@ -226,6 +228,7 @@ ShellRoot {
                 root.stamp = Date.now()
                 return
             }
+            if (scenario === "ends") { root.rootPath = win.path; root.stage = 20; return }
             root.saveColumn(form)
             root.listingBefore = win.viewItem().height
             root.objectsBefore = root.saveObjects(form)
@@ -243,21 +246,47 @@ ShellRoot {
                 root.stamp = Date.now()
                 return
             }
+            if (scenario === "return-twice") {
+                // A held or bounced Return in the field never answers: the review stands and nothing is sent.
+                root.press(Qt.Key_Return)
+                root.press(Qt.Key_Return)
+                root.stage = 5
+                root.stamp = Date.now()
+                return
+            }
             root.expectAnswer = true
             root.stage = 3
-            if (scenario === "replace") root.press(Qt.Key_Return)
+            // Only Replace itself overwrites: Space or Enter with focus on it.
+            if (scenario === "replace") { root.replaceButton().forceActiveFocus(Qt.TabFocusReason); root.press(Qt.Key_Space) }
             else if (scenario === "replace-button") { root.replaceButton().forceActiveFocus(Qt.TabFocusReason); root.press(Qt.Key_Return) }
             else { root.cancelButton().forceActiveFocus(Qt.TabFocusReason); root.press(Qt.Key_Return) }
             return
         }
+        if (stage === 5) {
+            // Past the backend's answer to a review, which a leaked second Return would have asked for.
+            if (Date.now() - root.stamp < root.settleWaitMs) return
+            root.check("a second Return in the field leaves the review standing and unanswered", [win.answered, win.submitting, win.collisionReview, form.statusItem.visible, root.acceptButton().label], [false, false, true, true, "Replace"])
+            root.check("Return in the field keeps focus and the stem selected", [form.fieldItem.activeFocus, form.fieldItem.selectedText], [true, "a"])
+            root.finish()
+            return
+        }
         if (stage === 2) {
             // The area settles over a few polls, so the geometry is read after them.
-            if (win.saveName !== "x.txt" || Date.now() - root.stamp < root.pollIntervalMs * 5) return
+            // The first poll after the keystroke: the review state is read one frame on, with no settle wait.
+            if (win.saveName !== "x.txt") return
             root.check("typing ends the review in one frame", [form.statusItem.visible, form.statusItem.text, root.acceptButton().label, root.acceptButton().destructive], [false, "", "Save", false])
+            root.stage = 4
+            root.stamp = Date.now()
+            return
+        }
+        if (stage === 4) {
+            // The area settles over a few polls, so the geometry is read after them.
+            if (Date.now() - root.stamp < root.pollIntervalMs * 5) return
             root.check("typing gives the row back to the listing", win.viewItem().height, root.listingBefore)
             root.finish()
             return
         }
+        if (stage === 20 || stage === 21 || stage === 22) { root.endsStep(form); return }
         if (stage === 10) {
             if (win.path.indexOf("/sub") < 0 || win.listingState !== "ready" || !win.saveReady || !root.acceptButton().available) return
             var chrome = root.typed("PickerChrome").focusItems()
@@ -282,14 +311,42 @@ ShellRoot {
             root.finish()
         }
     }
+    // A new folder, a re-list of the same folder and a new place each end a standing review: the folder is walked into from its row,
+    // the watcher's re-read of the folder is its own openWithoutHistory call, and Parent is the new place.
+    function endsStep(form) {
+        if (stage === 20) {
+            if (win.path !== root.rootPath || win.listingState !== "ready" || !win.saveReady || !win.saveCollision) return
+            root.startReview(form)
+            root.stage = 21
+            return
+        }
+        if (stage === 21) {
+            if (!win.collisionReview) return
+            root.check("the review stands before " + ["a folder", "a re-list", "a new place"][root.endAt], [form.statusItem.visible, root.acceptButton().label], [true, "Replace"])
+            if (root.endAt === 0) win.activate(root.rowIndex("sub"))
+            else if (root.endAt === 1) win.openWithoutHistory(win.path)
+            else win.goUp()
+            root.stage = 22
+            return
+        }
+        if (win.listingState !== "ready" || win.path === root.rootPath && root.endAt !== 1) return
+        var what = ["a new folder", "a re-list", "a new place"][root.endAt]
+        root.check(what + " ends the review", [win.collisionReview, win.reviewAsked, form.statusItem.visible, root.acceptButton().label, root.acceptButton().destructive], [false, false, false, "Save", false])
+        root.endAt++
+        if (root.endAt === 3) { root.finish(); return }
+        if (win.path !== root.rootPath) win.open(root.rootPath)
+        root.stage = 20
+    }
     // Three files marked by the picker's own toggle: a marked row takes the selection fill and no accent bar.
     function markedStep() {
-        if (win.viewMode !== "list") { root.finish(); return }
         if (win.markRequest) return
         if (win.marks.length < root.markedFiles) {
             win.toggleMark(root.rowIndex(["a.txt", "b.txt", "c.txt"][win.marks.length]))
             return
         }
+        root.check("the answer reads Open 3", root.acceptButton().label, "Open 3")
+        // The rows' fill is the list's own paint; the grid's tiles keep their marks in the count and the answer.
+        if (win.viewMode !== "list") { root.check("the grid counts the three marks", win.marks.length, root.markedFiles); root.finish(); return }
         var list = win.viewItem()
         var marked = list.itemAtIndex(root.rowIndex("b.txt"))
         var plain = list.itemAtIndex(root.rowIndex("e.txt"))
@@ -303,7 +360,6 @@ ShellRoot {
         root.check("a marked row has no accent wash", fills(marked, Style.selectedAccentFill), 0)
         root.check("a marked row draws no 2 px accent bar", bars(marked), 0)
         root.check("an unmarked row draws neither", [fills(plain, Style.selectionFill), bars(plain)], [0, 0])
-        root.check("the answer reads Open 3", root.acceptButton().label, "Open 3")
         root.finish()
     }
 

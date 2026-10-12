@@ -107,7 +107,10 @@ ShellRoot {
         readonly property string saveKey: JSON.stringify([win.path, win.saveName])
         readonly property bool saveReady: win.saveReview.key === win.saveKey
         readonly property bool saveCollision: win.saveReady && win.saveReview.collision
-        property bool collisionReview: false
+        // Return asked once for a name that exists; the review stands until the name, folder or listing changes.
+        property bool reviewAsked: false
+        // The review is the asked review of a name the backend still reports as taken: Replace, its error line and its role read this alone.
+        readonly property bool collisionReview: win.reviewAsked && win.saveCollision
         readonly property bool submitting: win.acceptMarks || win.reviewRequest > 0
         // Submission keeps Cancel reachable and restores its initiating control only on refusal.
         onSubmittingChanged: chrome.submissionChanged()
@@ -219,7 +222,7 @@ ShellRoot {
 
         function invalidateSave() {
             win.saveReview = ({})
-            win.collisionReview = false
+            win.reviewAsked = false
             win.saveError = ""
             if (win.saving) Qt.callLater(win.probeSave)
         }
@@ -308,8 +311,12 @@ ShellRoot {
                     return
                 }
                 if (!win.saveReady) { win.probeSave(); return }
-                if (win.saveCollision && !win.collisionReview) { win.collisionReview = true; save.selectStem(); return }
-                win.reviewRequest = win.check({op: "review", review: win.saveReview.review})
+                // Return, the field and a file row only ask: the review starts on a taken name and stays until Replace answers.
+                if (win.saveCollision) {
+                    if (!win.reviewAsked) { win.reviewAsked = true; save.selectStem() }
+                    return
+                }
+                win.submitSave()
                 return
             }
             // A folder request with nothing checked takes the directory the window is standing in,
@@ -332,6 +339,14 @@ ShellRoot {
             }
             win.validateMarks(true)
         }
+
+        // Replace is the only answer that overwrites; Enter or Space on it, or a click, arrives here and nothing else does.
+        function replace() {
+            if (win.backendUnavailable || win.submitting || win.markRequest || !win.collisionReview) return
+            win.submitSave()
+        }
+
+        function submitSave() { win.reviewRequest = win.check({op: "review", review: win.saveReview.review}) }
 
         function cancel() {
             win.finish(Picker.RESPONSE_CANCELLED, [])

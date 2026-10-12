@@ -64,7 +64,7 @@ Item {
             primary: !root.picker.collisionReview
             destructive: root.picker.collisionReview
             available: root.picker.canAccept
-            onActivated: root.picker.accept()
+            onActivated: root.picker.collisionReview ? root.picker.replace() : root.picker.accept()
         }
     }
 
