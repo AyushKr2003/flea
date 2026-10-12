@@ -201,8 +201,7 @@ function apply(pane, item, dropped, cursor) {
         pane.clearSelection()
         return
     }
-    // The tab's own dotfile answer is restored above, so the listing keeps it rather than taking the
-    // standing preference. A tab in another view clears at once: these rows were never listed in that view.
+    // The listing keeps the tab's own dotfile answer restored above; a tab in another view clears at once, as its rows were never listed there.
     pane.openWithoutHistory(item.path, { keepHidden: true, clearAtOnce: pane.viewMode !== shown, supersede: true })
     // After the request: letting a listing go clears what an earlier switch owed, and this one is owed to the listing just asked for.
     pane.tabs.pendingCursorName = cursor === undefined ? null : cursor

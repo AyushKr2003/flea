@@ -223,8 +223,7 @@ function availableEntry(e, p, kind) {
         delete e.glyph
         e.submenu = p.taildropPeers || []
         e.disabled = p.taildropRefreshing === true || !e.submenu.length
-        // The row says it cannot answer by being red and by one state word, not by the reason:
-        // a sentence here widened the menu past its own frame while the providers were still being read.
+        // The row says it cannot answer by red and one state word, not the reason: a sentence widened the menu past its frame mid-read.
         if (e.disabled && p.taildropRefreshing !== true) { e.errored = true; e.hint = StateWords.taildrop(p) }
     }
     // Absent rather than greyed when nothing is installed, the Menu board's rule for a row whose

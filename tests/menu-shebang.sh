@@ -21,7 +21,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     FLEA_BIN="$PWD/target/debug/flea" SHEBANG_SCRIPT="$test_root/build.sh" SHEBANG_NOTES="$test_root/notes.txt" \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 timeout 25 qs -p "$test_root/config" 2>&1)
 status=$?
-backend_checks=14
+backend_checks=15
 if [[ "$status" != 143 || $(grep -c 'MENUSHEBANG PASS' <<< "$output") != "$backend_checks" \
     || $(grep -c "MENUSHEBANG DONE checks=$backend_checks failures=0" <<< "$output") != 1 ]] \
     || grep -aqE 'MENUSHEBANG FAIL|WARN|ERROR|TypeError|ReferenceError' <<< "$output"; then
