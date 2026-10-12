@@ -95,11 +95,11 @@ pub enum Step {
     MadeFile { path: PathBuf, identity: ItemIdentity },
     // This operation trashed what was at `original`, and the trash holds it under `uri`.
     Trashed(trash::Entry),
-    // Permissions batch: each step pins dev, inode, birth time and mode, so a replaced path is skipped.
-    Mode { path: PathBuf, before: u32, after: u32, dev: u64, ino: u64, born: Option<(u64, u32)> },
+    // Permissions batch: each step pins dev, inode, birth time, inode generation and mode, so a replaced path is skipped.
+    Mode { path: PathBuf, before: u32, after: u32, dev: u64, ino: u64, born: Option<(u64, u32)>, generation: Option<u64> },
     // A too-big push leaves this payload-free barrier in the shared doc; no window keeps the entry.
     Barrier,
-    Tags { path: PathBuf, before: Option<Vec<u8>>, after: Option<Vec<u8>>, dev: u64, ino: u64, born: Option<(u64, u32)> },
+    Tags { path: PathBuf, before: Option<Vec<u8>>, after: Option<Vec<u8>>, dev: u64, ino: u64, born: Option<(u64, u32)>, generation: Option<u64> },
 }
 
 // The codec bounds an op name, so a barrier truncates an over-long one to fit it.
@@ -545,10 +545,10 @@ pub(crate) fn reverse(step: &Step) -> Result<Option<(ItemIdentity, ItemIdentity)
         }
         Step::MadeFile { path, identity } => remove_new_file(path, identity)?,
         Step::Trashed(entry) => trash::restore(entry)?,
-        Step::Mode { path, before, after, dev, ino, born } => restore_mode(path, *dev, *ino, *born, *after, *before)?,
+        Step::Mode { path, before, after, dev, ino, born, generation } => restore_mode(path, *dev, *ino, (*born, *generation), *after, *before)?,
         // A claimed barrier never reaches a reversal; refusing here keeps it from running as a file.
         Step::Barrier => return Err(FleaError { where_: "undo".into(), path: String::new(), msg: "That operation was too large to undo.".into() }),
-        Step::Tags { path, before, after, dev, ino, born } => super::tagsundo::reverse(path, before, after, (*dev, *ino), *born)?,
+        Step::Tags { path, before, after, dev, ino, born, generation } => super::tagsundo::reverse(path, before, after, (*dev, *ino), (*born, *generation))?,
     }
     Ok(None)
 }
@@ -664,7 +664,7 @@ fn err(msg: &str) -> FleaError {
 }
 
 // A mode undo restores bits through the held no-follow descriptor.
-pub(crate) fn restore_mode(path: &Path, dev: u64, ino: u64, born: Option<(u64, u32)>, expected: u32, target: u32) -> Result<(), FleaError> {
+pub(crate) fn restore_mode(path: &Path, dev: u64, ino: u64, born: super::filegen::Birth, expected: u32, target: u32) -> Result<(), FleaError> {
     super::permissions::chmod_pinned(path, dev, ino, born, expected, target).map_err(|msg| {
         FleaError { where_: "undo".to_string(), path: path.to_string_lossy().to_string(), msg }
     })

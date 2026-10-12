@@ -212,13 +212,13 @@ fn write_all(base: &Path, paths: &[PathBuf], op: &str, tag: &str) -> Written {
             }
         }
         let born = path.symlink_metadata().ok().and_then(|meta| super::permissions::born_of(&meta));
-        befores.push((super::tags::read_raw(path).map_err(missing)?, dev, ino, born));
+        befores.push((super::tags::read_raw(path).map_err(missing)?, dev, ino, (born, super::filegen::of_path(path))));
     }
     let carried: Vec<Vec<String>> =
-        befores.iter().map(|(before, _, _, _)| before.as_ref().map(|raw| super::tags::parse(raw)).unwrap_or_default()).collect();
+        befores.iter().map(|(before, ..)| before.as_ref().map(|raw| super::tags::parse(raw)).unwrap_or_default()).collect();
     let op = resolved(op, tag, &carried);
     let mut steps = Vec::new();
-    for ((path, (before, dev, ino, born)), names) in paths.iter().zip(befores).zip(carried) {
+    for ((path, (before, dev, ino, (born, generation))), names) in paths.iter().zip(befores).zip(carried) {
         let after = match super::tags::apply(&names, op, tag) {
             Ok(after) => after,
             // Unreachable after the caller's validation; rolls back rather than half-applying anyway.
@@ -235,7 +235,7 @@ fn write_all(base: &Path, paths: &[PathBuf], op: &str, tag: &str) -> Written {
             return Err(FleaError { where_: "settags".into(), path: path.to_string_lossy().into(), msg: e.msg });
         }
         let after = (!after.is_empty()).then(|| super::tags::join(&after));
-        steps.push(Step::Tags { path: path.clone(), before, after, dev, ino, born });
+        steps.push(Step::Tags { path: path.clone(), before, after, dev, ino, born, generation });
     }
     Ok((steps.len(), steps, op, skipped))
 }

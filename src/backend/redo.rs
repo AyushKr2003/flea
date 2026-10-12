@@ -216,7 +216,7 @@ fn apply(saved: &ReplayStep, id: usize, index: usize, cancel: &AtomicBool, tx: &
             steps.push(Step::Trashed(trashed.remove(0)));
             Ok(())
         }
-        Step::Tags { path, before, after, dev, ino, born } => super::tagsundo::replay(path, before, after, (*dev, *ino), *born, &saved.step, steps),
+        Step::Tags { path, before, after, dev, ino, born, generation } => super::tagsundo::replay(path, before, after, (*dev, *ino), (*born, *generation), &saved.step, steps),
         Step::Created { path } => Err(error(path, "this operation has no recorded replay source")),
         // A barrier never reaches a replay; refusing here keeps it from running as a file.
         Step::Barrier => Err(error(Path::new(""), "That operation was too large to undo.")),
@@ -232,8 +232,8 @@ fn apply(saved: &ReplayStep, id: usize, index: usize, cancel: &AtomicBool, tx: &
                 kind: kind.clone(), identity: ItemIdentity::inspect(path)? });
             Ok(())
         }
-        Step::Mode { path, before, after, dev, ino, born } => {
-            super::permissions::chmod_pinned(path, *dev, *ino, *born, *before, *after)
+        Step::Mode { path, before, after, dev, ino, born, generation } => {
+            super::permissions::chmod_pinned(path, *dev, *ino, (*born, *generation), *before, *after)
                 .map_err(|msg| error(path, &msg))?;
             steps.push(saved.step.clone());
             Ok(())

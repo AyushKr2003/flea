@@ -91,13 +91,13 @@ fn step(step: &Step) -> Json {
         ]),
         Step::RemovedEmptyDir { path, mode } => super::mergeapply::encode_emptied(path, *mode),
         Step::Trashed(entry) => super::trash::encode_step(entry),
-        Step::Mode { path, before, after, dev, ino, born } => obj(vec![
+        Step::Mode { path, before, after, dev, ino, born, generation } => obj(super::filegen::with_generation(vec![
             ("k", s("pm")), ("path", s(&path.to_string_lossy())), ("before", n(before)), ("after", n(after)),
             ("dev", n(dev)), ("ino", n(ino)), ("born", born_json(*born)),
-        ]),
+        ], *generation)),
         // Sample input: {"k":"barrier"}.
         Step::Barrier => obj(vec![("k", s("barrier"))]),
-        Step::Tags { path, before, after, dev, ino, born } => super::tagsundo::encode(path, before, after, *dev, *ino, *born),
+        Step::Tags { path, before, after, dev, ino, born, generation } => super::tagsundo::encode(path, before, after, *dev, *ino, (*born, *generation)),
     }
 }
 
@@ -303,6 +303,7 @@ fn decode_step(value: &Json) -> Option<Step> {
             dev: get(pairs, "dev").and_then(parse_u64)?,
             ino: get(pairs, "ino").and_then(parse_u64)?,
             born: decode_born(get(pairs, "born")?)?,
+            generation: super::filegen::decode_generation(pairs)?,
         }),
         "local" => None,
         "barrier" => Some(Step::Barrier),

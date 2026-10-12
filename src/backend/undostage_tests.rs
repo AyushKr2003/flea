@@ -56,7 +56,7 @@ pub(super) fn fixture_doc() -> Doc {
         Step::MadeDir { path: path("/a/dir"), identity: identity(4, 2) },
         Step::MadeFile { path: path("/a/file"), identity: plain.clone() },
         Step::Trashed(crate::backend::trash::Entry { original: path("/a/gone"), uri: "trash:///gone\n2".to_string(), before: Vec::new(), trashed_at: String::new() }),
-        Step::Mode { path: path("/a/mode"), before: 0o644, after: 0o600, dev: 9, ino: 10, born: Some((11, 12)) },
+        Step::Mode { path: path("/a/mode"), before: 0o644, after: 0o600, dev: 9, ino: 10, born: Some((11, 12)), generation: None },
     ];
     let replay = Replay::from_steps("copy".to_string(), vec![
         (steps[3].clone(), Some(identity(3, 1)), Some((path("/b"), identity(5, 1)))),

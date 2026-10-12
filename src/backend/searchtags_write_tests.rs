@@ -118,7 +118,7 @@ fn a_slow_mount_write_reaches_the_open_tag_search_through_its_late_message() {
     let path = d.join("plain-holiday.txt");
     crate::backend::tags::write_names(&path, &["Red".to_string()]).expect("tagged");
     let (dev, ino) = crate::backend::tagsundo::identity(&path).expect("identity");
-    let step = crate::backend::undo::Step::Tags { path: path.clone(), before: None, after: Some(crate::backend::tags::join(&["Red".to_string()])), dev, ino, born: None };
+    let step = crate::backend::undo::Step::Tags { path: path.clone(), before: None, after: Some(crate::backend::tags::join(&["Red".to_string()])), dev, ino, born: None, generation: None };
     let late = crate::backend::opsreq::OpMsg::SetTagsDone { id: 1, result: Ok((1, vec![step], "add", Vec::new())) };
     assert!(crate::backend::searchreq::op_write_paths(&late).is_empty(), "no directory patch");
     s.note_tags_written(&crate::backend::searchreq::op_tag_paths(&late));

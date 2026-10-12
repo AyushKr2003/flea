@@ -77,6 +77,7 @@ pub mod rowguard;
 pub mod tags;
 pub mod tagsreq;
 pub mod tagsundo;
+pub mod filegen;
 pub mod run;
 pub mod shelfdrop;
 pub mod timing;
