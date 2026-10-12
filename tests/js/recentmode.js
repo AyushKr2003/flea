@@ -121,6 +121,15 @@ function run(check) {
     check("and asks for the second open's paths behind the first", standing.listed.join(";"), "/home/gm/a.txt,/home/gm/b.txt|200;/home/gm/c.txt|200")
     check("and keeps the way back to where it stood", standing.recentFrom, "/home/gm/Work")
 
+    // A tab switch left its cursor and order for a landing that the history takes the place of.
+    var switched = pane("/home/gm/Work")
+    switched.listInFlight = true
+    switched.tabs = { pendingCursor: 40, pendingCursorName: "x", pendingLocatePath: "/p", pendingSortBy: "size", pendingSortDesc: true }
+    RecentMode.run(switched, ["/home/gm/a.txt"])
+    var owes = switched.tabs
+    check("an open over a tab switch's listing clears what the switch owed",
+          [owes.pendingCursor, owes.pendingCursorName, owes.pendingLocatePath, owes.pendingSortBy, owes.pendingSortDesc].join("|"), "-1||||false")
+
     // A history replaces the standing listing, so a running walk is cancelled.
     var walking = pane("/home/gm/Work")
     walking.searchMode = "results"

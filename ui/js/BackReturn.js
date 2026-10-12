@@ -31,14 +31,22 @@ function dropOwed(pane) {
         Object.assign(pane.tabs, { pendingCursor: -1, pendingCursorName: null, pendingLocatePath: "", pendingSortBy: "", pendingSortDesc: false })
 }
 
-// The departing cursor, or the pending place while a listing is out; leaving a walk names no row, so the landing stays at the top.
-function capture(pane) {
-    var out = pending(pane)
-    if (out)
-        return out
+// The stack a Back or Forward still out pushed the drawn place onto, or "" when the listing out is any other.
+function pushedOnto(pane) {
+    var owed = pending(pane) && pane.swap ? pane.swap.restore : null
+    return owed && owed.pushedOnto ? owed.pushedOnto : ""
+}
+
+// The drawn folder with the cursor row it stands on; leaving a walk names no row, so the landing stays at the top.
+function drawn(pane) {
     var walk = pane.searchMode === "results" || (pane.searchFrom || "").length > 0
     var row = !walk && pane.rowFor ? pane.rowFor(pane.cursorIndex) : null
     return makeEntry(pane.path, row ? row.n : "", walk ? 0 : pane.cursorIndex)
+}
+
+// The departing cursor, or the pending place while a listing is out.
+function capture(pane) {
+    return pending(pane) || drawn(pane)
 }
 
 // One step through the stacks after Nav's guard, popping before the open pushes back.
@@ -47,7 +55,7 @@ function travel(pane, from, to) {
     var target = asEntry(stack[stack.length - 1])
     pane[to] = (pane[to] || []).concat([capture(pane)])
     pane[from] = stack.slice(0, -1)
-    pane.openWithoutHistory(pathOf(target), { restore: target, supersede: true })
+    pane.openWithoutHistory(pathOf(target), { restore: Object.assign({}, target, { pushedOnto: to }), supersede: true })
 }
 
 // The landing in the rows reply's turn: name, then clamped index, then the top.

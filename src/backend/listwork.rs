@@ -50,8 +50,7 @@ pub struct Landed {
 
 type Work = Box<dyn FnOnce() + Send>;
 
-// What became of the scan out: still reading, answered with its Event::List on the way, or let go for a newer list.
-// The worker and the loop each try to leave READING, and whichever does first decides, so a let-go scan never also answers.
+// What became of the scan out (reading, answered with its Event::List, or let go for a newer list); worker and loop each try to leave READING and the first decides, so a let-go scan never also answers.
 const READING: u8 = 0;
 const ANSWERED: u8 = 1;
 const LET_GO: u8 = 2;

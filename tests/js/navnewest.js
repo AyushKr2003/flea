@@ -77,7 +77,23 @@ function run(check) {
     Nav.back(far)
     Nav.back(far)
     Nav.open(far, "/mnt/b")
-    check("an open over a Back that stepped to another place pushes nothing and clears the forward branch", paths(far.history) + "|" + far.forwardHistory.length, "/|0")
+    check("an open over a Back that stepped to another place keeps the drawn place in history and clears the forward branch", paths(far.history) + "|" + far.forwardHistory.length, "/|/home/gm|0")
+
+    // A Back out puts the drawn place on the forward branch an open clears, so the open must keep it in history.
+    var away = pane(["/home/x", "/home/y"])
+    away.path = "/home/z"
+    Nav.back(away)
+    Nav.open(away, "/mnt/w")
+    land(away)
+    check("an open over a Back out keeps the drawn place, not the one never reached, behind the new folder", paths(away.history) + "|" + away.forwardHistory.length, "/home/x|/home/z|0")
+    Nav.back(away)
+    check("and Back from the new folder lands on the drawn place", away.listingPath, "/home/z")
+    var ahead = pane(["/home/x"])
+    ahead.path = "/home/z"
+    ahead.forwardHistory = ["/home/y"]
+    Nav.forward(ahead)
+    Nav.open(ahead, "/mnt/w")
+    check("an open over a Forward out leaves the drawn place pushed once, by the Forward", paths(ahead.history) + "|" + ahead.forwardHistory.length, "/home/x|/home/z|0")
 
     var same = pane(["/"])
     Nav.open(same, "/mnt/a")

@@ -1,5 +1,6 @@
 .pragma library
 
+.import "BackReturn.js" as BackReturn
 .import "DirSizes.js" as DirSizes
 .import "Nav.js" as Nav
 .import "Search.js" as Search
@@ -21,8 +22,10 @@ function refusePaste(pane) {
 // Open keeps where the pane stood and asks the history's paths after the bounded jump; spanning mounts leaves fsinfo unknown.
 function run(pane, paths, visits) {
     // The history takes the place of a listing out; its answer is dropped by the folder it names, see ui/js/Swap.js onListed.
-    if (pane.listInFlight)
+    if (pane.listInFlight) {
         pane.swap.stopWaiting()
+        BackReturn.dropOwed(pane)
+    }
     // The standing order is kept for the way back, not the mtime it replaces.
     if (pane.recentMode.length === 0 && pane.backend) {
         pane.recentSortBy = pane.backend.sortBy

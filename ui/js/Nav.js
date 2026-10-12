@@ -20,12 +20,14 @@ function loading(pane) { return pane.listInFlight && pane.listingState !== "wait
 // While a listing is out, the folder it asked for is the pane's current place for every navigation, and the drawn path only until its answer lands.
 function place(pane) { return pane.listInFlight && !!pane.listingPath ? pane.listingPath : pane.path }
 
-// A new destination discards the forward branch; refreshing the same directory preserves it.
-// A place that never landed is never pushed: while a listing is out for another folder the drawn place was pushed when that listing was asked for.
+// A new destination discards the forward branch and pushes the drawn place unless the listing out already did; a re-read keeps both.
 function open(pane, newPath) {
     if (place(pane).length > 0 && newPath !== place(pane)) {
         if (!BackReturn.pending(pane))
             pane.history = pane.history.concat([BackReturn.capture(pane)])
+        // A Back out pushed the drawn place onto the forward branch cleared below, so history takes it instead.
+        else if (BackReturn.pushedOnto(pane) === "forwardHistory")
+            pane.history = pane.history.concat([BackReturn.drawn(pane)])
         pane.forwardHistory = []
     }
     pane.openWithoutHistory(newPath, { supersede: true })
@@ -101,8 +103,7 @@ function openWithoutHistory(pane, newPath, options) {
     pane.backend.askFsInfo()
 }
 
-// A settled listing stays drawn until the new rows land, see AGENTS.md "The listing swap"; true when held, else forgotten at once.
-// A listing that already fell back to the loading mark keeps it through the newest request, so the mark does not blink off and on.
+// A settled listing stays drawn until the new rows land, see AGENTS.md "The listing swap"; true when held, else forgotten at once, and a fallen-back loading mark stays through the newest request.
 function holdOrForget(pane, ask, keptQuery) {
     var fell = pane.swap.fellBack === true
     var held = pane.swap.hold(ask)

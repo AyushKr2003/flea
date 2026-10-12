@@ -138,9 +138,9 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
         Event::Request(line) => {
             // A list for another folder takes the place of a plain list scan still out, after the requests that waited replay against the listing still current.
             while gate.holds() && listwork::list_path(&line).is_some_and(|path| gate.let_go(&path)) {
-                if listwork::replay(gate, |waiting, gate| handle_line(waiting, out, st, tb, pool, cache, ops, flash, watch, peeks, fsinfo, poller, loop_tx, gate) == Control::Quit) {
-                    return Control::Quit;
-                }
+                let quit = listwork::replay(gate, |waiting, gate| handle_line(waiting, out, st, tb, pool, cache, ops, flash, watch, peeks, fsinfo, poller, loop_tx, gate) == Control::Quit);
+                gate.release_late().into_iter().for_each(|late| watch.abandon_wd(late)); // a local list answers inline, with no Event::List to release them
+                if quit { return Control::Quit; }
             }
             // A scan is out, so a later request cannot be answered against a listing it will replace.
             if gate.holds() {

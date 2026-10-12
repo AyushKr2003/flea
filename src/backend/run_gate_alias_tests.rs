@@ -50,3 +50,33 @@ fn a_let_go_scans_late_abandon_leaves_the_watch_a_newer_scan_of_the_same_folder_
     }
     assert!(live, "A's watch is alive after the first A's late abandon");
 }
+
+// Sample: list B held, list C held (B let go), B's late descriptor parked behind C, then a local list D lets C go and answers inline with no Event::List.
+#[test]
+fn a_local_list_that_lets_a_scan_go_releases_the_late_descriptors_parked_behind_it() {
+    let mut l = Loop::new("rungate-parked");
+    let local = TestDir::new("rungate-parked-local");
+    let (here, b, c) = (l.dir.dir("here"), l.dir.dir("b"), l.dir.dir("c"));
+    let d = local.dir("d");
+    l.dir.file("here/h.txt", "h");
+    l.dir.file("b/b.txt", "b");
+    l.dir.file("c/c.txt", "c");
+    local.file("d/d.txt", "d");
+    let _body = crate::backend::iomount::test_hold_body(remote_body(l.dir.path()));
+    assert!(l.request(&list(&here)) == Control::Continue);
+    let landed = l.wait(is_list);
+    assert!(l.feed(landed) == Control::Continue);
+    let (hold_b, hold_c) = (scanhold::hold(&text(&b), Stage::Read), scanhold::hold(&text(&c), Stage::Read));
+    assert!(l.request(&list(&b)) == Control::Continue);
+    hold_b.entered.recv_timeout(EVENT_DEADLINE).expect("B's scan armed its watch and is held at its read");
+    assert!(l.request(&list(&c)) == Control::Continue);
+    hold_c.entered.recv_timeout(EVENT_DEADLINE).expect("C's scan is out and held, B's was let go");
+    drop(hold_b);
+    let late = l.wait(|event| matches!(event, Event::AbandonWatch(_)));
+    assert!(l.feed(late) == Control::Continue);
+    assert!(l.gate.holds(), "C is still out while B's descriptor arrives, so it waits");
+    assert!(l.request(&list(&d)) == Control::Continue);
+    assert!(!l.gate.holds() && l.st.base == d, "the local list let C go and answered inline");
+    assert!(l.gate.release_late().is_empty(), "no scan is out, so B's descriptor was released with the let-go and nothing is left parked");
+    drop(hold_c);
+}
