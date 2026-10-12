@@ -30,7 +30,7 @@ Item {
 
     // The drop destination this delegate last recorded on the session, kept so leaving clears only its own record.
     property string recorded: ""
-    // False where the view answers drops from one shared area, so the row builds no DropArea.
+    // False where the view answers drops from one shared area, so the row's own area stays disabled.
     property bool dropsLocal: true
 
     anchors.fill: parent
@@ -52,20 +52,16 @@ Item {
         onCentroidChanged: if (active) root.session.liftMoved(lift.centroid)
     }
 
-    // Built with the row where per-row areas answer, unbuilt where one shared area answers.
-    Loader {
+    // The row's own area answers where dropsLocal holds; a view with one shared area leaves this one inert. No Loader stands in front of it: a Loader would add an object to every list row for a grid tile's saving.
+    DropArea {
         anchors.fill: parent
-        active: root.dropsLocal
-        sourceComponent: DropArea {
-            anchors.fill: parent
-            // A peek row takes drops only as a folder, through its dropScope; without one it would aim the drop at the pane's own folder.
-            enabled: root.pane !== null || (root.dropScope !== null && !!root.row && root.row.d === true && root.targetPane !== null && !root.targetPane.listInFlight)
-            keys: [DragOps.ROWS_MIME, "text/uri-list", "text/plain"]
-            onEntered: function (drag) { root.enterAt(drag, drag) }
-            onPositionChanged: function (drag) { root.moveAt(drag) }
-            onExited: root.leaveRow()
-            onDropped: function (drop) { root.dropAt(drop) }
-        }
+        // A peek row takes drops only as a folder, through its dropScope; without one it would aim the drop at the pane's own folder.
+        enabled: root.dropsLocal && (root.pane !== null || (root.dropScope !== null && !!root.row && root.row.d === true && root.targetPane !== null && !root.targetPane.listInFlight))
+        keys: [DragOps.ROWS_MIME, "text/uri-list", "text/plain"]
+        onEntered: function (drag) { root.enterAt(drag, drag) }
+        onPositionChanged: function (drag) { root.moveAt(drag) }
+        onExited: root.leaveRow()
+        onDropped: function (drop) { root.dropAt(drop) }
     }
 
     // A drop area's entrance, at a point in this row's own coordinates: the per-row area passes its drag, a shared one the mapped point.

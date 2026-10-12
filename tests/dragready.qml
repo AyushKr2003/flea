@@ -1,7 +1,7 @@
 import QtQuick
 import "js/sourcefixture.js" as Source
 
-// Grid lift readiness: every tile builds its lift path in the landing turn, while only views keeping per-row drop areas build a DropArea (ui/RowDrag.qml).
+// Grid lift readiness: every tile builds its lift path in the landing turn, while only views keeping per-row drop areas arm the DropArea (ui/RowDrag.qml), which holds no Loader.
 Item {
     id: root
     property int checked: 0
@@ -22,13 +22,15 @@ Item {
                                          parent, Qt.resolvedUrl("../ui/js/RowDrag.qml"))
         return wrapper.made.createObject(parent, properties)
     }
-    function hasDropArea(item) {
+    // The row's DropArea, wherever it sits under the item.
+    function dropAreaIn(item) {
         var kids = item.children || []
         for (var j = 0; j < kids.length; j++) {
-            if (kids[j] && kids[j].keys !== undefined && kids[j].drag !== undefined) return true
-            if (root.hasDropArea(kids[j])) return true
+            if (kids[j] && kids[j].keys !== undefined && kids[j].drag !== undefined) return kids[j]
+            var deeper = root.dropAreaIn(kids[j])
+            if (deeper) return deeper
         }
-        return false
+        return null
     }
     // The lift handler builds with the row: DragHandler precedes any Loader in RowDrag,
     // and the grid delegate holds RowDrag outside any Loader.
@@ -89,8 +91,9 @@ Item {
         }
         root.check("lift handler builds with the tile", root.liftBuiltIn(), true)
         root.check("slim tile keeps its lift gate", slim.enabled, true)
-        root.check("local tile builds a drop area", root.hasDropArea(full), true)
-        root.check("shared-area tile builds none", root.hasDropArea(slim), false)
+        root.check("local tile arms its drop area", root.dropAreaIn(full) !== null && root.dropAreaIn(full).enabled, true)
+        root.check("shared-area tile leaves its own inert", root.dropAreaIn(slim) !== null && root.dropAreaIn(slim).enabled, false)
+        root.check("no Loader stands in front of the area", Source.source("ui/RowDrag.qml").indexOf("Loader {") < 0, true)
         root.check("drop API answers", typeof full.enterAt === "function" && typeof full.leaveAt === "function"
                   && typeof full.moveAt === "function" && typeof full.dropAt === "function", true)
         console.log("dragready: " + root.checked + " checks, " + root.failed + " failed")

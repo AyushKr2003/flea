@@ -1,5 +1,5 @@
 #!/bin/bash
-# The grid's first press-move after a cold landing starts the drag: the lift handler builds with the tile while the shared drop area lets it skip its own DropArea.
+# The grid's first press-move after a cold landing starts the drag: the lift handler builds with the tile, and the shared drop area leaves the tile's own DropArea disabled.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 # The grid delegate opts out of the per-row area; the list and columns rows keep it.

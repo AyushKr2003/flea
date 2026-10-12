@@ -140,7 +140,7 @@ ui/ColumnRow.qml	279	markContent	Declared QML id; component context access is va
 ui/ColumnRow.qml	279	markContent	Declared QML id; component context access is valid at runtime.
 ui/ColumnRow.qml	279	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnRow.qml	282	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnRow.qml	313	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnRow.qml	319	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnsArea.qml	397	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnsArea.qml	397	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnsArea.qml	397	root	Declared QML id; component context access is valid at runtime.
@@ -1687,16 +1687,6 @@ ui/Row.qml	289	root	Declared QML id; component context access is valid at runtim
 ui/Row.qml	290	root	Declared QML id; component context access is valid at runtime.
 ui/Row.qml	302	root	Declared QML id; component context access is valid at runtime.
 ui/Row.qml	303	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	62	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	62	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	62	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	62	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	62	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	62	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	64	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	65	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	66	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	67	root	Declared QML id; component context access is valid at runtime.
 ui/Scripts.qml	48	root	Declared QML id; component context access is valid at runtime.
 ui/Scripts.qml	48	root	Declared QML id; component context access is valid at runtime.
 ui/Scripts.qml	48	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
@@ -2308,7 +2298,7 @@ ui/ColumnRow.qml	279	markContent	Declared QML id; component context access is va
 ui/ColumnRow.qml	279	markContent	Declared QML id; component context access is valid at runtime.
 ui/ColumnRow.qml	279	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnRow.qml	282	root	Declared QML id; component context access is valid at runtime.
-ui/ColumnRow.qml	313	root	Declared QML id; component context access is valid at runtime.
+ui/ColumnRow.qml	319	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnsArea.qml	397	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnsArea.qml	397	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnsArea.qml	397	root	Declared QML id; component context access is valid at runtime.
@@ -3216,16 +3206,6 @@ ui/Row.qml	289	root	Declared QML id; component context access is valid at runtim
 ui/Row.qml	290	root	Declared QML id; component context access is valid at runtime.
 ui/Row.qml	302	root	Declared QML id; component context access is valid at runtime.
 ui/Row.qml	303	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	62	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	62	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	62	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	62	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	62	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	62	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	64	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	65	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	66	root	Declared QML id; component context access is valid at runtime.
-ui/RowDrag.qml	67	root	Declared QML id; component context access is valid at runtime.
 ui/SettingsPane.qml	152	root	Declared QML id; component context access is valid at runtime.
 ui/SettingsPane.qml	153	root	Declared QML id; component context access is valid at runtime.
 ui/SettingsPane.qml	159	root	Declared QML id; component context access is valid at runtime.
