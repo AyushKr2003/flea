@@ -48,6 +48,7 @@ function pane(path) {
         if (!options || options.keepHidden !== true)
             p.showHidden = p.preferenceHidden === true
         p.clearedAtOnce = !!options && options.clearAtOnce === true
+        p.superseded = !!options && options.supersede === true
         p.listed.push(next)
         p.path = next
         p.cursorIndex = 0

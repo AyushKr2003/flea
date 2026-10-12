@@ -28,7 +28,7 @@ function standing(names, index, history) {
     p.cursorIndex = index
     p.listingPath = "/home/gm/Work"
     // ui/PaneSwap.qml hold(): every listing arms the travel's restore, any other listing clears it.
-    p.swap = { restore: null,
+    p.swap = { restore: null, stopWaiting: function () {},
         hold: function (ask) { p.swap.restore = ask.restore || null; return false } }
     p.rowFor = function (i) { return p.rows[i - p.held] || null }
     p.join = function (base, name) { return base + "/" + name }
@@ -63,7 +63,7 @@ function windowed(history) {
     p.selectionVersion = 0
     p.sentLocate = []
     p.sentWindow = []
-    p.swap = { restore: null, phase: { listed: null },
+    p.swap = { restore: null, phase: { listed: null }, stopWaiting: function () {},
         hold: function (ask) { p.swap.restore = ask.restore || null; return false } }
     p.rowFor = function (i) { var o = i - p.held; return o >= 0 && o < p.rows.length ? p.rows[o] : null }
     p.join = function (base, name) { return base === "/" ? "/" + name : base + "/" + name }
@@ -119,7 +119,7 @@ function run(check) {
     check("back preserves the departed directory for forward",
         travel.forwardHistory.map(BackReturn.pathOf).join("|"), "/home/gm/Work")
     Nav.forward(travel)
-    check("forward while loading preserves the destination", travel.forwardHistory.length, 1)
+    check("forward while loading is taken from the place asked for", travel.forwardHistory.length + "|" + travel.history.map(BackReturn.pathOf).join("|"), "0|/home/gm")
     travel.listInFlight = false
     Nav.forward(travel)
     check("forward returns to the departed directory", travel.path, "/home/gm/Work")

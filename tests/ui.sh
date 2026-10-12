@@ -10182,7 +10182,36 @@ case_hanglisting() {
         || fail "hanglisting: Up put the cursor on $up_name, not the waited folder"
     shot hanglisting-up
 
-    printf 'HANGLISTING deadline=ok rows-land-after=ok wait-escape=ok late-rows-dropped=ok reload-escape=ok up-climb=ok\n'
+    # Inside the wait a rail click is the newest request: it is taken, not refused, and the held listing's late rows never draw over it.
+    export FLEA_HANGLISTING_MARKER="$dir/newest-delayed" FLEA_HANGLISTING_DELAY=4
+    flea_bin="$dir/flea-proxy"
+    launch "$dir"
+    flea_bin="$real_bin"
+    wait_marker "$dir/newest-delayed" "hanglisting: the proxy never held the fifth listing"
+    held_at=$(date +%s%3N)
+    sleep 1
+    [[ "$(ipc listInFlight)" == "true" && "$(ipc state)" != "waiting" ]] \
+        || fail "hanglisting: the fifth listing is not out inside the wait, state is $(ipc state)"
+    click_rail_row "$(rail_row_of Home)" left
+    sleep 0.3
+    [[ "$(ipc stateMessage)" != "A directory is already loading." ]] \
+        || fail "hanglisting: a rail click inside the wait was refused with $(ipc stateMessage)"
+    escape_by=$(( $(date +%s%3N) + 10000 ))
+    seen_path=""
+    while (( $(date +%s%3N) < escape_by )); do
+        seen_path=$(ipc path 2>/dev/null || true)
+        [[ "$seen_path" == "$home_path" ]] && break
+        sleep 0.2
+    done
+    [[ "$seen_path" == "$home_path" ]] \
+        || fail "hanglisting: Home never landed inside the wait, path is $seen_path"
+    late_by=$(( held_at + FLEA_HANGLISTING_DELAY * 1000 + 2000 ))
+    while (( $(date +%s%3N) < late_by )); do sleep 0.2; done
+    [[ "$(ipc path)" == "$home_path" && -z "$(ipc stateMessage)" ]] \
+        || fail "hanglisting: the late rows drew over Home: $(ipc path) with $(ipc stateMessage)"
+    export FLEA_HANGLISTING_DELAY=15
+
+    printf 'HANGLISTING deadline=ok rows-land-after=ok wait-escape=ok late-rows-dropped=ok reload-escape=ok up-climb=ok newest-wins=ok\n'
     kill_flea
 }
 

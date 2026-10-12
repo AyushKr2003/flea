@@ -136,6 +136,12 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
                       poller: &super::watchpoll::Poller, loop_tx: &Sender<Event>, gate: &mut Gate) -> Control {
     match event {
         Event::Request(line) => {
+            // A list for another folder takes the place of a plain list scan still out, after the requests that waited replay against the listing still current.
+            while gate.holds() && listwork::list_path(&line).is_some_and(|path| gate.let_go(&path)) {
+                if listwork::replay(gate, |waiting, gate| handle_line(waiting, out, st, tb, pool, cache, ops, flash, watch, peeks, fsinfo, poller, loop_tx, gate) == Control::Quit) {
+                    return Control::Quit;
+                }
+            }
             // A scan is out, so a later request cannot be answered against a listing it will replace.
             if gate.holds() {
                 gate.defer(line);
@@ -154,15 +160,9 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
                 // A walk that landed during a session's folder scan is announced after that folder answer.
                 on_search_walked(out, st, tb, pool);
             }
-            while !gate.holds() {
-                match gate.next() {
-                    None => break,
-                    Some(line) => {
-                        if handle_line(&line, out, st, tb, pool, cache, ops, flash, watch, peeks, fsinfo, poller, loop_tx, gate) == Control::Quit {
-                            return Control::Quit;
-                        }
-                    }
-                }
+            gate.release_late().into_iter().for_each(|late| watch.abandon_wd(late)); // judged against the watch that landed
+            if listwork::replay(gate, |waiting, gate| handle_line(waiting, out, st, tb, pool, cache, ops, flash, watch, peeks, fsinfo, poller, loop_tx, gate) == Control::Quit) {
+                return Control::Quit;
             }
             // stdin closed while the scan was out: the listing was answered first, so now leave.
             if gate.closed() && gate.idle() {
@@ -206,8 +206,8 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
         Event::PeekArmed(wd, path) => peeks.register(wd, path),
         Event::PeekChanged(wd) => if let Some(path) = peeks.path_of(wd) { say(out, &changed_line(path)) },
         Event::PeekGone(wd) => peeks.forget(wd),
-        // A late list worker's descriptor goes unless a re-list aliased it onto the live watch.
-        Event::AbandonWatch(wd) => watch.abandon_wd(wd),
+        // A late list worker's descriptor goes unless a re-list aliased it onto the live watch, which a scan still out may not have committed yet.
+        Event::AbandonWatch(wd) => gate.park_late(wd).into_iter().for_each(|late| watch.abandon_wd(late)),
         Event::Op(m) => {
             if let Some(session) = st.search_session.as_mut() {
                 // An own write under the scope patches the index, and a due batch re-runs the standing query.

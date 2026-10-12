@@ -232,7 +232,7 @@ function run(check) {
     Focus.act("escape", typing)
     check("esc while the query line has the caret closes it", typing.filterTyping, false)
 
-    // A hop out of Recent while a listing is out is refused before the mode is touched.
+    // A hop out of Recent while a listing is out is the newest request; a reveal, which opens a row, still refuses.
     var held = escaper("", 0)
     held.focusView = "list"
     held.recentMode = "results"
@@ -245,9 +245,9 @@ function run(check) {
     held.openWithoutHistory = function (next) { held.opened.push(next) }
     held.backend = { sortBy: "name", sortDesc: false }
     Focus.act("escape", held)
-    check("Escape refuses the hop out of Recent while a listing is out", held.said, "A directory is already loading.")
-    check("and keeps the mode standing", held.recentMode + "|" + held.recentFrom, "results|/home/gm/Work")
-    check("and asks for nothing", held.opened.length, 0)
+    check("Escape takes the hop out of Recent while a listing is out", held.said, "")
+    check("and spends the mode and the way back", held.recentMode + "|" + held.recentFrom, "|")
+    check("and asks for the folder it was opened over", held.opened.join(","), "/home/gm/Work")
     var stuck = escaper("", 0)
     stuck.recentMode = "results"
     stuck.listInFlight = true
@@ -266,11 +266,11 @@ function run(check) {
     check("and keeps the mode standing", stuck.recentMode, "results")
     check("and asks for nothing", stuck.opened.length, 0)
 
-    // Pane.qml's own Back, Up and re-list entries refuse the same hop before touching the mode.
+    // Pane.qml's own Back and Up close Recent without a guard, and a re-list refuses before it clears.
     var backLine = Source.slice(Source.source("ui/Pane.qml"), "function goBack()", "function goForward()")
-    check("goBack refuses before it closes", backLine.indexOf("root.listInFlight") >= 0, true)
+    check("goBack closes Recent whatever is out", backLine.indexOf("root.listInFlight") < 0 && backLine.indexOf("RecentMode.close(root)") >= 0, true)
     var upLine = Source.slice(Source.source("ui/Pane.qml"), "function openParent()", "function openRecent(paths, visits)")
-    check("openParent refuses before it closes", upLine.indexOf("root.listInFlight") >= 0, true)
+    check("openParent closes Recent whatever is out", upLine.indexOf("root.listInFlight") < 0 && upLine.indexOf("RecentMode.close(root)") >= 0, true)
     var relist = Source.slice(Source.source("ui/Pane.qml"), "function openWithoutHistory(newPath, options)", "function toggleHidden()")
     check("a re-list refuses before it clears",
           relist.indexOf("if (root.listInFlight)") >= 0 && relist.indexOf("if (root.listInFlight)") < relist.indexOf("RecentMode.leave(root)"), true)

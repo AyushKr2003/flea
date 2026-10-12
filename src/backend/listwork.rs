@@ -1,7 +1,7 @@
 // Issue 144: a remote list scans on one kept thread and answers as an event, and requests that arrive meanwhile wait in `Gate` and replay in order; a local list runs inline.
 use crate::backend::events::Event;
 use crate::backend::iomount::{internal_failure, ListErr, ListOut};
-use crate::backend::proto::{error_line, error_line_with_mode};
+use crate::backend::proto::{error_line, error_line_with_mode, parse_request, Request};
 use crate::backend::run::{adopt_listed, adopt_session, forget_rows};
 use crate::backend::searchreq::{finish_search, searched_gen_line};
 use crate::backend::state::{Held, State, Tables};
@@ -11,6 +11,7 @@ use std::collections::VecDeque;
 use std::io::Write;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::mpsc::{channel, SendError, Sender};
 use std::sync::Arc;
 use std::thread;
@@ -49,21 +50,31 @@ pub struct Landed {
 
 type Work = Box<dyn FnOnce() + Send>;
 
+// What became of the scan out: still reading, answered with its Event::List on the way, or let go for a newer list.
+// The worker and the loop each try to leave READING, and whichever does first decides, so a let-go scan never also answers.
+const READING: u8 = 0;
+const ANSWERED: u8 = 1;
+const LET_GO: u8 = 2;
+
 // What waits for a scan: the job, the requests behind it, and the watch bursts seen before the new descriptor is known.
 pub struct Gate {
     // The loop's channel: the scan answers on it and its worker hands a late watch descriptor back on it.
     answers: Sender<Event>,
     // The one thread every remote scan runs on, started by the first remote list, so no later list pays a thread start.
     scanner: Option<Sender<Work>>,
+    // The newest scan's fate, shared with its worker.
+    fate: Arc<AtomicU8>,
     job: Option<Job>,
     deferred: VecDeque<String>,
     changes: Vec<i32>,
+    // Descriptors a let-go scan handed back while another scan was out; inotify gives the same one for the same folder.
+    late: Vec<i32>,
     closed: bool,
 }
 
 impl Gate {
     pub fn new(answers: Sender<Event>) -> Gate {
-        Gate { answers, scanner: None, job: None, deferred: VecDeque::new(), changes: Vec::new(), closed: false }
+        Gate { answers, scanner: None, fate: Arc::new(AtomicU8::new(ANSWERED)), job: None, deferred: VecDeque::new(), changes: Vec::new(), late: Vec::new(), closed: false }
     }
 
     // True while a scan is out, which is when a request cannot be answered against the listing it will replace.
@@ -80,14 +91,36 @@ impl Gate {
         self.job = Some(job);
     }
 
+    // Lets a plain list scan of another folder go so a newer list starts at once; false when none is out, it answers a search session, or its answer is already on the way.
+    pub fn let_go(&mut self, path: &str) -> bool {
+        let plain = self.job.as_ref().is_some_and(|job| job.session.is_none() && job.path != path);
+        if !plain || self.fate.compare_exchange(READING, LET_GO, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+            return false;
+        }
+        self.job = None;
+        // The let-go thread ends with its read, and the next remote list starts a fresh one.
+        self.scanner = None;
+        true
+    }
+
     // Runs the scan on the kept thread; it answers exactly once, a panic included, or the gate would hold for good.
     fn scan(&mut self, path: String, work: impl FnOnce(Sender<Event>) -> Result<ListOut, ListErr> + Send + 'static) {
         let (answers, loop_tx) = (self.answers.clone(), self.answers.clone());
+        let fate = Arc::new(AtomicU8::new(READING));
+        self.fate = Arc::clone(&fate);
         let run: Work = Box::new(move || {
             let result = catch_unwind(AssertUnwindSafe(|| work(loop_tx))).unwrap_or_else(|_| {
                 Err(ListErr { error: internal_failure("scan", Path::new(&path)), mode: 0, watch_wd: -1 })
             });
-            let _ = answers.send(Event::List(Done { result }));
+            if fate.compare_exchange(READING, ANSWERED, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+                let _ = answers.send(Event::List(Done { result }));
+                return;
+            }
+            // Let go for a newer list: nothing is answered, and the watch this scan armed goes back to the loop.
+            let wd = match &result { Ok(listed) => listed.watch_wd, Err(failed) => failed.watch_wd };
+            if wd >= 0 {
+                let _ = answers.send(Event::AbandonWatch(wd));
+            }
         });
         let scanner = self.scanner.get_or_insert_with(|| {
             let (jobs, queue) = channel::<Work>();
@@ -121,6 +154,17 @@ impl Gate {
         std::mem::take(&mut self.changes)
     }
 
+    // A late descriptor comes back at once with the ones that waited, or waits while a scan is out that may have armed the same one.
+    pub fn park_late(&mut self, wd: i32) -> Vec<i32> {
+        self.late.push(wd);
+        self.release_late()
+    }
+
+    // The descriptors that waited, once no scan is out.
+    pub fn release_late(&mut self) -> Vec<i32> {
+        if self.holds() { Vec::new() } else { std::mem::take(&mut self.late) }
+    }
+
     pub fn close(&mut self) {
         self.closed = true;
     }
@@ -133,6 +177,25 @@ impl Gate {
     pub fn idle(&self) -> bool {
         self.job.is_none() && self.deferred.is_empty()
     }
+}
+
+// The folder a `list` request names, None for any other line.
+pub fn list_path(line: &str) -> Option<String> {
+    match parse_request(line) {
+        Request::List { path, .. } => Some(path),
+        _ => None,
+    }
+}
+
+// Replays the requests that waited, in order, until one starts a scan or none is left; true when one asked the loop to quit.
+pub fn replay(gate: &mut Gate, mut handle: impl FnMut(&str, &mut Gate) -> bool) -> bool {
+    while !gate.holds() {
+        let Some(line) = gate.next() else { break };
+        if handle(&line, gate) {
+            return true;
+        }
+    }
+    false
 }
 
 // How start answered: inline runs list_dir on the loop, remote on the kept scan thread.

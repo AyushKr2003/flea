@@ -416,7 +416,7 @@ FocusScope {
     property bool systemVolume: false
 
     // Back and up close Recent rather than travelling; forward stays put outside the history.
-    function goBack() { if (root.flashActive) root.overlayParent.closeFlash(); else if (trashHost.opened) trashHost.close(); else if (root.recentMode.length > 0) { if (root.listInFlight) root.message("A directory is already loading.", false); else RecentMode.close(root) } else Nav.back(root) }
+    function goBack() { if (root.flashActive) root.overlayParent.closeFlash(); else if (trashHost.opened) trashHost.close(); else if (root.recentMode.length > 0) RecentMode.close(root); else Nav.back(root) }
     function goForward() { if (!trashHost.opened && !root.flashActive && root.recentMode.length === 0) Nav.forward(root) }
 
     // Rename lives in ui/js/Ops.js with the other write operations; ui/List.qml's editor commits through this.
@@ -495,24 +495,24 @@ FocusScope {
             Nav.openPlace(root, home)
     }
 
-    // A refused hop clears nothing: Nav refuses while a listing is out, and Recent's rows must survive it.
+    // A refused hop clears nothing: only a navigation takes the place of a listing out, and Recent's rows must survive a re-list that does not.
     function openWithoutHistory(newPath, options) {
         // Only a navigation lets a waiting listing go; an in-place re-list of the folder being left keeps it.
         if (!options || options.inPlace !== true) Anchor.clearWaiting(root)
-        if (root.listInFlight) {
+        // Only a navigation takes the place of a listing out, and the folder asked for last has its own wait, not the first one's clock.
+        if (root.listInFlight && (!options || options.supersede !== true)) {
             root.message("A directory is already loading.", false)
             return
         }
+        if (root.listInFlight) listingWait.restart()
         // Every real navigation leaves Recent, Trash and Flash; options.inPlace, a re-list of this folder, leaves Trash up.
         if (!options || options.inPlace !== true) { trashHost.close(); if (root.flashActive) root.overlayParent.closeFlash() }
         RecentMode.leave(root)
-        if (!root.listInFlight) {
-            var applied = root.appliedListingPreferences ? JSON.parse(root.appliedListingPreferences) : []
-            // Search exit can enter here before the preferences timer consumes a deferred Settings change.
-            if (JSON.stringify(applied[1]) !== JSON.stringify(ViewState.state.sort)) root.backend.resetSort(newPath)
-            // options.keepHidden is the tab restore's alone: it just put back this tab's own dotfile answer, which the standing preference would overwrite.
-            if (!options || options.keepHidden !== true) root.showHidden = ViewState.state.hidden === true
-        }
+        var applied = root.appliedListingPreferences ? JSON.parse(root.appliedListingPreferences) : []
+        // Search exit can enter here before the preferences timer consumes a deferred Settings change.
+        if (JSON.stringify(applied[1]) !== JSON.stringify(ViewState.state.sort)) root.backend.resetSort(newPath)
+        // options.keepHidden is the tab restore's alone: it just put back this tab's own dotfile answer, which the standing preference would overwrite.
+        if (!options || options.keepHidden !== true) root.showHidden = ViewState.state.hidden === true
         Nav.openWithoutHistory(root, newPath, options)
     }
 
@@ -792,7 +792,7 @@ FocusScope {
     // Quoted when it holds whitespace, because this one is pasted into a shell: see ui/js/Format.js.
     function copyDirPath() { wire.opener.copyText(Format.shellQuoted(root.path)) }
 
-    function openParent() { if (root.flashActive) root.overlayParent.closeFlash(); else if (trashHost.opened) trashHost.close(); else if (root.recentMode.length > 0) { if (root.listInFlight) root.message("A directory is already loading.", false); else RecentMode.close(root) } else Nav.parent(root) }
+    function openParent() { if (root.flashActive) root.overlayParent.closeFlash(); else if (trashHost.opened) trashHost.close(); else if (root.recentMode.length > 0) RecentMode.close(root); else Nav.parent(root) }
 
     // The sort Recent replaced, handed back on leaving; ui/js/Search.js reaches it through here.
     function restoreRecentSort() { RecentMode.restoreSort(root) }

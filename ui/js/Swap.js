@@ -11,7 +11,7 @@ var HOLD_MS = 150
 // A drawn loading state stands this long before content replaces it; under 100 ms the two changes read as one blink.
 var MIN_SHOW_MS = 100
 
-// Answered while a listing is out: the navigations refuse themselves, escape touches no row, the rest change the window.
+// Answered while a listing is out: the navigations take its place, escape touches no row, the rest change the window.
 var ANSWERED_WHILE_LISTING = ["open", "parent", "historyBack", "historyForward", "escape",
                               "viewList", "viewColumns", "viewGrid", "sidebar", "windowNew", "togglePreview",
                               "reload"]
@@ -122,9 +122,11 @@ function ended(state) {
     return Object.assign({}, state, { holding: false, listed: null, fellBack: false, waits: false, relist: false })
 }
 
-// A stale or window refusal ended only its own request; any other failure ends the listing, letting held rows go while it is still out.
-function failListing(pane, where) {
+// A stale or window refusal ended only its own request, and so does a scan failure naming a folder no longer asked for; any other failure ends the listing, letting held rows go while it is still out.
+function failListing(pane, where, path) {
     if (where === "stale" || where === "window")
+        return false
+    if (where === "scan" && !!path && path !== pane.listingPath)
         return false
     // An Esc relist that died leaves no cursor file armed for whatever listing comes next.
     if (pane.swap.phase.relist === true)
