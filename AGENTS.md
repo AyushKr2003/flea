@@ -9015,4 +9015,4 @@ The shared prebuild driver (`ui/PrebuildDriver.qml`, 146 lines, under the QML ca
 
 The key log's tick cap check moves one ceiling, re-derived with `wc -l`: `tests/columnsprebuild.qml` 415 to 416 for the check that fails once the tick log reaches `keepTicks`, where a key's stored tick index no longer holds.
 
-The home Trash cancel fix moves one ceiling, re-derived with `wc -l`: `src/backend/copyfile.rs` 732 to 734 for the test-only hook that raises the copy's own cancel after its first chunk lands, so a mid-copy cancel in `place_copy` is deterministic.
+The home Trash cancel fix moves one ceiling, re-derived with `wc -l`: `src/backend/copyfile.rs` 732 to 734 (the file grows from 719 lines, 13 under its old ceiling, to 734) for the test-only hook that raises the copy's own cancel after its first chunk lands, so a mid-copy cancel in `place_copy` is deterministic.
