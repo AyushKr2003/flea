@@ -665,6 +665,8 @@ def stub_allowances():
         ('tests/js/tabs-switch.js', 'listed'): 'Records list or open requests.',
         ('tests/js/tabs-switch.js', 'preferenceHidden'): 'Simulates external ViewState.hidden in the stub listing.',
         ('tests/js/tabs-switch.js', 'sorted'): 'Records backend.sort calls.',
+        ('tests/js/tabs-switch.js', 'superseded'): 'Resets the flag the stub openWithoutHistory records for supersede.',
+        ('tests/js/tabs.js', 'superseded'): 'Resets the flag the stub openWithoutHistory records for supersede.',
         ('tests/js/tabsfixture.js', 'clearedAtOnce'): 'Records openWithoutHistory clearAtOnce options.',
         ('tests/js/tabsfixture.js', 'listed'): 'Records list or open requests.',
         ('tests/js/tabsfixture.js', 'preferenceHidden'): 'Simulates the external ViewState.hidden preference during a stub listing.',

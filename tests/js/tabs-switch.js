@@ -176,5 +176,7 @@ function run(check) {
     Tabs.closeAt(direct, 1)
     check("a direct close while loading closes the tab, refusing nothing", Tabs.count(direct) + "|" + direct.said.join(""), "1|")
     check("and the surviving tab is current, listed over the one out", Tabs.currentIndex(direct) + "|" + direct.path + "|" + direct.superseded, "0|/tmp/one|true")
-    check("and the closed tab's late listed line is dropped, the surviving tab's is not", Swap.onListed({}, true, "/tmp/two", direct.listingPath, false) + "|" + (Swap.onListed({}, true, "/tmp/one", direct.listingPath, false) !== Swap.DROP), Swap.DROP + "|true")
+    // The path the fixture's openWithoutHistory received from Tabs.closeAt, not the listingPath the stub wrote.
+    var asked = direct.listed[direct.listed.length - 1]
+    check("and the closed tab's late listed line is dropped, the surviving tab's is not", Swap.onListed({}, true, "/tmp/two", asked, false) + "|" + (Swap.onListed({}, true, asked, asked, false) !== Swap.DROP), Swap.DROP + "|true")
 }

@@ -95,6 +95,14 @@ function run(check) {
     Nav.open(ahead, "/mnt/w")
     check("an open over a Forward out leaves the drawn place pushed once, by the Forward", paths(ahead.history) + "|" + ahead.forwardHistory.length, "/home/x|/home/z|0")
 
+    // A Forward stacked on a Back out re-reads the drawn folder, so the open pushes the drawn place from the pane itself.
+    var stacked = pane(["/home/x", "/home/y"])
+    stacked.path = "/home/z"
+    Nav.back(stacked)
+    Nav.forward(stacked)
+    Nav.open(stacked, "/mnt/w")
+    check("an open over a Forward stacked on a Back out keeps the drawn place in history once", paths(stacked.history) + "|" + stacked.forwardHistory.length, "/home/x|/home/y|/home/z|0")
+
     var same = pane(["/"])
     Nav.open(same, "/mnt/a")
     Nav.open(same, "/mnt/a")
