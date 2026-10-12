@@ -562,11 +562,11 @@ Item {
 
         Flea.CardScroll {
             id: scroll
-            // A menu steps the highlight, never pixel scrolls: one row a notch, one row per
-            // row height of gained touchpad travel, and reveal() follows, again once a rebuilt model has laid out and clamped contentY to 0. No bar, no lane.
+            // A menu steps the highlight, never pixel scrolls: one row a notch, one row per row height of touchpad travel. No bar, no lane.
             highlightSteps: true
             stepBy: function (delta) { root.stepMain(delta) }
             revealClearY: root.fadeReach
+            // A rebuilt model keeps the flyout's row, else the cursor's, in view.
             onContentHeightChanged: if (root.opened) scroll.reveal(menuRows.itemAt(root.openSubmenuRow >= 0 ? root.openSubmenuRow : root.cursor))
             anchors.fill: parent
             anchors.topMargin: Theme.spacing.rowPaddingY

@@ -11,8 +11,7 @@ fi
 
 # A marked sandbox of its own under the fixture root, so cleanup deletes only what this run owns.
 test_root=$(mktemp -d "$FIXTURE_ROOT/flea-menu-refresh-scroll-XXXXXX") || exit 1
-# GNU mktemp -d honours a relative TMPDIR verbatim, so the one path this suite makes is checked
-# absolute and non-empty before anything trusts it.
+# A relative FIXTURE_ROOT would make a relative path, so the one path made here is checked absolute before anything trusts it.
 case $test_root in
   /*/*) ;;
   *) echo "FAIL: mktemp -d gave '$test_root', which is not an absolute path two components deep"; exit 1 ;;
@@ -36,8 +35,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     timeout 30 qs -p "$test_root/config" 2>&1)
 qs_status=$?
 
-# Sample input, one probe line: "  INFO qml: MENUREFRESH PASS contentY=96 rowY=140"
-# Sample input, the receipt: "  INFO qml: MENUREFRESH DONE failures=0".
+# Sample input: "  INFO qml: MENUREFRESH PASS contentY=96 rowY=140".
 # The owned termination is the probe's own self-kill (SIGTERM, 143) after its one DONE receipt; a PASS beside any other status is a double's, never a proof.
 pass_count=$(printf '%s\n' "$output" | grep -c 'MENUREFRESH PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'MENUREFRESH FAIL')
