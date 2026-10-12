@@ -1,6 +1,5 @@
 import QtQuick
 import "." as Flea
-import "js/MarkdownPrepared.js" as Prepared
 import "js/QuickLookKinds.js" as LookKinds
 
 // What Quick Look's first Space needs before it opens: the rested file's prepared entry and held pictures, the compiled units, and the card itself built closed.
@@ -22,12 +21,17 @@ Item {
     property var kindUnits: ({})
     readonly property var markdownUnit: root.kindUnits[LookKinds.MARKDOWN] || null
     readonly property int unitWarmMs: 1000
+    // The unit the rested file's kind opens from, once held.
+    readonly property var restUnit: root.kindUnit !== "" ? (root.kindUnits[root.kindUnit] || null) : null
     readonly property bool unitsReady: root.previewUnit !== null && root.previewUnit.status === Component.Ready
-        && root.markdownUnit !== null && root.markdownUnit.status === Component.Ready
+        && root.restUnit !== null && root.restUnit.status === Component.Ready
         && root.swapUnit !== null && root.swapUnit.status === Component.Ready
-    // The cursor has rested on a Markdown file with every unit compiled: the card is built now, hidden and inactive, so the first Space only opens it.
-    readonly property bool cardDue: root.unitsReady && prepare.rested && root.pane !== null && Prepared.isMarkdownRow(root.pane.cursorRow)
-    onCardDueChanged: if (root.cardDue && root.pane.previewLoader) root.pane.previewLoader.active = true
+    // The cursor has rested on a file whose kind opens from a unit, every unit compiled: the card and its swap wrapper are built now, hidden and inactive, so the first Space only opens them.
+    readonly property bool cardDue: root.unitsReady && prepare.rested && root.pane !== null
+    onCardDueChanged: if (root.cardDue && root.pane.previewLoader) {
+        root.pane.previewLoader.active = true
+        if (root.pane.previewLoader.item) root.pane.previewLoader.item.ensureSwap()
+    }
     readonly property bool windowSettled: root.pane !== null && root.pane.listingState === "ready" && !root.pane.listInFlight
 
     // Counts from the last move onto a file with a unit, so a cursor passing over a kind holds none of it.
