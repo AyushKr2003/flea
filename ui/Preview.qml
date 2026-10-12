@@ -235,7 +235,8 @@ Item {
     // The PDF viewer's three actions come through this file, so ui/js/Focus.js never learns a Loader item answers them.
     function turnPage(delta) { if (root.isPdf && pdfLoader.item) pdfLoader.item.turn(delta) }
 
-    function zoomBy(steps) { if (root.isPdf && pdfLoader.item) pdfLoader.item.zoomBy(steps) }
+    function zoomBy(steps) { if (root.isPdf && pdfLoader.item) pdfLoader.item.zoomBy(steps); else if (root.isImage && imageLoader.item) imageLoader.item.zoomBy(steps) }
+    function zoomFit() { if (root.isImage && imageLoader.item) imageLoader.item.zoomFit() }
 
     function toggleExpand() { if (root.isPdf && pdfLoader.item) pdfLoader.item.toggleExpand() }
 
