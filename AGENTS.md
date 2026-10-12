@@ -9002,6 +9002,8 @@ The rail heading adds one first-frame unit to `tests/startup-units.txt`, `ui/Rai
 
 The stage join of the fix, tag, drop, rail, guidance and contributor lines re-derives the one ceiling it moves past the hard cap with `wc -l` on the merged tree: `src/backend/thumbspec.rs` 410, where two thumbnailer fixes meet, the user thumbnailer outside `/usr` with the failure marker per table (399 lines on its own side) and the link chain bound hop by hop with the PATH search that skips empty and relative entries (372 on its own side). `tests/startup-units.txt` gains `js/DropDev.js` (the drop guard's device map, which `Backend.qml` and `js/Messages.js` import) and `js/FolderViews.js` (the per-folder view, which `Pane.qml` imports), 173 units, while its `bytes` line moves from 1596985 to 1614048, the sum the probe's tool takes over them.
 
+The minor-fix pass adds `a_frame_held_for_the_preview_body_swallows_a_trash_key` to `src/tui/hold_tests.rs`, the case where the hold comes from the first preview body with the parent peek already landed, so `src/tui/hold_tests.rs` goes from 393 to 426 lines (`wc -l`) and its recorded ceiling in `tools/flea-file-budget` is 426.
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one
