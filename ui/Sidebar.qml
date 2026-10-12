@@ -20,6 +20,9 @@ Item {
     property bool trashActive: false
     // Set by Enter on a row that mounts first, so the open that lands afterwards takes focus into the folder.
     property bool focusOnOpen: false
+    // Right Arrow from a row that releases puts the keyboard on its eject mark; the cursor row draws the frame, and a move, a lost focus or a vanished mark ends it.
+    property bool markFocused: false
+    onFocusedChanged: if (!root.focused) root.markFocused = false
     // ui/Pane.qml's one ui/ContextMenu.qml, handed in rather than built here: a second instance in
     // this tree took the keyboard away from the list, see ui/SidebarRow.qml's own note.
     property var menu: null
@@ -124,6 +127,7 @@ Item {
         // A listing still out keeps its row through the rebuild; an idle pane re-reads it.
         root.litIndex = lit
         root.settleLit()
+        root.markFocused = root.markFocused && Eject.releasable(root.entries[next])
         availability.restart()
     }
 
@@ -430,7 +434,7 @@ Item {
         color: ViewState.railAutoHide ? Theme.color.surface : Glass.surface
     }
 
-    onCursorIndexChanged: root.revealCursor()
+    onCursorIndexChanged: { root.markFocused = false; root.revealCursor() }
 
     // Anchored inside the Flickable's contentItem, so a row's y is already the scroll coordinate.
     function revealCursor() {
@@ -610,6 +614,7 @@ Item {
                 delegate: SidebarRow {
                     lit: index + root.placesEntries.length === root.litIndex
                     cursor: root.cursorDrawn && index + root.placesEntries.length === root.cursorIndex
+                    markFocused: root.markFocused && cursor
                     focused: root.focused
                     renaming: (index + root.placesEntries.length) === root.renamingIndex
                     onActivated: function (idx) { root.activate(idx + root.placesEntries.length) }
@@ -639,6 +644,7 @@ Item {
                 delegate: SidebarRow {
                     lit: index + root.placesEntries.length + root.networkEntries.length === root.litIndex
                     cursor: root.cursorDrawn && index + root.placesEntries.length + root.networkEntries.length === root.cursorIndex
+                    markFocused: root.markFocused && cursor
                     focused: root.focused
                     onActivated: function (idx) { root.activate(idx + root.placesEntries.length + root.networkEntries.length) }
                     onEjectRequested: function (idx) { root.ejectRow(idx + root.placesEntries.length + root.networkEntries.length) }

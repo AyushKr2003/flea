@@ -21,6 +21,12 @@ Item {
     readonly property int tabCount: root.tabs && root.tabs.items && root.tabs.items.length > 0 ? root.tabs.items.length : 1
     readonly property int currentIndex: root.tabs ? root.tabs.index : 0
     readonly property bool open: root.tabCount > 1
+    // Tab's strip stop: the keyboard is on the tab at focusedIndex, or on New tab one past the last, which draws its own frame; ui/js/ChromeKeys.js moves it.
+    property bool stopFocused: false
+    property int focusedIndex: 0
+    // The keyboard frame lies inside a tab's box, clear of the rule, the current tab's accent edge and the separator.
+    readonly property real frameLeft: Theme.chromeControlInset
+    readonly property real frameBottom: Theme.accentEdge + Theme.chromeControlInset
     readonly property int tabWidth: {
         var n = Math.max(1, root.tabCount)
         var avail = Math.max(0, root.width - Theme.hitMin)
@@ -340,6 +346,8 @@ Item {
     function itemAt(index) {
         return repeater.itemAt(index)
     }
+    // The strip's keyboard frames, so tests/keyreach.qml measures them in their host.
+    readonly property Item newTabFrame: addFrame
 
     // On glass the strip's ground runs left and right of the current tab's plate, which a dragged tab gives up; see ui/Glass.qml.
     readonly property Item plate: Glass.on && root.dragFrom !== root.currentIndex && repeater.count > root.currentIndex ? root.itemAt(root.currentIndex) : null
@@ -387,6 +395,7 @@ Item {
                 opacity: root.dragFrom === tab.index ? Theme.disabledOpacity : 1
 
                 readonly property bool current: root.currentIndex === tab.index
+                readonly property Item focusFrame: tabFrame
                 // Every input named, so the label re-reads when a tab opens or the pane navigates.
                 readonly property string title: Tabs.label(
                     Tabs.pathAt(root.tabs, root.currentIndex, tab.index, root.path),
@@ -452,6 +461,18 @@ Item {
                     color: Theme.color.foreground
                     opacity: 0.12
                     visible: tab.slot < root.tabCount - 1 && !tab.current
+                }
+
+                Rectangle {
+                    id: tabFrame
+                    x: root.frameLeft
+                    y: root.frameLeft
+                    width: parent.width - 2 * root.frameLeft
+                    height: parent.height - root.frameLeft - root.frameBottom
+                    color: "transparent"
+                    border.width: Theme.spacing.hairline
+                    border.color: Theme.color.foreground
+                    visible: root.stopFocused && root.focusedIndex === tab.index
                 }
 
                 Text {
@@ -553,12 +574,24 @@ Item {
             Accessible.onPressAction: if (pane) Tabs.openNew(pane)
             HoverHandler { cursorShape: Qt.PointingHandCursor }
 
+            Rectangle {
+                id: addFrame
+                x: root.frameLeft
+                y: root.frameLeft
+                width: parent.width - 2 * root.frameLeft
+                height: parent.height - root.frameLeft - root.frameBottom
+                color: "transparent"
+                border.width: Theme.spacing.hairline
+                border.color: Theme.color.foreground
+                visible: root.stopFocused && root.focusedIndex === root.tabCount
+            }
+
             Flea.Glyph {
                 anchors.centerIn: parent
                 width: Theme.chromeMarkSize
                 height: Theme.chromeMarkSize
                 name: "plus"
-                color: Theme.color.mutedFrame
+                color: root.stopFocused && root.focusedIndex === root.tabCount ? Theme.color.foreground : Theme.color.mutedFrame
             }
 
             TapHandler {

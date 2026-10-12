@@ -216,7 +216,7 @@ case_dualautohidereveal() {
     export XDG_STATE_HOME="$suite_home"
     kill_flea
 }
-# Dual view Tab walks the left pane's rail, the left list and the right list, Shift+Tab walks it back, and Tab reaching an auto-hide rail reveals it.
+# Dual view Tab walks the left pane's rail, the bar, the left list and the right list, Shift+Tab walks it back, and Tab reaching an auto-hide rail reveals it.
 dual_tab_at() {
     local label=$1 side=$2 view=$3
     settle
@@ -247,9 +247,13 @@ case_dualtab() {
     dual_tab_at "Tab from the right list" 0 rail
     shot dualtab-rail
     key -k Tab >/dev/null
-    dual_tab_at "Tab from the rail" 0 list
+    dual_tab_at "Tab from the rail" 0 chrome
+    key -k Tab >/dev/null
+    dual_tab_at "Tab from the bar, a window of one tab having no strip" 0 list
     key -M shift -k Tab -m shift >/dev/null
-    dual_tab_at "Shift+Tab from the left list" 0 rail
+    dual_tab_at "Shift+Tab from the left list" 0 chrome
+    key -M shift -k Tab -m shift >/dev/null
+    dual_tab_at "Shift+Tab from the bar" 0 rail
     key -M shift -k Tab -m shift >/dev/null
     dual_tab_at "Shift+Tab from the rail" 1 list
     key -M shift -k Tab -m shift >/dev/null

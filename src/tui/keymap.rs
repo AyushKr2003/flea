@@ -312,6 +312,11 @@ mod tests {
         assert_eq!(map.action(&Key::character('3', "ctrl"), "mac"), "viewGrid");
     }
     #[test]
+    fn default_redo_is_control_shift_z() {
+        let map = Map::load();
+        assert_eq!(map.action(&Key::character('Z', "ctrlshift"), "default"), "redo");
+    }
+    #[test]
     fn header_comments_do_not_strip_quoted_hashes_or_accept_other_suffixes() {
         let map = Map::parse(r##"
 [[text]] # A header comment can contain = and ]].

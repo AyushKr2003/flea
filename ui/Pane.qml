@@ -154,6 +154,9 @@ FocusScope {
     readonly property alias header: header
     property var sharedSidebar: null
     property var railPane: root
+    // The window's chrome bar and tab strip, the two Tab stops after the rail; ui/js/ChromeKeys.js reads them.
+    property var chromeBar: null
+    property var tabStrip: null
     // The window-long network host, injected by ui/WindowBody.qml (the primary pane's own,
     // shared by the second pane): mounts, bridge waits and dialog answers outlive the rail.
     property var sharedNetworkService: null

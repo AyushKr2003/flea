@@ -1,5 +1,6 @@
 .pragma library
 .import "Input.js" as Input
+.import "ChromeKeys.js" as ChromeKeys
 .import "Eject.js" as Eject
 .import "Filter.js" as Filter
 .import "Grid.js" as Grid
@@ -23,19 +24,41 @@
 
 var LIST = "list"
 var RAIL = "rail"
-// The other two of Dual's three Tab stops: the left pane's list and the right pane's.
-var LEFT = "left"
-var RIGHT = "right"
+var CHROME = "chrome"
+var STRIP = "strip"
+// The stops Tab walks, in order; the list is always one and the others only while drawn.
+var RING = [LIST, RAIL, CHROME, STRIP]
 
 // Refusal where gio has no Trash, from ui/js/Status.js, which recognises it to drop it when the pane leaves that place; a preset with no key reads bare.
 var NO_TRASH = Status.NO_TRASH
 function noTrashHint() { return Status.trashHint().replace(" · ", "") }
 function noTrashLine() { return Status.noTrashLine() }
 
-// Tab is the only thing that moves focus between views, so the rule lives in one function.
-function next(current, sidebar) {
-    // RailAdditions rule 4: a hidden rail is not a place the keyboard can go, so Tab stays in the list. Directive 77: one that auto-hide withdrew is, because arriving there is what reveals it.
-    return current === LIST && sidebar ? RAIL : LIST
+// Tab is the only thing that moves focus between views, so the rule lives in one function; drawn names the optional stops that are there, as ChromeKeys.drawn says.
+function next(current, drawn, forward) {
+    // RailAdditions rule 4: a hidden rail is not a place the keyboard can go, so Tab skips it. Directive 77: one that auto-hide withdrew is, because arriving there is what reveals it.
+    var stops = RING.filter(function (view) { return view === LIST || drawn[view] === true })
+    var at = stops.indexOf(current)
+    return at < 0 ? LIST : stops[(at + (forward ? 1 : stops.length - 1)) % stops.length]
+}
+
+// Tab and Shift+Tab. In the dual view the two lists are consecutive stops and the pane switch is the step between them; the rail is the left pane's, so any pane's step onto it hands the keyboard to that one.
+function tabStep(root, sidebar, forward) {
+    if (root.dualMode && root.focusView === LIST && forward !== (root.listOnly === true)) { root.switchPane(); return }
+    var to = next(root.focusView, ChromeKeys.drawn(root, sidebar || root.sidebar || root.railAvailable), forward)
+    if (to === LIST) {
+        root.focusView = LIST
+        // Forward lands on the left list and backward on the right one, wherever the keyboard stood.
+        if (root.dualMode && (root.listOnly === true) === forward) root.switchPane()
+        return
+    }
+    if (to === RAIL && root.dualMode) {
+        root.focusView = LIST
+        root.switchToRail()
+        return
+    }
+    ChromeKeys.enter(root, to, forward)
+    root.focusView = to
 }
 
 // Hiding the rail while it holds the keyboard strands focusView, so the listing takes the logical view and the actual focus together.
@@ -225,10 +248,11 @@ function act(action, root, menuId, paths) {
         return
     case "addNetwork": if (root.sidebar) root.sidebar.addRequested(); return
     case "eject": Eject.release(root, root.sidebar, false); return
-    // Finder's Cmd+1/2/3; the chrome's three buttons write the same property, so they follow.
+    // Finder's Cmd+1/2/3/4; the chrome's four buttons write the same property, so they follow.
     case "viewList": root.chooseView("list"); return
     case "viewColumns": root.chooseView("columns"); return
     case "viewGrid": root.chooseView("grid"); return
+    case "viewDual": root.chooseView("dual"); return
     case "newFolder": if (root.recentMode.length > 0) { root.message("This listing is a history, and cannot take a new folder.", false); return } Ops.newFolder(root); return
     // The directory being shown, not the row: the menu row and the chord both land here.
     case "openTerminal": root.openTerminal(); return
@@ -381,8 +405,9 @@ function handleKey(event, root, sidebar) {
         return true
     }
     if (windowAction(action, root, sidebar)) return true
+    if ((root.focusView === CHROME || root.focusView === STRIP) && ChromeKeys.act(event, root)) return true
     if (root.focusView === RAIL && sidebar) {
-        RailKeys.act(action, root, sidebar)
+        RailKeys.act(action, root, sidebar, event)
         return true
     }
     // An armed pair keeps Escape to cancel the arm instead of climbing.
@@ -409,16 +434,6 @@ function handleKey(event, root, sidebar) {
     return false
 }
 
-// Dual's Tab walks the left pane's rail, the left list and the right list and wraps; with no rail it is the two lists.
-function dualStep(back, root, rail) {
-    var stops = rail ? [RAIL, LEFT, RIGHT] : [LEFT, RIGHT]
-    var at = root.focusView === RAIL ? RAIL : root.listOnly ? RIGHT : LEFT
-    var to = stops[(stops.indexOf(at) + (back ? stops.length - 1 : 1)) % stops.length]
-    if (at === RAIL) root.focusView = LIST
-    if (to === RAIL) root.switchToRail()
-    else if ((to === RIGHT) !== (root.listOnly === true)) root.switchPane()
-}
-
 // Keys and query actions share the window's dispatcher before reaching pane actions.
 function dispatchAction(action, root) {
     if (!windowAction(action, root)) root.act(action)
@@ -426,9 +441,7 @@ function dispatchAction(action, root) {
 
 function windowAction(action, root, sidebar) {
     if (action === "focusNext" || action === "focusPrevious") {
-        var rail = sidebar || root.sidebar || root.railAvailable
-        if (root.dualMode) dualStep(action === "focusPrevious", root, rail)
-        else root.focusView = next(root.focusView, rail)
+        tabStep(root, sidebar, action === "focusNext")
         return true
     }
     if (action === "focusPreview") {
