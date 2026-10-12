@@ -545,9 +545,9 @@ except a menu's, which the backend resolves from the menu's own capture and neve
 row drag stamps its rows at the lift (`ui/FileDrag.qml dragListing`), so a watched re-read or a refresh
 that lands before the choice or the drop gets that transfer refused rather than resolved in the new
 numbering onto another file. The watched re-read also waits while a transfer waits on the card, so the
-usual case keeps its rows. `src/backend/rowguard.rs` refuses a `trash`,
-`transfer`, `paths`, `collisions` or `menuaction` whose `listing` is not the one in force, before anything resolves:
-an `error` line with `where` `stale` for the first four, which `ui/PaneWire.qml onFailed` reports
+usual case keeps its rows. `src/backend/rowguard.rs` refuses a `trash`, `transfer`, `link`, `paths`, `collisions`, `settags`
+or `menuaction` whose `listing` is not the one in force, before anything resolves:
+an `error` line with `where` `stale` for each but `menuaction`, which `ui/PaneWire.qml onFailed` reports
 without ending the listing that is out, and a failed `menuaction` reply for a snapshot, the shape the
 menu already waits for. A request that names no numbering is resolved as before, which is every
 older client, the picker and `tests/protocol.sh`'s own lines; `thumb`, `dirsize`, `meta` and `window`
@@ -6675,7 +6675,7 @@ before deleting anything. Removing the duplicate is the operator's call, not Ctr
 
 **One undo history for every Flea window.** Each backend keeps its in-memory journal until the session dir validates, then every push and take goes through the file under `$XDG_RUNTIME_DIR/flea/` (`FLEA_UNDO_DIR` when set) under an flock, so the newest entry from any window is what Ctrl+Z undoes. A take is one locked read-modify-write, so two windows pressing Ctrl+Z undo two different operations; the filesystem work runs after the claim, so a slow undo never holds the lock. The published doc stays under 32 MiB by dropping oldest undo then redo records until it fits; an entry too big alone stores a small barrier through the normal store path, its op name only and no paths, and no window keeps the payload. Any window's undo that claims a barrier consumes it in the same locked claim and answers `That operation was too large to undo.`, the next undo continues with older entries, and a barrier never enters redo. The codec versions the file: a decoder meeting a newer version treats the file as unavailable, falls back to memory, and never rewrites the newer file. A key added to an existing record is optional and keeps the version: an older decoder ignores it and its re-render drops it, so a reader treats a record without it as the older record (`gen` reads 0, a trash step without `before` and `time` refuses its undo as 0.3.8 did). Only a record an older decoder would reject moves the version, as the barrier moved it to 2. A claim stamps the push generation, and the finish replays only when no push ran since, otherwise the stale replay is dropped.
 
-**The journal records only what an operation created or moved.** `undo.rs`'s `Step` has eight shapes the
+**The journal records only what an operation created or moved.** `undo.rs`'s `Step` has nine shapes the
 product writes: `Moved` (rename back), `Copied` (remove the copy; a failed tree copy carries a manifest, a success carries none; a merge top carries `merge: true` and never takes the whole-tree fallback; a copy made under the FAT card's Rename carries `rename_fat: true`, and so does a `Moved` step made under it because a cross-device move copies first, journaled as `"fat":1` only when set, so a redo writes the same names, an older journal reads as made without it, and the journal version stays 3 because an older build that ignores the key undoes the copy alike and only redoes it under the names as they were, which the drive refuses and names), `MadeDir` (remove it
 while it is still empty, because whatever is inside it now was put there by someone else), `MadeFile`
 (remove it while it is still the untouched empty file), `Trashed` (restore it, written by a trash and
