@@ -4,6 +4,7 @@ import QtQuick
 import QtTest
 import Quickshell
 import "flea" as Flea
+import "flea/js/Nav.js" as Nav
 
 // poolpark: a warm Enter in a real list, grid or columns view builds no delegate, and every reused row shows only its own state.
 ShellRoot {
@@ -104,7 +105,14 @@ ShellRoot {
             property int windowSize: 35
             property var backend: null
             property var sidebar: null
-            property var listArea: null
+            property var listArea: ({ primeSettle: function () {} })
+            property var pendingSort: null
+            property double trashArmedAt: 0
+            property string stateMessage: ""
+            property int lockedMode: 0
+            property bool searchLeaving: false
+            property bool filterTyping: false
+            function clearSelection() {}
             function join(base, name) { return String(base) + "/" + String(name) }
             function rowFor(index) {
                 root.counts.rowFor += 1
@@ -217,15 +225,9 @@ ShellRoot {
         root.counts.readPast = 0
         p.listInFlight = true
         root.counts.empty = true
-        p.total = 0
-        p.held = 0
+        Nav.forget(p)
         p.rows = root.watched([])
-        p.kindNames = []
-        p.cursorIndex = 0
-        p.renamingIndex = -1
-        p.thumbState = { file: {}, order: [] }
         p.shown = null
-        p.listingState = "loading"
         root.selectedSet = {}
         p.selectionVersion += 1
         p.rows = root.watched(rows)
