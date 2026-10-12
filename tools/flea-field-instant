@@ -67,6 +67,19 @@ Enter in a cycle goes to the first folder of the session fixture, found by Home 
 ui-state patch pins foldersFirst true and folders sort first, so the first folder is row 0. A window that is not this session's Flea (class com.thisisgm.flea under the launched process)
 mapping during a timed sample ends the series with an error row, "an external window opened", never a miss; nothing
 that Flea did not start is closed.
+
+Loads (p7-load). The right pane carries one of: a, a fresh hard-link copy of 2,000 cold 1280x720 JPEGs, whose
+thumbnails Flea writes for the rows the pane shows and for no others; b, a copy of a large file to the USB stick; c,
+the 5,000-entry NAS folder listing. A load is proved per sample, never per series: the probe (a: thumbnail files in the
+cache; b: bytes copied; c: the right pane's list request count and whether its listing is in flight, read by the dualState
+IPC) is read right before each timed input and right after its quiet, and the row carries load_probe and load_active
+(it moved, or the load was busy at the read before). Loads a and c are renewed before every sample, a by replacing the
+previous batch of linked pictures in the right folder with a batch of never-thumbnailed ones under names that sort just after its first row
+(the folder keeps its size), c by changing the NAS folder's mtime, and the input is sent only after the probe moved since
+the renewal; a probe that never moves is an error row, "the load did not start", never a timed row. A renewal waits out
+the load's gap since the last one (a 0.3 s, c 1 s). A paced series renews after a key only when that gap has passed, so
+at the 400 ms pace c renews on about every third key, and reads the probe before each key. The
+gate passes a load group only when every sample's load_active is true.
 """
 import json
 import math
@@ -680,8 +693,32 @@ class Session:
         owned = S.descendants(self.proc.pid)
         return {c["address"]: c for c in external_clients(S.clients(), owned)}
 
+    load = None  # the Load beside the series, or None
+    load_reads = None  # the probe read before each paced input
+
+    def load_read(self):
+        return self.load.probe() if self.load else None
+
+    def load_ready(self):
+        """The probe read that shows a renewed load moving (a load that cannot be renewed: its read now), or None with no load; a probe that never moves raises."""
+        ld = self.load
+        if ld is None:
+            return None
+        if ld.renew_fn is None:
+            return ld.probe()
+        base = ld.probe()
+        ld.renew(True)
+        t0 = time.monotonic()
+        while True:
+            now = ld.probe()
+            if load_moved(base, now):
+                return now
+            if time.monotonic() - t0 > LOAD_START_S:
+                raise RuntimeError("the load did not start")
+            time.sleep(LOAD_POLL_S)
+
     def sample(self, journey, inp, row, evidence=None, extra=None):
-        """One timed input and its columns (pre_quiet: the region was quiet before it); a window mapped since the baseline that is not Flea's raises ExternalWindow."""
+        """One timed input and its columns (pre_quiet: the region was quiet before it), with the load's probe read before it and after its quiet; a window mapped since the baseline that is not Flea's raises ExternalWindow."""
         quiet_s, cap_s = QUIET[row], CAP[row]
         if inp[0] == "key":
             S.hide_cursor(self.keys, 0)
@@ -690,13 +727,18 @@ class Session:
             x, y = self.point(inp[1])
             pointer_to(self.keys, x, y)
             pre = self.settle(0.5, 3)
+            p_in = self.load_ready()
             t = click(self.keys, BTN_LEFT if inp[0] == "click" else BTN_RIGHT)
         else:
+            p_in = self.load_ready()
             t = self.send(inp)
         if evidence:
             self.rec.armed_ns = t
         self.rec.wait_quiet(int(quiet_s * NS), t, int(cap_s * NS))
+        p_out = self.load_read()
         out = self.columns(journey, t, row, pre, evidence, extra)
+        if self.load:
+            out.update(load_evidence(p_in, p_out))
         opened = {a: c for a, c in self.outsiders().items() if a not in self.known}
         if opened:
             out.update(error="an external window opened",
@@ -807,15 +849,21 @@ VIEW_CIRCUIT = ["list", "columns", "grid", "dual", "list", "grid", "columns", "d
 
 
 def paced(sess, chords, pace_ms, times=None):
-    """Chords on an absolute schedule; their CLOCK_MONOTONIC ns, in times as each is sent."""
-    times, start = [] if times is None else times, time.monotonic_ns()
+    """Chords on an absolute schedule; their CLOCK_MONOTONIC ns, in times as each is sent, the load probe read before each in sess.load_reads, the load renewed after each when its gap has passed."""
+    times = [] if times is None else times
+    reads = sess.load_reads = []
+    first = sess.load_ready()
+    start = time.monotonic_ns()
     for i, c in enumerate(chords):
         due = start + int(i * pace_ms * MS)
         while time.monotonic_ns() < due - 2 * MS:
             time.sleep(0.001)
         while time.monotonic_ns() < due:
             pass
+        reads.append(first if i == 0 else sess.load_read())
         times.append(c() if callable(c) else sess.keys.chord(*c))
+        if sess.load:
+            sess.load.renew()
     return times
 
 
@@ -826,12 +874,16 @@ def per_key_rows(sess, times, names, extra=None):
     end = time.monotonic_ns()
     cols = S.search_columns(frames, times, end, N.NAV_QUIET_NS, N.NAV_CAP_NS)
     changes = S.changes_of(frames)
+    reads = sess.load_reads[:len(times)] if sess.load else []
+    ends = reads[1:] + [sess.load_read()]
     rows = []
     for i, (t, name) in enumerate(zip(times, names)):
         nxt = times[i + 1] if i + 1 < len(times) else end
         a = S.first_change_after(changes, t)
         rows.append(dict({"journey": name, "row": 1, "view": sess.view, "first_ms": cols["per_key_first_ms"][i],
                           "first_any_ms": None if a is None or a > nxt else round((a - t) / MS, 1)}, **(extra or {})))
+        if sess.load:
+            rows[-1].update(load_evidence(reads[i], ends[i]))
     return rows
 
 
@@ -1380,7 +1432,7 @@ def parts(fx, samples):
 PARTS = ["smoke", "p1-cursor", "p2-held", "p3-navigate", "p4-open", "p5-heavy", "p6-ops", "p7-load"]
 # Minutes of minipc per part at 20 samples, from the series' own pacing (keys at 400 ms, quiet gaps, launches).
 ESTIMATE_MIN = {"smoke": 5, "p1-cursor": 16, "p2-held": 8, "p3-navigate": 14, "p4-open": 14, "p5-heavy": 13,
-                "p6-ops": 13, "p7-load": 10}
+                "p6-ops": 13, "p7-load": 16}
 
 
 def journeys_of(sessions):
@@ -1672,6 +1724,105 @@ def fling_probe(runs, keys=None):
     return dict(fling_floor(wheel_ms, frame_ms), workdir=work)
 
 
+# Loads: the probe of each is read per sample, see the docstring.
+
+LOAD_START_S = 30  # how long a renewed load may take to show its first progress
+LOAD_POLL_S = 0.02  # between probe reads while a renewed load is awaited
+COLD_BATCH = 48  # pictures linked per renewal of load a, a little over the rows the right pane shows at 2560x1440
+COLD_SEQ = 1000000  # the numbers in load a's link names count down from here, so no name is used twice
+LOAD_GAP_S = {"a": 0.3, "c": 1.0}  # least time between two renewals, a forced one waits it out; c's folder mtime has second resolution
+
+
+def load_progress(p):
+    """The count of a probe value: a bare number, or the first of a (count, busy) pair."""
+    return p[0] if isinstance(p, (tuple, list)) else p
+
+
+def load_busy(p):
+    """True when a probe value says work was in flight at that read; only a (count, busy) pair can."""
+    return bool(p[1]) if isinstance(p, (tuple, list)) else False
+
+
+def load_moved(p0, p1):
+    """True when the load progressed since the read p0: its count changed, or it is busy at p1; an unread probe moved nothing."""
+    a, b = load_progress(p0), load_progress(p1)
+    return a is not None and b is not None and (a != b or load_busy(p1))
+
+
+def load_active(p_in, p_out):
+    """True when the load ran during a sample: it progressed between the read before the input and the read after its quiet, or was busy at the first."""
+    return load_moved(p_in, p_out) or (load_progress(p_in) is not None and load_busy(p_in))
+
+
+def load_evidence(p_in, p_out):
+    """The two columns a row carries for its load."""
+    return {"load_probe": [p_in, p_out], "load_active": load_active(p_in, p_out)}
+
+
+class Load:
+    """A load beside a series: probe() reads its progress, renew() starts it again (renew_fn None: it runs on its own)."""
+
+    def __init__(self, name, note, probe, renew_fn=None, gap_s=0.0):
+        self.name, self.note, self.probe, self.renew_fn, self.gap_s, self.at = name, note, probe, renew_fn, gap_s, None
+
+    def renew(self, force=False):
+        """Start the load again; False when gap_s has not passed since the last time, unless force: that waits out the rest of the gap."""
+        if self.renew_fn is None:
+            return False
+        wait = 0.0 if self.at is None else self.gap_s - (time.monotonic() - self.at)
+        if wait > 0:
+            if not force:
+                return False
+            time.sleep(wait)
+        self.at = time.monotonic()
+        self.renew_fn()
+        return True
+
+
+def link_cold(src, names, dst, seq, n, linked=None):
+    """Link n cold pictures into dst under names that sort just after the first name there; seq[0] counts down across calls so no name repeats. Returns the new paths; linked, when given, is that list and names only the links that exist when a link fails."""
+    stem = os.path.splitext(min(os.listdir(dst)))[0]  # the right pane's cursor stays on its first row and a re-read keeps that row's screen y, so the new rows must fall below it
+    linked = [] if linked is None else linked
+    for _ in range(n):
+        seq[0] -= 1
+        name = names[seq[0] % len(names)]
+        path = os.path.join(dst, "%s.k%06d%s" % (stem, seq[0], os.path.splitext(name)[1]))
+        os.link(os.path.join(src, name), path)
+        linked.append(path)
+    return linked
+
+
+def load_renew(sess, load, ctx):
+    """The function that starts load a or c again, or None: a swaps the batch of pictures linked into the right folder for a fresh one, c changes the NAS folder's mtime."""
+    if load == "a":
+        cold = os.path.join(ctx["root"], "load", "cold-src")
+        names, seq, batch = sorted(os.listdir(cold)), [COLD_SEQ], []
+
+        def drop():
+            while batch:  # the right folder keeps its size, so every sample re-reads the same load; batch names only what is left
+                sandbox_rm(batch[-1], ctx["roots"])
+                batch.pop()
+
+        def renew():
+            if not names:
+                raise RuntimeError("no cold images in %s" % cold)
+            drop()
+            try:
+                link_cold(cold, names, sess.right, seq, COLD_BATCH, batch)
+            except OSError:  # a link that failed midway leaves no partial batch in the folder
+                drop()
+                raise
+        return renew
+    if load == "c":
+        mark = os.path.join(sess.right, ".restart")
+
+        def renew():
+            open(mark, "w").close()
+            sandbox_rm(mark, ctx["roots"])
+        return renew
+    return None
+
+
 def load_start(sess, load, ctx):
     """Start a load in the right pane; (probe, note). probe() changes while the load runs."""
     roots = ctx["roots"]
@@ -1691,20 +1842,33 @@ def load_start(sess, load, ctx):
         def probe():
             return sum(os.path.getsize(os.path.join(dst, f)) for f in os.listdir(dst))
         return probe, "copy of a %d MiB file to the USB stick from the right pane" % LONG_MIB
-    pids = [int(p) for p in subprocess.run(["pgrep", "-f", "gvfsd-smb|gvfsd-fuse"], capture_output=True,
-                                           text=True).stdout.split()]
-    return (lambda: S.tree_ticks(pids)), "NAS listing streaming in the right pane"
+
+    def right_listing():
+        """(list requests, listing in flight) of the right pane, from the dualState IPC; (None, False) when unreadable."""
+        try:
+            # Sample input: {"active": true, "focused": 0, "panes": [{"path": "/a", "total": 3, "cursor": 0, "loading": false, "selected": [], "focused": true, "listRequests": 4}, null]} (ui/Ipc.qml dualState)
+            panes = json.loads(sess.ipc("dualState") or "{}").get("panes") or []
+            right = panes[1] or {}
+            return right.get("listRequests"), bool(right.get("loading"))
+        except (ValueError, IndexError, AttributeError, OSError, subprocess.SubprocessError):
+            return None, False
+    return right_listing, "NAS listing streaming in the right pane"
 
 
 def run_series(sess, sp, n):
-    """A series' rows; an error or an outside window ends it with the rows already built plus its error row."""
+    """A series' rows; an error or an outside window ends it with the rows already built plus its error row; under a load every row names it and says whether it ran during that sample."""
     sess.taken = []  # the series build their rows in this list, so a failure keeps them
     try:
-        return SERIES[sp["type"]](sess, sp, n)
+        rows = SERIES[sp["type"]](sess, sp, n)
     except ExternalWindow as e:
-        return sess.taken + [e.row]
+        rows = sess.taken + [e.row]
     except (RuntimeError, OSError, ValueError, subprocess.CalledProcessError) as e:
-        return sess.taken + [{"journey": sp["type"], "view": sess.view, "error": "%s: %s" % (type(e).__name__, e)}]
+        rows = sess.taken + [{"journey": sp["type"], "view": sess.view, "error": "%s: %s" % (type(e).__name__, e)}]
+    for r in rows if sess.load else ():
+        r.update({"load": sess.load.name, "load_note": sess.load.note})
+        r.setdefault("load_probe", None)
+        r.setdefault("load_active", False)
+    return rows
 
 
 def run_session(spec, ctx, out):
@@ -1729,19 +1893,13 @@ def run_session(spec, ctx, out):
         return
     sess.right = right
     try:
-        probe = None
         if spec.get("load"):
             probe, note = load_start(sess, spec["load"], ctx)
+            sess.load = Load(spec["load"], note, probe, load_renew(sess, spec["load"], ctx), LOAD_GAP_S.get(spec["load"], 0.0))
             sess.settle(1.0, 5)
         for sp in spec["series"]:
-            p0 = probe() if probe else None
-            rows = run_series(sess, sp, spec["n"])
-            p1 = probe() if probe else None
-            for r in rows:
+            for r in run_series(sess, sp, spec["n"]):
                 r.setdefault("fixture", where)
-                if probe:
-                    r.update({"load": spec["load"], "load_note": note, "load_probe": [p0, p1],
-                              "load_active": p0 != p1})
                 emit(out, r)
     finally:
         sess.close()
@@ -2107,6 +2265,10 @@ def gate(paths, out=None, only=None, pattern=None):
             missing.append("GATE MISSING %s %s %s no readable samples n=%d" % (
                 c["journey"], c["view"], c["fixture"], len(g)))
             continue
+        idle = sum(1 for r in g if not r.get("load_active")) if "+load-" in c["fixture"] else 0
+        if idle:
+            missing.append("GATE MISSING %s %s %s load inactive in %d of %d samples" % (
+                c["journey"], c["view"], c["fixture"], idle, len(g)))
         if c["verdict"] == "BREACH":
             breaches.append("GATE BREACH %s %s %s p95=%s ceiling=%s" % (
                 c["journey"], c["view"], c["fixture"], fmt(gate_shown_p95(c["row"], c)), gate_ceiling(c["row"], c)))
@@ -2420,6 +2582,8 @@ def selftest():
             row = row_of(journey, fixture.split("+")[0])
             for _ in range(n):
                 r = {"journey": journey, "view": view, "fixture": fixture, "first_ms": 5.0}
+                if "+load-" in fixture:  # a load row names its load apart from its fixture, as run_series writes it
+                    r.update(fixture=fixture.split("+")[0], load=fixture[-1], load_active=True)
                 if row == 2:
                     r["held"] = {"slots_missed": 0, "overshoot": 0, "steps_behind": 0}
                 if row == 5:
@@ -2428,6 +2592,9 @@ def selftest():
         return rows
 
     full = plan_rows(planned_counts("p7-load", 20))
+
+    def where(r):
+        return r["fixture"] + ("+load-" + r["load"] if r.get("load") else "")
     code, gtext = run_gate(full, "p7-load", 20)
     check("gate_plan_pass_code", code, 0)
     check("gate_plan_pass_line", "GATE PASS" in gtext, True)
@@ -2436,7 +2603,7 @@ def selftest():
     code, gtext = run_gate(full[:-1], "p7-load", 20)
     check("gate_plan_short_code", code, 2)
     check("gate_plan_short_line", "GATE MISSING" in gtext, True)
-    kept = [r for r in full if (r["journey"], r["fixture"]) != ("open.ql.txt.first", "local+load-a")]
+    kept = [r for r in full if (r["journey"], where(r)) != ("open.ql.txt.first", "local+load-a")]
     code, gtext = run_gate(kept, "p7-load", 20)
     check("gate_plan_first_gone_code", code, 2)
     check("gate_plan_first_gone_line",
@@ -2453,7 +2620,7 @@ def selftest():
     miss2 = [dict(r) for r in full]
     n = 0
     for r in miss2:
-        if r["journey"] == "open.ql.txt" and r["fixture"] == "local+load-a" and n < 2:
+        if r["journey"] == "open.ql.txt" and where(r) == "local+load-a" and n < 2:
             r["first_ms"] = None
             n += 1
     code, gtext = run_gate(miss2, "p7-load", 20)
@@ -3073,6 +3240,203 @@ def selftest():
     check("calibrate_fling_calledprocesserror", (code, '"error": "CalledProcessError: ' in text), (7, True))
     code, text = calibrate_with(lambda runs, keys=None: {"skipped": "no uinput"})
     check("calibrate_fling_skipped_keeps_gate", (code, '"skipped": "no uinput"' in text), (7, True))
+    # Loads: the probe is read per sample, so a load that stops after sample 2 reads inactive from sample 3.
+    check("load_active_moved", (load_active(3, 4), load_active(4, 4), load_active(None, 4), load_active(4, None)),
+          (True, False, False, False))
+    check("load_active_busy", (load_active((7, True), (7, True)), load_active((7, False), (7, False)),
+                               load_active((7, False), (8, False)), load_active((7, False), (7, True))),
+          (True, False, True, True))
+    check("load_moved_ignores_busy_before", (load_moved((7, True), (7, False)), load_moved((7, False), (7, True))),
+          (False, True))
+
+    def load_session(probe, renew=None, chord_log=None, bump=None):
+        """A session with no display, a stub load, and a chord that bumps the load as a sample's input is sent."""
+        ss = object.__new__(Session)
+        ss.view, ss.taken, ss.known, ss.ctx = "dual", [], set(), {}
+
+        def chord(*k):
+            if k != ("shift",) and k != ("home",):
+                if chord_log is not None:
+                    chord_log.append(k)
+                if bump:
+                    bump()
+            return 7
+        ss.keys = types.SimpleNamespace(chord=chord)
+        ss.rec = types.SimpleNamespace(wait_quiet=lambda *a: True, snapshot=lambda: [])
+        ss.columns = lambda journey, *a: {"journey": journey, "first_ms": 1.0}
+        ss.outsiders, ss.require_window = lambda: {}, lambda: None
+        ss.load = Load("b", "stub", probe, renew)
+        return ss
+
+    cycle = {"type": "cycle", "steps": [{"journey": "nav.dual.enter", "in": ("key", ("enter",))}]}
+    count = {"n": 0, "keys": 0}
+
+    def stops_after_two():
+        count["keys"] += 1
+        if count["keys"] <= 2:
+            count["n"] += 1
+    rows = run_series(load_session(lambda: count["n"], bump=stops_after_two), cycle, 6)
+    check("load_per_sample_stops", [r["load_active"] for r in rows], [True, True, False, False, False, False])
+    check("load_per_sample_probes", [r["load_probe"] for r in rows[:3]], [[0, 1], [1, 2], [2, 2]])
+    check("load_rows_name_the_load", {(r["load"], r["load_note"]) for r in rows}, {("b", "stub")})
+    count.update(n=0, keys=0)
+    with mock.patch.dict(globals(), PACE_MS=1), \
+            mock.patch.object(S, "search_columns", lambda frames, times, *a: {"per_key_first_ms": [2.0] * len(times)}), \
+            mock.patch.object(S, "changes_of", lambda frames: []), \
+            mock.patch.object(S, "first_change_after", lambda changes, t: None):
+        rows = run_series(load_session(lambda: count["n"], bump=stops_after_two),
+                          {"type": "pairs", "pairs": [(("down",), ("up",))]}, 3)
+    check("load_paced_per_key_stops", [r["load_active"] for r in rows], [True, True, False, False, False, False])
+    # A load that ended before sample 1 marks every row inactive, so the gate names it.
+    rows = run_series(load_session(lambda: 5), cycle, 4)
+    check("load_never_active", [r["load_active"] for r in rows], [False] * 4)
+
+    # load_a_waits_for_start: the renewal comes first and the input only after the probe moved since it.
+    log, st = [], {"count": 0, "armed": False, "polls": 0}
+
+    def probe_a():
+        if st["armed"]:
+            st["polls"] += 1
+            if st["polls"] == 3:
+                st["count"] += 1
+        return st["count"]
+
+    def renew_a():
+        st.update(armed=True, polls=0)
+        log.append(("renew", st["count"]))
+    ss = load_session(probe_a, renew_a)
+    ss.keys = types.SimpleNamespace(chord=lambda *k: (log.append(("chord", st["count"])) if k == ("enter",) else None) or 7)
+    with mock.patch.dict(globals(), LOAD_POLL_S=0.0):
+        rows = run_series(ss, cycle, 2)
+    check("load_a_waits_for_start", log, [("renew", 0), ("chord", 1), ("renew", 1), ("chord", 2)])
+    log.clear()
+    ss = load_session(lambda: 0, lambda: log.append("renew"), log)
+    with mock.patch.dict(globals(), LOAD_START_S=0.05, LOAD_POLL_S=0.005):
+        rows = run_series(ss, cycle, 3)
+    check("load_a_never_starts", (log, [r.get("error") for r in rows]), (["renew"], ["RuntimeError: the load did not start"]))
+
+    def link_failing_at(n):
+        """An os.link that raises on its nth call and links as usual on every other."""
+        real, calls = os.link, [0]
+
+        def link(a, b):
+            calls[0] += 1
+            if calls[0] == n:
+                raise OSError("link failed")
+            return real(a, b)
+        return link
+    # Load a's renewal links fresh names that sort just after the first name in dst, whatever src calls its files, onto the same inodes.
+    with tempfile.TemporaryDirectory() as td:
+        src, dst = os.path.join(td, "src"), os.path.join(td, "dst")
+        os.makedirs(src)
+        os.makedirs(dst)
+        for i in range(1, 6):
+            open(os.path.join(src, "c_%05d.jpg" % i), "w").close()
+            os.link(os.path.join(src, "c_%05d.jpg" % i), os.path.join(dst, "p_%05d.jpg" % i))
+        names, seq, base = sorted(os.listdir(src)), [COLD_SEQ], sorted(os.listdir(dst))
+        first = [os.path.basename(x) for x in link_cold(src, names, dst, seq, 3)]
+        second = [os.path.basename(x) for x in link_cold(src, names, dst, seq, 3)]
+        listing = sorted(os.listdir(dst))
+        check("cold_links_names", (first, second), (["p_00001.k%06d.jpg" % x for x in (999999, 999998, 999997)],
+                                                    ["p_00001.k%06d.jpg" % x for x in (999996, 999995, 999994)]))
+        check("cold_links_sort_after_the_first_row", (listing[0] == base[0], listing[1:4] == sorted(second),
+                                                      listing[4:7] == sorted(first), listing[7:] == base[1:]),
+              (True, True, True, True))
+        inodes = {os.stat(os.path.join(src, x)).st_ino for x in names}
+        check("cold_links_share_inodes", all(os.stat(os.path.join(dst, x)).st_ino in inodes for x in first + second), True)
+        check("cold_links_distinct", (len(first), len(second), len(listing)), (3, 3, 11))
+        part = []
+        with mock.patch.object(os, "link", link_failing_at(3)):
+            try:
+                link_cold(src, names, dst, seq, 5, part)
+                fail.append("cold_links_failure_propagates: a failing os.link raised nothing")
+            except OSError:
+                pass
+        check("cold_links_name_only_what_exists", (len(part), all(os.path.lexists(x) for x in part)), (2, True))
+    # Load a's renewal swaps the previous batch for a new one, so the right folder keeps its size through the run, and removes only inside a marked root.
+    with tempfile.TemporaryDirectory() as td:
+        open(os.path.join(td, MARKER), "w").close()
+        cold, right = os.path.join(td, "load", "cold-src"), os.path.join(td, "load", "cold-x")
+        os.makedirs(cold)
+        os.makedirs(right)
+        for i in range(1, 6):
+            open(os.path.join(cold, "c_%05d.jpg" % i), "w").close()
+            os.link(os.path.join(cold, "c_%05d.jpg" % i), os.path.join(right, "c_%05d.jpg" % i))
+        renew_a = load_renew(types.SimpleNamespace(right=right), "a", {"root": td, "roots": [td]})
+        sizes, seen = [], set()
+        for _ in range(4):
+            renew_a()
+            sizes.append(len(os.listdir(right)))
+            seen |= set(os.listdir(right))
+        check("load_a_renewals_keep_the_folder_size", (sizes, len(os.listdir(cold))), ([5 + COLD_BATCH] * 4, 5))
+        check("load_a_renewals_never_reuse_a_name", len(seen), 5 + 4 * COLD_BATCH)
+        # A link that fails on the tenth of a batch leaves the folder at its five pictures, and the next renewal links a whole batch.
+        base = ["c_%05d.jpg" % i for i in range(1, 6)]
+        with mock.patch.object(os, "link", link_failing_at(10)):
+            try:
+                renew_a()
+                fail.append("load_a_failed_renewal_propagates: a failing os.link raised nothing")
+            except OSError:
+                pass
+        check("load_a_failed_renewal_leaves_no_partial_batch", sorted(os.listdir(right)), base)
+        renew_a()
+        check("load_a_renewal_recovers_after_a_failed_one", len(os.listdir(right)), 5 + COLD_BATCH)
+    # With no marker on the root the renewal refuses before it removes anything, so the batch it linked is all still there.
+    with tempfile.TemporaryDirectory() as bare:
+        cold, other = os.path.join(bare, "load", "cold-src"), os.path.join(bare, "load", "cold-y")
+        os.makedirs(cold)
+        os.makedirs(other)
+        open(os.path.join(cold, "c_00001.jpg"), "w").close()
+        os.link(os.path.join(cold, "c_00001.jpg"), os.path.join(other, "c_00001.jpg"))
+        unmarked = load_renew(types.SimpleNamespace(right=other), "a", {"root": bare, "roots": [bare]})
+        unmarked()
+        linked = sorted(os.listdir(other))
+        try:
+            unmarked()
+            fail.append("load_a_renewal_refuses_outside_a_marked_root: a batch was removed with no marked root")
+        except SystemExit:
+            pass
+        check("load_a_refused_renewal_removes_nothing", (len(linked), sorted(os.listdir(other)) == linked), (1 + COLD_BATCH, True))
+    # A forced renewal waits out the load's gap since the last one, so load c's folder mtime has moved by the time the probe is read.
+    stamps = []
+    gap_load = Load("c", "stub", lambda: len(stamps), lambda: stamps.append(time.monotonic()), 0.2)
+    gap_session = load_session(None)
+    gap_session.load = gap_load
+    check("load_renew_inside_the_gap_is_skipped", (gap_load.renew(), gap_load.renew(), len(stamps)), (True, False, 1))
+    gap_session.load_ready()
+    check("load_forced_renewal_waits_out_the_gap", (len(stamps), stamps[1] - stamps[0] >= 0.2 - 0.01), (2, True))
+    # Load c's probe is the right pane's request count and listing flag, never a process tick count; the sample is dualState's shape (ui/Ipc.qml:126).
+    ipc = {"out": '{"active": true, "focused": 0, "panes": [{"path": "/a", "total": 3, "cursor": 0, "loading": false, "selected": [], "focused": true, "listRequests": 4}, {"path": "/nas/stream", "total": 5000, "cursor": 0, "loading": true, "selected": [], "focused": false, "listRequests": 7}]}'}
+    stub = types.SimpleNamespace(ipc=lambda fn, *a: ipc["out"])
+    probe_c, note_c = load_start(stub, "c", {"roots": []})
+    check("load_c_probe", (probe_c(), note_c), ((7, True), "NAS listing streaming in the right pane"))
+    # The probe reads the fields the producer writes: a pane built from the keys of dualState's own object literal.
+    with open(os.path.join(REPO, "ui", "Ipc.qml")) as f:
+        qml = f.read()
+    literal = qml[qml.index("function dualState()"):]
+    literal = literal[:literal.index("} : null")]
+    keys = re.findall(r"(\w+):", literal.split("return pane ? {", 1)[1])
+    ipc["out"] = json.dumps({"panes": [None, {k: 7 for k in keys}]})
+    check("load_c_probe_reads_the_producers_fields", (probe_c(), "listRequests" in keys, "loading" in keys),
+          ((7, True), True, True))
+    ipc["out"] = "{"
+    check("load_c_probe_unreadable", probe_c(), (None, False))
+    ipc["out"] = '{"panes": [{"listRequests": 4, "loading": false}]}'
+    check("load_c_probe_one_pane", probe_c(), (None, False))
+    ipc["out"] = '{"active": true, "focused": 0, "panes": [{"listRequests": 4, "loading": false}, null]}'
+    check("load_c_probe_null_pane", probe_c(), (None, False))
+    # The gate: a load group passes only when every sample's load_active is true.
+    idle = [dict(r) for r in full]
+    next(r for r in idle if r["journey"] == "nav.dual.down" and where(r) == "local+load-a")["load_active"] = False
+    code, gtext = run_gate(idle, "p7-load", 20)
+    check("gate_load_inactive_code", code, 2)
+    check("gate_load_inactive_line",
+          "GATE MISSING nav.dual.down dual local+load-a load inactive in 1 of 20 samples" in gtext, True)
+    check("gate_load_inactive_only_that_group", gtext.count("load inactive"), 1)
+    code, gtext = run_gate([{k: v for k, v in r.items() if k != "load_active"} for r in full], "p7-load", 20)
+    check("gate_load_unproved_is_inactive", (code, "load inactive in 20 of 20 samples" in gtext), (2, True))
+    code, gtext = run_gate(full, "p7-load", 20)
+    check("gate_load_all_active", (code, "load inactive" in gtext), (0, False))
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
@@ -3084,6 +3448,7 @@ def selftest():
     print("isolation cases: Esc count over running, cancelling and queued errors, refused pastes marked, an unclear bar is an error row")
     print("fling floor cases: medians and ranges from fixed arrays, the client wheel line on the harness clock, the floor beside the fling rows, "
           "a floor kept past trailing text, a named file that gives none says why, calibrate survives any probe error")
+    print("load cases: the probe is read per sample and per paced key, a load that stops reads inactive from there, a renewed load is awaited before the input and waits out its gap, a renewal swaps its batch inside a marked root, the c probe reads the fields ui/Ipc.qml writes, the gate names an inactive load group")
     print("target cases: dual pointer in the left pane, Enter row from the listing, --only plans, an error or an external window keeps the rows built before it, folders first pinned")
     print("SELFTEST ok (%d journeys across %d parts)" % (len(cover), len(PARTS)))
     return 0
