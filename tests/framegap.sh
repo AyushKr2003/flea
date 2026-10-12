@@ -43,16 +43,25 @@ output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
 
 verdict=0
 fail() { printf 'FAIL %s\n' "$1"; verdict=1; }
-# Sample input: "  INFO qml: FRAMEGAP DONE checks=4684 failed=0 controls=72 controlMiss=0 focusMiss=0" once, after "FRAMEGAP HOSTS 25 ArchiveCompressDialog,...". Every row is one frame side at one stop and state.
-expected_checks=4684
+# Sample input: "  INFO qml: FRAMEGAP DONE checks=4708 failed=0 controls=96 controlMiss=0 focusMiss=0" once, after "FRAMEGAP HOSTS 25 ArchiveCompressDialog,...". Every row is one frame side at one stop and state.
+expected_checks=4708 # 4684 plus the per-folder view row (4720), less 12 rows of its 3 frames now one CLIPPED row each
 expected_hosts=25
-# Every GapDialog, GapCheck and GapChrome side is a control row and must be flagged; GapChrome only draws its frame focused.
-expected_controls=72
+# Every GapDialog, GapCheck, GapChrome and GapCrossing side is a control row and must be flagged; GapChrome only draws its frame focused.
+expected_controls=96 # 72 plus GapCrossing, 4 sides over 3 stops and 2 states
 tally=$(printf '%s\n' "$output" | grep -ao 'FRAMEGAP DONE checks=[0-9]* failed=[0-9]* controls=[0-9]* controlMiss=[0-9]* focusMiss=[0-9]*' | tail -1)
 hosts=$(printf '%s\n' "$output" | grep -ao 'FRAMEGAP HOSTS [0-9]*' | grep -o '[0-9]*$')
 if printf '%s\n' "$output" | grep -q 'FRAMEGAP FAIL'; then
     fail 'a framed control comes within the inset of a rule or its host edge'
     printf '%s\n' "$output" | grep -ao 'FRAMEGAP FAIL.*' | head -40
+fi
+# A CLIPPED row is scrolled content cut by the fold, judged by what it shows; only the Settings card scrolls, and the count is positional so it is not pinned.
+clipped_rows=$(printf '%s\n' "$output" | grep -ao 'FRAMEGAP CLIPPED.*')
+printf 'FRAMEGAP clipped rows: %s\n' "$(printf '%s' "$clipped_rows" | grep -c .)"
+tab=$(printf '\t')
+foreign_clipped=$(printf '%s\n' "$clipped_rows" | grep -v -e '^$' -e "^FRAMEGAP CLIPPED SettingsPanel [^$tab]*$tab")
+if [ -n "$foreign_clipped" ]; then
+    fail 'a frame outside the Settings card was called clipped by the fold'
+    printf '%s\n' "$foreign_clipped" | head -10
 fi
 [ "$tally" = "FRAMEGAP DONE checks=$expected_checks failed=0 controls=$expected_controls controlMiss=0 focusMiss=0" ] || fail "the run reported '${tally:-nothing}', not $expected_checks checks, 0 failed, $expected_controls controls and no misses"
 [ "${hosts:-0}" = "$expected_hosts" ] || fail "the run measured ${hosts:-0} hosts, not $expected_hosts"
@@ -64,7 +73,7 @@ if printf '%s\n' "$output" | grep -q 'FRAMEGAP FOCUSMISS'; then
     fail 'the focused pass left a control type unfocused, so it may have re-measured rest'
     printf '%s\n' "$output" | grep -ao 'FRAMEGAP FOCUSMISS.*' | head -20
 fi
-for control_host in GapDialog GapCheck GapChrome; do
+for control_host in GapDialog GapCheck GapChrome GapCrossing; do
     printf '%s\n' "$output" | grep -q "FRAMEGAP CONTROLROW $control_host" || fail "no flagged control row names $control_host"
 done
 # The offscreen platform cannot mask a FloatingWindow, and Settings > About asks a flea binary the harness does not ship for its version; neither line is a host's.
