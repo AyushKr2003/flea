@@ -70,6 +70,7 @@ mod walkmounts;
 mod menudelete;
 pub mod trashbrowse;
 pub mod trashland;
+pub mod journalgate;
 pub mod trashdelete;
 pub mod trashmanifest;
 pub mod rows;

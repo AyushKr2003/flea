@@ -40,11 +40,12 @@ pub(crate) fn land(out: &mut impl Write, ops: &mut Ops, msg: OpMsg) {
     match msg {
         OpMsg::TrashAnnounced { id, path, ok, failed, reason } => {
             ops.settling.push((id, path));
+            ops.journal.reserve(id);
             ops.live.finished_if(id);
             writeln!(out, "{}", trashed_line(ok, failed, &reason)).ok();
         }
         OpMsg::Trashed { id, ok, failed, entry, reason, announced } => {
-            ops.journal.push(entry);
+            ops.journal.fill(id, entry);
             ops.settling.retain(|(held, _)| *held != id);
             ops.live.finished_if(id);
             if !announced { writeln!(out, "{}", trashed_line(ok, failed, &reason)).ok(); }
@@ -56,7 +57,7 @@ pub(crate) fn land(out: &mut impl Write, ops: &mut Ops, msg: OpMsg) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::opsdispatch::{do_undo, start_trash};
+    use crate::backend::opsdispatch::{do_rename, do_undo, start_trash};
     use crate::backend::testdir::TestDir;
 
     fn created(path: &std::path::Path) -> Entry {
@@ -126,5 +127,73 @@ mod tests {
         assert_eq!(o.live.running(), Some(second), "the first batch landing never frees the second batch's slot");
         let done = rx.recv_timeout(std::time::Duration::from_secs(10)).expect("the second trash reports");
         assert!(matches!(done, OpMsg::Trashed { announced: false, .. }));
+    }
+
+    fn emptied(id: usize) -> OpMsg {
+        OpMsg::Trashed { id, ok: 0, failed: 1, entry: Entry { op: "trash".to_string(), steps: Vec::new() }, reason: String::new(), announced: true }
+    }
+
+    fn undone(o: &mut Ops) -> String {
+        let mut line: Vec<u8> = Vec::new();
+        do_undo(&mut line, o);
+        String::from_utf8_lossy(&line).to_string()
+    }
+
+    #[test]
+    fn a_rename_in_the_settle_window_journals_after_the_trash_so_undo_reverses_the_rename_first() {
+        let d = TestDir::new("trashland-order-rename");
+        let (x, trashed) = (d.file("x.txt", "x"), d.file("trashed.txt", "t"));
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let mut o = Ops::new(tx);
+        let (id, _) = o.claim_transfer();
+        let mut buf: Vec<u8> = Vec::new();
+        land(&mut buf, &mut o, announced(id, &trashed));
+        do_rename(&mut buf, &mut o, &x.to_string_lossy(), "y.txt");
+        assert!(d.join("y.txt").exists() && o.journal.is_empty(), "the rename ran and waits behind the batch's place");
+        land(&mut buf, &mut o, journaled(id, &trashed));
+        assert_eq!(o.journal.len(), 2, "the trash and the rename both filed once the settle list landed");
+        assert!(undone(&mut o).contains(r#""t":"undone""#));
+        assert!(x.exists() && trashed.exists(), "the first undo reverses the rename, the user's last action, and leaves the trash");
+        assert!(undone(&mut o).contains(r#""t":"undone""#));
+        assert!(!trashed.exists(), "the second undo reverses the trash");
+    }
+
+    #[test]
+    fn two_batches_whose_settle_lists_finish_in_reverse_journal_in_the_order_they_were_announced() {
+        let d = TestDir::new("trashland-order-batches");
+        let (a, b) = (d.file("a.txt", "a"), d.file("b.txt", "b"));
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let mut o = Ops::new(tx);
+        let mut buf: Vec<u8> = Vec::new();
+        let (first, _) = o.claim_transfer();
+        land(&mut buf, &mut o, announced(first, &a));
+        let (second, _) = o.claim_transfer();
+        land(&mut buf, &mut o, announced(second, &b));
+        land(&mut buf, &mut o, journaled(second, &b));
+        assert!(o.journal.is_empty(), "the later batch waits for the earlier one's place");
+        assert!(undone(&mut o).contains("already running") && b.exists());
+        land(&mut buf, &mut o, journaled(first, &a));
+        assert_eq!(o.journal.len(), 2);
+        assert!(undone(&mut o).contains(r#""t":"undone""#));
+        assert!(a.exists() && !b.exists(), "the first undo reverses the later batch");
+        assert!(undone(&mut o).contains(r#""t":"undone""#));
+        assert!(!a.exists(), "the second undo reverses the earlier batch");
+    }
+
+    #[test]
+    fn a_batch_that_landed_nothing_still_closes_its_place_and_the_queued_rename_journals() {
+        let d = TestDir::new("trashland-order-empty");
+        let (x, missing) = (d.file("x.txt", "x"), d.join("missing.txt"));
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let mut o = Ops::new(tx);
+        let (id, _) = o.claim_transfer();
+        let mut buf: Vec<u8> = Vec::new();
+        land(&mut buf, &mut o, announced(id, &missing));
+        do_rename(&mut buf, &mut o, &x.to_string_lossy(), "y.txt");
+        assert!(o.journal.is_empty());
+        land(&mut buf, &mut o, emptied(id));
+        assert_eq!(o.journal.len(), 1, "the rename journals and the empty entry adds nothing");
+        assert!(undone(&mut o).contains(r#""t":"undone""#), "undo is free again");
+        assert!(x.exists() && !d.join("y.txt").exists());
     }
 }

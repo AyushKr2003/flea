@@ -160,6 +160,8 @@ pub struct Journal {
     entries: Vec<Entry>,
     redo: Vec<Result<super::redo::Replay, FleaError>>,
     shared: Option<super::undoshare::Shared>,
+    // Entries queue here behind any open trash reservation, so they file in the order the operations were accepted.
+    gate: super::journalgate::Gate,
     // Paths the last reversal touched, so a session patches its index; cleared on take and on entry.
     last_touched: Reached,
     // Manifests by nonce for entries this backend recorded; a claim elsewhere finds no key and falls back.
@@ -231,7 +233,7 @@ impl Journal {
         std::mem::take(&mut self.last_touched)
     }
     pub fn new() -> Journal {
-        Journal { entries: Vec::new(), redo: Vec::new(), shared: None, last_touched: Reached::default(), manifests: std::collections::HashMap::new(), next_nonce: 0, nonce_high: nonce_high_once() }
+        Journal { entries: Vec::new(), redo: Vec::new(), shared: None, gate: Default::default(), last_touched: Reached::default(), manifests: std::collections::HashMap::new(), next_nonce: 0, nonce_high: nonce_high_once() }
     }
 
     // Production attaches the session journal file; a refused directory keeps the in-memory one.
@@ -278,8 +280,29 @@ impl Journal {
         self.next_nonce()
     }
 
-    // An operation that changed nothing records nothing, so undo never reports a no-op as work.
     pub fn push(&mut self, entry: Entry) {
+        if let Some(entry) = self.gate.hold(entry) {
+            self.file(entry);
+        }
+    }
+
+    // A trash batch reserves its place at the announce, so a write accepted in the settle window files after it.
+    pub(crate) fn reserve(&mut self, id: usize) {
+        self.gate.reserve(id);
+    }
+
+    // The batch's entry (empty when all failed) fills its place, and every ready entry now leading files in queue order.
+    pub(crate) fn fill(&mut self, id: usize, entry: Entry) {
+        if let Some(entry) = self.gate.fill(id, entry) {
+            self.push(entry);
+        }
+        for ready in self.gate.flush() {
+            self.file(ready);
+        }
+    }
+
+    // An operation that changed nothing records nothing, so undo never reports a no-op as work.
+    fn file(&mut self, entry: Entry) {
         let shared = match &self.shared {
             Some(shared) => shared.clone(),
             None => {
