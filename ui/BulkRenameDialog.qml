@@ -215,17 +215,8 @@ FocusScope {
         target: replaceField.input
         function onTextChanged() { root.replace = replaceField.input.text; root.applyFind() }
     }
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.color.background
-        opacity: 0.5
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onClicked: root.close()
-            onWheel: function (wheel) { wheel.accepted = true }
-        }
+    Flea.DialogScrim {
+        onDismissed: root.close()
     }
     Rectangle {
         id: card

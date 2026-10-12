@@ -1,6 +1,6 @@
 .pragma library
 
-.import "Mounts.js" as Mounts
+.import "Format.js" as Format
 
 // The updater's row state and every word it shows, pure so tests/js/update.js drives it without a window; ui/UpdateCheck.qml runs the processes.
 
@@ -95,8 +95,8 @@ function shownVersion(latest, installed) {
 function value(status) {
     switch (status.state) {
     case "checking": return WORDS.checking
-    case "available": return Mounts.fill(WORDS.available, shownVersion(status.latest, status.installed))
-    case "current": return Mounts.fill(WORDS.current, status.installed.split("-")[0])
+    case "available": return Format.fill(WORDS.available, shownVersion(status.latest, status.installed))
+    case "current": return Format.fill(WORDS.current, status.installed.split("-")[0])
     case "failed": return WORDS.failed
     case "launched": return WORDS.launched
     case "unchecked": return status.kind === "git" ? WORDS.rolling : WORDS.source

@@ -172,7 +172,7 @@ Item {
         return accepted
     }
 
-    // The pointer in the view's own coordinates, so the rest and the band read the listing and not the row; a peek is another directory's rows, so only the pane's own rows rest and scroll here.
+    // In the view's own coordinates, so the band reads the listing, not the row.
     function hoverAt(drag) {
         if (root.dropScope !== null)
             return

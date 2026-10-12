@@ -1,10 +1,11 @@
 .pragma library
 
 .import "Mounts.js" as Mounts
+.import "Format.js" as Format
 .import "Protocols.js" as Protocols
 .import "NetFs.js" as NetFs
 
-// The sentences Ctrl+E answers with when it releases nothing, each filled by Mounts.fill.
+// The sentences Ctrl+E answers with when it releases nothing, each filled by Format.fill.
 var WORDS = {
     systemDrive: "%1 is the system drive, which Flea never unmounts.",
     systemVolume: "This folder is on a system volume, which Flea never unmounts.",
@@ -191,7 +192,7 @@ function release(root, rail, fromRail) {
     }
     var entry = fromRail ? rail.entries[rail.cursorIndex] : Mounts.holding(rail.entries, root.path)
     if (fromRail && entry && entry.group === "device" && entry.kind === "disk") {
-        root.message(Mounts.fill(WORDS.systemDrive, entry.label), false)
+        root.message(Format.fill(WORDS.systemDrive, entry.label), false)
         return
     }
     if (!entry) {
@@ -202,7 +203,7 @@ function release(root, rail, fromRail) {
     var rows = Mounts.railMenu(entry)
     var pick = releaseFromRows(rows)
     if (pick === "") {
-        root.message(Mounts.fill(Mounts.WORDS.nothingToRelease, entry.label), false)
+        root.message(Format.fill(Mounts.WORDS.nothingToRelease, entry.label), false)
         return
     }
     rail.releaseChosen(pick, Mounts.railKey(entry))

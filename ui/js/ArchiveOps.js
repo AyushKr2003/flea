@@ -12,7 +12,7 @@ function openCompressPw(pane, menuId, cards) {
     pane.backend.askPaths(idx)
 }
 
-// The answer to the askPaths above: the cards host opens over these paths and their menu id, and an empty answer says there is no target.
+// The answer to askPaths: the paths and menu id the cards host opens over.
 function compressPwResolved(cards, pane, paths, menuId) {
     if (paths.length === 0) return Ops.sayNoTarget(pane)
     cards.openCompressDialog({ paths: paths, menuId: menuId || 0 }, Ops.leaf(pane.path), pane)

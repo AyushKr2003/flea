@@ -312,7 +312,7 @@ Rectangle {
         // A running operation's line, which stands until the operation replaces it; see ui/StatusBar.qml.
         onSticky: function (text) { bar.setActivity(primaryPane, text, primaryPane.transfer) }
         onConvertRequested: function (name) { convertDialog.open(name, primaryPane) }
-        // Archives040: the password compress dialog opens over resolved selection paths, the extract card over the archive the first attempt named.
+        // Archives040: compress opens over resolved paths, extract over the named archive.
         onCompressPwRequested: function (paths, menuId) {
             view.openArchiveCards().askCompressPw(primaryPane, paths, menuId)
         }
@@ -477,7 +477,7 @@ Rectangle {
         function onAccepted(source, format, strip, requestId) { Ops.convert(convertDialog.owner, source, format, strip, requestId) }
     }
 
-    // Archives040: the two password cards build on first open through this host, so startup builds no Loader and no object of them.
+    // Archives040: both password cards build on first open, never at startup.
     property var archiveCards: null
     function openArchiveCards() {
         if (!view.archiveCards) {

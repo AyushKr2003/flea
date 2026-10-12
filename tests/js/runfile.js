@@ -1,3 +1,4 @@
+.import "../../ui/js/Format.js" as Format
 .import "../../ui/js/RunFile.js" as RunFile
 .import "../../ui/js/Menu.js" as Menu
 .import "../../ui/js/Nav.js" as Nav
@@ -71,7 +72,7 @@ function run(check) {
     check("the title names the program",
           RunFile.titleFor("flea-field-bench"), "flea-field-bench is a program")
     check("shown strings are whole templates filled in order, never joined fragments",
-          RunFile.fill("%1 · %2", "a", "b") + "|" + RunFile.TITLE_PROGRAM + "|" + RunFile.SUBTITLE_PROGRAM,
+          Format.fill("%1 · %2", "a", "b") + "|" + RunFile.TITLE_PROGRAM + "|" + RunFile.SUBTITLE_PROGRAM,
           "a · b|%1 is a program|%1 · %2")
     check("the script row carries its kind and its size",
           RunFile.subtitleFor("script", 9420), "Shell script · 9.4 kB")

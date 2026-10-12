@@ -84,13 +84,12 @@ function listedGlyph(pane, path) {
     return row ? Icons.glyphForRow(row.i, row.p) : ""
 }
 
-// Every user-facing string is one whole template filled by fill, never fragments joined with +; %1, %2 name the values in order.
-var fill = Format.fill
+// Every user-facing string is one whole template filled by Format.fill, never fragments joined with +.
 
 // The card's title names the program; the name row carries its kind and its size.
 var TITLE_PROGRAM = "%1 is a program"
 function titleFor(name) {
-    return fill(TITLE_PROGRAM, escapeName(name))
+    return Format.fill(TITLE_PROGRAM, escapeName(name))
 }
 
 // R4: control and bidi characters are shown escaped, never raw, and a clean name passes through byte for byte.
@@ -104,7 +103,7 @@ function escapeName(name) {
 
 var SUBTITLE_PROGRAM = "%1 · %2"
 function subtitleFor(kind, bytes) {
-    return fill(SUBTITLE_PROGRAM, KIND_LABELS[kind] || KIND_LABELS.elf, Format.size(bytes))
+    return Format.fill(SUBTITLE_PROGRAM, KIND_LABELS[kind] || KIND_LABELS.elf, Format.size(bytes))
 }
 
 function leafOf(path) {
