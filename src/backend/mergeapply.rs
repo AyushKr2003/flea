@@ -193,7 +193,7 @@ fn merge_into(
                 let kept = to != dst_inner;
                 // Replace trashes then creates exclusively, through the merge's deferred batch.
                 let r = if replace {
-                    replacing_deferred(&dst_inner, steps, deferred, |steps| {
+                    replacing_deferred(&dst_inner, steps, deferred, cancel, |steps| {
                         let mut land = LandCtx { moving, cancel, sink: &mut *sink, carried: &mut *carried, manifest: &mut *manifest, ctx: &mut *ctx, steps: &mut *steps };
                         land_one(&src_inner, &to, &mut land)
                     })

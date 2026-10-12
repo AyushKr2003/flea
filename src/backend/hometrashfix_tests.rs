@@ -43,7 +43,7 @@ fn a_partly_removed_folder_keeps_its_trash_copy_and_says_so() {
     d.file("orig/album/sub/in.txt", "in");
     std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o555)).unwrap();
     set_test_trash_root(Some(xdg.join("Trash")));
-    let r = trash_to_home(&album);
+    let r = trash_to_home(&album, &std::sync::atomic::AtomicBool::new(false));
     set_test_trash_root(None);
     std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o755)).unwrap();
     let msg = r.expect_err("the remove must fail on the locked child");
@@ -145,4 +145,25 @@ fn a_home_trash_replace_needs_no_gio_list() {
     assert_eq!(trash::test_list_calls(), 0, "the home Trash names its own entry, so nothing lists");
     use crate::backend::undo::Step;
     assert!(matches!(&entry.steps[..], [Step::Trashed(old), Step::Copied { .. }] if old.uri.starts_with(URI)), "{:?}", entry.steps);
+}
+
+// A cancel that landed before the Replace's trash step starts no home Trash copy, so a cancelled Replace costs no Trash entry.
+#[test]
+fn a_cancelled_replace_starts_no_home_trash_copy() {
+    let d = TestDir::new("replace261-cancel");
+    let xdg = d.dir("xdg");
+    let dest = gvfs_dest(&d);
+    d.dir("from");
+    let photo = d.file("from/photo.png", "yours");
+    let there = d.file("gvfs/sftp:host=slot.test/home/gm/photo.png", "there");
+    let _root = test_trash_root(&xdg.join("Trash"));
+    let _trash = gvfs_trash(&d, &xdg);
+    let _cancel_at = crate::backend::opsreq::CancelAtGuard::hold(0);
+    crate::backend::hometrash::test_take_record_syncs();
+    let (_, _, _, errors, entry) = transfer(false, &[&photo], &dest, chosen("replace", asked(1, &[&photo], &dest), &dest));
+    assert_eq!(crate::backend::hometrash::test_take_record_syncs(), 0, "the old item was copied into the home Trash after the cancel");
+    assert_eq!(errors, vec!["cancelled".to_string()]);
+    assert_eq!(text(&there), "there", "the old item stays in place");
+    assert!(entry.steps.is_empty(), "a cancelled Replace journals nothing: {:?}", entry.steps);
+    assert!(std::fs::read_dir(xdg.join("Trash/files")).map(|mut i| i.next().is_none()).unwrap_or(true), "no Trash copy stays behind");
 }

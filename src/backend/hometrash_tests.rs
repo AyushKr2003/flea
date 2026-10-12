@@ -366,7 +366,7 @@ fn without_an_override_a_test_never_names_a_real_trash() {
     set_test_trash_root(None);
     let d = TestDir::new("replace261-no-override");
     let there = d.file("photo.png", "there");
-    assert_eq!(trash_to_home(&there).expect_err("no override names no Trash"), HOME_TRASH_FAILED);
+    assert_eq!(trash_to_home(&there, &std::sync::atomic::AtomicBool::new(false)).expect_err("no override names no Trash"), HOME_TRASH_FAILED);
     assert_eq!(text(&there), "there", "the original never moved");
     assert!(!d.path().join("Trash").exists(), "no Trash directory was created in the sandbox");
 }

@@ -4,7 +4,7 @@ use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // No GVFS backend implements trash, so gio trash refuses every path under its FUSE folder (sample: /run/user/1000/gvfs/smb-share:server=192.168.21.25,share=data/photos).
 pub fn trashable(path: &Path) -> bool {
@@ -229,13 +229,17 @@ fn home_entry(original: &Path, candidate: &OsStr) -> Entry {
 }
 
 // Moves one replaced item into the home Trash the freedesktop way and answers its trash:/// entry.
-pub(crate) fn trash_to_home(original: &Path) -> Result<Entry, String> {
+pub(crate) fn trash_to_home(original: &Path, cancel: &AtomicBool) -> Result<Entry, String> {
+    // A cancel that landed before the copy starts costs no Trash entry at all.
+    if cancel.load(Ordering::Relaxed) {
+        return Err(crate::backend::collide::CANCELLED.to_string());
+    }
     let Some(root) = home_trash_root() else { return Err(HOME_TRASH_FAILED.to_string()) };
     let (files, info) = trash_dirs(&root).map_err(|e| sentence_for_io(&e).to_string())?;
     let Some(name) = original.file_name() else { return Err(HOME_TRASH_FAILED.to_string()) };
     let (candidate, info_path) = reserve(&files, &info, original, name, true).map_err(|e| sentence_for_io(&e).to_string())?;
     let files_path = files.join(&candidate);
-    if let Err(reason) = place_copy(original, &files_path, &files) {
+    if let Err(reason) = place_copy(original, &files_path, &files, cancel) {
         drop_orphan(&files_path, &info_path);
         return Err(reason);
     }
@@ -316,14 +320,15 @@ pub(crate) fn sync_folders(unsynced: &mut std::collections::BTreeSet<PathBuf>) {
 }
 
 // Copies the original into the Trash files folder whole, a symlink as a link and never followed.
-fn place_copy(original: &Path, files_path: &Path, room: &Path) -> Result<(), String> {
-    let idle = AtomicBool::new(false);
+fn place_copy(original: &Path, files_path: &Path, room: &Path, cancel: &AtomicBool) -> Result<(), String> {
     let mut sink = |_: u64, _: u64| {};
-    let mut progress = crate::backend::copyfile::Progress { cancel: &idle, on_bytes: &mut sink, tree: None,
+    let mut progress = crate::backend::copyfile::Progress { cancel, on_bytes: &mut sink, tree: None,
         partial: None, manifest: None, durability: None, for_move: false };
     match crate::backend::copyfile::copy_any(original, files_path, &mut progress) {
         Ok(()) => Ok(()),
         // The room is read off the Trash folder itself, which stands whatever the copy left behind.
+        // A cancel keeps its own word, which is what the transfer counts it by; copy_any already removed the partial.
+        Err(_) if cancel.load(Ordering::Relaxed) => Err(crate::backend::collide::CANCELLED.to_string()),
         Err(_) => Err(sentence_after_copy(free_bytes(room)).to_string()),
     }
 }

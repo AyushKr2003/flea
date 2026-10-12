@@ -63,7 +63,7 @@ fn merge_replace_refuses_a_destination_that_vanished_before_its_trash() {
     let landed_in = std::rc::Rc::clone(&landed);
     let mut deferred = crate::backend::mergeapply::Deferred::begin();
     let mut steps = Vec::new();
-    let r = crate::backend::mergeapply::replacing_deferred(&gone, &mut steps, &mut deferred, move |_| { landed_in.set(true); Ok(()) });
+    let r = crate::backend::mergeapply::replacing_deferred(&gone, &mut steps, &mut deferred, &std::sync::atomic::AtomicBool::new(false), move |_| { landed_in.set(true); Ok(()) });
     match r {
         Err(e) => assert_eq!(e.msg, crate::backend::collide::TRASH_REFUSED),
         Ok(()) => panic!("a gone destination must refuse, not trash-and-land"),
@@ -96,7 +96,7 @@ fn a_replace_refuses_up_front_when_the_before_list_cannot_be_read() {
     let mut steps = Vec::new();
     let landed = std::rc::Rc::new(std::cell::Cell::new(false));
     let landed_in = std::rc::Rc::clone(&landed);
-    let r = crate::backend::mergeapply::replacing_deferred(&there, &mut steps, &mut deferred, move |_| {
+    let r = crate::backend::mergeapply::replacing_deferred(&there, &mut steps, &mut deferred, &std::sync::atomic::AtomicBool::new(false), move |_| {
         landed_in.set(true);
         Ok(())
     });
@@ -133,7 +133,7 @@ fn a_settle_list_that_fails_once_is_retried_and_still_attributes() {
     let _guard = StandIn;
     let mut deferred = crate::backend::mergeapply::Deferred::begin();
     let mut steps = Vec::new();
-    let r = crate::backend::mergeapply::replacing_deferred(&there, &mut steps, &mut deferred, |_| {
+    let r = crate::backend::mergeapply::replacing_deferred(&there, &mut steps, &mut deferred, &std::sync::atomic::AtomicBool::new(false), |_| {
         std::fs::rename(&photo, &there).map_err(|e| crate::error::from_io("copy", "p.png", &e))?;
         Ok(())
     });
@@ -178,7 +178,7 @@ fn a_settle_no_list_answers_keeps_path_and_time_for_undo_to_resolve() {
     let mut steps = Vec::new();
     let before_trash = crate::backend::hometrash::deletion_date_local();
     let mut after_trash = String::new();
-    let r = crate::backend::mergeapply::replacing_deferred(&there, &mut steps, &mut deferred, |_| {
+    let r = crate::backend::mergeapply::replacing_deferred(&there, &mut steps, &mut deferred, &std::sync::atomic::AtomicBool::new(false), |_| {
         after_trash = crate::backend::hometrash::deletion_date_local();
         // A landing that runs past a second boundary, so a settle-time stamp could not pass for the trash time.
         std::thread::sleep(std::time::Duration::from_millis(1100));
