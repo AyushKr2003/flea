@@ -161,7 +161,7 @@ ShellRoot {
             var seenBig = function () { return [big.session.dragCopy, big.session.dropDestDev, big.destDev] }
             root.check("a folder row with a device of its own is realised", big ? big.row.v : null, 5)
             root.check("its own device wins over the backend's answer for its path", big ? [root.attempt(function () { return big.enter(own, carried, "", "", Qt.MoveAction, "") })[0]].concat(seenBig()) : [], [true, true, 5, 5])
-            big.leaveRow()
+            if (big) big.leaveRow()
             root.paneStub.backend.pathDevs = {}
             root.paneStub.columnsArea.columns = []
             var bareRows = root.rowsOf(bareColumn)
