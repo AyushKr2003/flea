@@ -124,6 +124,26 @@ unset -f stat
 XDG_DATA_HOME="$data_real"
 [[ "$got" != "$second_root/data/Trash/files" && "$got" == */.Trash*/files ]] || fail "nested-volume item gave $got"
 ok "item on its own device inside the data home's folder goes to gio: $got"
+# trash_guard_rows judges each row by one rule: Flea's rename by the files rule, a gio trash by the gio rule, never either.
+. "$repo/tests/ui-trash.sh"
+trash_box=$second_root
+trash_private() { :; }
+trash_backing() { printf '%s\n' "$stub_backing"; }
+rows_item="$second_root/item.txt"
+rows_listing=$(printf 'trash:///item.txt\t%s' "$rows_item")
+XDG_DATA_HOME="$second_root/data"
+rows_flea=$(sandbox_trash_files_dir "$rows_item" "$home_same") || { XDG_DATA_HOME="$data_real"; fail "rows: Flea rule refused"; }
+rows_gio=$(sandbox_trash_gio_dir "$rows_item" "$home_same") || { XDG_DATA_HOME="$data_real"; fail "rows: gio rule refused"; }
+[[ "$rows_flea" != "$rows_gio" ]] || { XDG_DATA_HOME="$data_real"; fail "rows: the two rules agree, so the layout proves nothing"; }
+rows_judge() { ( trash_gio_rows=(); [[ "$1" == gio ]] && trash_gio_rows[$rows_item]=1; stub_backing="$2/item.txt"; trash_guard_rows "$rows_listing" "$home_same" ) >/dev/null 2>&1; }
+rows_judge flea "$rows_flea" || { XDG_DATA_HOME="$data_real"; fail "rows: a Flea row in Flea's store was refused"; }
+rows_judge gio "$rows_gio" || { XDG_DATA_HOME="$data_real"; fail "rows: a gio row in the gio store was refused"; }
+! rows_judge flea "$rows_gio" || { XDG_DATA_HOME="$data_real"; fail "rows: a Flea row in the gio store passed"; }
+! rows_judge gio "$rows_flea" || { XDG_DATA_HOME="$data_real"; fail "rows: a gio row in Flea's store passed"; }
+# A Flea row never asks the gio rule, so a mount-top trash that cannot resolve leaves it passing.
+( sandbox_trash_gio_dir() { return 1; }; rows_judge flea "$rows_flea" ) || { XDG_DATA_HOME="$data_real"; fail "rows: a Flea row failed when the gio rule could not resolve"; }
+XDG_DATA_HOME="$data_real"
+ok "row guard: each row is judged by its own rule, both wrong stores refused"
 # The remaining mount-top cases keep the data home on the other device, apart from the item.
 export XDG_DATA_HOME="$second_root/data"
 
