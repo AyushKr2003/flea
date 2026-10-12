@@ -79,7 +79,8 @@ ShellRoot {
         var found = root.proc("/proc/self/maps").match(/lib(?:Qt6(?:Pdf|Multimedia)[A-Za-z]*|avcodec|avformat)\.so/g) || []
         return found.filter(function (n, i) { return found.indexOf(n) === i }).sort().join("+")
     }
-    // Every distinct file path mapped now, as a "\n"-joined sorted string, for the first-open cost census.
+    // Every distinct file path mapped now, as a sorted array, for the first-open cost census.
+    // Sample input: the /proc/self/maps line "7f3a1c000000-7f3a1c2a4000 r--p 00000000 08:01 1234567    /usr/lib/libQt6Pdf.so.6.12.0" answers "/usr/lib/libQt6Pdf.so.6.12.0", the path after the first " /" with a trailing " (deleted)" cut.
     function mappedFiles() {
         var found = root.proc("/proc/self/maps").match(/ \/[^\n]*/g) || []
         var seenFiles = {}
@@ -158,7 +159,7 @@ ShellRoot {
             root.fail("step " + (root.step + 1) + " held [" + held.join(" ") + "], want [" + want.join(" ") + "]")
         if (s.unit.length === 0 && (w.previewUnit !== null || w.swapUnit !== null))
             root.fail("step " + (root.step + 1) + " held Quick Look's own unit for " + s.name + ", which Quick Look opens from no unit")
-        // A rest on a file with a unit builds the card closed, swap wrapper included, so the first Space only opens it; a file with no unit builds none.
+        // A rest on a file with a unit builds the card closed, swap wrapper included, so the first Space only opens it; a file with no unit builds none until a unit file has been rested on, as the loader keeps a built card.
         root.cardExpected = root.cardExpected || s.unit.length > 0
         var look = root.pv()
         if (root.cardExpected && (look === null || look.active || !look.swapBuilt))
