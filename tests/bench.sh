@@ -328,8 +328,7 @@ cp "$man" "${comma_csv%.csv}.manifest.md"
 "$repo/tools/flea-bench-report" "$comma_csv" >/dev/null 2>"$scratch/comma.err"
 check "a comma inside a verdict is refused" 1 $?
 holds "and the refusal names the field that holds it" "so a field holds a comma" "$scratch/comma.err"
-# A comma in a dirty row the guard alone would drop: the raw check still dies naming it.
-# The dirty comma sits in ranked, so this order read-back must hold for the shift to reach write_clean.
+# A dirty row's comma sits in ranked, so the raw check names it only while ranked comes before write_clean.
 ranked_at=$(printf '%s\n' "$bench_header" | tr ',' '\n' | grep -n '^ranked$' | cut -d: -f1)
 clean_at=$(printf '%s\n' "$bench_header" | tr ',' '\n' | grep -n '^write_clean$' | cut -d: -f1)
 [ "${ranked_at:-0}" -ge 1 ] && [ "${ranked_at:-0}" -lt "${clean_at:-0}" ]
