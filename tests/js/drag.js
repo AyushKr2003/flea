@@ -366,6 +366,7 @@ function run(check) {
     Messages.route(capRoot, JSON.parse(JSON.stringify(capReply)))
     var capBind = Source.slice(Source.source("ui/CrumbDrop.qml"), "destDev:", "\n").substring("destDev:".length)
     var capDev = new Function("root", "DropDev", "return (" + capBind + ")")(capRoot, DropDev)
+    check("cap_drops crumb device is the one the devs reply answered for it", capDev, 56)
     check("cap_drops crumb reads a move, because its device is the lift's", Drag.feedbackLine(capCrumb, capCrumbs[capCrumbs.length - 2].text, capDev),
         "Move 1 item to outer/ · ctrl at lift copies")
     var capColumn = Drag.feedbackFor(Drag.markerPayload([0], false, "/cap-drops/Photos", 56), ["file:///cap-drops/Photos/p1.txt"])
