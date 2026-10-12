@@ -10089,8 +10089,7 @@ def flush_held():
         held.clear()
         for line in due:
             send(line)
-    if due and marker:
-        open(marker, "a").write("flushed\n")
+    return bool(due)
 # Sample input: {"c":"list","path":"/home/gm","first":350,"hidden":false}
 def replaces_held(line):
     with heldLock:
@@ -10113,8 +10112,8 @@ for line in sys.stdin:
             if replaces_held(line):
                 if marker:
                     open(marker, "a").write("dropped\n")
-            else:
-                flush_held()
+            elif flush_held() and marker:
+                open(marker, "a").write("flushed\n")
         if not send(line):
             break
 EOS
@@ -10182,9 +10181,9 @@ case_hanglisting() {
     while (( $(date +%s%3N) < late_by )); do sleep 0.2; done
     [[ "$(ipc path)" == "$home_path" ]] \
         || fail "hanglisting: the late rows drew over Home: $(ipc path)"
-    # Home's list flushed the held one, so its stale answer came while Home's listing was out, not after it settled.
-    grep -qx flushed "$dir/escape-delayed" \
-        || fail "hanglisting: Home's list never flushed the held one, the proxy wrote $(tr '\n' ' ' < "$dir/escape-delayed")"
+    # Only a list of another folder writes "flushed", so the proxy sent the held list ahead of Home's own list.
+    grep -qx flushed "$dir/escape-delayed" 2>/dev/null \
+        || fail "hanglisting: Home's list never flushed the held one, the proxy wrote $(tr '\n' ' ' 2>/dev/null < "$dir/escape-delayed" || echo 'no marker file')"
     [[ -z "$(ipc stateMessage)" ]] \
         || fail "hanglisting: Home kept $(ipc stateMessage)"
     shot hanglisting-escaped
