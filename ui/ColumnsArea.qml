@@ -64,7 +64,17 @@ Item {
     readonly property var columnsLimit: ViewState.state.columnsLimit
     readonly property int columnCount: Columns.columnCountForWidth(root.width, root.columnsLimit)
     // One columnWidth per shown column from the window width (ColumnsWidth board #167 and #69); the third column takes the remainder at activeX, and resizing re-lays widths in one frame with no re-read.
-    readonly property int columnWidth: Math.max(1, Math.floor(root.width / Math.max(1, root.columnCount)))
+    readonly property int defaultColumn: Math.max(1, Math.floor(root.width / Math.max(1, root.columnCount)))
+    // preview.width: the last column's share of the area, 0 for the default third; a drag holds its live pixels in dragLast until release.
+    property int dragLast: -1
+    property int dragFrom: 0
+    readonly property int storedLast: root.dragLast >= 0 ? root.dragLast : Math.round(root.width * ViewState.previewWidth / 100)
+    // Each shown column keeps the narrowest one the count rule lays out: COUNT_NARROW_AT over the default 3, or less when the window is narrower.
+    readonly property int minColumn: Math.min(Math.floor(Columns.COUNT_NARROW_AT / Columns.COUNT_DEFAULT), root.defaultColumn)
+    readonly property int columnWidth: root.storedLast <= 0 ? root.defaultColumn
+        : Math.max(1, Math.floor((root.width - root.clampLast(root.storedLast)) / root.shownBefore))
+    readonly property int thirdWidth: root.width - root.shownBefore * root.columnWidth
+    function clampLast(px) { return Math.max(root.minColumn, Math.min(px, root.width - root.shownBefore * root.minColumn)) }
     // Ancestors shown oldest first: 2 hides the parent, 5 adds the great-grandparent.
     readonly property bool showGreatGrandparent: root.columnCount >= 5
     readonly property bool showGrandparent: root.columnCount >= 4
@@ -491,7 +501,7 @@ Item {
         // The cursor row: what is inside it when it is a directory, what it is when it is a file.
         Flea.PreviewSwap {
             id: thirdSwap
-            width: root.width - root.shownBefore * root.columnWidth
+            width: root.thirdWidth
             height: parent.height
             burstEnds: true
             ready: root.thirdReady
@@ -526,6 +536,22 @@ Item {
                 onThumbsApplied: function (work) { root.thumbsApplied(work) }
             }
         }
+    }
+
+    // The preview column's left edge drags the last column's width live and stores it once on release; a double click restores the default third.
+    PreviewEdge {
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        z: 3
+        visible: root.thirdShown
+        edge: root.shownBefore * root.columnWidth
+        onGrabbed: root.dragFrom = root.thirdWidth
+        onDragged: function (shift) { root.dragLast = root.clampLast(root.dragFrom - shift) }
+        onReleased: {
+            if (root.dragLast >= 0) ViewState.setPreviewWidth(Math.max(1, Math.min(100, Math.round(100 * root.dragLast / root.width))))
+            root.dragLast = -1
+        }
+        onRestored: { root.dragLast = -1; ViewState.setPreviewWidth(0) }
     }
 
     // For ui/Ipc.qml: the names a drawn neighbour column holds, "|" joined, and "" when that column is not drawn.
