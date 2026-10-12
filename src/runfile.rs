@@ -104,10 +104,15 @@ pub fn decide_opened(opened: &crate::runid::Opened, path: &Path, mounts: &str) -
         Some(k) => k,
         None => return Decision::OpenNormally,
     };
+    let runnable = crate::runid::executable_by_caller(opened);
+    // A script missing its bit is never run, so a noexec mount has nothing to refuse and it opens with its handler.
+    if !runnable && kind == Kind::Script {
+        return Decision::MakeExecutable(kind);
+    }
     if noexec_in(path, mounts) {
         return Decision::RefuseNoExec;
     }
-    if crate::runid::executable_by_caller(opened) {
+    if runnable {
         Decision::Ask(kind)
     } else {
         Decision::MakeExecutable(kind)
