@@ -16,9 +16,9 @@ function fresh(listing) {
 
 // Sample output, src/backend/fsinfo.rs: {"t":"fsinfo","fs":"tmpfs","free":64100000,"path":"/fx/v/work","class":"","tagable":true}
 function answer(pane, path, fs) {
-    var onFsInfo = new Function("pane", "ExtThumbs", "ViewState",
+    var onFsInfo = new Function("root", "pane", "ExtThumbs", "ViewState",
         "return function (fs, free, path, storageClass, tagable, systemVolume) {" + onFsInfoBody + "}")(
-        pane, { verdict: function () { return "" } }, { preview: "" })
+        { pane: pane }, pane, { verdict: function () { return "" } }, { preview: "" })
     Messages.route({ fsInfo: onFsInfo }, { t: "fsinfo", fs: fs, free: fs ? 64100000 : 0, path: path, "class": "", tagable: true })
 }
 
@@ -30,7 +30,10 @@ function run(check) {
 
     var other = fresh("/fx/v/work")
     answer(other, "/elsewhere", "ext4")
-    check("a line for a folder neither shown nor asked for is answered empty", other.fsName + "|" + other.fsAnswered + "|" + other.storageKnown, "|true|false")
+    check("a late line for a superseded folder leaves the slot pending while the listing is out", other.fsName + "|" + other.fsAnswered + "|" + other.storageKnown, "|false|false")
+    other.listInFlight = false
+    answer(other, "/elsewhere", "ext4")
+    check("with no listing out, a line for another folder is answered empty", other.fsName + "|" + other.fsAnswered + "|" + other.storageKnown, "|true|false")
 
     var settled = fresh()
     settled.path = "/fx/v/work"
@@ -44,8 +47,9 @@ function run(check) {
 
     var recent = fresh("/")
     recent.recentMode = "results"
+    recent.fsAnswered = true // ui/js/RecentMode.js answers the slot as it opens
     answer(recent, "/", "btrfs")
-    check("Recent refuses a line and its empty slot is an answer", recent.fsName + "|" + recent.fsAnswered, "|true")
+    check("Recent refuses a line and keeps its empty slot answered", recent.fsName + "|" + recent.fsAnswered, "|true")
 
     // A request for another folder takes the answered mark back, a re-read of the one shown keeps it.
     var moving = NavSuite.pane()
