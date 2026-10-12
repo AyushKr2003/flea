@@ -51,7 +51,7 @@ cardsize_focus() {
 
 case_cardsizes() {
     local dir="$fixture_root/cardsizes" addr viewport initial_width initial_height wx wy ww wh index=0
-    local base protocol network_rect before sy content visible after bx by bw bh cx cy focus last menu_count step box body eye rows menu_rect menu_width work_width
+    local base protocol network_rect before sy content visible after bx by bw bh cx cy focus last menu_count step box body eye rows menu_rect menu_width work_width menu_state want_width
     local area ax ay aw ah candidate rect rx ry rw rh centre ccx ccy
     sandbox_make "$dir"
     mkdir -p "$dir/listing" "$dir/config" "$dir/data" "$dir/bin" || fail "cardsizes: fixture creation failed"
@@ -221,10 +221,12 @@ OPENER
         cardsize_rect "bottom-menu-$index" "$menu_rect"
         read -r bx by bw bh <<< "$menu_rect"
         menu_width=$(token_of menuWidth) || fail "cardsizes: menu width token observation failed"
-        work_width=$(ipc menuState | jq -er '.workArea.width | numbers') || fail "cardsizes: menu work area observation failed"
-        jq -en --argjson observed "$bw" --argjson token "$menu_width" --argjson area "$work_width" --argjson rounding 1 \
-            '([$token, $area] | all(type == "number" and . > 0)) and (($observed - ([$token, $area] | min | round) | fabs) <= $rounding)' >/dev/null \
-            || fail "cardsizes: menu frame width $bw differs from token $menu_width clamped to work area $work_width"
+        menu_state=$(ipc menuState) || fail "cardsizes: menu state observation failed"
+        work_width=$(jq -er '.workArea.width | numbers' <<< "$menu_state") || fail "cardsizes: menu work area observation failed"
+        want_width=$(jq -er '.wanted | numbers' <<< "$menu_state") || fail "cardsizes: menu wanted width observation failed"
+        jq -en --argjson observed "$bw" --argjson token "$menu_width" --argjson wanted "$want_width" --argjson area "$work_width" --argjson rounding 1 \
+            '([$token, $wanted, $area] | all(type == "number" and . > 0)) and (($observed - ([[$token, $wanted] | max, $area] | min | round) | fabs) <= $rounding)' >/dev/null \
+            || fail "cardsizes: menu frame width $bw differs from token $menu_width with wanted $want_width clamped to work area $work_width"
         shot "cardsizes-menu-$index-$viewport"
         key -k Escape >/dev/null || fail "cardsizes: context menu dismissal failed"
         cardsize_expect contextMenuVisible false
