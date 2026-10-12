@@ -2,6 +2,7 @@
 
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import "flea" as Flea
 
 // tests/code-column.sh's harness: the Columns preview over the real backend draws code in the theme's inks, never plain first.
@@ -27,13 +28,15 @@ ShellRoot {
     property double calmFrom: 0
     property bool ticking: false
     property bool finished: false
-    // Asks counted at each move's start, the largest line any reply reached, and the asks made while a reload's listing was out.
+    // Asks counted at each move's start, the largest line any reply reached, and the listings seen during a reload.
     property int askBase: 0
     property int farthest: 0
     property bool watchLoad: false
     property int loadsSeen: 0
-    property int loadBase: 0
-    property int askedLoading: 0
+    // The lines the shown file grows by in the reload, and the ask token before it.
+    readonly property int grownLines: 5
+    property int reloadBase: 0
+    property int wideReplies: 0
     // The frames sampled while a walk runs: drawn live (not under the swap's picture) and what was wrong with them.
     property bool sampling: false
     property int liveFrames: 0
@@ -197,16 +200,24 @@ ShellRoot {
                 return true
             }
         } else if (op.reload) {
-            root.check("a CodeLines is live and active for the reload", [root.codeCount(), root.codeOf(root.column()).active], [1, true])
+            var shownCode = root.codeOf(root.column())
+            root.check("a CodeLines is live and active for the reload", [root.codeCount(), shownCode.active], [1, true])
+            root.check("the reload starts from the shown file's one line", shownCode.lines.length, 1)
             root.loadsSeen = 0
-            root.askedLoading = 0
+            root.reloadBase = root.backend().codeToken
+            // The shown file grows on disk (size and mtime move), so the landing must ask for the new lines.
+            var grown = [root.imgLine]
+            for (var g = 1; g <= root.grownLines; g++) grown.push("extra line " + g)
+            grownFile.setText(grown.join("\n") + "\n")
             root.watchLoad = true
             root.pane.refresh(root.fixture + "/06-img.html", false)
             root.awaiting = function () {
-                if (!root.calm(!root.pane.listInFlight && root.loadsSeen > 0 && root.drawn("06-img.html", "styled"))) return false
+                var grownCode = root.codeOf(root.column())
+                if (!root.calm(!root.pane.listInFlight && root.loadsSeen > 0 && grownCode !== null && grownCode.lines.length === 1 + root.grownLines && root.drawn("06-img.html", "styled"))) return false
                 root.watchLoad = false
                 root.check("the listing loaded under a live CodeLines", root.loadsSeen > 0, true)
-                root.check("no code ask while the listing loads", root.askedLoading, 0)
+                root.check("the reload asks the grown file again", root.backend().codeToken > root.reloadBase, true)
+                root.check("the grown file's reply replaces the shown lines", grownCode.lines, grown)
                 return true
             }
         } else if (op.wide !== undefined) {
@@ -216,13 +227,14 @@ ShellRoot {
             for (var n = 1; n <= 1500; n++) wideLines.push("fn w" + n + "() {}")
             wide.text = wideLines.join("\n")
             wide.height = (wide.lineCap + 100) * wide.rowHeight
-            var wideBase = root.backend().codeToken
+            // The slot's own replies are counted: the listing the reload's write set off may re-list again under the column, which asks on its own slot.
+            root.wideReplies = 0
             wide.active = true
             root.awaiting = function () {
                 if (!root.calm(wide.settled && wide.covered(1, wide.needed().to))) return false
                 var reach = wide.needed().to
                 root.check("a window over the cap is wider than the cap", reach > wide.lineCap, true)
-                root.check("a window over the cap is asked in cap-sized parts", root.backend().codeToken - wideBase, Math.ceil(reach / wide.lineCap))
+                root.check("a window over the cap is asked in cap-sized parts", root.wideReplies, Math.ceil(reach / wide.lineCap))
                 wide.destroy()
                 return true
             }
@@ -317,9 +329,16 @@ ShellRoot {
         function onAfterAnimating() { root.sample() }
     }
     Flea.Backend { id: realBackend }
+    FileView {
+        id: grownFile
+        path: root.fixture + "/06-img.html"
+        printErrors: false
+        blockWrites: true
+    }
     Connections {
         target: realBackend
         function onCodeResult(message) {
+            if (message.slot === "wide") root.wideReplies += 1
             var reach = message.first + (message.lines ? message.lines.length : 0) - 1
             if (reach > root.farthest) root.farthest = reach
         }
@@ -327,13 +346,7 @@ ShellRoot {
     Connections {
         target: root.pane
         function onListInFlightChanged() {
-            if (!root.watchLoad) return
-            if (root.pane.listInFlight) {
-                root.loadsSeen += 1
-                root.loadBase = realBackend.codeToken
-            } else if (root.loadsSeen > 0) {
-                root.askedLoading += realBackend.codeToken - root.loadBase
-            }
+            if (root.watchLoad && root.pane.listInFlight) root.loadsSeen += 1
         }
     }
     Component {
