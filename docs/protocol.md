@@ -152,9 +152,11 @@ cover permanent deletion.
 
 `{"c":"menuaction","op":"contents","id":4}` counts what the one captured folder holds, for Properties on a folder.
 It walks with the folder size walker and never crosses into a nested mount or follows a symbolic link. A local folder
-walks on the menu worker with no deadline. A folder on a remote mount walks on a worker beside the menu worker under
-the bulk deadline (15 s): past it the reply is the floor counted so far, `partial:true` and `done:true`, and the walk
-stops. `items` counts every entry the walk visits below the folder (files, folders, links and other entries), not the
+walks on the menu worker with no deadline. A folder on a remote mount, or holding one anywhere below it (the walk
+still reads the mount point's own entry), walks on a worker beside the menu worker under the bulk deadline (15 s): past
+it the reply is the floor counted so far, `partial:true` and `done:true`, the walk stops, and the remote mounts it
+could touch are marked stuck for 30 s. While one is marked, the same request answers the empty floor at once
+(`bytes:0`, `items:0`, `partial:true`, `done:true`) without a walk. `items` counts every entry the walk visits below the folder (files, folders, links and other entries), not the
 folder itself, and `bytes` is the folder size walk's total, which includes the folder's own entry.
 The walk runs under the request's own cancellation, so `close` or a newer `snapshot` stops it within one directory
 read, and a remote one is answered at once. It answers a progress line every 150 ms while it walks, and none for a folder that

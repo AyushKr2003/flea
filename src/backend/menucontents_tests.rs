@@ -8,7 +8,7 @@ use std::os::unix::fs::{symlink, MetadataExt};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-fn tree(tag: &str) -> (TestDir, PathBuf) {
+pub(super) fn tree(tag: &str) -> (TestDir, PathBuf) {
     let sandbox = TestDir::new(tag);
     let root = sandbox.dir("tree");
     (sandbox, root)
@@ -24,7 +24,7 @@ fn nested(root: &Path) {
 fn nested_bytes(root: &Path) -> u64 {
     ["", "a.txt", "sub", "sub/b.txt", "sub/c.txt"].iter().map(|name| size_of(&root.join(name))).sum()
 }
-fn lines(rx: &std::sync::mpsc::Receiver<OpMsg>) -> Vec<String> {
+pub(super) fn lines(rx: &std::sync::mpsc::Receiver<OpMsg>) -> Vec<String> {
     let mut out = Vec::new();
     while let Ok(OpMsg::Meta { line }) = rx.try_recv() { out.push(line); }
     out

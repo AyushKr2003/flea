@@ -16,16 +16,19 @@ pub(super) fn serve(line: &str, id: usize, items: &[Selected], replies: &Sender<
     serve_with_deadline(line, id, items, replies, cancel, super::iomount::BULK_DEADLINE)
 }
 
-// The bulk deadline bounds only a remote folder; a local one walks inline exactly as before.
+// The bulk deadline bounds a folder with a remote mount at or below it; any other walks inline exactly as before.
 fn serve_with_deadline(line: &str, id: usize, items: &[Selected], replies: &Sender<OpMsg>, cancel: &Cancellation, deadline: Duration) -> bool {
     if id == 0 || field_usize(line, "id") != Some(id) || items.len() != 1 {
         return send(replies, line, Err("Menu selection expired; reopen the menu.".into()));
     }
     let body = super::iomount::mount_body();
-    if super::iomount::is_remote(&items[0].path, &body) {
-        serve_remote(line, &items[0], replies, cancel, deadline)
-    } else {
+    let mounts = super::walkmounts::remote_mounts_under(&items[0].path, &body);
+    if mounts.is_empty() {
         serve_local(line, id, items, replies, cancel)
+    } else if super::walkmounts::stuck_among(&mounts).is_some() {
+        send(replies, line, Ok(fields(&Tally { bytes: 0, items: 0, partial: true }, true)))
+    } else {
+        serve_remote(line, &items[0], replies, cancel, deadline, &mounts)
     }
 }
 
@@ -74,7 +77,7 @@ struct RemoteShared {
 }
 
 // A remote walk runs beside the menu worker under the bulk deadline; past it the menu answers the floor so far.
-fn serve_remote(line: &str, item: &Selected, replies: &Sender<OpMsg>, cancel: &Cancellation, deadline: Duration) -> bool {
+fn serve_remote(line: &str, item: &Selected, replies: &Sender<OpMsg>, cancel: &Cancellation, deadline: Duration, mounts: &[PathBuf]) -> bool {
     let shared = Arc::new(RemoteShared { stop: AtomicBool::new(false), floor: Mutex::new(Tally { bytes: 0, items: 0, partial: true }) });
     let (done_tx, done_rx) = std::sync::mpsc::channel();
     let worker_item = item.clone();
@@ -82,7 +85,7 @@ fn serve_remote(line: &str, item: &Selected, replies: &Sender<OpMsg>, cancel: &C
     let worker_shared = Arc::clone(&shared);
     let pace = test_pace();
     std::thread::spawn(move || remote_walk(&worker_item, &worker_cancel, &worker_shared, pace, &done_tx));
-    remote_wait(line, replies, cancel, &shared, &done_rx, deadline)
+    remote_wait(line, replies, cancel, &shared, &done_rx, deadline, mounts)
 }
 
 // The single syscall that decides the folder happens on the worker too, so a hung mount never holds the menu worker.
@@ -112,7 +115,7 @@ fn remote_walk(item: &Selected, cancel: &Cancellation, shared: &RemoteShared, pa
 }
 
 // Every wire line leaves from the menu worker, so a progress line never lands past the final one.
-fn remote_wait(line: &str, replies: &Sender<OpMsg>, cancel: &Cancellation, shared: &RemoteShared, done: &std::sync::mpsc::Receiver<RemoteMsg>, deadline: Duration) -> bool {
+fn remote_wait(line: &str, replies: &Sender<OpMsg>, cancel: &Cancellation, shared: &RemoteShared, done: &std::sync::mpsc::Receiver<RemoteMsg>, deadline: Duration, mounts: &[PathBuf]) -> bool {
     let bound = Instant::now() + deadline;
     let mut progress_due = Instant::now();
     loop {
@@ -135,6 +138,7 @@ fn remote_wait(line: &str, replies: &Sender<OpMsg>, cancel: &Cancellation, share
                 }
                 if Instant::now() >= bound {
                     shared.stop.store(true, Ordering::Relaxed);
+                    super::walkmounts::mark_all_stuck(mounts);
                     return send(replies, line, Ok(fields(&timed_out_floor(shared), true)));
                 }
             }
@@ -212,3 +216,6 @@ fn fields(tally: &Tally, done: bool) -> String {
 #[cfg(test)]
 #[path = "menucontents_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "menucontents_mounts_tests.rs"]
+mod mounts_tests;
