@@ -139,7 +139,7 @@ cap_drops_wait_column() {
 }
 case_cap_drops() {
     local dir="$fixture_root/cap-drops" menus_checks=0 cap_drops_wx=0 cap_drops_wy=0
-    local i src_pt dst_pt cx cy tx ty count target index ax ay aw ah img
+    local i src_pt dst_pt held_pt cx cy tx ty count target index ax ay aw ah img
     sandbox_scratch "$dir"
     mkdir -p "$dir/Photos" "$dir/deep/outer/inner"
     printf 'drag me\n' > "$dir/a.txt"
@@ -278,6 +278,10 @@ case_cap_drops() {
     cap_drops_wait_column child p1.txt
     index=$(printf '%s' "$cap_drops_names" | tr '|' '\n' | grep -nx "p1.txt" | head -n 1 | cut -d: -f1 || true)
     src_pt=$(cap_drops_centre columnChildRowCentre "$((index - 1))")
+    # The release lands on p2.txt, a sibling in the dragged file's own folder, so the drop holds.
+    index=$(printf '%s' "$cap_drops_names" | tr '|' '\n' | grep -nx "p2.txt" | head -n 1 | cut -d: -f1 || true)
+    [[ -n "$index" ]] || fail "cap_drops: the child column never listed p2.txt (it drew: $cap_drops_names)"
+    held_pt=$(cap_drops_centre columnChildRowCentre "$((index - 1))")
     cap_drops_wait_column parent deep
     index=$(printf '%s' "$cap_drops_names" | tr '|' '\n' | grep -nx "deep" | head -n 1 | cut -d: -f1 || true)
     dst_pt=$(cap_drops_centre columnParentRowCentre "$((index - 1))")
@@ -288,9 +292,7 @@ case_cap_drops() {
     cap_drops_steer "$tx" "$ty"
     cap_drops_wait_target "Move 1 item to deep · ctrl at lift copies"
     shot drops-columns-parent
-    index=$(row_index_of p2.txt 2>/dev/null) || { cap_drops_abandon; fail "cap_drops: the active column lost p2.txt"; }
-    dst_pt=$(cap_drops_centre rowCentre "$index")
-    read -r tx ty <<< "$dst_pt"
+    read -r tx ty <<< "$held_pt"
     cap_drops_steer "$tx" "$ty"
     cap_drops_release
     [[ ! -e "$dir/deep/p1.txt" ]] || fail "cap_drops: the columns release moved p1.txt"
