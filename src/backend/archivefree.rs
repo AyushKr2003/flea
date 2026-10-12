@@ -93,6 +93,9 @@ mod tests {
     // procfs answers a statfs with zero blocks and zero free, the shape of a gvfs share that omits its room.
     #[test]
     fn a_filesystem_that_reports_no_blocks_is_unknown_room_and_refuses_nothing() {
+        // The statfs must answer, or the unstattable path would return the same None and the zero-block branch goes untested.
+        let room = fsinfo::read(std::path::Path::new("/proc/self")).expect("procfs answers a statfs");
+        assert_eq!((room.blocks, room.free), (0, 0), "the fixture is a zero-block filesystem");
         assert_eq!(check("a.tar", 10, std::path::Path::new("/proc/self/out")), None);
     }
 
