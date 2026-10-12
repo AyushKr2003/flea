@@ -95,14 +95,14 @@ function stateByExtension(name) {
     return ""
 }
 
-// The Quick Look's own answer, from the icon and the name alone: the three tests Facts.state makes
-// before the ones only a row can answer (symlink mode, Kind name, selection count). Code renders as
-// text there, because the overlay draws no gutter, and a markdown file renders verbatim like any text.
-function quickLookKind(icon, name) {
+// Quick Look's kind from the icon, the name and a served thumbnail, Facts.state's row-free tests; code and markdown read as text.
+function quickLookKind(icon, name, thumbnailed) {
     if (isPdf(name)) return PDF
     if (isMarkdown(name)) return TEXT
     // The client's own extension rule, because the backend's icon cannot name the widened formats.
     if (Archive.isArchive(name)) return ARCHIVE
     var byIcon = kindState(icon)
+    // A model no thumbnailer serves has nothing to draw, so it takes the generic file pane.
+    if (byIcon === IMAGE && isModel(name) && !thumbnailed) return UNSUPPORTED
     return byIcon === CODE ? TEXT : byIcon
 }

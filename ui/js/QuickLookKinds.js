@@ -16,7 +16,7 @@ function unitOf(row) {
         return ""
     if (Kinds.isMarkdown(row.n))
         return MARKDOWN
-    switch (Kinds.quickLookKind(row.i, row.n)) {
+    switch (Kinds.quickLookKind(row.i, row.n, row.t === true)) {
     case Kinds.PDF: return PDF
     case Kinds.VIDEO:
     case Kinds.AUDIO: return MEDIA

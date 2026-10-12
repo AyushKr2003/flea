@@ -429,8 +429,13 @@ function runE81(check) {
         quick.indexOf("interimTurned") < 0 && image.indexOf("interimTurned") < 0, true)
     var pre = squashed(bodyOf(quick, "function maybePrefetch"))
     check("prefetch warms one cache entry on rest only",
-        pre.indexOf("ViewState.previewAutomatic") >= 0 && pre.indexOf("followSettle.running") >= 0 && pre.indexOf("ExtThumbs.manualHold(") >= 0
+        pre.indexOf("ViewState.previewAutomatic") >= 0 && pre.indexOf("followSettle.running") >= 0 && pre.indexOf("root.thumbClear(row)") >= 0
         && pre.indexOf("cacheOnly: true") >= 0 && pre.indexOf("backend.thumb(work.ask, true)") >= 0 && pre.indexOf("askMeta") < 0, true)
+    var clear = squashed(bodyOf(quick, "function thumbClear"))
+    check("the prefetch and the owed thumbnail share one gate: listing settled, class known, no manual hold, row allowed",
+        clear.indexOf("root.pane.listInFlight") >= 0 && clear.indexOf("!root.pane.storageKnown") >= 0 && clear.indexOf("ExtThumbs.manualHold(") >= 0
+        && clear.indexOf("Thumbs.allowed(row, ViewState.thumbnailMode)") >= 0
+        && squashed(bodyOf(quick, "function thumbOwed")).indexOf("root.thumbClear(") >= 0, true)
     check("the interim takes the upright original's rect, never the cache pixels",
         flat.indexOf("PreviewSwap.interimRect(panes.width, panes.height,") >= 0
         && flat.indexOf("root.interimBox !== null ? root.interimBox.x : 0") >= 0
@@ -445,10 +450,12 @@ function runE81(check) {
         askArm.indexOf("root.resolveImageRow()") >= 0
         && squashed(bodyOf(quick, "function resolveImageRow")).indexOf("root.namedRow(at, root.path) !== null ? at : -1") >= 0, true)
     var wire = Source.source("ui/PaneWire.qml")
+    var ext = Source.source("ui/js/ExtThumbs.js")
     check("a prefetch miss on a generating class returns to unasked",
-        wire.indexOf("Thumbs.CACHE_ASKED") >= 0 && wire.indexOf("Thumbs.miss(pane.thumbState, row, true, pane.thumbCap)") >= 0, true)
+        wire.indexOf("ExtThumbs.thumbReply(pane.thumbState, row, file, pane.thumbCap") >= 0
+        && ext.indexOf("Thumbs.CACHE_ASKED") >= 0 && ext.indexOf("Thumbs.miss(state, row, true, cap)") >= 0, true)
     check("the forgotten row is re-planned through the settled view",
-        wire.indexOf("if (pane.listArea) pane.listArea.restartSettle()") >= 0, true)
+        wire.indexOf("if (next.missed && pane.listArea) pane.listArea.restartSettle()") >= 0, true)
     var loadArm = squashed(sel.substring(sel.indexOf("function load()"), sel.indexOf("function askThumb")))
     check("the column single-row ask runs through its held gate",
         loadArm.indexOf("root.askThumb()") >= 0 && loadArm.indexOf("pane.backend.thumb(work.ask") < 0, true)
