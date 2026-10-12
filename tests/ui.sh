@@ -540,8 +540,14 @@ fixture_home_make() {
 }
 
 assert_window() {
-    local count class
-    count=$(omarchy-drive windows --json | jq '[.windows[] | select(.title == "Flea")] | length')
+    local count class deadline=$(( $(date +%s%3N) + 15000 ))
+    # The window can map before its title is set, and more so behind a heavy writeback: wait for the title, never a sleep.
+    while :; do
+        count=$(omarchy-drive windows --json | jq '[.windows[] | select(.title == "Flea")] | length')
+        [[ "$count" == "0" ]] || break
+        (( $(date +%s%3N) < deadline )) || break
+        sleep 0.05
+    done
     [[ "$count" == "1" ]] || fail "expected one Flea window, got $count"
     class=$(omarchy-drive windows --json | jq -r '.windows[] | select(.title == "Flea") | .class')
     [[ "$class" == "$flea_window_class" ]] || fail "unexpected Flea class '$class'"
