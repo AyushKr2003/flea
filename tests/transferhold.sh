@@ -38,7 +38,7 @@ qs_status=$?
 pass_count=$(printf '%s\n' "$output" | grep -c 'TRANSFERHOLD PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'TRANSFERHOLD FAIL')
 done_count=$(printf '%s\n' "$output" | grep -c 'TRANSFERHOLD DONE failures=0$')
-expected_passes=18
+expected_passes=19
 verdict=0
 if [ "$qs_status" -ne 143 ]; then
     printf 'FAIL qs exited %s, want the owned self-kill 143 after DONE\n' "$qs_status"

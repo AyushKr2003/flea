@@ -138,6 +138,8 @@ ShellRoot {
         backend.transferItem(9, 0, "a", true, "")
         backend.transferStarted(10, 5, false, false)
         backend.transferItem(9, 1, "stale", true, "")
+        // Read before the beat, so a stale line held and dropped at the flush cannot pass for one never held.
+        shell.check("a-stale-id-line-is-never-queued", wire.item.heldItems.length === 0, JSON.stringify(wire.item.heldItems))
         return shell.beatWaitMs
     }
     function legECheck() {

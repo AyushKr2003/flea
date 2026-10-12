@@ -206,4 +206,9 @@ function run(check) {
           folded.done + "|" + folded.name, "1000|f999.bin")
     check("no held items leave the card untouched",
           Transfer.itemsDone(thousand, []), thousand)
+    // The sample input in ui/js/Transfer.js against literal values: the first file's sampled total joins moved, the second had no sample.
+    var sample = { id: 8, n: 2, moving: false, index: 0, name: "a", done: 0, bytes: 40, total: 100, moved: 0, scanned: 0, running: true, failureReported: false }
+    var two = Transfer.itemsDone(sample, [{ index: 0, name: "a" }, { index: 1, name: "b" }])
+    check("two held lines land as both files done with the last one named",
+          two.done + "|" + two.name + "|" + two.moved + "|" + two.bytes, "2|b|100|0")
 }
