@@ -154,3 +154,21 @@ fn a_stall_in_a_local_folder_that_holds_a_remote_mount_marks_nothing() {
     let held = [PathBuf::from("/"), root.clone(), root.join("mnt")];
     assert_eq!(marked_within(&held, Duration::from_secs(1)), None, "a stall in a local folder marks a mount");
 }
+
+#[test]
+fn a_walk_hands_back_to_its_folder_after_each_crossing_so_a_later_stall_is_not_the_nested_mounts() {
+    let (_sandbox, root) = tree("contents-hand-back");
+    let mounts: std::collections::HashSet<PathBuf> = (0..6).map(|n| root.join(format!("mnt{}", n))).collect();
+    for mount in &mounts { fs::create_dir(mount).unwrap(); }
+    for n in 0..4 { fs::write(root.join(format!("f{}", n)), "x").unwrap(); }
+    let at = std::cell::RefCell::new(root.clone());
+    let stops = std::cell::RefCell::new(Vec::new());
+    let stop = || { stops.borrow_mut().push(at.borrow().clone()); false };
+    let entering = |folder: &Path| *at.borrow_mut() = folder.to_path_buf();
+    let dev_of = |entry: &Path| mounts.contains(entry).then_some(u64::MAX);
+    let progress = Progress { every: Duration::ZERO, report: &mut |_| {}, entering: Some(&entering) };
+    walk_core(&root, &stop, Some(&dev_of), Some(progress));
+    let stops = stops.into_inner();
+    assert!(stops.len() >= 10, "every entry asks to stop, so the check is not vacuous: {}", stops.len());
+    assert!(stops.iter().all(|folder| *folder == root), "a stop after a crossing sat in a nested mount: {:?}", stops);
+}
