@@ -1,5 +1,6 @@
 // gio trash is the freedesktop trash this box already shares with every GTK app; nothing about the spec is written here, only an argv and a result.
 use crate::error::FleaError;
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -65,7 +66,8 @@ const TRASH_CHUNK: usize = 64;
 pub(crate) fn failure_reason(output: &Option<std::process::Output>) -> String {
     match output {
         None => "gio could not be run to move items to Trash".to_string(),
-        Some(o) if matches!(o.status.code(), Some(124 | 137)) => "Trash took too long to answer".to_string(),
+        // timeout kills its own group on the kill-after, so a gio that outlived the first signal ends the wait as signal 9, with no exit code.
+        Some(o) if matches!(o.status.code(), Some(124 | 137)) || o.status.signal() == Some(9) => "Trash took too long to answer".to_string(),
         Some(o) => {
             let line = String::from_utf8_lossy(&o.stderr).lines().last().unwrap_or("").trim().to_string();
             if line.is_empty() { "gio trash failed".to_string() } else { line }

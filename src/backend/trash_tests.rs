@@ -351,3 +351,12 @@ fn an_announced_failure_words_itself_as_the_final_result_does() {
     assert!(entries.is_empty());
     assert_eq!(said.borrow().clone(), Some((0, failed, reason)), "the announce and the result agree");
 }
+
+// timeout's own exit is 124 on the first signal; after the kill-after it dies with its group, which std reports as signal 9 and no code.
+#[test]
+fn a_gio_that_outlives_the_first_signal_still_reads_as_taking_too_long() {
+    let said = |raw: i32| failure_reason(&Some(std::process::Output { status: std::process::ExitStatus::from_raw(raw), stdout: Vec::new(), stderr: Vec::new() }));
+    assert_eq!(said(124 << 8), "Trash took too long to answer", "exit 124");
+    assert_eq!(said(9), "Trash took too long to answer", "killed by signal 9 after the kill-after");
+    assert_eq!(said(1 << 8), "gio trash failed", "an ordinary failure with no stderr keeps its own words");
+}

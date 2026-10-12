@@ -59,10 +59,10 @@ pub enum OpMsg {
     MergeDone { id: usize, ok: usize, failed: usize, skipped: usize, cancelled: bool, entry: Entry,
                 retry: Vec<(PathBuf, ItemIdentity)>, durable: bool, note: String, merged: usize, kept_both: usize, into: String,
                 refused: Vec<(String, String)> },
-    // The outcome line alone, sent the moment the disk shows it; the slot stays claimed until Trashed journals.
-    TrashAnnounced { ok: usize, failed: usize, reason: String },
+    // The outcome line alone, sent the moment the disk shows it: the slot frees here and only the batch's own journal entry stays pending.
+    TrashAnnounced { id: usize, path: String, ok: usize, failed: usize, reason: String },
     // announced is true once TrashAnnounced already wrote this batch's line, so the wire carries it once.
-    Trashed { ok: usize, failed: usize, entry: Entry, reason: String, announced: bool },
+    Trashed { id: usize, ok: usize, failed: usize, entry: Entry, reason: String, announced: bool },
     Linked { ok: usize, failed: usize, skipped: usize, entry: Entry, note: String, first_err: String, dest: String },
     Duplicated { ok: bool, path: String, err: String, entry: Entry },
     RedoDone { journal: super::undo::Journal, result: Result<String, FleaError>, touched: super::undo::Reached },
