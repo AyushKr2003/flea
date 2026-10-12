@@ -77,8 +77,9 @@ Rectangle {
     function focusPane(side) {
         if (!dualMode) return
         focusSide = side
-        // The keyboard rail is the left pane's, so leaving it behind hands that pane its list back: Shift+Tab from the right then lands on the left list, not the rail.
+        // The pane left behind gets its list back, so the ring resumes from the list and never from a rail, bar or strip stop the user left (Shift+Tab from the right lands on the left list, not the rail).
         if (side === 1) primaryPane.focusView = Focus.LIST
+        else if (secondPane.item) secondPane.item.pane.focusView = Focus.LIST
         currentPane.forceActiveFocus()
         Qt.callLater(view.rememberDual)
     }
