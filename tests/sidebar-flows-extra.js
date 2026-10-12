@@ -18,16 +18,44 @@ var RAIL_BOARD = [
     { name: "a favourite", want: "none", label: "Home", path: "/home", group: "favorite", kind: "favorite", glyph: "house" }
 ]
 
-// RailEject.html rail_row and RailDetails.html: padding 14, a 15 px mark, gap 9, the label flex:1, then an optional number
-// and a 12 px slot, each one gap apart. The label starts after the mark and its gap and ends one gap before whatever trails
-// it: the number when the row has one, else the slot, else the padding. The Trash count is the indicator itself (the
-// 2026-09-14 amendment), so it ends on the padding with no slot after it. want: slot, number, count or none.
+// RailEject.html and RailDetails.html: the label ends one gap before its number, else its slot; the Trash count has no slot.
 function railBoardEdges(row, want, pad, gap, slot, mark) {
     var edge = row.width - pad
     if (want === "slot") edge -= slot + gap
     else if (want === "number") edge -= slot + gap + row.detailItem.width + gap
     else if (want === "count") edge -= row.detailItem.width + gap
     return { left: pad + mark + gap, right: edge }
+}
+
+// The first board row that draws a drive size, the one an incomplete board waits on.
+var FIRST_SIZE_INDEX = RAIL_BOARD.findIndex(function (kind) { return kind.want === "number" })
+var FIRST_SIZE_ROW = RAIL_BOARD[FIRST_SIZE_INDEX].name
+
+// The first drive size row's detail read straight off the row, "no row" when the board lacks it.
+function firstSizeDetail(rows) {
+    var row = rows.itemAt(FIRST_SIZE_INDEX)
+    return row ? row.detail : "no row"
+}
+
+// Why the board is not whole yet: a wrong row count, else the first row missing, short of its width or of its detail; "" when whole.
+function railBoardWaiting(rows, width) {
+    if (rows.count !== RAIL_BOARD.length) return "the rail board has " + rows.count + " rows, want " + RAIL_BOARD.length
+    for (var i = 0; i < RAIL_BOARD.length; i++) {
+        var row = rows.itemAt(i), want = RAIL_BOARD[i].want
+        if (!row || row.width !== width || ((want === "number" || want === "count") && row.detail.length === 0)) return RAIL_BOARD[i].name
+    }
+    return ""
+}
+
+// Each board row draws the detail its kind wants and ends its label on the board's edge; run once railBoardWaiting answers "".
+function railBoardChecks(root, rows, pad, gap, slot, mark) {
+    for (var i = 0; i < RAIL_BOARD.length; i++) {
+        var row = rows.itemAt(i), kind = RAIL_BOARD[i], wantsDetail = kind.want === "number" || kind.want === "count"
+        root.check("rail-board: " + kind.name + " draws " + (wantsDetail ? "a detail" : "no detail") + " (drew " + JSON.stringify(row.detail) + ")", row.detail.length > 0, wantsDetail)
+        var edges = railBoardEdges(row, kind.want, pad, gap, slot, mark)
+        root.check("rail-board: " + kind.name + " starts its label after the mark", row.labelItem.x, edges.left)
+        root.check("rail-board: " + kind.name + " ends its label on the board's edge", row.labelItem.x + row.labelItem.width, edges.right)
+    }
 }
 
 // Additional real-UI proofs share the hunt's fixture, driver and tally.
