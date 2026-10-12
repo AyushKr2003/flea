@@ -473,7 +473,6 @@ Item {
         // An answer that changed nothing drawn leaves every row standing: no model reset, no cursor move.
         if (MenuRefresh.unchanged(root.entries, next)) return
         MenuRefresh.apply(root, next)
-        Qt.callLater(function() { if (root.opened) scroll.reveal(menuRows.itemAt(root.cursor)) })
     }
     // A finished refresh: its answer is what later opens draw while their own refresh runs behind them, see ui/js/MenuRefresh.js.
     function providersSettled() {
@@ -563,11 +562,12 @@ Item {
 
         Flea.CardScroll {
             id: scroll
-            // A menu steps the highlight, never pixel scrolls: one row a notch, one row per
-            // row height of gained touchpad travel, and reveal() follows. No bar, no lane.
+            // A menu steps the highlight, never pixel scrolls: one row a notch, one row per row height of touchpad travel. No bar, no lane.
             highlightSteps: true
             stepBy: function (delta) { root.stepMain(delta) }
             revealClearY: root.fadeReach
+            // A rebuilt model keeps the flyout's row, else the cursor's, in view.
+            onContentHeightChanged: if (root.opened) scroll.reveal(menuRows.itemAt(root.openSubmenuRow >= 0 ? root.openSubmenuRow : root.cursor))
             anchors.fill: parent
             anchors.topMargin: Theme.spacing.rowPaddingY
             anchors.bottomMargin: Theme.spacing.rowPaddingY
