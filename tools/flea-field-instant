@@ -570,6 +570,14 @@ RAIL = 192
 PANE_SPLIT = 0.6  # share of the content width kept left of the preview column
 
 
+def window_at(address):
+    """The mapped client at address, or a RuntimeError when it has gone, so a window lost mid-setup is an error row."""
+    for c in S.clients():
+        if c.get("address") == address:
+            return c
+    raise RuntimeError("the window %s closed before its geometry was read" % address)
+
+
 def win_rect(win, kind):
     """A watched rectangle (x, y, w, h) of a window (x, y, w, h): the whole window, the preview column, dual's left pane, else the content."""
     wx, wy, ww, wh = win
@@ -634,7 +642,7 @@ class Session:
             S.focus_window(self.address)
             S.park_cursor()
             time.sleep(0.5)
-            win = next(c for c in S.clients() if c.get("address") == self.address)
+            win = window_at(self.address)
             (wx, wy), (ww, wh) = win["at"], win["size"]
             self.win = (wx, wy, ww, wh)
             self.known = set(self.outsiders())
@@ -1649,7 +1657,7 @@ def calib_window(work, delay):
     S.focus_window(win["address"])
     S.park_cursor()
     time.sleep(1.0)
-    win = [c for c in S.clients() if c["address"] == win["address"]][0]
+    win = window_at(win["address"])
     (x, y), (w, h) = win["at"], win["size"]
     return client, (x, y + CALIB_HEADER_PX, w, h - CALIB_HEADER_PX), [(x, y, w, CALIB_HEADER_PX)], logp
 
@@ -3149,8 +3157,16 @@ def selftest():
     rows = run_series(sess, {"type": "cycle", "steps": [{"journey": "nav.dual.enter", "in": ("key", ("enter",))}]}, 20)
     check("series_keeps_samples_before_timeout", (len(rows), sum("error" not in r for r in rows), rows[-1].get("error", "")[:16]),
           (4, 3, "TimeoutExpired: "))
-    # A wheel series builds 2 rows per sample, none through sample(): an error on its 5th of 6 inputs keeps the 4 rows built.
+    # A window gone after it mapped is a named RuntimeError, which run_session records as an error row, never a StopIteration or IndexError.
     from unittest import mock
+    with mock.patch.object(S, "clients", return_value=[{"address": "0x1", "size": [8, 8]}]):
+        check("window_at_found", window_at("0x1")["size"], [8, 8])
+        try:
+            window_at("0x2")
+            fail.append("window_at_gone: no refusal")
+        except RuntimeError as e:
+            check("window_at_gone_names", str(e), "the window 0x2 closed before its geometry was read")
+    # A wheel series builds 2 rows per sample, none through sample(): an error on its 5th of 6 inputs keeps the 4 rows built.
     sent_wheel = []
 
     def wheel_or_die(keys, notches):
