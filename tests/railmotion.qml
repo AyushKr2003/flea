@@ -59,6 +59,30 @@ ShellRoot {
     }
     // Listings the Sidebar's DeviceMounts has started; the rail keeps polling only while revealed.
     function devicePolls() { var d = root.find(root.sidebar(), "DeviceMounts"); return d ? d._listingsStarted : -1 }
+    // The keep-running cases of DeviceMounts' poll, each held on a withdrawn rail; a release reveals the rail at once, so it is held on the parked poll itself.
+    readonly property var holds: [
+        { name: "a mount awaiting its folder", set: function (d) { d._pendingOpenDevice = "/dev/flea-rail-test" }, clear: function (d) { d._pendingOpenDevice = "" } },
+        { name: "a power-off chain", set: function (d) { d._powerOffDisk = "/dev/flea-rail-test" }, clear: function (d) { d._powerOffDisk = "" } },
+        { name: "no first answer yet", set: function (d) { d.firstAnswered = false }, clear: function (d) { } },
+        { name: "a release in flight", set: function (d) { d.polling = false; d._unmounting = true },
+          clear: function (d) { d._unmounting = false; d.polling = Qt.binding(function () { return root.sidebar().polling }) } }
+    ]
+    function holdSteps() {
+        var out = []
+        root.holds.forEach(function (hold) {
+            out.push(function () { return until("the rail withdrawn before " + hold.name, root.gone()) })
+            out.push(function () { root.polls = root.devicePolls(); hold.set(root.find(root.sidebar(), "DeviceMounts")); root.mark("hold"); return true })
+            out.push(function () {
+                var d = root.find(root.sidebar(), "DeviceMounts")
+                var grew = root.devicePolls() > root.polls
+                if (!grew && root.since("hold") < 1500) return false
+                check(hold.name + " keeps a parked poll running", [d.polling === false, grew], [true, true])
+                hold.clear(d)
+                return true
+            })
+        })
+        return out
+    }
     function mark(name) { root.marks[name] = Date.now() }
     function since(name) { return Date.now() - root.marks[name] }
     // The pointer: x 1 is inside the edge strip and over the rail's first pixel, x at 60% of the pane is on the listing.
@@ -389,7 +413,7 @@ ShellRoot {
                   root.distinct(root.samples.map(function (s) { return s.lw })) + "|" + (pane.listArea.width === root.listWidth), "1|true")
             return true
         }
-    ]
+    ].concat(root.holdSteps())
 
     Timer {
         interval: 20
