@@ -252,6 +252,12 @@ status)
     sandbox_trash_trap_own "$FILES" "$ROOT" a.txt || exit 9
     exit 7
     ;;
+errexit)
+    set -e
+    trap 'printf "%s" "$?" > "$FLAG"' EXIT
+    sandbox_trash_trap_own "$FILES" "$ROOT" a.txt || exit 9
+    exit 7
+    ;;
 rechain)
     sandbox_trash_trap_own "$FILES" "$ROOT" a.txt || exit 9
     trap 'printf ran > "$FLAG"' EXIT
@@ -326,6 +332,12 @@ rc=0; trapleg_run status a.txt || rc=$?
 [[ "$(cat "$leg_flag" 2>/dev/null)" == 7 ]] || fail "a trap set before the registration saw status $(cat "$leg_flag" 2>/dev/null), not 7"
 trapleg_gone a.txt || fail "the status leg left its registered entry"
 ok "trap: a trap set before the first registration still runs and sees exit 7"
+
+rc=0; trapleg_run errexit a.txt || rc=$?
+[[ "$rc" == 7 ]] || fail "errexit leg exited $rc, not 7"
+[[ "$(cat "$leg_flag" 2>/dev/null)" == 7 ]] || fail "under errexit the chained trap saw status $(cat "$leg_flag" 2>/dev/null), not 7"
+trapleg_gone a.txt || fail "the errexit leg left its registered entry"
+ok "trap: under errexit, as tests/ui.sh runs each case, the chained trap still runs and sees exit 7"
 
 rc=0; trapleg_run rechain a.txt b.txt || rc=$?
 [[ "$rc" == 1 ]] || fail "rechain leg exited $rc, not 1"

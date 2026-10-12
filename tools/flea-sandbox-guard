@@ -350,7 +350,8 @@ sandbox_trash_trap_run() {
     trash=${job%%$'\t'*}; rest=${job#*$'\t'}; root=${rest%%$'\t'*}; name=${rest#*$'\t'}
     sandbox_trash_remove_own "$trash" "$root" "$name" 2>/dev/null || printf 'TRASH TRAP %s in %s was not removed\n' "$name" "$trash" >&2
   done
-  # The subshell hands the chained trap the status this trap was entered with.
+  # The subshell hands the chained trap the status this trap was entered with; errexit, on in every ui.sh case, would end the trap there.
+  set +e
   (exit "$st")
   eval "${_SANDBOX_TRASH_PREV_EXIT:-return $st}"
   return "$st"
