@@ -28,7 +28,7 @@ fn serve_with_deadline(line: &str, id: usize, items: &[Selected], replies: &Send
     } else if super::walkmounts::stuck_among(&mounts).is_some() {
         send(replies, line, Ok(fields(&Tally { bytes: 0, items: 0, partial: true }, true)))
     } else {
-        serve_remote(line, &items[0], replies, cancel, deadline, &mounts)
+        serve_remote(line, &items[0], replies, cancel, deadline)
     }
 }
 
@@ -76,8 +76,8 @@ struct RemoteShared {
     floor: Mutex<Tally>,
 }
 
-// A remote walk runs beside the menu worker under the bulk deadline; past it the menu answers the floor so far.
-fn serve_remote(line: &str, item: &Selected, replies: &Sender<OpMsg>, cancel: &Cancellation, deadline: Duration, mounts: &[PathBuf]) -> bool {
+// A remote walk runs beside the menu worker under the bulk deadline; past it the menu answers the floor so far and marks no mount.
+fn serve_remote(line: &str, item: &Selected, replies: &Sender<OpMsg>, cancel: &Cancellation, deadline: Duration) -> bool {
     let shared = Arc::new(RemoteShared { stop: AtomicBool::new(false), floor: Mutex::new(Tally { bytes: 0, items: 0, partial: true }) });
     let (done_tx, done_rx) = std::sync::mpsc::channel();
     let worker_item = item.clone();
@@ -85,7 +85,7 @@ fn serve_remote(line: &str, item: &Selected, replies: &Sender<OpMsg>, cancel: &C
     let worker_shared = Arc::clone(&shared);
     let pace = test_pace();
     std::thread::spawn(move || remote_walk(&worker_item, &worker_cancel, &worker_shared, pace, &done_tx));
-    remote_wait(line, replies, cancel, &shared, &done_rx, deadline, mounts)
+    remote_wait(line, replies, cancel, &shared, &done_rx, deadline)
 }
 
 // The single syscall that decides the folder happens on the worker too, so a hung mount never holds the menu worker.
@@ -115,7 +115,7 @@ fn remote_walk(item: &Selected, cancel: &Cancellation, shared: &RemoteShared, pa
 }
 
 // Every wire line leaves from the menu worker, so a progress line never lands past the final one.
-fn remote_wait(line: &str, replies: &Sender<OpMsg>, cancel: &Cancellation, shared: &RemoteShared, done: &std::sync::mpsc::Receiver<RemoteMsg>, deadline: Duration, mounts: &[PathBuf]) -> bool {
+fn remote_wait(line: &str, replies: &Sender<OpMsg>, cancel: &Cancellation, shared: &RemoteShared, done: &std::sync::mpsc::Receiver<RemoteMsg>, deadline: Duration) -> bool {
     let bound = Instant::now() + deadline;
     let mut progress_due = Instant::now();
     loop {
@@ -138,7 +138,6 @@ fn remote_wait(line: &str, replies: &Sender<OpMsg>, cancel: &Cancellation, share
                 }
                 if Instant::now() >= bound {
                     shared.stop.store(true, Ordering::Relaxed);
-                    super::walkmounts::mark_all_stuck(mounts);
                     return send(replies, line, Ok(fields(&timed_out_floor(shared), true)));
                 }
             }

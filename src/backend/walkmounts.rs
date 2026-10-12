@@ -1,5 +1,5 @@
 // The remote mounts a bulk walk can touch, and the stuck table they share with iomount's single path calls.
-use super::iomount::{is_remote, is_stuck, mark_stuck, mount_key, STUCK_TTL};
+use super::iomount::{is_remote, is_stuck, mount_key, STUCK_TTL};
 use std::path::{Path, PathBuf};
 
 // Every remote mount a walk from path can touch: the one holding path and each remote mount point below it, from one table read.
@@ -19,9 +19,4 @@ pub(crate) fn remote_mounts_under(path: &Path, body: &str) -> Vec<PathBuf> {
 // The first of these mounts marked stuck inside its TTL, so a bulk walk over it answers at once without a worker.
 pub(crate) fn stuck_among(mounts: &[PathBuf]) -> Option<PathBuf> {
     mounts.iter().find(|mount| is_stuck(mount, STUCK_TTL)).cloned()
-}
-
-// A bulk walk past its deadline cannot say which mount hung, so it marks every remote mount it could touch.
-pub(crate) fn mark_all_stuck(mounts: &[PathBuf]) {
-    mounts.iter().for_each(|mount| mark_stuck(mount));
 }

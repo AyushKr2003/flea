@@ -58,18 +58,25 @@ fn a_mount_in_the_stuck_table_answers_the_floor_at_once_without_a_walk() {
 }
 
 #[test]
-fn a_walk_past_its_deadline_marks_its_remote_mounts_stuck() {
-    let (_sandbox, root) = tree("contents-deadline-marks");
+fn a_walk_past_its_deadline_answers_partial_and_marks_no_mount_so_a_repeat_walks_again() {
+    let (_sandbox, root) = tree("contents-deadline-marks-nothing");
     for n in 0..16 { fs::write(root.join(format!("f{}", n)), "x").unwrap(); }
     let mounts = [root.join("mnt")];
-    assert!(crate::backend::walkmounts::stuck_among(&mounts).is_none(), "a fresh path starts unmarked");
     let _body = crate::backend::iomount::test_hold_body(nested_remote_body(&root));
     let _pace = test_hold_pace(Duration::from_millis(25));
-    let cancel = Cancellation::default().next();
-    let (tx, rx) = std::sync::mpsc::channel();
-    let items = [Selected::inspect(&root.to_string_lossy()).unwrap()];
-    let line = r#"{"c":"menuaction","op":"contents","id":4}"#.to_string();
-    assert!(serve_with_deadline(&line, 4, &items, &tx, &cancel, Duration::from_millis(50)));
-    assert_eq!(lines(&rx).len(), 1);
-    assert_eq!(crate::backend::walkmounts::stuck_among(&mounts), Some(mounts[0].clone()), "the deadline marked the mount");
+    let run = || {
+        let cancel = Cancellation::default().next();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let items = [Selected::inspect(&root.to_string_lossy()).unwrap()];
+        let line = r#"{"c":"menuaction","op":"contents","id":4}"#.to_string();
+        let started = Instant::now();
+        assert!(serve_with_deadline(&line, 4, &items, &tx, &cancel, Duration::from_millis(50)));
+        (lines(&rx), started.elapsed())
+    };
+    let (first, _) = run();
+    assert!(field_bool(&first[0], "done") && field_bool(&first[0], "partial"), "{}", first[0]);
+    assert!(crate::backend::walkmounts::stuck_among(&mounts).is_none(), "local walk time marks a healthy remote mount stuck");
+    let (again, took) = run();
+    assert!(took >= Duration::from_millis(50), "the repeat answers a cached zero instead of walking: {:?}", took);
+    assert!(field_bool(&again[0], "done") && field_bool(&again[0], "partial"), "{}", again[0]);
 }
