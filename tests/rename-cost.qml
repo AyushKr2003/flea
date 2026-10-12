@@ -10,8 +10,7 @@ ShellRoot {
     readonly property string fixture: Quickshell.env("HOME") + "/fixture"
     readonly property var pane: body.currentPane
     readonly property int stallTicks: 200
-    // Each case renames one row through r and typed text, in each view and for each end: a name that stays in place, a name past the held window (far), and Escape.
-    // Far cases measure their before phase on the last row, where the renamed row lands. End 0 opens the path field, and legs switch views.
+    // Each case renames one row through r and typed text, in each view and for each end; far cases start before on the row the new name sorts into, end 0 opens the path field, legs switch views.
     readonly property var cases: [
         { view: "columns", target: "f020.txt", typed: "zc", end: Qt.Key_Return, far: true },
         { view: "columns", target: "f023.txt", typed: "f023n", end: Qt.Key_Return },
@@ -39,8 +38,20 @@ ShellRoot {
     readonly property int idleTicks: 20
     // An armed frame hook draws on every vsync, so an idle second past half of one is a leak, below it noise.
     readonly property int idleFloor: 30
-    readonly property int frameSlack: 4
+    // The most frames one case drew beyond or below another run of itself in the suite logs under .superpowers/ip265a (dual 26 to 32), and the margin on top of it.
+    readonly property int frameSpread: 6
+    readonly property int frameMargin: 2
+    readonly property int frameSlack: root.frameSpread + root.frameMargin
     readonly property int readsPerBump: 5
+    // The row reads of one columns case on the last row ran from 208 to 211 over the suite logs under .superpowers/ip265a, so a selecting end gets the spread beside its bumps.
+    readonly property int readsSpread: 3
+    // The views the positive control scrolls through, one at a time.
+    readonly property var controlViews: ["list", "grid", "columns", "dual"]
+    property int controlView: 0
+    // A jump of sixty rows scrolls the pane inside its held window without asking the backend for another one.
+    readonly property int controlJump: 60
+    // Six ticks let the jump's layouts and queued bindings land before the snapshot.
+    readonly property int controlTicks: 6
     property int caseIndex: 0
     property int stage: 0
     property int stageTicks: 0
@@ -60,6 +71,8 @@ ShellRoot {
     property int rowsReplies: 0
     property int inputs: 0
     property int cursorRowEvals: 0
+    // Fields the rows replies armed on arrival; none means the handler ran before the pane held the reply's rows.
+    property int replyArmed: 0
     // Field reads of held rows, in an object never reassigned: a getter that wrote a property would loop every binding that reads a row.
     readonly property var tally: ({ rowReads: 0 })
 
@@ -78,6 +91,13 @@ ShellRoot {
         for (var i = 0; i < pane.total; i++)
             if (pane.rowFor(i) && String(pane.rowFor(i).n) === name) return i
         return -1
+    }
+    // The row a far rename lands on: every row before the held window sorts below a far name, so the landing row is the held rows sorting below the new name, minus the renamed row itself.
+    function farHome(newName) {
+        var below = pane.held
+        for (var i = 0; i < pane.rows.length; i++)
+            if (String(pane.rows[i].n) < newName) below++
+        return below - 1
     }
     // Every object under the window: children and resources, so Timers and Connections count too.
     function census() {
@@ -118,17 +138,20 @@ ShellRoot {
         return { frames: root.frames, selection: root.selectionBumps, rows: root.rowsReplies, inputs: root.inputs,
                  cursorRow: root.cursorRowEvals, rowReads: root.tally.rowReads }
     }
-    // rowFor is a QML method and cannot be wrapped, so every field a held row gives out is counted instead; a reply brings new rows, armed on the next snapshot.
+    // rowFor is a QML method and cannot be wrapped, so every field a held row gives out is counted instead; a rows reply arms its rows on arrival, snapshots arm the rest.
     function armRows() {
+        var armed = 0
         for (var i = 0; i < pane.rows.length; i++)
             for (var field in pane.rows[i])
-                root.armField(pane.rows[i], field)
+                if (root.armField(pane.rows[i], field)) armed++
+        return armed
     }
     function armField(row, field) {
         var desc = Object.getOwnPropertyDescriptor(row, field)
-        if (desc.get !== undefined) return
+        if (desc.get !== undefined) return false
         var value = row[field]
         Object.defineProperty(row, field, { get: function () { root.tally.rowReads++; return value }, enumerable: true, configurable: true })
+        return true
     }
     // Every row delegate under the window, pooled ones included: List's Row, the Grid's tile and Columns' ColumnRow carry listingIndex.
     function cellSnap() {
@@ -213,7 +236,7 @@ ShellRoot {
         }
         var result = { idleFrames: head.idle.frames, listFocus: head.listFocus, focus: head.focus, keys: sum, missed: missed, delegates: root.cells.items.length,
                        census: head.census, anchor: pane.wire.anchor !== null, follows: pane.selection.follows(),
-                       trace: steps.map(function (s) { return s.cursor + "/" + s.inputs }).join(" ") }
+                       trace: steps.map(function (s) { return s.cursor + "/" + s.inputs }).join(" "), path: steps.map(function (s) { return s.cursor }).join(" ") }
         root.line(tag, result)
         root.waitTicks = 0
         return result
@@ -229,7 +252,8 @@ ShellRoot {
             pane.listArea.forceActiveFocus()
             pane.clearSelection()
             // A row outside the held window reads as missing, so the cursor goes home until the window holds it.
-            var home = c.far ? pane.total - 1 : root.indexOfName(c.target)
+            if (c.far && !pane.rowFor(pane.total - 1)) { pane.setCursor(pane.total - 1); return false }
+            var home = c.far ? root.farHome(c.typed + ".txt") : root.indexOfName(c.target)
             if (c.far ? !pane.rowFor(home) : home < 0) { pane.setCursor(c.far ? home : 0); return false }
             pane.setCursor(home)
             root.stage = c.legs ? 2 : 1
@@ -294,33 +318,38 @@ ShellRoot {
         return true
     }
 
-    // A positive control for the per-key counts: a cursor jump of sixty rows scrolls the list inside the held window, so delegates rebind and held rows are read.
+    // A positive control for the per-key counts, in every view: a cursor jump scrolls the pane inside the held window, so delegates rebind and held rows are read.
     function control(c) {
+        var view = root.controlViews[root.controlView]
+        var tag = "control scroll " + view
         if (root.stage === 0) {
-            if (Flea.ViewState.state.view !== c.view) { pane.chooseView(c.view); return false }
+            if (Flea.ViewState.state.view !== view) { pane.chooseView(view); return false }
             if (!root.settled()) return false
             pane.listArea.forceActiveFocus()
             pane.clearSelection()
-            if (pane.cursorIndex !== 0 || !pane.rowFor(0) || !pane.rowFor(60)) { pane.setCursor(0); return false }
+            if (pane.cursorIndex !== 0 || !pane.rowFor(0) || !pane.rowFor(root.controlJump)) { pane.setCursor(0); return false }
             root.armRows()
             root.resetCounters()
             root.cells = root.cellSnap()
-            pane.setCursor(60)
+            pane.setCursor(root.controlJump)
             root.waitTicks = 0
             root.stage = 1
             return true
         }
-        if (++root.waitTicks < 6) return false
+        if (++root.waitTicks < root.controlTicks) return false
         var delta = root.cellDelta(root.cells, root.cellSnap())
         var seen = root.counters()
-        root.line("control scroll", { delta: delta, seen: seen })
-        root.check(delta.rebound + delta.built > 0, "control a sixty row jump rebound or built no delegate")
-        root.check(seen.rowReads > 0, "control a sixty row jump read no held row")
-        root.check(seen.cursorRow > 0, "control a sixty row jump left the cursor row alone")
+        root.line(tag, { delta: delta, seen: seen })
+        root.check(delta.rebound + delta.built > 0, tag + " a " + root.controlJump + " row jump rebound or built no delegate")
+        root.check(seen.rowReads > 0, tag + " a " + root.controlJump + " row jump read no held row")
+        root.check(seen.cursorRow > 0, tag + " a " + root.controlJump + " row jump left the cursor row alone")
         root.waitTicks = 0
         root.stage = 0
-        root.caseIndex++
-        return true
+        if (++root.controlView >= root.controlViews.length) {
+            root.controlView = 0
+            root.caseIndex++
+        }
+        return root.controlView === 0
     }
 
     // One view per leg, settled: three Down presses one tick apart move the cursor three rows, and that view's own area holds the keyboard.
@@ -345,23 +374,32 @@ ShellRoot {
         root.check(a.listFocus && a.missed === 0, tag + " before the rename " + a.missed + " keys missed the key handler, list focus " + a.listFocus)
         root.check(b.listFocus, tag + " the list area lost the keyboard to " + b.focus)
         root.check(b.missed === 0, tag + " " + b.missed + " of " + root.keys.length + " keys never reached the key handler: " + b.trace)
+        // Both phases press the same keys from the same row, or their counts compare different work.
+        root.check(a.path === b.path, tag + " the cursor walked " + a.path + " before and " + b.path + " after")
         root.check(b.idleFrames <= Math.max(a.idleFrames, root.idleFloor), tag + " idle frames " + a.idleFrames + " before, " + b.idleFrames + " after")
         root.check(b.census.timers <= a.census.timers, tag + " running timers " + a.census.timers + " before, " + b.census.timers + " after")
         root.check(b.census.animations <= a.census.animations, tag + " running animations " + a.census.animations + " before, " + b.census.animations + " after")
         var costs = ["rows", "cursorRow", "built", "destroyed", "rebound"]
         for (var n = 0; n < costs.length; n++)
             root.check(b.keys[costs[n]] <= a.keys[costs[n]], tag + " " + costs[n] + " over " + root.keys.length + " keys " + a.keys[costs[n]] + " before, " + b.keys[costs[n]] + " after")
-        // The grid draws 40 to 45 frames for the same sixteen keys from run to run, so frames get four of slack.
+        // The same sixteen keys draw 40 to 45 frames in the grid and 26 to 32 in dual from run to run, so frames get the measured spread and a margin.
         root.check(b.keys.frames <= a.keys.frames + root.frameSlack, tag + " frames over " + root.keys.length + " keys " + a.keys.frames + " before, " + b.keys.frames + " after")
-        // Each bump of the landed row's selection makes the status strip total that one row in five field reads; Escape bumps nothing and reads the same.
-        root.check(b.keys.rowReads <= a.keys.rowReads + root.readsPerBump * b.keys.selection, tag + " row field reads over " + root.keys.length + " keys " + a.keys.rowReads + " before, " + b.keys.rowReads + " after, " + b.keys.selection + " selection bumps")
-        root.check(b.keys.selection <= Math.max(a.keys.selection, root.keys.length), tag + " selection bumps over " + root.keys.length + " keys " + a.keys.selection + " before, " + b.keys.selection + " after")
+        // Each bump of the landed row's selection makes the status strip total that one row in five field reads; an Escape end bumps nothing, so its row reads get no selection allowance.
+        var escape = tag.slice(-7) === " escape"
+        root.check(b.keys.rowReads <= a.keys.rowReads + (escape ? 0 : root.readsPerBump * b.keys.selection + root.readsSpread), tag + " row field reads over " + root.keys.length + " keys " + a.keys.rowReads + " before, " + b.keys.rowReads + " after, " + b.keys.selection + " selection bumps")
+        if (escape) {
+            root.check(a.keys.selection === 0, tag + " selection bumps " + a.keys.selection + " before an Escape rename over " + root.keys.length + " keys")
+            root.check(b.keys.selection === 0, tag + " selection bumps " + b.keys.selection + " after an Escape rename over " + root.keys.length + " keys")
+        } else {
+            root.check(b.keys.selection <= Math.max(a.keys.selection, root.keys.length), tag + " selection bumps over " + root.keys.length + " keys " + a.keys.selection + " before, " + b.keys.selection + " after")
+        }
         root.check(b.census.editors === 0, tag + " " + b.census.editors + " rename editors live after the rename")
         root.check(!b.anchor, tag + " the rename anchor still stands")
     }
 
     function report() {
         stepper.running = false
+        root.check(root.replyArmed > 0, "no rows reply armed a fresh row on arrival")
         root.check(root.caseIndex === root.cases.length, "ran " + root.caseIndex + " of " + root.cases.length + " cases")
         console.log("RENAMECOST DONE checks=" + root.checks + " failed=" + root.failures.length)
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
@@ -387,7 +425,8 @@ ShellRoot {
     }
     Connections {
         target: root.pane ? root.pane.backend : null
-        function onRows() { root.rowsReplies++ }
+        // This handler runs after the pane's own takeRows, so the reply's rows are already held and arming them keeps every later read counted.
+        function onRows() { root.rowsReplies++; root.replyArmed += root.armRows() }
     }
 
     Timer {

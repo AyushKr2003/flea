@@ -2650,7 +2650,7 @@ soft and 300 hard. Going over the hard cap fails the tool; going over the soft b
 only warns. The md3 Markdown rhythm harness recorded `tests/markdown-render.qml` at 493 lines;
 its marker-baseline follow-up raises that one scoped ceiling to 628 for two-size painted-baseline
 and adjacent-item geometry checks, with the details beside the md3 paragraph below.
-`tests/rename-cost.qml` is recorded at 418 lines: its per-key census (frames, replies, selection bumps, delegates
+`tests/rename-cost.qml` is recorded at 457 lines: its per-key census (frames, replies, selection bumps, delegates
 built, destroyed and rebound, row field reads) runs for each rename end in all four views and cannot split from the one
 real WindowBody it drives.
 The budget is a smell detector, not a target, and **it is not a reason to refactor a
