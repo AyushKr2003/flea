@@ -5490,6 +5490,8 @@ no kill after the reap, since the kernel reparents the init there and no parent 
 The metareq and mediaprobe watchdogs kill through the same gate while the child is still alive,
 and the reader thread is built with `Builder::spawn`, whose error kills the started child and
 answers the caller's `NotStarted`.
+
+Every pid signal goes through `src/procsignal.rs` (`signal_group`, `signal_process`), which refuses any pid <= 1 before the syscall so no computed pid can become `kill(0)` or `kill(-1)`; never declare `kill` anywhere else.
 **A video the worker takes is confined without this argv.** `sandbox::wrap_worker` runs
 `flea --thumb-worker` under the same flags minus the two binds and minus `prlimit`, and each child
 it forks sets the same two limits itself through an `extern "C"` `setrlimit` from the system libc
