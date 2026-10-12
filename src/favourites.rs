@@ -104,11 +104,11 @@ pub fn changed(state: &Json, operation: &Json) -> Result<Json, String> {
                 .chars()
                 .any(|character| !character.is_whitespace() && !character.is_control())
             {
-                return Err("favorite label needs visible text".into());
+                return Err("A favorite name needs visible text.".into());
             }
             if !valid_path(path) {
                 return Err(
-                    "favorite path must be absolute, ~/ relative, or a supported URI".into(),
+                    "use a full path, a path that starts with ~/, or a network address".into(),
                 );
             }
             // Issue 138, AksharP5: one place is one row, so a place the list holds is kept once.
@@ -118,7 +118,7 @@ pub fn changed(state: &Json, operation: &Json) -> Result<Json, String> {
         }
         Some(action @ ("remove" | "move" | "rename")) => {
             if operation.get("expected").and_then(Json::as_array) != Some(current) {
-                return Err("Favorites changed in another window; refresh before editing".into());
+                return Err("Favorites changed in another window; try again.".into());
             }
             let index = index(operation, "index", next.len())?;
             match action {
@@ -139,11 +139,11 @@ pub fn changed(state: &Json, operation: &Json) -> Result<Json, String> {
                         .and_then(Json::as_str)
                         .ok_or("favorite label must be text")?;
                     if label.trim().is_empty() {
-                        return Err("favorite label needs visible text".into());
+                        return Err("A favorite name needs visible text.".into());
                     }
                     let record = next[index]
                         .as_object()
-                        .ok_or("invalid favorite cannot be renamed; remove it explicitly")?;
+                        .ok_or("This favorite is damaged and cannot be renamed. Remove it instead.")?;
                     let mut record = record.to_vec();
                     if let Some(pair) = record.iter_mut().find(|(key, _)| key == "label") {
                         pair.1 = Json::Str(label.into());
@@ -372,5 +372,17 @@ mod tests {
         ] {
             assert!(changed(&state, &parse(operation)).is_err());
         }
+    }
+
+    // Favourites.qml shows the first line raw, so each refusal is a whole sentence with its capital and its period.
+    #[test]
+    fn a_refused_edit_is_a_whole_sentence_the_rail_can_show_raw() {
+        let state = uistate::from_file(r#"{"places":{"favourites":[{"label":"A","path":"/a"},"damaged"]}}"#);
+        let held = r#""expected":[{"label":"A","path":"/a"},"damaged"]"#;
+        let refused = |operation: String| changed(&state, &parse(&operation)).map(|_| ()).unwrap_err();
+        assert_eq!(refused(r#"{"op":"remove","index":0,"expected":[]}"#.to_string()), "Favorites changed in another window; try again.");
+        assert_eq!(refused(r#"{"op":"add","record":{"label":" ","path":"/a"}}"#.to_string()), "A favorite name needs visible text.");
+        assert_eq!(refused(format!(r#"{{"op":"rename","index":0,"label":" ",{}}}"#, held)), "A favorite name needs visible text.");
+        assert_eq!(refused(format!(r#"{{"op":"rename","index":1,"label":"B",{}}}"#, held)), "This favorite is damaged and cannot be renamed. Remove it instead.");
     }
 }

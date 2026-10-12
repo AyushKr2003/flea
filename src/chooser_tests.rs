@@ -128,3 +128,13 @@ fn a_note_left_without_its_line_is_dropped_so_an_undo_restores_nothing_it_names(
     assert!(!out.contains(REPLACED), "{:?}", out);
     assert_eq!(drop_preferred(&out, IFACE).as_deref(), Some("[preferred]\ndefault=hyprland;gtk\n"));
 }
+
+#[test]
+fn a_portal_file_that_cannot_be_read_says_why_in_words() {
+    let dir = TestDir::new("chooserunreadable");
+    // A folder where the file belongs: reading it is refused with a reason a person can act on.
+    let folder = dir.dir("portals.conf");
+    let expected = format!("{} could not be read: item is a folder", folder.display());
+    assert_eq!(claim_chooser((folder.clone(), false)).unwrap_err(), expected);
+    assert_eq!(release_file(&folder, true).unwrap_err(), expected);
+}

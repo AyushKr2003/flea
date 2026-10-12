@@ -1,7 +1,7 @@
 // A 7z password travels on the child's stdin and never in argv: only a compress carries a bare `-p`.
 use crate::backend::archive::{Formats, Reader, STORE_LINKS, ZIP_TYPE};
 use crate::backend::archivelist::{parse_reader, Contents};
-use crate::backend::archivework::{cancel_failure, failure_message, spawn_stderr_reader, Work};
+use crate::backend::archivework::{cancel_failure, failure_message, spawn_stderr_reader, Work, SANDBOX_MISSING};
 use crate::backend::opsreq::op_err;
 use crate::backend::sandbox;
 use crate::error::{from_io, FleaError};
@@ -176,7 +176,7 @@ fn run_with(
 ) -> Result<Option<SevenFailure>, FleaError> {
     if !sandbox::available() {
         let tool = inner.first().map_or("", |s| s.as_str());
-        return Err(op_err(what, tool, "the sandbox is unavailable: bubblewrap or prlimit is not installed"));
+        return Err(op_err(what, tool, SANDBOX_MISSING));
     }
     let mut full = sandbox::wrap_archive(&inner, read_only, &work.dir);
     sandbox::add_status(&mut full, inner.len());

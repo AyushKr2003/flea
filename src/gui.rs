@@ -307,7 +307,7 @@ pub(crate) fn exec(mut cmd: Command) -> i32 {
     thp::disable();
     // exec() only returns on failure; the reason is elided, never shown raw.
     let _ = cmd.exec();
-    eprintln!("flea: could not start the shell, qs is not on PATH or failed to run");
+    eprintln!("flea: the window could not start: Quickshell is not installed or could not run");
     1
 }
 

@@ -13,6 +13,11 @@ const SIGHUP: i32 = 1;
 const SIGKILL: i32 = 9;
 const SIGCONT: i32 = 18;
 const SIGTTOU: i32 = 22;
+// The shown faults of the stty calls: raw mode at the start and the terminal handed back at the end, then the same two around the editor.
+const PREPARE_FAILED: &str = "The terminal could not be prepared";
+const RESTORE_FAILED: &str = "The terminal could not be restored";
+const PREPARE_FOR_EDITOR_FAILED: &str = "The terminal could not be prepared for the editor";
+const RESTORE_AFTER_EDITOR_FAILED: &str = "The terminal could not be restored after the editor";
 #[repr(C)]
 struct WindowSize {
     rows: u16,
@@ -20,9 +25,13 @@ struct WindowSize {
     x: u16,
     y: u16,
 }
+// The editor's exit as the bulk rename sees it: a nonzero status ends the rename with the status shown.
+fn editor_result(status: std::process::ExitStatus) -> io::Result<()> {
+    if status.success() { Ok(()) } else { Err(io::Error::other(format!("The editor could not finish ({})", status))) }
+}
 pub fn launch(path: &Path, window: bool) -> io::Result<Child> {
     let path = path.canonicalize()?;
-    if !path.is_dir() { return Err(io::Error::other("Terminal destination is not a directory")); }
+    if !path.is_dir() { return Err(io::Error::other("That is not a folder, so no terminal was opened")); }
     let mut directory = std::ffi::OsString::from("--dir=");
     directory.push(&path);
     let mut command = Command::new("xdg-terminal-exec");
@@ -62,18 +71,16 @@ impl Terminal {
             .arg("-g")
             .stdin(Stdio::inherit())
             .output()?;
-        if !output.status.success() {
-            return Err(io::Error::other("stty could not read terminal mode"));
-        }
+        stty_result(output.status, PREPARE_FAILED)?;
         let mut terminal = Self {
             saved: String::from_utf8_lossy(&output.stdout).trim().to_owned(),
             handlers: Vec::new(),
             active: false,
         };
         if terminal.saved.is_empty() {
-            return Err(io::Error::other("stty returned an empty terminal mode"));
+            return Err(io::Error::other(PREPARE_FAILED));
         }
-        raw()?;
+        raw(PREPARE_FAILED)?;
         for sig in [SIGINT, SIGTERM, SIGHUP] {
             terminal
                 .handlers
@@ -85,15 +92,13 @@ impl Terminal {
         Ok(terminal)
     }
     pub fn run_editor(&mut self, editor: &str, path: &Path) -> io::Result<()> {
-        self.restore()?;
+        self.restore(PREPARE_FOR_EDITOR_FAILED)?;
         let result = match EditorJob::start(editor, path) {
             Ok(mut editor) => {
             let result = loop {
                 if self.stopped() { break Err(io::Error::other("Bulk rename editor interrupted")); }
                 match editor.status() {
-                    Ok(Some(status)) => {
-                        break if status.success() { Ok(()) } else { Err(io::Error::other(format!("Bulk rename editor failed ({})", status))) };
-                    }
+                    Ok(Some(status)) => break editor_result(status),
                     Err(error) => break Err(error),
                     Ok(None) => {}
                 }
@@ -105,18 +110,16 @@ impl Terminal {
             }
             Err(error) => Err(error),
         };
-        raw()?;
+        raw(RESTORE_AFTER_EDITOR_FAILED)?;
         screen(true)?;
         self.active = true;
         result
     }
     pub fn ready(&self) -> bool { self.active }
-    fn restore(&mut self) -> io::Result<()> {
+    fn restore(&mut self, fault: &'static str) -> io::Result<()> {
         self.active = false;
         let screen = screen(false);
-        let mode = Command::new("stty").arg(&self.saved).status().and_then(|status| {
-            if status.success() { Ok(()) } else { Err(io::Error::other("stty could not restore terminal mode")) }
-        });
+        let mode = Command::new("stty").arg(&self.saved).status().and_then(|status| stty_result(status, fault));
         mode.and(screen)
     }
     pub fn stopped(&self) -> bool {
@@ -211,7 +214,7 @@ impl Drop for EditorJob {
 }
 impl Drop for Terminal {
     fn drop(&mut self) {
-        if let Err(error) = self.restore() { eprintln!("flea: {}", error); }
+        if let Err(error) = self.restore(RESTORE_FAILED) { eprintln!("flea: {}", error); }
         // kitty unlinks the object once it reads it; a terminal that could not read it leaves it here.
         let _ = std::fs::remove_file(Path::new(SHM_DIR).join(shm_name()));
         for &(sig, handler) in &self.handlers {
@@ -234,11 +237,12 @@ fn shm_query(dir: &Path, name: &str) -> Option<String> {
     let encoded = super::graphics::base64(format!("/{}", name).as_bytes());
     Some(format!("\x1b_Gi=32,s=1,v=1,a=q,t=s,f=24;{}\x1b\\", encoded))
 }
-fn raw() -> io::Result<()> {
-    if !Command::new("stty").args(["raw", "-echo", "min", "0", "time", "0"]).status()?.success() {
-        return Err(io::Error::other("stty could not enter raw mode"));
-    }
-    Ok(())
+// A stty call's exit as a shown fault: a nonzero status says what the call was for.
+fn stty_result(status: std::process::ExitStatus, fault: &'static str) -> io::Result<()> {
+    if status.success() { Ok(()) } else { Err(io::Error::other(fault)) }
+}
+fn raw(fault: &'static str) -> io::Result<()> {
+    stty_result(Command::new("stty").args(["raw", "-echo", "min", "0", "time", "0"]).status()?, fault)
 }
 const ENTER: &str = "\x1b[?1049h\x1b[?25l\x1b[?1002h\x1b[?1006h\x1b[?2004h\x1b[>1u\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\\x1b[c";
 const LEAVE: &str = "\x1b[<u\x1b[?1003l\x1b[?1002l\x1b[?1006l\x1b[?2004l\x1b[0m\x1b[?25h\x1b[?1049l";

@@ -18,6 +18,9 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+// The one answer for a menu route whose selection is gone or no longer the item the request names.
+pub(crate) const SELECTION_CHANGED: &str = "Selected items changed; reopen the menu.";
+
 // A slow remote write still running past its slow line, keyed by the mount it holds.
 pub(crate) struct SlowClaim {
     pub id: usize,
@@ -593,11 +596,10 @@ pub(crate) fn run_link(op: &str, paths: Vec<String>, dest: PathBuf, policy: supe
                             Err(e) => {
                                 // A failed cleanup leaves the link behind, so its result is reported, never ignored.
                                 if let Err(remove) = remove_made_link(&to) {
-                                    // The link holds their name, so restoring them can only fail and they stay in the trash.
-                                    let stayed = if replaced.is_empty() { String::new() } else { "; the replaced item stays in the trash".to_string() };
+                                    // The link holds their name, so restoring them can only fail and they stay in the Trash.
+                                    let sentence = format!("{}; the link at {} could not be removed: {}", e.msg, to.to_string_lossy(), crate::error::io_message(&remove));
                                     // The sentence lives in note, so a landed batch still reports it.
-                                    let sentence = format!("{}; the link left at {} could not be removed ({}){}",
-                                        e.msg, to.to_string_lossy(), crate::error::io_message(&remove), stayed);
+                                    let sentence = if replaced.is_empty() { sentence } else { super::collide::kept_in_trash(&sentence) };
                                     if note.is_empty() {
                                         note = sentence;
                                     } else {
@@ -987,7 +989,7 @@ mod tests {
         assert_eq!(o.journal.len(), 2);
         buf.clear();
         do_menu_rename(&mut buf, &mut o, &foreign.to_string_lossy(), "wrong", 5);
-        assert!(text(&buf).contains("not in the menu selection"));
+        assert!(text(&buf).contains("That item is no longer selected"));
         d.file("first", "replacement");
         buf.clear();
         do_menu_rename(&mut buf, &mut o, &first.to_string_lossy(), "wrong", 5);
@@ -1204,7 +1206,7 @@ mod tests {
         link_reported(&mut buf, &mut o, &rx);
         let line = text(&buf);
         assert!(line.contains(r#""ok":1"#) && line.contains(r#""failed":1"#), "{}", line);
-        assert!(line.contains("a hard link to a directory is refused"), "mixed failure silent: {}", line);
+        assert!(line.contains("a hard link cannot point to a folder"), "mixed failure silent: {}", line);
         assert!(line.contains(&sub.to_string_lossy().into_owned()), "mixed failure unnamed: {}", line);
         assert_eq!(o.journal.len(), 1);
     }
@@ -1220,7 +1222,7 @@ mod tests {
         start_link(&mut buf, &mut o, "hard", vec![src.to_string_lossy().to_string()], &dest.to_string_lossy(), ask);
         link_reported(&mut buf, &mut o, &rx);
         let line = text(&buf);
-        assert!(line.contains("a hard link to a directory is refused"), "{}", line);
+        assert!(line.contains("a hard link cannot point to a folder"), "{}", line);
         assert!(line.contains(r#""where":"link""#), "{}", line);
         assert!(std::fs::symlink_metadata(dest.join("src")).is_err());
         assert!(o.journal.is_empty());
@@ -1243,7 +1245,7 @@ mod tests {
         let line = text(&buf);
         let at = dest.join("a.txt");
         assert!(line.contains(&at.to_string_lossy().into_owned()), "leftover unnamed: {}", line);
-        assert!(line.contains("could not be removed"), "cleanup failure silent: {}", line);
+        assert!(line.contains(&format!("the link at {} could not be removed: ", crate::json::escape(&at.to_string_lossy()))), "cleanup failure silent: {}", line);
         assert!(at.symlink_metadata().is_ok(), "the leftover stays and is reported, never dropped");
         assert!(o.journal.is_empty(), "a link never identified journals nothing");
     }
@@ -1402,7 +1404,7 @@ mod tests {
         std::fs::write(dest.join("a.txt"), "someone else").unwrap();
         let (tx, _rx) = channel();
         let redone = o.journal.redo(1, &AtomicBool::new(false), &tx);
-        assert!(redone.unwrap_err().msg.contains("already exists"));
+        assert_eq!(redone.unwrap_err().msg, "an item with that name is already there, so redo left it in place");
         assert_eq!(std::fs::read_to_string(dest.join("a.txt")).unwrap(), "someone else");
     }
 
@@ -2254,5 +2256,20 @@ mod tests {
         assert_eq!(o.journal.len(), journaled + 1, "the late entry lands exactly once");
         assert!(o.live.running().is_none(), "no pending entry survives the late Done");
         assert!(o.pending.is_empty(), "the late Done clears its own pending entry");
+    }
+
+    // An absent menu service holds no selection, so every menu route answers the one sentence.
+    const SELECTION_GONE: &str = "Selected items changed; reopen the menu.";
+
+    #[test]
+    fn a_menu_route_with_no_menu_service_says_the_selection_changed() {
+        let d = TestDir::new("dispatchnomenu");
+        let o = ops();
+        assert_eq!(menu_sources(&o, 5).unwrap_err(), SELECTION_GONE);
+        assert!(menu_sources(&o, 0).unwrap().is_none(), "a request with no menu names no selection");
+        let mut o = ops();
+        let mut buf = out();
+        do_menu_rename(&mut buf, &mut o, &d.file("a.txt", "a").to_string_lossy(), "b.txt", 5);
+        assert!(text(&buf).contains(SELECTION_GONE), "{}", text(&buf));
     }
 }

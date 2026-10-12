@@ -173,7 +173,7 @@ fn journal_partial(
 ) -> Result<(), FleaError> {
     let (manifest, loud) = crate::backend::copymanifest::finish_loud(manifest);
     if let Some(e) = loud {
-        err.msg.push_str(&format!("; copy manifest failed: {e}"));
+        err.msg = crate::backend::ops::manifest_failed(&err.msg, &e);
     }
     steps.push(undo::copied_partial(src, dst, source.clone(), manifest)?);
     Ok(())

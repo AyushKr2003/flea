@@ -117,7 +117,9 @@ pub fn load(m: &mut Model, force: bool) {
         return;
     }
     if !m.preview_loaded {
-        m.preview.push("Ctrl+Space to load preview".into());
+        if !m.hints.load_preview.is_empty() {
+            m.preview.push(format!("{} to load preview", m.hints.load_preview));
+        }
         return;
     }
     if row.directory {
@@ -266,6 +268,36 @@ mod tests {
         m.rows.get_mut(&0).unwrap().name = "link".into();
         load(&mut m, true);
         assert_eq!(read_text(&d.join("link"), &AtomicBool::new(false)).unwrap_err(), "This file could not be read.");
+    }
+    // The hint under an unloaded preview names the key the keymap binds, and says nothing when none is bound.
+    #[test]
+    fn the_load_hint_names_the_key_the_keymap_binds() {
+        let rebound = crate::tui::keymap::Map::parse(r##"
+[[preset]]
+name = "default"
+mods = "ctrl"
+key = "P"
+action = "loadPreview"
+context = "listing"
+"##);
+        let d = TestDir::new("tui-preview-hint");
+        d.file("note.txt", "body");
+        let mut m = Model::new(d.path().into(), &Json::Null);
+        let row = Row { name: "note.txt".into(), directory: false, size: 4, mode: 0o100644, link: String::new(), kind: "Plain text document".into(), thumbnail: false, modified: 0, icon: "text-x-generic".into() };
+        m.rows.insert(0, row);
+        m.preview_visible = true;
+        m.preview_auto = false;
+        m.hints = crate::tui::keymap::Hints::new(&crate::tui::keymap::Map::load(), "default");
+        load(&mut m, false);
+        assert_eq!(m.preview.last().unwrap(), "Ctrl+Space to load preview");
+        m.hints = crate::tui::keymap::Hints::new(&rebound, "default");
+        m.preview_path.clear();
+        load(&mut m, false);
+        assert_eq!(m.preview.last().unwrap(), "Ctrl+P to load preview");
+        m.hints.load_preview.clear();
+        m.preview_path.clear();
+        load(&mut m, false);
+        assert!(!m.preview.iter().any(|line| line.contains("load preview")), "{:?}", m.preview);
     }
     #[test]
     fn text_reader_replaces_pending_work_and_discards_stale_results() {

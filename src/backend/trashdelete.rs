@@ -197,7 +197,7 @@ fn open_dir(path: &Path) -> Result<File, String> {
         .read(true)
         .custom_flags(O_NOFOLLOW | O_DIRECTORY)
         .open(path)
-        .map_err(|e| format!("Could not open Trash directory {}: {}", path.display(), e))
+        .map_err(|e| format!("Could not open the Trash folder {}: {}", path.display(), e))
 }
 fn fd_path(file: &File, name: &OsStr) -> PathBuf {
     PathBuf::from(format!("/proc/self/fd/{}", file.as_raw_fd())).join(name)
@@ -461,7 +461,7 @@ impl Reviewed {
             }
             let destination = original_path(&metadata, self.path.parent().and_then(Path::parent).ok_or("Missing Trash root.")?)?;
             if destination != original || Identity::of(&metadata.metadata().map_err(|e| e.to_string())?) != self.metadata {
-                return Err("Trash original location changed; refresh the selection.".into());
+                return Err("The item's original folder changed; select it again.".into());
             }
             let destination_parent = destination.parent().ok_or("Original parent is missing.")?.canonicalize()
                 .map_err(|e| format!("Could not open original location {}: {}", destination.display(), e))?;
@@ -485,7 +485,7 @@ impl Reviewed {
         if identity(&fd_path(&files, name))? != self.payload
             || identity(&fd_path(&infos, info_name))? != self.metadata
         {
-            return Err("Trash item changed; review a fresh confirmation.".into());
+            return Err("The Trash item changed; confirm again.".into());
         }
         let quarantine_name = format!(
             ".flea-delete-{}-{}",

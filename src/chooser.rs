@@ -1,4 +1,5 @@
 // flea --picker: the per-user step that routes the desktop's file chooser here, see docs/install.md.
+use crate::error::io_message;
 use crate::hyprkeys;
 use crate::userfile::{config_home, create_file, data_file, replace_file};
 use std::fs;
@@ -32,7 +33,7 @@ pub fn backend_installed() -> bool {
 pub fn claim() -> i32 {
     if installed_portal().is_none() {
         eprintln!(
-            "flea: {} is not installed in any portal directory, so there is no backend to prefer; install the package first",
+            "flea: {} is not installed in any portal folder, so the file chooser was not changed. Install the package first.",
             PORTAL_FILE
         );
         return 1;
@@ -96,12 +97,12 @@ fn claim_chooser((path, desktop_file): (PathBuf, bool)) -> Result<String, String
     let text = match fs::read_to_string(&path) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            let dir = path.parent().ok_or_else(|| format!("{} has no directory", path.display()))?;
-            fs::create_dir_all(dir).map_err(|e| format!("{} could not be created ({:?})", dir.display(), e.kind()))?;
+            let dir = path.parent().ok_or_else(|| format!("{} has no parent folder", path.display()))?;
+            fs::create_dir_all(dir).map_err(|e| format!("{} could not be created: {}", dir.display(), io_message(&e)))?;
             create_file(&path, &format!("{}\n{}={}\n", GROUP, IFACE, PREFERRED))?;
             return Ok(format!("{}: {}, written to {}", IFACE, PREFERRED, path.display()));
         }
-        Err(e) => return Err(format!("{} could not be read ({:?})", path.display(), e.kind())),
+        Err(e) => return Err(format!("{} could not be read: {}", path.display(), io_message(&e))),
     };
     let before = preferred_value(&text, IFACE);
     let Some(next) = set_preferred(&text, IFACE, PREFERRED) else {
@@ -138,14 +139,14 @@ fn release_file(path: &Path, own_file: bool) -> Result<Option<String>, String> {
     let text = match fs::read_to_string(path) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(format!("{} could not be read ({:?})", path.display(), e.kind())),
+        Err(e) => return Err(format!("{} could not be read: {}", path.display(), io_message(&e))),
     };
     let Some(next) = drop_preferred(&text, IFACE) else {
         return Ok(None);
     };
     // A file left holding nothing but the group heading was this command's own, so it goes with the key.
     if own_file && next.trim() == GROUP {
-        fs::remove_file(path).map_err(|e| format!("{} could not be removed ({:?})", path.display(), e.kind()))?;
+        fs::remove_file(path).map_err(|e| format!("{} could not be removed: {}", path.display(), io_message(&e)))?;
         return Ok(Some(format!("{}: Flea's line removed, and {} held nothing else, so it is gone", IFACE, path.display())));
     }
     let restored = preferred_value(&next, IFACE);
@@ -170,7 +171,7 @@ fn effective_conf() -> Result<(PathBuf, bool), String> {
     if std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default().is_empty() && !found.is_empty() {
         let names: Vec<String> = found.iter().map(|p| p.display().to_string()).collect();
         return Err(format!(
-            "XDG_CURRENT_DESKTOP is not set, so it is unknown whether {} is the file this desktop reads; run it from inside the desktop session",
+            "The desktop is unknown, so Flea cannot tell whether this desktop reads {}. Run flea --default inside the desktop session.",
             names.join(" or ")
         ));
     }
@@ -198,7 +199,7 @@ fn desktop_files() -> Result<Vec<PathBuf>, String> {
     let entries = match fs::read_dir(&dir) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(format!("{} could not be read ({:?})", dir.display(), e.kind())),
+        Err(e) => return Err(format!("{} could not be read: {}", dir.display(), io_message(&e))),
     };
     let mut found: Vec<PathBuf> = entries
         .filter_map(|entry| entry.ok().map(|e| e.path()))

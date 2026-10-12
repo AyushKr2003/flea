@@ -22,7 +22,7 @@ pub const PICKER_SHELL_ID: &str = "fleapicker";
 
 // Issue 216: names the entry file sought, since a package missing ui/boot reads as a missing dir.
 pub fn missing_ui_message() -> String {
-    format!("flea: the shell config is missing: /usr/share/flea/ui/{} was not found; set FLEA_UI or reinstall flea", ENTRY)
+    format!("flea: Flea's interface files are missing (/usr/share/flea/ui/{}). Reinstall flea.", ENTRY)
 }
 
 // The UI ships as data, so it is found the same way FLEA_BIN finds the binary.
@@ -117,7 +117,7 @@ mod tests {
     fn the_missing_ui_message_names_the_entry_file_it_looked_for() {
         assert_eq!(
             missing_ui_message(),
-            "flea: the shell config is missing: /usr/share/flea/ui/boot/shell.qml was not found; set FLEA_UI or reinstall flea"
+            "flea: Flea's interface files are missing (/usr/share/flea/ui/boot/shell.qml). Reinstall flea."
         );
     }
 

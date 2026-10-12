@@ -56,7 +56,7 @@ impl Editor {
         if matches!(self.kind, "rename" | "mkdir" | "newfile")
             && !crate::backend::ops::valid_name(&self.value)
         {
-            self.error = "Enter one filename without a path separator.".into();
+            self.error = "A name cannot contain /.".into();
             return false;
         }
         if self.kind == "rename" {
@@ -241,6 +241,13 @@ mod tests {
             assert_eq!(editor.value, name);
         }
         assert_eq!(std::fs::read_to_string(path).unwrap(), "original");
+    }
+
+    #[test]
+    fn a_name_with_a_slash_is_refused_in_plain_words() {
+        let mut editor = Editor::new("mkdir", "a/b".into(), "/".into());
+        assert!(!editor.valid());
+        assert_eq!(editor.error, "A name cannot contain /.");
     }
 
     #[test]

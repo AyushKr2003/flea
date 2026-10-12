@@ -89,3 +89,23 @@ fn the_pile_number_the_card_sends_is_one_based() {
     assert!(chosen_index(&["0".to_string()]).is_err(), "there is no row zero on the card");
     assert!(chosen_index(&["two".to_string()]).is_err(), "and a word is not a row number");
 }
+
+#[test]
+fn files_with_no_folder_above_them_say_so_in_the_shelfs_words() {
+    let dir = TestDir::new("summon-root");
+    let mut summon = Summon::at(dir.path());
+    summon.summon = std::path::PathBuf::from("/");
+    assert_eq!(summon.ring().unwrap_err(), "the shelf has no folder to write in");
+    let mut summon = Summon::at(dir.path());
+    summon.piles = std::path::PathBuf::from("/");
+    assert_eq!(summon.keep(pile_of(&["/p/a"]), 1_000).unwrap_err(), "the shelf has no folder to write in");
+    assert_eq!(summon.restore_pile(0).unwrap_err(), "the shelf has no folder to write in");
+}
+
+#[test]
+fn a_pile_that_neither_the_shelf_nor_the_history_would_take_says_what_happened() {
+    assert_eq!(
+        pile_lost("busy"),
+        "the pile could not be restored, and it could not go back into the history (busy)"
+    );
+}

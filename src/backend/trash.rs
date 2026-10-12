@@ -64,11 +64,11 @@ const TRASH_CHUNK: usize = 64;
 // The batch's own reason, so a hung mount or a denial reads as what happened rather than silence.
 pub(crate) fn failure_reason(output: &Option<std::process::Output>) -> String {
     match output {
-        None => "gio could not be run to move items to Trash".to_string(),
-        Some(o) if matches!(o.status.code(), Some(124 | 137)) => "Trash took too long to answer".to_string(),
+        None => "the Trash could not be reached, so nothing was moved".to_string(),
+        Some(o) if matches!(o.status.code(), Some(124 | 137)) => "The Trash took too long to answer".to_string(),
         Some(o) => {
             let line = String::from_utf8_lossy(&o.stderr).lines().last().unwrap_or("").trim().to_string();
-            if line.is_empty() { "gio trash failed".to_string() } else { line }
+            if line.is_empty() { "the items could not be moved to the Trash".to_string() } else { line }
         }
     }
 }
@@ -238,7 +238,7 @@ pub fn restore(entry: &Entry) -> Result<(), FleaError> {
     }
     // A step with no time (a record from before the time was kept) cannot be told from another item of the same path.
     if entry.trashed_at.is_empty() {
-        return Err(err("this item was trashed without a trash entry, so it cannot be restored"));
+        return Err(err("this item was trashed without a Trash entry, so it cannot be restored"));
     }
     // A list that fails says so, never that the item is gone from a Trash nobody could read.
     let Some(after) = list() else {
@@ -330,9 +330,9 @@ fn restore_uri(entry: &Entry) -> Result<(), FleaError> {
         Some(o) if o.status.success() => Ok(()),
         Some(o) => {
             let msg = String::from_utf8_lossy(&o.stderr);
-            Err(err(msg.lines().last().unwrap_or("gio trash --restore failed")))
+            Err(err(msg.lines().last().unwrap_or("the item could not be restored from the Trash")))
         }
-        None => Err(err("gio is not available to restore from the trash")),
+        None => Err(err("gio is not installed, so nothing can be restored from the Trash")),
     }
 }
 
@@ -377,3 +377,6 @@ mod undo_tests;
 #[cfg(test)]
 #[path = "trashfast_tests.rs"]
 mod fast;
+#[cfg(test)]
+#[path = "trashwording_tests.rs"]
+mod wording;

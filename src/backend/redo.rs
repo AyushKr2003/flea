@@ -28,6 +28,14 @@ fn error(path: &Path, message: &str) -> FleaError {
     FleaError { where_: "redo".into(), path: path.to_string_lossy().into(), msg: message.into() }
 }
 
+// Sample output: "1 item was left in place: a: no", or "2 items were left in place: a: no; b: no".
+pub(crate) fn left_in_place(skipped: &[String]) -> String {
+    match skipped {
+        [only] => format!("1 item was left in place: {only}"),
+        many => format!("{} items were left in place: {}", many.len(), many.join("; ")),
+    }
+}
+
 fn source(step: &Step) -> Option<&Path> {
     match step {
         Step::Moved { from, .. } | Step::Copied { from, .. } | Step::Tags { path: from, .. } => Some(from),
@@ -51,7 +59,7 @@ impl Replay {
         let mut steps = Vec::new();
         for step in entry.steps {
             if matches!(step, Step::Created { .. } | Step::Barrier) {
-                return Err(error(Path::new(""), "this interrupted operation has no recorded source to redo"));
+                return Err(error(Path::new(""), "this operation cannot be redone"));
             }
             let input = match &step {
                 Step::Copied { source, .. } => Some(source.clone()),
@@ -99,7 +107,7 @@ impl Replay {
         }
         if let Some((path, identity)) = &saved.parent {
             if !identity.same_item(&ItemIdentity::inspect(path)?) {
-                return Err(error(path, "the destination folder was replaced; redo was refused"));
+                return Err(error(path, "the destination folder was replaced, so nothing was redone"));
             }
         }
         super::mergeapply::check_emptied(&saved.step)?;
@@ -107,7 +115,7 @@ impl Replay {
             match path.symlink_metadata() {
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                 Err(e) => return Err(from_io("redo", &path.to_string_lossy(), &e)),
-                Ok(_) => return Err(error(path, "the destination already exists; redo never replaces it")),
+                Ok(_) => return Err(error(path, "an item with that name is already there, so redo left it in place")),
             }
         }
         Ok(())
@@ -151,7 +159,7 @@ impl Replay {
                 }
             }
             if !skipped.is_empty() {
-                return Err(error(Path::new(""), &format!("{} path(s) left in place: {}", skipped.len(), skipped.join("; "))));
+                return Err(error(Path::new(""), &left_in_place(&skipped)));
             }
             Ok(self.op.clone())
         })();
@@ -217,7 +225,7 @@ fn apply(saved: &ReplayStep, id: usize, index: usize, cancel: &AtomicBool, tx: &
             Ok(())
         }
         Step::Tags { path, before, after, dev, ino, born } => super::tagsundo::replay(path, before, after, (*dev, *ino), *born, &saved.step, steps),
-        Step::Created { path } => Err(error(path, "this operation has no recorded replay source")),
+        Step::Created { path } => Err(error(path, "this operation cannot be redone")),
         // A barrier never reaches a replay; refusing here keeps it from running as a file.
         Step::Barrier => Err(error(Path::new(""), "That operation was too large to undo.")),
         // A link replays through the same exclusive create, so a name taken

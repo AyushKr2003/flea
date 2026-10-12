@@ -42,7 +42,7 @@ fn an_owner_without_a_clipboard_manager_returns_its_cause() {
     let result = spawn_owner_with(&script, "copy", &["/tmp/a".into()], |rx| rx.recv_timeout(watchdog()));
     let served = compositor.join().unwrap_or_else(|_| panic!("the fake compositor panicked; owner result: {:?}", result));
     assert!(served.is_ok(), "the fake compositor failed: {:?}; owner result: {:?}", served, result);
-    assert_eq!(result.unwrap_err(), "no clipboard protocol: neither data-control manager is offered");
+    assert_eq!(result.unwrap_err(), "this compositor does not offer clipboard access");
 }
 
 #[test]

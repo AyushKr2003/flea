@@ -110,7 +110,7 @@ fn finish_manifest(src: &Path, dst_top: &Path, manifest: Option<Writer>, steps: 
     let (handle, loud) = crate::backend::copymanifest::finish_loud(Some(writer));
     if let Some(e) = loud {
         let mut err = r.as_ref().err().map(clone_err).unwrap_or_else(|| FleaError { where_: "transfer".into(), path: dst_top.to_string_lossy().to_string(), msg: String::new() });
-        err.msg = format!("{}; copy manifest failed: {e}", err.msg);
+        err.msg = crate::backend::ops::manifest_failed(&err.msg, &e);
         return Err(err);
     }
     if let Some(handle) = handle {

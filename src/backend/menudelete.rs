@@ -18,6 +18,16 @@ fn check_cancel(cancel: &Cancellation) -> Result<(), String> {
     cancel.check().map_err(|_| "Permanent deletion cancelled.".into())
 }
 
+// Sample output: "3 selected items could not be fully deleted. The first: /d/a: boom."
+fn failure_text(failed: usize, first_error: &str) -> String {
+    let reason = first_error.trim_end_matches('.');
+    match failed {
+        0 => String::new(),
+        1 => format!("1 selected item could not be fully deleted: {reason}."),
+        n => format!("{n} selected items could not be fully deleted. The first: {reason}."),
+    }
+}
+
 pub(crate) struct Review {
     pub token: usize,
     pub count: usize,
@@ -60,7 +70,7 @@ impl Review {
         for root in &self.roots {
             check_cancel(cancel)?;
             if !root.review.unchanged(cancel)? {
-                return Err("Selected items changed; review a fresh deletion confirmation.".into());
+                return Err("Selected items changed; confirm again.".into());
             }
         }
         Ok(())
@@ -83,10 +93,7 @@ impl Review {
                 }
             }
         }
-        let error = if failed > 0 {
-            format!("{} selected {} not completely deleted. First failure: {}", failed,
-                if failed == 1 { "item was" } else { "items were" }, first_error)
-        } else { String::new() };
+        let error = failure_text(failed, &first_error);
         Ok(format!(r#""deleted":{},"failed":{},"cancelled":{},"error":"{}","remaining":[{}]"#,
             deleted, failed, cancelled, escape(&error), self.remaining()))
     }
@@ -141,13 +148,21 @@ mod tests {
         d.file("folder/new-arrival", "preserved");
         let recovery = d.join("recovery");
         deletion_sandbox(&d, &[&folder, &child, &recovery]);
-        assert!(review.delete(&recovery, &Cancellation::default()).unwrap_err().contains("changed"));
+        assert_eq!(review.delete(&recovery, &Cancellation::default()).unwrap_err(), "Selected items changed; confirm again.");
         assert_eq!(std::fs::read_to_string(&child).unwrap(), "original");
         let cancel = Cancellation::default();
         let current = Review::prepare(&[selected(&folder)], d.path(), &cancel).unwrap();
         cancel.next();
         assert!(current.delete(&recovery, &cancel).unwrap_err().contains("cancelled"));
         assert!(folder.join("new-arrival").exists());
+    }
+
+    #[test]
+    fn a_partly_deleted_selection_says_how_many_items_and_why_the_first_failed() {
+        assert_eq!(failure_text(0, ""), "");
+        assert_eq!(failure_text(1, "/a: boom"), "1 selected item could not be fully deleted: /a: boom.");
+        assert_eq!(failure_text(1, "/a: boom."), "1 selected item could not be fully deleted: /a: boom.", "a reason's own period is not doubled");
+        assert_eq!(failure_text(3, "/a: boom."), "3 selected items could not be fully deleted. The first: /a: boom.");
     }
 
     #[test]

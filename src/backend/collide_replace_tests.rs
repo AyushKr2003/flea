@@ -217,7 +217,7 @@ fn a_put_back_that_fails_keeps_the_step_for_undo_and_says_the_old_item_is_in_tra
     let mut deferred = Deferred::begin();
     let mut steps = Vec::new();
     let error = replacing_deferred(&there, &mut steps, &mut deferred, failing).unwrap_err();
-    assert!(error.msg.starts_with("permission denied; the item it replaced is still in Trash"), "{}", error.msg);
+    assert!(error.msg.starts_with("permission denied; the item it replaced is still in the Trash"), "{}", error.msg);
     assert!(matches!(&steps[..], [Step::Trashed(old)] if old.original == there), "undo can still restore it: {:?}", steps);
 }
 
@@ -246,7 +246,7 @@ fn a_cancelled_replace_whose_put_back_fails_is_a_failure_and_its_own_error_stops
     let (ok, failed, skipped, was_cancelled, steps) = done.expect("a terminal line");
     assert!(!cancel.load(Ordering::Relaxed), "the flag was down again before later.txt, so only photo.png's error could stop the batch");
     assert_eq!((ok, failed, skipped, was_cancelled), (0, 1, 1, true), "photo.png's name no longer holds what it held, so it fails; later.txt is skipped");
-    assert!(errors.len() == 1 && errors[0].starts_with("cancelled; the item it replaced is still in Trash"), "{:?}", errors);
+    assert!(errors.len() == 1 && errors[0].starts_with("cancelled; the item it replaced is still in the Trash"), "{:?}", errors);
     assert!(!to.join("later.txt").exists() && text(&later) == "never reached", "the batch stopped before later.txt");
     assert!(matches!(&steps[..], [Step::Trashed(old)] if old.original == there), "undo can still restore it: {:?}", steps);
     assert!(!there.exists(), "the old item really is in the stand-in trash");
@@ -276,7 +276,7 @@ fn a_cancelled_replace_whose_put_back_fails_under_a_standing_cancel_counts_once_
     }
     assert!(cancel.load(Ordering::Relaxed), "the Cancel stood through the put-back, as it does with the real gio");
     assert_eq!(done.expect("a terminal line"), (0, 1, 0, true), "failed once and never also skipped");
-    assert!(errors.len() == 1 && errors[0].starts_with("cancelled; the item it replaced is still in Trash"), "{:?}", errors);
+    assert!(errors.len() == 1 && errors[0].starts_with("cancelled; the item it replaced is still in the Trash"), "{:?}", errors);
     assert!(!there.exists(), "the old item is in the stand-in trash, where undo can restore it");
 }
 
@@ -436,8 +436,8 @@ fn a_failed_link_cleanup_with_a_replaced_entry_still_undoes_the_good_link() {
     assert!(line.contains(r#""t":"linked","ok":1,"failed":1,"skipped":0"#), "one link lands and one is left over: {}", line);
     // F24: the mixed answer carries the stranded sentence as a note.
     assert!(line.contains(r#""note":"#), "a stranded replace is named on the mixed answer: {}", line);
-    assert!(line.contains("b.txt"), "the note names the leftover link: {}", line);
-    assert!(line.contains("stays in the trash"), "the note says the replaced item was not restored: {}", line);
+    assert!(line.contains(&format!("the link at {} could not be removed: ", crate::json::escape(&dest.join("b.txt").to_string_lossy()))), "the note names the leftover link: {}", line);
+    assert!(line.contains("the item it replaced is still in the Trash"), "the note says the replaced item was not restored: {}", line);
     assert_eq!(std::fs::read_to_string(dest.join("a.txt")).unwrap(), "a-new");
     let mut buf = Vec::new();
     do_undo(&mut buf, &mut o);
@@ -459,8 +459,8 @@ fn a_failed_link_cleanup_with_a_replaced_entry_still_undoes_the_good_link() {
     test_fail_link_verify(false);
     let line = String::from_utf8_lossy(&buf).to_string();
     assert!(line.contains(r#""where":"link""#), "an all-failed link is an error line: {}", line);
-    assert!(line.contains("could not be removed"), "the cleanup failure is named: {}", line);
-    assert!(line.contains("stays in the trash"), "the replaced item is not reported as restored: {}", line);
+    assert!(line.contains("could not be removed: "), "the cleanup failure is named with its reason: {}", line);
+    assert!(line.contains("the item it replaced is still in the Trash"), "the replaced item is not reported as restored: {}", line);
 }
 
 #[test]
@@ -488,5 +488,5 @@ fn a_missing_source_never_hides_a_stranded_replace_note() {
     assert!(line.contains(r#""where":"link""#), "an all-failed link is an error line: {}", line);
     assert!(line.contains("x.txt"), "the first failure is still named: {}", line);
     assert!(line.contains("c.txt"), "the stranded link is named too: {}", line);
-    assert!(line.contains("stays in the trash"), "the replaced item is not reported as restored: {}", line);
+    assert!(line.contains("the item it replaced is still in the Trash"), "the replaced item is not reported as restored: {}", line);
 }

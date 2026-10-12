@@ -126,7 +126,7 @@ fn redo_of_a_copy_merge_refuses_and_leaves_the_destination_folder() {
     journal.undo().expect("undo takes away what the merge made");
     let (tx, _rx) = channel();
     let err = journal.redo(1, &AtomicBool::new(false), &tx).expect_err("redo never replays a merge over its folder");
-    assert!(err.msg.contains("already exists"), "{}", err.msg);
+    assert_eq!(err.msg, "an item with that name is already there, so redo left it in place");
     assert_eq!(text(&there), "stays", "the pre-existing destination file survives the refusal");
 }
 

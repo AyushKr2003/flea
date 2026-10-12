@@ -19,6 +19,7 @@ const FOUR_GIB: u64 = 4 * 1024 * 1024 * 1024;
 // rename(2) sets EXDEV when the two paths are on different filesystems, which is the one failure that means "copy instead".
 const EXDEV: i32 = 18;
 use crate::oflags::{O_DIRECTORY, O_NOFOLLOW};
+use super::archivefree::format_size;
 use super::unheld::Kind;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::os::unix::io::AsRawFd;
@@ -278,14 +279,15 @@ pub(crate) fn test_fail_write(fault: Option<(usize, i32)>) {
 
 // A file the destination cannot hold is refused before a byte is written, so EFBIG never leaves a partial file.
 fn precheck(dst: &Path, size: u64) -> Option<String> {
+    let name = dst.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
     #[cfg(test)]
     if let Some((free, blocks, magic)) = TEST_PRECHECK.with(|v| *v.borrow()) {
-        return refuse_for_size(magic, free, blocks, size);
+        return refuse_for_size(&name, magic, free, blocks, size);
     }
     let parent = dst.parent().unwrap_or(dst);
     let (info, magic) = crate::backend::fsinfo::read_with_magic(parent);
     let (free, blocks) = info.map(|i| (i.free, i.blocks)).unwrap_or((u64::MAX, 1));
-    refuse_for_size(magic, free, blocks, size)
+    refuse_for_size(&name, magic, free, blocks, size)
 }
 
 // Sample input: test_set_precheck(Some(0), Some(0), None) makes the next precheck see unknown room.
@@ -300,10 +302,10 @@ pub fn test_set_precheck(free: Option<u64>, blocks: Option<u64>, magic: Option<i
     TEST_PRECHECK.with(|v| *v.borrow_mut() = free.map(|f| (f, blocks.unwrap_or(1), magic)));
 }
 
-const TOO_BIG: &str = "files of 4 GiB or more do not fit on a vfat drive";
+const TOO_BIG: &str = "a file of 4 GiB or more does not fit on a FAT32 drive";
 
-// Sample input: (Some(0x4D44), free, 1, 4 GiB) refuses, (Some(ext4), free, 1, 4 GiB) passes.
-fn refuse_for_size(magic: Option<i64>, free: u64, blocks: u64, size: u64) -> Option<String> {
+// Sample input: ("a.iso", Some(0x4D44), free, 1, 4 GiB) refuses, ("a.iso", Some(ext4), free, 1, 4 GiB) passes.
+fn refuse_for_size(name: &str, magic: Option<i64>, free: u64, blocks: u64, size: u64) -> Option<String> {
     if magic == Some(VFAT_MAGIC) && size >= FOUR_GIB {
         return Some(TOO_BIG.to_string());
     }
@@ -312,7 +314,7 @@ fn refuse_for_size(magic: Option<i64>, free: u64, blocks: u64, size: u64) -> Opt
         return None;
     }
     if size > free {
-        return Some(format!("the drive holds {free} bytes free but the file needs {size}"));
+        return Some(format!("{name} needs {}, and the drive has {} free", format_size(size), format_size(free)));
     }
     None
 }

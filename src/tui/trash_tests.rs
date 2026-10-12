@@ -2,7 +2,7 @@
 use super::sort_tests::{drain, press, requests};
 use super::*;
 use crate::tui::input::Key;
-use crate::tui::keymap::Map;
+use crate::tui::keymap::{Hints, Map};
 use crate::tui::model::Model;
 use std::path::PathBuf;
 
@@ -36,6 +36,7 @@ fn trash_keys() -> Vec<(&'static str, Key)> {
 fn listing(dir: &str, preset: &str, wire: &mut Wire) -> Model {
     let mut model = Model::new(PathBuf::from(dir), &Json::Null);
     model.preset = preset.into();
+    model.hints = Hints::new(&Map::load(), preset);
     model.open(model.path.clone(), wire).unwrap();
     drain(wire);
     let listed = format!(r#"{{"t":"listed","n":1,"read":0.0,"sort":0.0,"v":1,"path":"{dir}"}}"#);
@@ -79,4 +80,43 @@ fn trash_keys_in_a_local_folder_still_trash() {
         assert_eq!(model.error, "", "{preset}: nothing is refused");
         finish(wire, reader);
     }
+}
+
+// The keys the prompt and the refusal name come from the hints, so a rebound or missing key changes the sentence.
+#[test]
+fn the_arm_prompt_and_the_refusal_name_the_keys_the_hints_hold() {
+    let rebound = Map::parse(r##"
+[[preset]]
+name = "default"
+mods = "ctrl"
+key = "K"
+action = "deletePermanently"
+context = "listing"
+[[code]]
+key = "Backspace"
+action = "trash"
+"##);
+    let (mut wire, reader) = echo_wire();
+    let mut model = listing("/listing", "default", &mut wire);
+    press(&mut model, &mut wire, &key("d", "d", ""));
+    assert_eq!(model.message, "Press d again to trash, or Delete on its own", "the shipped keys, and a status line takes no period");
+    model.hints = Hints::new(&rebound, "default");
+    model.key_arm.clear();
+    press(&mut model, &mut wire, &key("d", "d", ""));
+    assert_eq!(model.message, "Press d again to trash, or Backspace on its own", "a rebound trash key");
+    model.hints.trash.clear();
+    model.key_arm.clear();
+    press(&mut model, &mut wire, &key("d", "d", ""));
+    assert_eq!(model.message, "Press d again to trash", "no key left to name");
+    finish(wire, reader);
+    let (mut wire, reader) = echo_wire();
+    let mut model = listing(SHARE, "default", &mut wire);
+    model.hints = Hints::new(&rebound, "default");
+    press(&mut model, &mut wire, &key("Delete", "", ""));
+    assert_eq!(model.error, "This location has no Trash; Ctrl+K deletes permanently", "a rebound permanent-delete key");
+    model.dismiss_error();
+    model.hints.delete_permanently.clear();
+    press(&mut model, &mut wire, &key("Delete", "", ""));
+    assert_eq!(model.error, "This location has no Trash", "no key left to name");
+    finish(wire, reader);
 }

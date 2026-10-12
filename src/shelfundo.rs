@@ -3,6 +3,7 @@
 // is newer. The move half is a one-step journal on disk, because `flea shelf move` is a process that
 // has already exited by the time the card asks for its reversal.
 use crate::backend::undo::{born_differs, move_back, ItemIdentity, Step};
+use crate::error::io_message;
 use crate::jsondoc::{self, Json};
 use crate::shelf::Shelf;
 use crate::summon::Summon;
@@ -47,7 +48,7 @@ impl Moves {
         if moves.is_empty() {
             return Ok(());
         }
-        let dir = self.file.parent().ok_or("the shelf has no directory to write in")?;
+        let dir = self.file.parent().ok_or("the shelf has no folder to write in")?;
         uistore::make_dir(dir)?;
         let lock = uistore::take_lock(&self.lock)?;
         let written = uistore::replace(&self.file, &jsondoc::render(&doc_of(moves, at_ms)));
@@ -71,7 +72,7 @@ impl Moves {
         let removed = match fs::remove_file(&self.file) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(format!("{} could not be spent ({:?})", self.file.display(), e.kind())),
+            Err(e) => Err(format!("{} could not be spent: {}", self.file.display(), io_message(&e))),
         };
         give_back(&self.lock, lock);
         removed?;
@@ -235,7 +236,7 @@ fn reverse(moves: &Moves) -> i32 {
 fn put_back(step: &Move) -> Result<(), String> {
     let to = Path::new(&step.to);
     let meta = fs::symlink_metadata(to)
-        .map_err(|e| format!("{} is not where the move left it ({:?})", step.to, e.kind()))?;
+        .map_err(|e| format!("{} is not where the move left it: {}", step.to, io_message(&e)))?;
     let landed = ItemIdentity::record(&meta);
     let (dev, ino, kind) = landed.parts();
     if dev != step.dev || ino != step.ino || kind != step.kind || born_differs(step.born, landed.born()) {
@@ -266,7 +267,7 @@ fn read_doc(path: &Path) -> Json {
 // unlock that failed is not the answer to that question.
 fn give_back(path: &Path, lock: fs::File) {
     if let Err(e) = uistore::unlock(&lock) {
-        eprintln!("flea: {} could not be unlocked ({:?})", path.display(), e.kind());
+        eprintln!("flea: {} could not be unlocked: {}", path.display(), io_message(&e));
     }
 }
 

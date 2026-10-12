@@ -1,0 +1,56 @@
+// The words a refused registry read shows; each pins the sentence a person reads, not the branch that raises it.
+use super::*;
+
+// A registry error ends with exactly one period, so a caller that wraps it never adds a second.
+#[test]
+fn registry_errors_are_sentences_that_end_once() {
+    let registry = Registry::default();
+    let cancel = Cancellation::default();
+    let query = registry.capture(&mut Command::new("/usr/bin/false"), &cancel).unwrap_err();
+    let launch = registry.launch_command(&mut Command::new("/usr/bin/false"), &cancel).unwrap_err();
+    assert_eq!(launch, "The application could not be started (exit status 1).");
+    let missing = registry.launch_command(&mut Command::new("/definitely-missing-gio-test-helper"), &cancel).unwrap_err();
+    assert!(missing.starts_with("Could not start the application list: ") && !missing.contains("os error"), "{}", missing);
+    let stopped = Cancellation::default();
+    stopped.next();
+    let cancelled = registry.launch_command(&mut Command::new("/usr/bin/true"), &stopped).unwrap_err();
+    for error in [query, launch, missing, cancelled] {
+        assert!(error.ends_with('.') && !error.ends_with(".."), "{}", error);
+    }
+}
+
+#[test]
+fn a_registry_that_stopped_answering_says_so_in_plain_words() {
+    const STOPPED: &str = "The application list stopped answering.";
+    let registry = Registry::default();
+    let running = registry.running.clone();
+    let icons = registry.icons.clone();
+    let poisoner = std::thread::spawn(move || {
+        let _running = running.lock().unwrap();
+        let _icons = icons.lock().unwrap();
+        panic!("poison both locks");
+    });
+    assert!(poisoner.join().is_err());
+    assert_eq!(registry.cancel().unwrap_err(), STOPPED);
+    assert_eq!(registry.icon_index(&Cancellation::default()).err().as_deref(), Some(STOPPED));
+}
+
+#[test]
+fn an_unknown_application_is_one_that_could_not_be_found() {
+    assert_eq!(resolve("not-a-desktop-file", &Cancellation::default()).err().as_deref(), Some("That application could not be found."));
+    assert_eq!(resolve("../escape.desktop", &Cancellation::default()).err().as_deref(), Some("That application could not be found."));
+}
+
+// Lines no fixture reaches (gio answering without a type, a pidfd that cannot open) are pinned by their source.
+#[test]
+fn retired_registry_wording_is_gone_from_the_live_source() {
+    let live = include_str!("menu_registry.rs").split("\n#[cfg(test)]\nmod tests").next().unwrap();
+    for retired in ["GIO application", "GIO output reader", "GIO error reader", "GIO returned", "GIO did not report", "Could not reap GIO",
+                    "Could not observe GIO", "owned GIO child", "Could not read GIO", "Could not start GIO", "Could not wait for GIO",
+                    "query service", "icon index service", "not a desktop entry", "byte metadata limit", "is not valid UTF-8"] {
+        assert!(!live.contains(retired), "retired wording came back: {}", retired);
+    }
+    for plain in ["The selected item's file type is unknown.", "Application {} could not be read.", "Could not open {} with {}: {}."] {
+        assert!(live.contains(plain), "plain wording is missing: {}", plain);
+    }
+}

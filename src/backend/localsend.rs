@@ -54,27 +54,30 @@ extern "C" {
     fn prctl(option: i32, ...) -> i32;
 }
 
+// Every refusal while the terminal is made says one thing: the detail is the platform's, not the user's.
+const NOT_STARTED: &str = "LocalSend could not start.";
+
 fn open_pty() -> Result<(OwnedFd, std::fs::File), String> {
     // O_RDWR | O_NOCTTY | O_CLOEXEC: the terminal belongs to the child, and the master must not ride into it.
     const O_RDWR_NOCTTY_CLOEXEC: i32 = 0o2 | 0o400 | 0o2000000;
     let raw = unsafe { posix_openpt(O_RDWR_NOCTTY_CLOEXEC) };
-    if raw < 0 { return Err("LocalSend could not open a terminal for its own CLI.".into()) }
+    if raw < 0 { return Err(NOT_STARTED.into()) }
     let master = unsafe { OwnedFd::from_raw_fd(raw) };
     if unsafe { grantpt(raw) } < 0 || unsafe { unlockpt(raw) } < 0 {
-        return Err("LocalSend could not prepare a terminal for its own CLI.".into())
+        return Err(NOT_STARTED.into())
     }
     let mut name = [0u8; 256];
     if unsafe { ptsname_r(raw, name.as_mut_ptr(), name.len()) } != 0 {
-        return Err("LocalSend could not name the terminal it opened.".into())
+        return Err(NOT_STARTED.into())
     }
     let end = name.iter().position(|b| *b == 0).unwrap_or(0);
     let path = String::from_utf8_lossy(&name[..end]).into_owned();
     let size = WinSize { rows: ROWS, cols: COLS, x_pixels: 0, y_pixels: 0 };
     if unsafe { ioctl(raw, TIOCSWINSZ, &size as *const WinSize) } < 0 {
-        return Err("LocalSend could not size the terminal for its own CLI.".into())
+        return Err(NOT_STARTED.into())
     }
     let slave = std::fs::OpenOptions::new().read(true).write(true).open(&path)
-        .map_err(|e| format!("LocalSend could not open {}: {}.", path, crate::error::io_message(&e)))?;
+        .map_err(|e| format!("LocalSend could not start: {}.", crate::error::io_message(&e)))?;
     Ok((master, slave))
 }
 
@@ -83,9 +86,9 @@ fn open_pty() -> Result<(OwnedFd, std::fs::File), String> {
 // announcements. A box already running its own LocalSend is told so instead, by refusal() below.
 // The program parameter is a test seam; every production caller names COMMAND.
 fn spawn(program: &str, args: &[String], slave: &std::fs::File) -> Result<Child, String> {
-    let stdin = slave.try_clone().map_err(|e| format!("LocalSend terminal setup failed: {}.", crate::error::io_message(&e)))?;
-    let stdout = slave.try_clone().map_err(|e| format!("LocalSend terminal setup failed: {}.", crate::error::io_message(&e)))?;
-    let stderr = slave.try_clone().map_err(|e| format!("LocalSend terminal setup failed: {}.", crate::error::io_message(&e)))?;
+    let stdin = slave.try_clone().map_err(|e| format!("LocalSend could not start: {}.", crate::error::io_message(&e)))?;
+    let stdout = slave.try_clone().map_err(|e| format!("LocalSend could not start: {}.", crate::error::io_message(&e)))?;
+    let stderr = slave.try_clone().map_err(|e| format!("LocalSend could not start: {}.", crate::error::io_message(&e)))?;
     let mut command = Command::new(program);
     // A pty is not a terminal until something says which one: the backend inherits no TERM, and
     // without one the CLI draws its frame and never refreshes the device list inside it.
@@ -139,9 +142,9 @@ fn text_of(seen: &Arc<Mutex<String>>) -> String {
 // key the app never reads: it is the app's own output, so the write lands on its screen and nowhere
 // else, which is why every press before this was silently lost.
 fn press(master: &OwnedFd, keys: &[u8]) -> Result<(), String> {
-    let mut writer = std::fs::File::from(master.try_clone().map_err(|e| format!("LocalSend could not reach its CLI: {}.", crate::error::io_message(&e)))?);
-    writer.write_all(keys).map_err(|e| format!("LocalSend could not reach its CLI: {}.", crate::error::io_message(&e)))?;
-    writer.flush().map_err(|e| format!("LocalSend could not reach its CLI: {}.", crate::error::io_message(&e)))
+    let mut writer = std::fs::File::from(master.try_clone().map_err(|e| format!("LocalSend stopped answering: {}.", crate::error::io_message(&e)))?);
+    writer.write_all(keys).map_err(|e| format!("LocalSend stopped answering: {}.", crate::error::io_message(&e)))?;
+    writer.flush().map_err(|e| format!("LocalSend stopped answering: {}.", crate::error::io_message(&e)))
 }
 
 // Sample event lines, exactly as the CLI prints them under its panel:
@@ -170,7 +173,7 @@ pub fn peers(limit: Duration) -> Result<Vec<Peer>, String> {
     let (master, slave) = open_pty()?;
     let mut child = spawn(COMMAND, &[], &slave)?;
     let keys = master.try_clone()
-        .map_err(|e| format!("LocalSend could not hold its own terminal: {}.", crate::error::io_message(&e)))?;
+        .map_err(|e| format!("LocalSend could not start: {}.", crate::error::io_message(&e)))?;
     let seen = read_into(master);
     let deadline = Instant::now() + limit;
     // The CLI has to be up before it has a key reader, so the panel is asked for after one poll.
@@ -209,7 +212,7 @@ pub fn send(name: &str, paths: &[String], limit: Duration) -> Result<(), String>
     let (master, slave) = open_pty()?;
     let mut child = spawn(COMMAND, &args, &slave)?;
     let keys = master.try_clone()
-        .map_err(|e| format!("LocalSend could not hold its own terminal: {}.", crate::error::io_message(&e)))?;
+        .map_err(|e| format!("LocalSend could not start: {}.", crate::error::io_message(&e)))?;
     let seen = read_into(master);
     let deadline = Instant::now() + limit;
     let mut index = None;
@@ -251,7 +254,7 @@ pub fn send(name: &str, paths: &[String], limit: Duration) -> Result<(), String>
         if let Ok(Some(_)) = child.try_wait() {
             return match sent(&text_of(&seen), name) {
                 Some(verdict) => verdict,
-                None => Err(format!("LocalSend's own CLI ended without sending to {}.", name)),
+                None => Err(format!("LocalSend stopped before sending to {}.", name)),
             }
         }
         std::thread::sleep(POLL);
@@ -404,3 +407,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "localsend_wording_tests.rs"]
+mod wording;

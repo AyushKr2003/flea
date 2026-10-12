@@ -311,7 +311,7 @@ fn a_password_zip_on_a_box_without_a_zip_tool_names_the_missing_tool() {
     let pw = Password { secret: "s3cret", encrypt_names: false };
     let dest = d.join("out.zip");
     let e = compress(&formats, d.path(), &["a.txt".to_string()], "zip", &dest, &AtomicBool::new(false), Some(pw)).unwrap_err();
-    assert_eq!(e.msg, "this box offers no tool for that format");
+    assert_eq!(e.msg, "no installed tool can create that format");
     assert!(!dest.exists(), "a refused compress wrote a destination");
 }
 

@@ -15,7 +15,7 @@ fn batch_selection_skips_a_dangling_link_and_keeps_valid_files() {
     assert!(result.is_ok(), "batch refused instead of marking valid file: {:?}", result);
     assert_eq!(state.marks.len(), 1);
     assert_eq!(state.marks[0].path, file);
-    assert!(result.unwrap().contains(&format!(r#""skipped":[{{"path":"{}","why":"file or folder not found"}}]"#,
+    assert!(result.unwrap().contains(&format!(r#""skipped":[{{"path":"{}","why":"item not found"}}]"#,
         escape(&link.to_string_lossy()))));
     let single = format!(r#"{{"op":"mark","id":2,"path":"{}"}}"#, escape(&link.to_string_lossy()));
     assert!(state.handle(&single, &cancel).unwrap_err().contains("Could not inspect"));
@@ -50,8 +50,7 @@ fn batch_selection_budget_refuses_before_opening_in_a_low_limit_child() {
     let result = state.handle(&line, &cancel);
     assert!(result.is_err(), "selection exceeding soft limit minus reserve was accepted");
     let error = result.unwrap_err();
-    assert!(error.contains(&format!("{} items", paths.len())), "{}", error);
-    assert!(error.contains(&format!("limit of {}", CHILD_LIMIT - DESCRIPTOR_RESERVE as u64)), "{}", error);
+    assert_eq!(error, format!("Cannot select {} items. The file chooser takes at most {}.", paths.len(), CHILD_LIMIT - DESCRIPTOR_RESERVE as u64));
     assert_eq!(state.marks.len(), 1, "refused batch must preserve held marks");
     let mut opened = 0;
     let result = state.select(&paths, false, &cancel, |path, follow| {
@@ -79,7 +78,7 @@ fn added_target_metadata_error_names_the_path() {
         Ok(target)
     });
     let error = result.err().expect("added target fstat must fail after child exits");
-    assert_eq!(error, format!("Could not inspect {}: file or folder not found", link.display()), "added branch lost path");
+    assert_eq!(error, format!("Could not inspect {}: item not found.", link.display()), "added branch lost path");
 }
 
 #[test]
@@ -93,7 +92,7 @@ fn retained_target_metadata_error_names_the_path() {
     assert!(child.wait().unwrap().success());
     assert_eq!(target.metadata().unwrap_err().kind(), std::io::ErrorKind::NotFound);
     assert_eq!(target_is_dir(&target, &path).unwrap_err(),
-        format!("Could not inspect {}: file or folder not found", path.display()));
+        format!("Could not inspect {}: item not found.", path.display()));
 }
 
 #[test]
@@ -109,7 +108,7 @@ fn inaccessible_selection_reports_plain_cause_and_recovers() {
     std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o0)).unwrap();
     let refused = state.handle(&mark, &cancel);
     std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o700)).unwrap();
-    assert_eq!(refused.unwrap_err(), format!("Could not inspect {}: permission denied", path.display()));
+    assert_eq!(refused.unwrap_err(), format!("Could not inspect {}: permission denied.", path.display()));
     assert!(state.marks.is_empty());
     state.handle(&mark, &cancel).unwrap();
     assert_eq!(std::fs::read(path).unwrap(), b"retained contents");
@@ -195,7 +194,7 @@ fn save_refuses_directories_and_links_to_directories() {
     for name in ["folder", "linked-folder"] {
         let line = format!(r#"{{"op":"save","id":1,"folder":"{}","name":"{}"}}"#, escape(&dir.path().to_string_lossy()), name);
         let error = state.handle(&line, &Cancellation::default()).unwrap_err();
-        assert!(error.contains("is a directory"));
+        assert_eq!(error, "A folder has this name; choose another name.");
         assert!(state.save.is_none());
     }
 }

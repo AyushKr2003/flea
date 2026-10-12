@@ -42,3 +42,27 @@ fn enter_writes_the_opening() {
     let enter = &source[source.find("pub fn enter()").expect("Terminal::enter")..source.find("pub fn run_editor").expect("run_editor")];
     assert!(enter.contains("print!(\"{}\", opening(") && !enter.contains("screen(true)"), "enter no longer writes the opening");
 }
+
+#[test]
+fn an_editor_that_exits_nonzero_ends_the_rename_with_its_status() {
+    assert!(editor_result(std::process::ExitStatus::from_raw(0)).is_ok());
+    // Raw wait status 1 << 8 is exit code 1.
+    let failed = editor_result(std::process::ExitStatus::from_raw(1 << 8)).unwrap_err();
+    assert_eq!(failed.to_string(), "The editor could not finish (exit status: 1)");
+}
+
+#[test]
+fn a_terminal_cannot_open_in_a_file() {
+    let file = std::env::current_exe().unwrap();
+    assert_eq!(launch(&file, false).unwrap_err().to_string(), "That is not a folder, so no terminal was opened");
+}
+
+#[test]
+fn a_failed_stty_call_says_what_it_was_for() {
+    assert!(stty_result(std::process::ExitStatus::from_raw(0), PREPARE_FAILED).is_ok());
+    let failed = std::process::ExitStatus::from_raw(1 << 8);
+    assert_eq!(stty_result(failed, PREPARE_FAILED).unwrap_err().to_string(), "The terminal could not be prepared");
+    assert_eq!(stty_result(failed, RESTORE_FAILED).unwrap_err().to_string(), "The terminal could not be restored");
+    assert_eq!(stty_result(failed, PREPARE_FOR_EDITOR_FAILED).unwrap_err().to_string(), "The terminal could not be prepared for the editor");
+    assert_eq!(stty_result(failed, RESTORE_AFTER_EDITOR_FAILED).unwrap_err().to_string(), "The terminal could not be restored after the editor");
+}

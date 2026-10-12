@@ -130,3 +130,9 @@ fn a_build_no_release_describes_is_unchecked_and_names_its_kind() {
     assert_eq!(unchecked(Kind::Local, Some("0.3.3-1".to_string())).line(), "unchecked local 0.3.3-1 -");
     assert_eq!(unchecked(Kind::Unowned, None).line(), "unchecked unowned - -");
 }
+
+#[test]
+fn a_comparison_vercmp_could_not_make_is_said_in_plain_words() {
+    let report = decide(Kind::Opr, Some("0.3.2-1".to_string()), "0.3.4-1".to_string(), None);
+    assert_eq!(report.state, State::Failed("the two versions could not be compared"));
+}

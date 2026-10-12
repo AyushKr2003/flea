@@ -123,7 +123,7 @@ fn investigate() -> Report {
         return unchecked(Kind::Unowned, None);
     };
     let Some(described) = run("pacman", &["-Qi", owner.as_str()]).filter(|ran| ran.code == 0) else {
-        return failed(kind_for(&owner, false), None, "pacman could not describe the package that owns this Flea");
+        return failed(kind_for(&owner, false), None, "pacman could not find the package that installed Flea");
     };
     let (installed, signed) = package_info(&described.stdout);
     let installed = installed.filter(|v| valid_version(v));
@@ -168,7 +168,7 @@ fn decide(kind: Kind, installed: Option<String>, offer: String, order: Option<Or
     let state = match order {
         Some(Ordering::Greater) => State::Available,
         Some(_) => State::Current,
-        None => State::Failed("vercmp could not compare the two versions"),
+        None => State::Failed("the two versions could not be compared"),
     };
     Report { state, kind, installed, latest: Some(offer) }
 }

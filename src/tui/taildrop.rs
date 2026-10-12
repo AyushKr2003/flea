@@ -53,7 +53,7 @@ impl Taildrop {
         {
             Ok(mut child) => {
                 let Some(output) = child.stdout.take() else {
-                    self.error = "Taildrop status output unavailable".into();
+                    self.error = "Taildrop status could not be read".into();
                     return;
                 };
                 let (tx, rx) = mpsc::channel();
@@ -65,7 +65,7 @@ impl Taildrop {
                         .read_to_end(&mut bytes)
                         .and_then(|_| {
                             if bytes.len() as u64 > MAX_STATUS_BYTES {
-                                Err(io::Error::other("Taildrop status exceeds its limit"))
+                                Err(io::Error::other("Taildrop status could not be read"))
                             } else {
                                 Ok(bytes)
                             }
@@ -98,13 +98,13 @@ impl Taildrop {
                     self.sent = Some(if status.success() {
                         Ok(format!("Sent to {}", label))
                     } else {
-                        Err(format!("Taildrop to {} failed ({})", label, status))
+                        Err(format!("Could not send to {} ({})", label, status))
                     });
                     self.child = None;
                     self.sending = None;
                 }
                 Err(e) => {
-                    self.sent = Some(Err(format!("Taildrop process: {}", e)));
+                    self.sent = Some(Err(format!("Could not send to {} ({})", label, crate::error::io_message(&e))));
                     let _ = child.kill();
                     let _ = child.wait();
                     self.child = None;
@@ -133,7 +133,7 @@ impl Taildrop {
             Ok(Some(status)) => status,
             Ok(None) => return,
             Err(_) => {
-                self.error = "Taildrop status process could not be observed".into();
+                self.error = "Taildrop status could not be read".into();
                 return;
             }
         };
@@ -152,7 +152,7 @@ impl Taildrop {
                     Err(_) => self.error = "Taildrop status could not be read".into(),
                 }
             }
-            _ => self.error = "Taildrop status failed".into(),
+            _ => self.error = "Taildrop status could not be read".into(),
         }
     }
     pub fn send(&mut self, peer: &Peer, paths: &[String]) -> io::Result<()> {
@@ -299,6 +299,27 @@ mod tests {
         assert!(taildrop.current_peer(&selected).is_none());
     }
 
+    // A child already reaped, so poll learns its status with no wait: try_wait hands back the saved one.
+    fn finished(code: i32) -> Child {
+        let mut child = Command::new("sh").args(["-c", &format!("exit {code}")]).stdin(Stdio::null()).spawn().unwrap();
+        child.wait().unwrap();
+        child
+    }
+    #[test]
+    fn a_failed_send_and_a_failed_status_call_read_as_plain_sentences() {
+        let mut taildrop = Taildrop::new();
+        taildrop.child = Some(finished(7));
+        taildrop.sending = Some("Alpha".into());
+        taildrop.poll();
+        assert_eq!(taildrop.sent, Some(Err("Could not send to Alpha (exit status: 7)".into())));
+        let mut taildrop = Taildrop::new();
+        let (tx, rx) = mpsc::channel();
+        tx.send(Ok(Vec::new())).unwrap();
+        taildrop.child = Some(finished(7));
+        taildrop.output = Some(rx);
+        taildrop.poll();
+        assert_eq!(taildrop.error, "Taildrop status could not be read");
+    }
     #[test]
     fn provider_state_overrides_stale_peer_eligibility() {
         let fixture = r#"{"BackendState":"Running","Self":{"Capabilities":["https://tailscale.com/cap/file-sharing"]},"Peer":{"old":{"Online":true,"TaildropTarget":1,"HostName":"alpha"}}}"#;

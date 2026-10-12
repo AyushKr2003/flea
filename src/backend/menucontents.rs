@@ -20,7 +20,7 @@ pub(super) fn serve(line: &str, id: usize, items: &[Selected], replies: &Sender<
 // The bulk deadline bounds a folder with a remote mount at or below it; any other walks inline exactly as before.
 fn serve_with_deadline(line: &str, id: usize, items: &[Selected], replies: &Sender<OpMsg>, cancel: &Cancellation, deadline: Duration) -> bool {
     if id == 0 || field_usize(line, "id") != Some(id) || items.len() != 1 {
-        return send(replies, line, Err("Menu selection expired; reopen the menu.".into()));
+        return send(replies, line, Err(super::menu_actions::SELECTION_CHANGED.into()));
     }
     let body = super::iomount::mount_body();
     let mounts = super::walkmounts::remote_mounts_under(&items[0].path, &body);
@@ -203,7 +203,7 @@ fn land_remote(line: &str, replies: &Sender<OpMsg>, outcome: Result<RemoteDone, 
 // The one captured item, and only while it is still a folder: a link to one is described as the link.
 fn folder_of(line: &str, id: usize, items: &[Selected]) -> Result<PathBuf, String> {
     if id == 0 || field_usize(line, "id") != Some(id) || items.len() != 1 {
-        return Err("Menu selection expired; reopen the menu.".into());
+        return Err(super::menu_actions::SELECTION_CHANGED.into());
     }
     if !items[0].current()?.is_dir() { return Err("Only a folder has contents to count.".into()); }
     Ok(items[0].path.clone())

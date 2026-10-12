@@ -42,7 +42,7 @@ pub fn compress(formats: &Formats, parent: &Path, names: &[String], format: &str
             return Err(op_err("archive", format, "a password needs the 7z or zip format"));
         }
         if !formats.offers(format) {
-            return Err(op_err("archive", format, "this box offers no tool for that format"));
+            return Err(op_err("archive", format, "no installed tool can create that format"));
         }
     }
     let mut work = Work::new(parent, "arc")?;
@@ -57,7 +57,7 @@ pub fn compress(formats: &Formats, parent: &Path, names: &[String], format: &str
     } else {
         let inner = match formats.compress_argv(format, &staged, parent, names) {
             Some(a) => a,
-            None => return Err(op_err("archive", format, "this box offers no tool for that format")),
+            None => return Err(op_err("archive", format, "no installed tool can create that format")),
         };
         run_boxed_cancellable("archive", inner, parent, &mut work, cancel)?;
     }
@@ -124,7 +124,7 @@ pub fn extract(
     };
     let inner = match argv {
         Some(a) => a,
-        None => return Err(op_err("archive", &archive.to_string_lossy(), "this box offers no tool for that archive")),
+        None => return Err(op_err("archive", &archive.to_string_lossy(), "no installed tool can open that archive")),
     };
     // A cancel that landed while the job waited for the slot aborts before any child runs.
     if cancel.load(Ordering::Relaxed) {

@@ -47,7 +47,7 @@ fn gio_runs_under_the_named_wait() {
     let argv = gio_argv(&["trash", "--list"]);
     assert_eq!(&argv[..4], ["timeout", "--kill-after=1s", "10s", "gio"], "the bound gio runs under: {argv:?}");
     assert_eq!(&argv[4..], ["trash", "--list"]);
-    assert_eq!(failure_reason(&None), "gio could not be run to move items to Trash");
+    assert_eq!(failure_reason(&None), "the Trash could not be reached, so nothing was moved");
 }
 
 #[test]
@@ -117,7 +117,20 @@ fn a_failed_trash_carries_gios_own_last_line() {
     assert!(failure_reason(&output).contains("Permission denied"));
     let timed_out = Some(std::process::Output { status: std::process::ExitStatus::from_raw(124 << 8),
         stdout: Vec::new(), stderr: Vec::new() });
-    assert_eq!(failure_reason(&timed_out), "Trash took too long to answer");
+    assert_eq!(failure_reason(&timed_out), "The Trash took too long to answer");
+    let silent = Some(std::process::Output { status: std::process::ExitStatus::from_raw(256), stdout: Vec::new(), stderr: Vec::new() });
+    assert_eq!(failure_reason(&silent), "the items could not be moved to the Trash");
+}
+
+#[test]
+fn a_gio_that_cannot_restore_says_what_could_not_be_done() {
+    let entry = Entry { original: PathBuf::from("/a/x"), uri: "trash:///d/x".into(), before: Vec::new(), trashed_at: String::new() };
+    let _stand = StandIn::hold(Rc::new(|_args: &[&str]| {
+        Some(std::process::Output { status: std::process::ExitStatus::from_raw(256), stdout: Vec::new(), stderr: Vec::new() })
+    }));
+    assert_eq!(restore(&entry).unwrap_err().msg, "the item could not be restored from the Trash");
+    let _stand = StandIn::hold(Rc::new(|_args: &[&str]| None));
+    assert_eq!(restore(&entry).unwrap_err().msg, "gio is not installed, so nothing can be restored from the Trash");
 }
 
 #[test]
@@ -197,7 +210,7 @@ fn a_step_with_no_settle_time_refuses_even_when_its_path_is_listed() {
     })));
     let err = restore(&e).expect_err("a step with no time must refuse");
     STAND_IN.with(|slot| *slot.borrow_mut() = None);
-    assert_eq!(err.msg, "this item was trashed without a trash entry, so it cannot be restored", "no list ran, so the refusal claims nothing about it");
+    assert_eq!(err.msg, "this item was trashed without a Trash entry, so it cannot be restored", "no list ran, so the refusal claims nothing about it");
 }
 
 #[test]

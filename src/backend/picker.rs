@@ -52,8 +52,8 @@ impl Picker {
         }
         if let Err(error) = self.requests.try_send(line) {
             let (line, message) = match error {
-                TrySendError::Full(line) => (line, "A picker check is still running; try again."),
-                TrySendError::Disconnected(line) => (line, "The picker check stopped; reopen this request."),
+                TrySendError::Full(line) => (line, "Flea is still checking this item; try again."),
+                TrySendError::Disconnected(line) => (line, "The check stopped; open the file chooser again."),
             };
             let _ = self.replies.send(OpMsg::Meta { line: response(&line, Err(message.into())) });
         }
@@ -73,7 +73,7 @@ impl Held {
     fn open(path: &Path, follow: bool) -> Result<Self, String> {
         if !path.is_absolute() { return Err("Picker paths must be absolute.".into()); }
         let file = OpenOptions::new().read(true).custom_flags(O_PATH | if follow { 0 } else { crate::oflags::O_NOFOLLOW })
-            .open(path).map_err(|error| format!("Could not inspect {}: {}", path.display(), io_message(&error)))?;
+            .open(path).map_err(|error| format!("Could not inspect {}: {}.", path.display(), io_message(&error)))?;
         Ok(Self { path: path.into(), file, follow, target: None })
     }
     fn is_dir(&self) -> Result<bool, String> {
@@ -102,7 +102,7 @@ impl Held {
 }
 fn target_is_dir(target: &File, path: &Path) -> Result<bool, String> {
     target.metadata().map(|metadata| metadata.is_dir())
-        .map_err(|error| format!("Could not inspect {}: {}", path.display(), io_message(&error)))
+        .map_err(|error| format!("Could not inspect {}: {}.", path.display(), io_message(&error)))
 }
 // A path held for its own kind, with the link's target held beside it when it is one; the metadata is the first check's.
 fn open_held(path: &Path, mut open: impl FnMut(&Path, bool) -> Result<Held, String>) -> Result<(Held, Metadata), String> {
@@ -169,18 +169,18 @@ impl State {
                 self.save = None;
                 let path = PathBuf::from(field_str(line, "folder").unwrap_or_default());
                 let name = field_str(line, "name").unwrap_or_default();
-                if !super::ops::valid_name(&name) { return Err("Use a filename without a separator.".into()); }
+                if !super::ops::valid_name(&name) { return Err("A name cannot contain /.".into()); }
                 let folder = Held::open(&path, true)?;
-                if !folder.current()?.is_dir() { return Err("The selected save location is not a directory.".into()); }
+                if !folder.current()?.is_dir() { return Err("The selected save location is not a folder.".into()); }
                 let path = path.join(name);
                 let target = match path.symlink_metadata() {
                     Ok(_) => {
                         let (held, metadata) = open_held(&path, Held::open)?;
-                        if held_is_dir(&held, &metadata)? { return Err("This output name is a directory; choose a filename.".into()); }
+                        if held_is_dir(&held, &metadata)? { return Err("A folder has this name; choose another name.".into()); }
                         Some(held)
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-                    Err(error) => return Err(format!("Could not inspect output location: {}", io_message(&error))),
+                    Err(error) => return Err(format!("Could not inspect output location: {}.", io_message(&error))),
                 };
                 if let Some(target) = &target { target.current()?; }
                 let result = format!(r#""review":{},"path":"{}","collision":{}"#, id, escape(&path.to_string_lossy()), target.is_some());
@@ -196,8 +196,8 @@ impl State {
                 } else {
                     match review.path.symlink_metadata() {
                         Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
-                        Ok(_) => return Err("An item appeared at this output location; review it again.".into()),
-                        Err(error) => return Err(format!("Could not inspect output location: {}", error)),
+                        Ok(_) => return Err("An item with this name just appeared there; review it again.".into()),
+                        Err(error) => return Err(format!("Could not inspect output location: {}.", io_message(&error))),
                     }
                 }
                 Ok(format!(r#""path":"{}","collision":{}"#, escape(&review.path.to_string_lossy()), review.target.is_some()))
@@ -224,7 +224,8 @@ impl State {
                 Ok(inspected) => inspected,
                 Err(error) => {
                     let prefix = format!("Could not inspect {}: ", path.display());
-                    let why = error.strip_prefix(&prefix).unwrap_or(&error);
+                    // The picker joins this clause into its own sentence, so it carries neither the prefix nor the closing period.
+                    let why = error.strip_prefix(&prefix).unwrap_or(&error).trim_end_matches('.');
                     skipped.push(format!(r#"{{"path":"{}","why":"{}"}}"#, escape(&path.to_string_lossy()), escape(why)));
                     continue;
                 }
@@ -254,8 +255,7 @@ impl State {
         }
         if descriptors > budget {
             let count = paths.iter().collect::<HashSet<_>>().len();
-            return Err(format!("Cannot select {} items: {} descriptors exceed the selection limit of {} (open-file limit {}, {} reserved).",
-                count, descriptors, budget, soft, limits::DESCRIPTOR_RESERVE));
+            return Err(format!("Cannot select {} items. The file chooser takes at most {}.", count, budget));
         }
         Ok(())
     }
@@ -302,3 +302,7 @@ pub fn filter_listing(listing: &mut Listing, db: &Db, line: &str) {
 #[cfg(test)]
 #[path = "picker_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "picker_wording_tests.rs"]
+mod wording;

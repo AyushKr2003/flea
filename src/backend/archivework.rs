@@ -14,6 +14,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
+// What both archive runners answer when the jail's programs are missing.
+pub(crate) const SANDBOX_MISSING: &str = "the sandbox is unavailable: bubblewrap or prlimit is not installed";
 // A private directory beside the destination, so the rename that follows never crosses a filesystem.
 pub(crate) const WORK_PREFIX: &str = ".flea-work-";
 // A cancel is observed within this; a killed child is reaped on the next round.
@@ -87,7 +89,7 @@ impl Work {
                 Err(e) => return Err(from_io("archive", &dir.to_string_lossy(), &e)),
             }
         }
-        Err(op_err("archive", &last, "no free work directory beside the destination"))
+        Err(op_err("archive", &last, "a temporary folder could not be made beside the destination"))
     }
 
     // A cancel past the drain bound leaves the folder for the operator: the tool may still write.
@@ -129,8 +131,8 @@ pub(crate) fn failure_message(what: &str, status: &ExitStatus, stderr: &str) -> 
         return line.trim().to_string();
     }
     let killed = |signal: i32| match signal_name(signal) {
-        Some(name) => format!("the {} tool was killed by signal {} ({})", what, name, signal),
-        None => format!("the {} tool was killed by signal {}", what, signal),
+        Some(name) => format!("the {} tool stopped before it finished (signal {})", what, name),
+        None => format!("the {} tool stopped before it finished (signal {})", what, signal),
     };
     if let Some(signal) = status.signal() {
         return killed(signal);
@@ -138,9 +140,9 @@ pub(crate) fn failure_message(what: &str, status: &ExitStatus, stderr: &str) -> 
     match status.code() {
         // 128+n is bwrap's rendering of a signal; an unknown one stays an exit status.
         Some(code) if signal_name(code - BWRAP_SIGNAL_BASE).is_some() => killed(code - BWRAP_SIGNAL_BASE),
-        Some(code) => format!("the {} tool exited with status {}", what, code),
+        Some(code) => format!("the {} tool could not finish (exit status {})", what, code),
         // Unreachable in practice; this function always answers a sentence rather than panicking.
-        None => format!("the {} tool failed", what),
+        None => format!("the {} tool could not finish", what),
     }
 }
 
@@ -212,7 +214,7 @@ fn run_boxed_cancellable_inner(what: &str, inner: Vec<String>, read_only: &Path,
     LAST_CPU.with(|c| c.set(Some(cpu)));
     if !sandbox::available() {
         let tool = inner.first().map_or("", |s| s.as_str());
-        return Err(op_err(what, tool, "the sandbox is unavailable: bwrap or prlimit is not on PATH"));
+        return Err(op_err(what, tool, SANDBOX_MISSING));
     }
     // The cap is the only difference between the convert jail and the archive one.
     let mut full = match cpu {
@@ -386,3 +388,7 @@ fn archive_produced_count_with_inner(inner: Vec<String>, spec: ListSpec, read_on
 #[cfg(test)]
 #[path = "archivework_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "archivework_text_tests.rs"]
+mod text_tests;

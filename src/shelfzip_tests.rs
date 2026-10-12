@@ -56,3 +56,30 @@ fn the_cap_is_the_hundred_the_constant_names_and_the_hundred_and_first_is_refuse
     assert!(last.ends_with("shelf-2026-09-14-100.zip"), "got {}", last.display());
     assert!(free_name(dir.path(), "2026-09-14").unwrap().is_none(), "the hundred and first is refused");
 }
+
+fn reason(kind: std::io::ErrorKind) -> String {
+    crate::error::io_message(&std::io::Error::from(kind))
+}
+
+#[test]
+fn a_folder_nobody_can_write_in_is_named_with_its_reason() {
+    let dir = TestDir::new("shelfzipwhy");
+    let gone = dir.path().join("no-such-directory");
+    let why = writable(&gone).unwrap_err();
+    assert_eq!(why, format!("{} is the only folder those items share, and it cannot be written in: {}", gone.display(), reason(std::io::ErrorKind::NotFound)));
+}
+
+#[test]
+fn an_archive_that_cannot_be_put_on_the_shelf_says_why_in_words() {
+    let dir = TestDir::new("shelfzipmove");
+    let why = relocate(&dir.path().join("never-staged.zip"), &dir.path().join("shelf.zip")).unwrap_err();
+    assert_eq!(why, format!("the archive could not be put on the shelf: {}", reason(std::io::ErrorKind::NotFound)));
+}
+
+#[test]
+fn a_name_that_cannot_be_reserved_says_why_in_words() {
+    let dir = TestDir::new("shelfzipreserve");
+    let path = dir.path().join("no-such-folder").join("shelf-2026-09-14.zip");
+    let why = reserve(&path).unwrap_err();
+    assert_eq!(why, format!("{} could not be created: {}", path.display(), reason(std::io::ErrorKind::NotFound)));
+}

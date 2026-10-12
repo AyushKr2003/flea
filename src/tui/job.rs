@@ -92,8 +92,12 @@ fn run(path: &Path, arguments: &mut [String], cancel: &AtomicBool) -> io::Result
     let bytes = reader
         .join()
         .map_err(|_| io::Error::other("Preview reader stopped"))??;
+    decoded(status, bytes)
+}
+// The decoder's output when it exited cleanly inside the limit, and a plain refusal otherwise.
+fn decoded(status: std::process::ExitStatus, bytes: Vec<u8>) -> io::Result<Vec<u8>> {
     if !status.success() || bytes.len() as u64 > OUTPUT_LIMIT {
-        return Err(io::Error::other("Preview decoder failed"));
+        return Err(io::Error::other("Preview could not be shown"));
     }
     Ok(bytes)
 }
@@ -118,11 +122,21 @@ mod tests {
     }
 
     #[test]
+    fn a_decoder_that_exits_nonzero_or_overflows_reports_the_preview_as_not_shown() {
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(decoded(std::process::ExitStatus::from_raw(0), b"ok".to_vec()).unwrap(), b"ok");
+        let failed = decoded(std::process::ExitStatus::from_raw(3 << 8), Vec::new()).unwrap_err();
+        assert_eq!(crate::error::io_message(&failed), "Preview could not be shown");
+        let overflow = vec![0; OUTPUT_LIMIT as usize + 1];
+        assert!(decoded(std::process::ExitStatus::from_raw(0), overflow).is_err());
+    }
+
+    #[test]
     fn missing_preview_source_reports_plain_worker_error() {
         if crate::backend::sandboxprobe::skipped() { return; }
         let root = TestDir::new("tui-preview-error");
         let job = Job::start(root.join("missing.pdf"), vec!["/usr/bin/pdfinfo".into(), "{input}".into()]);
         let result = job.result.recv_timeout(Duration::from_secs(5)).expect("preview worker did not finish");
-        assert_eq!(result.unwrap_err(), "file or folder not found");
+        assert_eq!(result.unwrap_err(), "item not found");
     }
 }

@@ -127,7 +127,7 @@ fn a_file_modified_after_the_copy_survives_while_the_copys_own_files_go() {
     let mut j = journal("copy", vec![step]);
     let err = j.undo().expect_err("one kept file must be reported, not silent");
     assert_eq!(err.where_, "undo");
-    assert!(err.msg.contains("kept") && err.msg.contains("was modified after the copy"), "honest count and cause: {}", err.msg);
+    assert!(err.msg.contains("kept") && err.msg.contains("it was modified after the copy"), "honest count and cause: {}", err.msg);
     assert_eq!(std::fs::read_to_string(&edited).unwrap(), "the user's own work");
     assert_eq!(std::fs::read_dir(&partial).unwrap().count(), 1, "only the edited file is left");
 }
@@ -156,7 +156,7 @@ fn a_file_added_mid_copy_survives_inside_a_kept_directory() {
     let step = copied_partial(&src, &partial, ItemIdentity::inspect(&src).unwrap(), Some(handle)).unwrap();
     let mut j = journal("copy", vec![step]);
     let err = j.undo().expect_err("the stray keeps its directories");
-    assert!(err.msg.contains("kept") && err.msg.contains("is not empty"), "honest count and cause: {}", err.msg);
+    assert!(err.msg.contains("kept") && err.msg.contains("it is not empty"), "honest count and cause: {}", err.msg);
     assert_eq!(std::fs::read_to_string(partial.join("nested/stray.txt")).unwrap(), "stray");
     assert!(walk_bins(&partial).is_empty(), "every file the copy made is gone");
     assert!(partial.join("nested").is_dir() && partial.is_dir(), "only the stray's directories stand");
@@ -181,7 +181,7 @@ fn a_file_replaced_by_another_inode_is_kept() {
     let step = copied_partial(&src, &partial, ItemIdentity::inspect(&src).unwrap(), Some(handle)).unwrap();
     let mut j = journal("copy", vec![step]);
     let err = j.undo().expect_err("the replacement must be reported, not removed");
-    assert!(err.msg.contains("was replaced after the copy"), "honest cause: {}", err.msg);
+    assert!(err.msg.contains("it was replaced after the copy"), "honest cause: {}", err.msg);
     assert_eq!(std::fs::read_to_string(&victim).unwrap(), "a different file at the same name");
 }
 
@@ -343,7 +343,7 @@ fn a_shared_failed_tree_copy_walks_for_its_recorder() {
     let step = copied_partial(&src, &partial, ItemIdentity::inspect(&src).unwrap(), Some(handle)).unwrap();
     let mut a = shared_journal_nonces(&d, step);
     let err = a.undo().expect_err("the stray keeps its directories");
-    assert!(err.msg.contains("kept") && err.msg.contains("is not empty"), "manifest walk: {}", err.msg);
+    assert!(err.msg.contains("kept") && err.msg.contains("it is not empty"), "manifest walk: {}", err.msg);
     assert_eq!(std::fs::read_to_string(partial.join("nested/stray.txt")).unwrap(), "stray");
     assert!(walk_bins(&partial).is_empty(), "every file the copy made is gone");
 }
