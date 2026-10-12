@@ -193,7 +193,7 @@ case_cap_dropmods() {
     launch "$dir"
     wait_listing 5
     probe_log="$run_root/dropprobe.log"
-    qml6 "$repo/tests/dropmods-probe.qml" >"$probe_log" 2>&1 &
+    QT_FORCE_STDERR_LOGGING=1 qml6 "$repo/tests/dropmods-probe.qml" >"$probe_log" 2>&1 &
     cap_dropmods_probe_pid=$!
     local probe_end=$((SECONDS + 15)) probe_addr=""
     while (( SECONDS < probe_end )); do
@@ -224,6 +224,7 @@ case_cap_dropmods() {
     read -r wx wy ww wh <<< "$(window_box)"
     cap_dropmods_press_at "$((cx + wx))" "$((cy + wy))"
     cap_dropmods_steer_to "$tx" "$ty"
+    printf 'CAP_DROPMODS c1 aim %s,%s cursor %s windows %s\n' "$tx" "$ty" "$(hyprctl cursorpos)" "$(hyprctl clients -j | jq -c '[.[] | select(.title == "DropProbe" or .class == "com.thisisgm.flea") | [.title, .floating, .at, .size]]')"
     sleep 0.5
     cap_dropmods_release
     local offered1="" offered2=""
