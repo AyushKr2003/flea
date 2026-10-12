@@ -209,8 +209,12 @@ Item {
     readonly property real whereShare: 0.5
 
     anchors.fill: parent
-    visible: root.opened
+    visible: root.opened || root.opacity > 0
+    // Closed means no input, even while the fade-out is still drawn.
+    enabled: root.opened
+    opacity: 0
     z: 2
+    Flea.Reveal { target: root; shown: root.opened; lift: card }
 
     function open(holder) {
         root.focusHolder = holder
@@ -317,7 +321,7 @@ Item {
         // Mirrors hyprland decoration:rounding, same as ui/ConvertDialog.qml; 0 on a stock box stays square.
         radius: Style.cornerRadius
 
-        Flea.CardScroll {
+        Flea.CardFrame {
             id: body
             anchors.fill: parent
             anchors.topMargin: Theme.spacing.rowPaddingX
@@ -325,14 +329,10 @@ Item {
             anchors.leftMargin: card.border.width
             anchors.rightMargin: card.border.width
 
-        Column {
-            x: root.textInset
-            width: root.contentWidth
-            spacing: Theme.spacing.gap
-
             // Rule 2: the one clause a reader needs, in the corner every other surface puts it in.
-            Item {
-                width: parent.width
+            title: Item {
+                x: root.textInset
+                width: root.contentWidth
                 height: title.implicitHeight
 
                 Text {
@@ -356,138 +356,160 @@ Item {
                 }
             }
 
-            // The query line, drawn only while one stands: a ? in the cap column, the query in a hairline accent field (decided 2026-10-03: no ring).
-            Item {
-                id: queryRow
-                width: parent.width
-                height: queryRow.visible ? queryBox.height : 0
-                visible: root.query.length > 0
+            Column {
+                x: root.textInset
+                width: root.contentWidth
+                spacing: Theme.spacing.gap
 
-                Text {
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: root.capWidth
-                    horizontalAlignment: Text.AlignHCenter
-                    text: "?"
-                    color: Theme.color.muted
-                    font.family: Theme.font.family
-                    font.pixelSize: Theme.font.bodySmall
-                    textFormat: Text.PlainText
-                }
-
-                Rectangle {
-                    id: queryBox
-                    anchors.left: parent.left
-                    anchors.leftMargin: root.capWidth + root.capGap
-                    anchors.right: parent.right
-                    height: Theme.rowHeight - Theme.spacing.rowPaddingY
-                    color: Theme.color.background
-                    border.width: Theme.spacing.hairline
-                    border.color: Theme.color.accent
+                // The query line, drawn only while one stands: a ? in the cap column, the query in a hairline accent field (decided 2026-10-03: no ring).
+                Item {
+                    id: queryRow
+                    width: parent.width
+                    height: queryRow.visible ? queryBox.height : 0
+                    visible: root.query.length > 0
 
                     Text {
-                        id: queryLine
                         anchors.left: parent.left
-                        anchors.leftMargin: Theme.spacing.gap
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Math.min(implicitWidth, parent.width - 2 * Theme.spacing.gap - queryCaret.width)
-                        text: root.query
-                        color: Theme.color.foreground
+                        width: root.capWidth
+                        horizontalAlignment: Text.AlignHCenter
+                        text: "?"
+                        color: Theme.color.muted
                         font.family: Theme.font.family
-                        font.pixelSize: Theme.font.body
+                        font.pixelSize: Theme.font.bodySmall
                         textFormat: Text.PlainText
-                        elide: Text.ElideLeft
                     }
 
-                    // The field always holds the caret while it shows, and a TextInput's caret takes its text ink.
                     Rectangle {
-                        id: queryCaret
-                        anchors.left: queryLine.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Theme.spacing.hairline
-                        height: Theme.font.body + Theme.spacing.hairline
-                        color: Theme.color.foreground
+                        id: queryBox
+                        anchors.left: parent.left
+                        anchors.leftMargin: root.capWidth + root.capGap
+                        anchors.right: parent.right
+                        height: Theme.rowHeight - Theme.spacing.rowPaddingY
+                        color: Theme.color.background
+                        border.width: Theme.spacing.hairline
+                        border.color: Theme.color.accent
+
+                        Text {
+                            id: queryLine
+                            anchors.left: parent.left
+                            anchors.leftMargin: Theme.spacing.gap
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Math.min(implicitWidth, parent.width - 2 * Theme.spacing.gap - queryCaret.width)
+                            text: root.query
+                            color: Theme.color.foreground
+                            font.family: Theme.font.family
+                            font.pixelSize: Theme.font.body
+                            textFormat: Text.PlainText
+                            elide: Text.ElideLeft
+                        }
+
+                        // The field always holds the caret while it shows, and a TextInput's caret takes its text ink.
+                        Rectangle {
+                            id: queryCaret
+                            anchors.left: queryLine.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Theme.spacing.hairline
+                            height: Theme.font.body + Theme.spacing.hairline
+                            color: Theme.color.foreground
+                        }
                     }
                 }
-            }
 
-            // The query results replace the key grid, one row per match with the run washed.
-            Column {
-                width: parent.width
-                visible: root.query.length > 0
-                Repeater {
-                    id: resultRepeater
-                    model: root.queryResults
-                    delegate: Flea.KeymapSheetResult {
-                        width: parent.width
-                        resultCursor: root.resultCursor
-                        query: root.query
-                        capWidth: root.capWidth
-                        capSize: root.capSize
-                        capGap: root.capGap
-                        rowPitch: root.rowPitch
-                        textInset: root.textInset
-                        whereShare: root.whereShare
+                // The query results replace the key grid, one row per match with the run washed.
+                Column {
+                    width: parent.width
+                    visible: root.query.length > 0
+                    Repeater {
+                        id: resultRepeater
+                        model: root.queryResults
+                        delegate: Flea.KeymapSheetResult {
+                            width: parent.width
+                            resultCursor: root.resultCursor
+                            query: root.query
+                            capWidth: root.capWidth
+                            capSize: root.capSize
+                            capGap: root.capGap
+                            rowPitch: root.rowPitch
+                            textInset: root.textInset
+                            whereShare: root.whereShare
+                        }
                     }
                 }
-            }
-            Row {
-                visible: root.query.length === 0
-                spacing: Theme.spacing.rowPaddingX
+                Row {
+                    visible: root.query.length === 0
+                    spacing: Theme.spacing.rowPaddingX
 
-                Repeater {
-                    model: root.columnSlots
+                    Repeater {
+                        model: root.columnSlots
 
-                    // Equal halves, so the second column starts on one x the whole way down.
-                    delegate: Column {
-                        id: block
-                        required property var modelData
-                        width: (root.contentWidth - (root.columns - 1) * Theme.spacing.rowPaddingX) / root.columns
+                        // Equal halves, so the second column starts on one x the whole way down.
+                        delegate: Column {
+                            id: block
+                            required property var modelData
+                            width: (root.contentWidth - (root.columns - 1) * Theme.spacing.rowPaddingX) / root.columns
 
-                        Repeater {
-                            model: block.modelData
+                            Repeater {
+                                model: block.modelData
 
-                            delegate: Item {
-                                id: slot
-                                required property var modelData
-                                width: block.width
-                                height: slot.modelData.heading.length > 0 ? root.headingPitch : root.rowPitch
-                                // Nothing this cell draws may reach the cell beside it, whatever it holds.
-                                clip: true
+                                delegate: Item {
+                                    id: slot
+                                    required property var modelData
+                                    width: block.width
+                                    height: slot.modelData.heading.length > 0 ? root.headingPitch : root.rowPitch
+                                    // Nothing this cell draws may reach the cell beside it, whatever it holds.
+                                    clip: true
 
-                                // A heading takes a row's own slot, so both columns keep one rhythm.
-                                Text {
-                                    anchors.left: parent.left
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: Theme.spacing.hairline * 2
-                                    visible: slot.modelData.heading.length > 0
-                                    text: slot.modelData.heading
-                                    color: Theme.color.muted
-                                    font.family: Theme.font.family
-                                    font.pixelSize: Theme.font.caption
-                                    font.capitalization: Font.AllUppercase
-                                    font.letterSpacing: Theme.spacing.hairline
-                                    textFormat: Text.PlainText
-                                }
+                                    // A heading takes a row's own slot, so both columns keep one rhythm.
+                                    Text {
+                                        anchors.left: parent.left
+                                        anchors.bottom: parent.bottom
+                                        anchors.bottomMargin: Theme.spacing.hairline * 2
+                                        visible: slot.modelData.heading.length > 0
+                                        text: slot.modelData.heading
+                                        color: Theme.color.muted
+                                        font.family: Theme.font.family
+                                        font.pixelSize: Theme.font.caption
+                                        font.capitalization: Font.AllUppercase
+                                        font.letterSpacing: Theme.spacing.hairline
+                                        textFormat: Text.PlainText
+                                    }
 
-                                Rectangle {
-                                    id: capBox
-                                    anchors.left: parent.left
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    visible: slot.modelData.row !== null
-                                    // The sheet's own cap column, never this row's text: see root.capWidth.
-                                    width: root.capWidth
-                                    height: root.capSize
-                                    color: "transparent"
-                                    border.width: Theme.spacing.hairline
-                                    border.color: Theme.color.muted
+                                    Rectangle {
+                                        id: capBox
+                                        anchors.left: parent.left
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        visible: slot.modelData.row !== null
+                                        // The sheet's own cap column, never this row's text: see root.capWidth.
+                                        width: root.capWidth
+                                        height: root.capSize
+                                        color: "transparent"
+                                        border.width: Theme.spacing.hairline
+                                        border.color: Theme.color.muted
+
+                                        Text {
+                                            anchors.fill: parent
+                                            anchors.margins: Theme.spacing.hairline
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                            text: slot.modelData.row ? slot.modelData.row.keys : ""
+                                            color: Theme.color.foreground
+                                            font.family: Theme.font.family
+                                            font.pixelSize: Theme.font.caption
+                                            textFormat: Text.PlainText
+                                            elide: Text.ElideRight
+                                        }
+                                    }
 
                                     Text {
-                                        anchors.fill: parent
-                                        anchors.margins: Theme.spacing.hairline
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                        text: slot.modelData.row ? slot.modelData.row.keys : ""
+                                        anchors.left: capBox.right
+                                        anchors.leftMargin: root.capGap
+                                        anchors.right: parent.right
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        visible: slot.modelData.row !== null
+                                        text: slot.modelData.row ? slot.modelData.row.label : ""
+                                        // The wording is the sheet's own running text, so it takes the
+                                        // foreground the board draws it in; muted is for the headings.
                                         color: Theme.color.foreground
                                         font.family: Theme.font.family
                                         font.pixelSize: Theme.font.caption
@@ -495,28 +517,11 @@ Item {
                                         elide: Text.ElideRight
                                     }
                                 }
-
-                                Text {
-                                    anchors.left: capBox.right
-                                    anchors.leftMargin: root.capGap
-                                    anchors.right: parent.right
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    visible: slot.modelData.row !== null
-                                    text: slot.modelData.row ? slot.modelData.row.label : ""
-                                    // The wording is the sheet's own running text, so it takes the
-                                    // foreground the board draws it in; muted is for the headings.
-                                    color: Theme.color.foreground
-                                    font.family: Theme.font.family
-                                    font.pixelSize: Theme.font.caption
-                                    textFormat: Text.PlainText
-                                    elide: Text.ElideRight
-                                }
                             }
                         }
                     }
                 }
             }
-        }
         }
     }
 

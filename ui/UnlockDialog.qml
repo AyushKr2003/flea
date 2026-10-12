@@ -10,7 +10,10 @@ import "js/Unlock.js" as Unlock
 FocusScope {
     id: root
     anchors.fill: parent
-    visible: opened
+    visible: opened || opacity > 0
+    // Closed means no input, even while the fade-out is still drawn.
+    enabled: opened
+    opacity: 0
     property bool opened: false
     property string device: ""
     property string driveLabel: ""
@@ -184,6 +187,7 @@ FocusScope {
         unlockTimeout.restart()
     }
 
+    Flea.Reveal { target: root; shown: root.opened; lift: card }
     Keys.onTabPressed: function (event) { root.stepTab((event.modifiers & Qt.ShiftModifier) !== 0); event.accepted = true }
     Keys.onBacktabPressed: function (event) { root.stepTab(true); event.accepted = true }
     Keys.onPressed: function(event) {
@@ -245,20 +249,20 @@ FocusScope {
             onClicked: {}
             onWheel: function(wheel) { wheel.accepted = true }
         }
-        Flea.CardScroll {
+        Flea.CardFrame {
             id: body
             anchors.fill: parent
             anchors.leftMargin: card.cardPadding
             anchors.rightMargin: card.cardPadding
             anchors.topMargin: card.cardPadding
             anchors.bottomMargin: card.cardBottomPadding
+            title: Flea.DialogHeader {
+                width: parent.width
+                text: Unlock.title(root.driveLabel)
+            }
             Column {
-                width: body.width
+                width: parent.width
                 spacing: Theme.spacing.gap
-                Flea.DialogHeader {
-                    width: parent.width
-                    text: Unlock.title(root.driveLabel)
-                }
                 Row {
                     width: parent.width
                     spacing: Theme.spacing.gap
@@ -305,7 +309,12 @@ FocusScope {
                     color: root.noteIsError ? Theme.color.error : Theme.color.muted
                     font { family: Theme.font.family; pixelSize: Theme.font.caption }
                 }
+            }
+            buttons: Item {
+                width: parent.width
+                height: buttonRow.height
                 Row {
+                    id: buttonRow
                     anchors.right: parent.right
                     topPadding: card.buttonsAir
                     spacing: Theme.spacing.gap

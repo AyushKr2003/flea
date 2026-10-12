@@ -56,8 +56,13 @@ Item {
     readonly property var cardItem: card
 
     anchors.fill: parent
-    visible: root.opened
+    visible: root.opened || root.opacity > 0
+    // Closed means no input, even while the fade-out is still drawn.
+    enabled: root.opened
+    opacity: 0
     z: 2
+
+    Flea.Reveal { target: root; shown: root.opened; lift: card }
 
     // A codec this box converts to but the canvas does not name still needs a cap, so upper-casing
     // the extension is the fallback rather than an empty row.
@@ -219,18 +224,15 @@ Item {
             onWheel: function (wheel) { wheel.accepted = true }
         }
 
-        Flea.CardScroll {
+        Flea.CardFrame {
             id: body
             bleedY: Theme.focusClearance
             anchors.fill: parent
             anchors.topMargin: Theme.spacing.rowPaddingX - Theme.focusClearance
             anchors.bottomMargin: Theme.spacing.rowPaddingX - Theme.focusClearance
-
-        Column {
-            width: parent.width
             spacing: Theme.spacing.gap / 2
 
-            Item {
+            title: Item {
                 id: title
                 width: parent.width
                 height: header.implicitHeight + Theme.spacing.gap
@@ -253,128 +255,7 @@ Item {
                 }
             }
 
-            Repeater {
-                id: formatRows
-                model: root.formats
-                delegate: Flea.MenuRow {
-                    required property string modelData
-                    required property int index
-                    width: body.holderWidth
-                    enabled: root.editable
-                    entry: ({ label: root.formatLabel(modelData), action: modelData, glyph: "image",
-                        labelColor: Theme.color.foreground, disabled: !root.editable })
-                    picked: root.format === modelData
-                    current: root.focusPart === 0 && root.cursor === index
-                    Accessible.role: Accessible.RadioButton
-                    Accessible.name: root.formatLabel(modelData)
-                    Accessible.checkable: true
-                    Accessible.checked: root.format === modelData
-                    Keys.forwardTo: [keys]
-                    Accessible.onPressAction: root.chooseFormat(index)
-                    lastPointerGlobal: root.pointerGlobal
-                    onPointerSeen: function (at) { root.pointerGlobal = at }
-                    onPointerMoved: { root.focusPart = 0; root.cursor = index }
-                    onActivated: root.chooseFormat(index)
-                }
-            }
-
-            Rectangle {
-                width: parent.width
-                height: Theme.spacing.hairline
-                color: Theme.color.muted
-                opacity: 0.4
-            }
-
-            // The rule's checkbox row; Space and a tap toggle it.
-            Item {
-                id: metadata
-                width: parent.width
-                height: Theme.rowHeight
-                enabled: root.editable
-                Accessible.role: Accessible.CheckBox
-                Accessible.name: "Remove metadata"
-                Accessible.checkable: true
-                Accessible.checked: root.strip
-                Keys.forwardTo: [keys]
-                Accessible.onPressAction: if (root.editable) root.strip = !root.strip
-
-                Item {
-                    id: box
-                    anchors.left: parent.left
-                    anchors.leftMargin: Theme.spacing.rowPaddingX
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: ruleBox.implicitWidth
-                    height: ruleBox.implicitHeight
-
-                    Flea.CheckBox {
-                        id: ruleBox
-                        value: root.strip ? "on" : "off"
-                        focused: root.focusPart === 1
-                        available: root.editable
-                    }
-                }
-
-                Text {
-                    anchors.left: box.right
-                    anchors.leftMargin: Theme.spacing.gap
-                    anchors.verticalCenter: parent.verticalCenter
-                    // Unchecked by default: a user converting a photo does not expect metadata
-                    // silently dropped unless they asked for it.
-                    text: "Remove metadata"
-                    color: Theme.color.foreground
-                    font.family: Theme.font.family
-                    font.pixelSize: Theme.font.body
-                    textFormat: Text.PlainText
-                }
-
-                TapHandler {
-                    acceptedButtons: Qt.LeftButton
-                    gesturePolicy: TapHandler.ReleaseWithinBounds
-                    onTapped: if (root.editable) { root.focusPart = 1; root.strip = !root.strip; metadata.forceActiveFocus() }
-                }
-            }
-
-            Text {
-                id: output
-                x: Theme.spacing.rowPaddingX
-                width: parent.width - 2 * Theme.spacing.rowPaddingX
-                topPadding: 2 * Theme.spacing.hairline
-                bottomPadding: 2 * Theme.spacing.hairline
-                text: "Output: " + root.outputPath
-                color: Theme.color.foreground
-                font.family: Theme.font.family
-                font.pixelSize: Theme.font.caption
-                textFormat: Text.PlainText
-                wrapMode: Text.WrapAnywhere
-            }
-
-            Text {
-                x: Theme.spacing.rowPaddingX
-                width: parent.width - 2 * Theme.spacing.rowPaddingX
-                visible: root.errorText.length > 0
-                topPadding: 2 * Theme.spacing.hairline
-                bottomPadding: 2 * Theme.spacing.hairline
-                text: root.errorText
-                color: Theme.color.error
-                font { family: Theme.font.family; pixelSize: Theme.font.caption }
-                textFormat: Text.PlainText
-                wrapMode: Text.Wrap
-            }
-
-            Text {
-                x: Theme.spacing.rowPaddingX
-                width: parent.width - 2 * Theme.spacing.rowPaddingX
-                topPadding: 2 * Theme.spacing.hairline
-                bottomPadding: 2 * Theme.spacing.hairline
-                visible: root.collision
-                text: "Choose another format."
-                color: Theme.color.foreground
-                font { family: Theme.font.family; pixelSize: Theme.font.caption }
-                textFormat: Text.PlainText
-                wrapMode: Text.Wrap
-            }
-
-            Item {
+            buttons: Item {
                 width: parent.width
                 height: Theme.spacing.gap + Math.max(cancelButton.implicitHeight, convertButton.implicitHeight)
                 Row {
@@ -405,7 +286,132 @@ Item {
                     }
                 }
             }
-        }
+
+            Column {
+                width: parent.width
+                spacing: Theme.spacing.gap / 2
+
+                Repeater {
+                    id: formatRows
+                    model: root.formats
+                    delegate: Flea.MenuRow {
+                        required property string modelData
+                        required property int index
+                        width: body.holderWidth
+                        enabled: root.editable
+                        entry: ({ label: root.formatLabel(modelData), action: modelData, glyph: "image",
+                            labelColor: Theme.color.foreground, disabled: !root.editable })
+                        picked: root.format === modelData
+                        current: root.focusPart === 0 && root.cursor === index
+                        Accessible.role: Accessible.RadioButton
+                        Accessible.name: root.formatLabel(modelData)
+                        Accessible.checkable: true
+                        Accessible.checked: root.format === modelData
+                        Keys.forwardTo: [keys]
+                        Accessible.onPressAction: root.chooseFormat(index)
+                        lastPointerGlobal: root.pointerGlobal
+                        onPointerSeen: function (at) { root.pointerGlobal = at }
+                        onPointerMoved: { root.focusPart = 0; root.cursor = index }
+                        onActivated: root.chooseFormat(index)
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: Theme.spacing.hairline
+                    color: Theme.color.muted
+                    opacity: 0.4
+                }
+
+                // The rule's checkbox row; Space and a tap toggle it.
+                Item {
+                    id: metadata
+                    width: parent.width
+                    height: Theme.rowHeight
+                    enabled: root.editable
+                    Accessible.role: Accessible.CheckBox
+                    Accessible.name: "Remove metadata"
+                    Accessible.checkable: true
+                    Accessible.checked: root.strip
+                    Keys.forwardTo: [keys]
+                    Accessible.onPressAction: if (root.editable) root.strip = !root.strip
+
+                    Item {
+                        id: box
+                        anchors.left: parent.left
+                        anchors.leftMargin: Theme.spacing.rowPaddingX
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: ruleBox.implicitWidth
+                        height: ruleBox.implicitHeight
+
+                        Flea.CheckBox {
+                            id: ruleBox
+                            value: root.strip ? "on" : "off"
+                            focused: root.focusPart === 1
+                            available: root.editable
+                        }
+                    }
+
+                    Text {
+                        anchors.left: box.right
+                        anchors.leftMargin: Theme.spacing.gap
+                        anchors.verticalCenter: parent.verticalCenter
+                        // Unchecked by default: a user converting a photo does not expect metadata
+                        // silently dropped unless they asked for it.
+                        text: "Remove metadata"
+                        color: Theme.color.foreground
+                        font.family: Theme.font.family
+                        font.pixelSize: Theme.font.body
+                        textFormat: Text.PlainText
+                    }
+
+                    TapHandler {
+                        acceptedButtons: Qt.LeftButton
+                        gesturePolicy: TapHandler.ReleaseWithinBounds
+                        onTapped: if (root.editable) { root.focusPart = 1; root.strip = !root.strip; metadata.forceActiveFocus() }
+                    }
+                }
+
+                Text {
+                    id: output
+                    x: Theme.spacing.rowPaddingX
+                    width: parent.width - 2 * Theme.spacing.rowPaddingX
+                    topPadding: 2 * Theme.spacing.hairline
+                    bottomPadding: 2 * Theme.spacing.hairline
+                    text: "Output: " + root.outputPath
+                    color: Theme.color.foreground
+                    font.family: Theme.font.family
+                    font.pixelSize: Theme.font.caption
+                    textFormat: Text.PlainText
+                    wrapMode: Text.WrapAnywhere
+                }
+
+                Text {
+                    x: Theme.spacing.rowPaddingX
+                    width: parent.width - 2 * Theme.spacing.rowPaddingX
+                    visible: root.errorText.length > 0
+                    topPadding: 2 * Theme.spacing.hairline
+                    bottomPadding: 2 * Theme.spacing.hairline
+                    text: root.errorText
+                    color: Theme.color.error
+                    font { family: Theme.font.family; pixelSize: Theme.font.caption }
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                }
+
+                Text {
+                    x: Theme.spacing.rowPaddingX
+                    width: parent.width - 2 * Theme.spacing.rowPaddingX
+                    topPadding: 2 * Theme.spacing.hairline
+                    bottomPadding: 2 * Theme.spacing.hairline
+                    visible: root.collision
+                    text: "Choose another format."
+                    color: Theme.color.foreground
+                    font { family: Theme.font.family; pixelSize: Theme.font.caption }
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                }
+            }
         }
     }
 

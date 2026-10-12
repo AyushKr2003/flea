@@ -1,6 +1,5 @@
 import QtQuick
 import "." as Flea
-import "js/Motion.js" as Motion
 
 // Shows a bare smb://host/'s own shares as ordinary pane rows, the same instantiated-from-shell
 // overlay pattern as ui/EmptyState.qml; see ui/NetworkMounts.qml "listShares" for the source data.
@@ -20,6 +19,13 @@ Item {
     // active flips instantly (open()/close() below), so shareBrowserOpen()'s IPC read never races
     // the close fade; visible only stays true a little longer, until content's opacity finishes it.
     visible: root.active || content.opacity > 0
+
+    // The fade and the rise are the shared reveal of ui/Reveal.qml, built by the first open so a window that never browses shares holds none.
+    property var fade: null
+    onActiveChanged: {
+        if (root.active && root.fade === null)
+            root.fade = Qt.createComponent("Reveal.qml").createObject(root, { target: content, shown: Qt.binding(function () { return root.active }), lift: content })
+    }
 
     function open(uri, label, names) {
         root.baseUri = uri
@@ -58,23 +64,9 @@ Item {
         x: 0
         width: root.width
         height: root.height
-        // Open rises into place; close does not translate (enabled: root.active only), only fades,
-        // faster than the open animation. root.active itself already flipped above, synchronously.
-        y: root.active ? 0 : Motion.translateUpPx
-        opacity: root.active ? 1 : 0
-
-        Behavior on y {
-            enabled: root.active && !Theme.reducedMotion
-            NumberAnimation { duration: Motion.durMs.open; easing.type: Easing.OutCubic }
-        }
-
-        Behavior on opacity {
-            enabled: !Theme.reducedMotion
-            NumberAnimation {
-                duration: root.active ? Motion.durMs.open : Motion.durMs.close
-                easing.type: Easing.OutCubic
-            }
-        }
+        // Closed means no input, even while the fade-out is still drawn; ui/Reveal.qml owns the fade and the rise.
+        enabled: root.active
+        opacity: 0
 
         // Opaque so the real listing behind it, still rendering, never shows or flickers through.
         Rectangle {

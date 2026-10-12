@@ -63,8 +63,12 @@ Item {
     readonly property int searchTrail: Math.round(root.eyebrowLeadBoard * Theme.font.bodySmall / root.bodySmallBoard)
 
     anchors.fill: parent
-    visible: root.opened
+    visible: root.opened || root.opacity > 0
+    // Closed means no input, even while the fade-out is still drawn.
+    enabled: root.opened
+    opacity: 0
     z: 2
+    Flea.Reveal { target: root; shown: root.opened; lift: card }
 
     // The shared signature the Loader calls both cards with; this one reads the item off the reply.
     function open(operation, id, sourceFolder, holder) {
@@ -99,11 +103,18 @@ Item {
         // ends the child rather than leaving it running behind a card that is already gone.
         root.requested({c: "menuaction", op: "close", id: root.requestId})
         root.opened = false
-        root.busy = false
-        root.committing = false
+        root.settleClosed()
         root.closed()
         if (root.focusHolder) root.focusHolder.forceActiveFocus()
     }
+
+    // A closed card keeps its busy look while it fades out; the reset waits until it is gone.
+    function settleClosed() {
+        if (root.opened || root.opacity !== 0) return
+        root.busy = false
+        root.committing = false
+    }
+    onOpacityChanged: root.settleClosed()
 
     // The pane calls this when the folder is refreshed under an open dialog. Nothing to redraw here:
     // the backend rechecks the captured item on submit, so a selection that moved refuses there.
@@ -124,9 +135,9 @@ Item {
             return
         }
         if (message.op !== "openWith") return
+        if (message.ok) { root.close(); return }
         root.busy = false
         root.committing = false
-        if (message.ok) { root.close(); return }
         if (!message.cancelled) root.errorText = message.error || "The application could not be opened."
     }
 
@@ -216,18 +227,16 @@ Item {
             onWheel: function (wheel) { wheel.accepted = true }
         }
 
-        Flea.CardScroll {
+        Flea.CardFrame {
             id: body
             bleedY: Theme.focusClearance
             anchors.fill: parent
             anchors.topMargin: Theme.spacing.rowPaddingX - Theme.focusClearance
             anchors.bottomMargin: Theme.spacing.rowPaddingX - Theme.focusClearance
-
-        Column {
-            width: parent.width
+            spacing: 0
 
             // RunCard's own header: the esc hint at the right and the rule inset to the content edge.
-            Flea.DialogHeader {
+            title: Flea.DialogHeader {
                 id: title
                 x: Theme.spacing.rowPaddingX
                 width: parent.width - 2 * Theme.spacing.rowPaddingX
@@ -235,6 +244,9 @@ Item {
                 // The registry names the item, so the title says only what it knows until it lands.
                 text: root.name.length > 0 ? "Open " + root.name + " with" : "Open with"
             }
+
+        Column {
+            width: parent.width
 
             // Rule 4: the Network board's field, with the lens beside it and a clear mark once it holds text.
             Item {
@@ -517,8 +529,9 @@ Item {
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
             }
+        }
 
-            Item {
+            buttons: Item {
                 width: parent.width
                 height: Math.max(cancelButton.implicitHeight, openButton.implicitHeight)
 
@@ -548,7 +561,6 @@ Item {
                     }
                 }
             }
-        }
         }
     }
 

@@ -7,7 +7,11 @@ import "js/Format.js" as Format
 FocusScope {
     id: root
     anchors.fill: parent
-    visible: opened
+    visible: opened || opacity > 0
+    // Closed means no input, even while the fade-out is still drawn.
+    enabled: opened
+    opacity: 0
+    Flea.Reveal { target: root; shown: root.opened; lift: card }
     property bool opened: false
     property string action: ""
     property int requestId: 0
@@ -22,6 +26,10 @@ FocusScope {
     readonly property bool deletionActive: action === "deletePermanently" && committing
     readonly property bool canSubmit: !busy && inputAction && field.text.length > 0
     readonly property string title: ({moveTo: "Move to", copyTo: "Copy to", properties: "Properties", newFile: "New File", deletePermanently: "Delete permanently"})[action] || ""
+    // The card and its scrim step aside for the confirmation, and stay aside while it fades out with a closing dialog.
+    readonly property bool cardShown: !confirmation.opened && (root.opened || !confirmation.visible)
+    // Cleanup a closing reply defers until the fade ended, so the card holds still while it fades out.
+    property var settle: null
     readonly property var cardItem: card
     readonly property var confirmationItem: confirmation
     readonly property var closeItem: closeButton
@@ -42,6 +50,7 @@ FocusScope {
         errorText = ""
         checkPending = false
         confirmation.close()
+        settle = null
         field.text = operation === "newFile" ? "New File" : parentPath
         busy = operation === "properties" || operation === "deletePermanently"
         committing = false
@@ -59,8 +68,9 @@ FocusScope {
         if ((!opened && !deletionActive) || message.id !== requestId || message.op === "close") return
         if (root.ownedOps.indexOf(message.op === undefined ? "" : message.op) < 0) return
         if (deletionActive && message.op !== "delete") return
-        busy = false
-        committing = false
+        // A reply that ends the card keeps its busy look until the fade ended.
+        var ends = message.ok && !message.stale && (message.op === undefined || message.op === "" || message.op === "validate" || message.op === "newFile")
+        if (!ends) { busy = false; committing = false }
         if (!message.ok) {
             confirmation.close()
             opened = true
@@ -81,10 +91,23 @@ FocusScope {
         }
         if (message.op === "delete") { deleted(Object.assign({count: facts.count}, message)); finish(); return }
         if (message.op === "properties") { facts = message; return }
-        if (message.op === "validate") { approved(message); close(); return }
+        if (message.op === "validate") { approved(message); closeSettled(); return }
         if (message.op === "newFile") created(message.path)
-        close()
+        closeSettled()
     }
+    // The close of a finished reply: the busy look it left is cleared once the card is gone.
+    function closeSettled() {
+        settle = function () { busy = false; committing = false }
+        finish()
+        settleNow()
+    }
+    function settleNow() {
+        if (opacity !== 0 || settle === null) return
+        var run = settle
+        settle = null
+        run()
+    }
+    onOpacityChanged: root.settleNow()
     function close() {
         if (!opened || busy && committing && action === "newFile") return
         finish()
@@ -152,7 +175,7 @@ FocusScope {
     Keys.onPressed: function(event) { event.accepted = true }
     Rectangle {
         anchors.fill: parent
-        visible: !confirmation.opened
+        visible: root.cardShown
         color: Theme.color.background
         opacity: 0.5
         MouseArea {
@@ -165,7 +188,7 @@ FocusScope {
     }
     Rectangle {
         id: card
-        visible: !confirmation.opened
+        visible: root.cardShown
         x: Theme.cardOrigin(root.width, width)
         y: Theme.cardOrigin(root.height, height)
         width: Theme.cardSpan(Theme.space(420) * Theme.dialogWidthRatio, root.width - 2 * Theme.spacing.gap)
@@ -180,19 +203,47 @@ FocusScope {
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             onWheel: function(wheel) { wheel.accepted = true }
         }
-        Flea.CardScroll {
+        Flea.CardFrame {
             id: body
             bleed: Theme.focusClearance
             anchors.fill: parent
             anchors.margins: Theme.spacing.rowPaddingX - Theme.focusClearance
-            Column {
-                width: body.holderWidth
+            title: Column {
+                width: parent.width
                 spacing: Theme.spacing.gap
                 Flea.DialogTitle {
                     width: parent.width
                     text: root.title
                 }
                 Rectangle { width: parent.width; height: Theme.spacing.hairline; color: Theme.color.muted; opacity: 0.4 }
+            }
+            buttons: Row {
+                anchors.right: parent.right
+                spacing: Theme.spacing.gap
+                Flea.DialogButton {
+                    id: closeButton
+                    label: root.action === "properties" ? "Close" : "Cancel"
+                    available: !(root.busy && root.committing && root.action === "newFile")
+                    tabHandle: true
+                    tabStop: true
+                    onTabbed: function(from, back) { root.stepFocus(back) }
+                    onActivated: root.close()
+                }
+                Flea.DialogButton {
+                    id: submitButton
+                    visible: root.action !== "properties" && root.action !== "deletePermanently"
+                    label: root.action === "newFile" ? "Create" : root.action === "moveTo" ? "Move" : "Copy"
+                    primary: true
+                    available: root.canSubmit
+                    tabHandle: true
+                    tabStop: true
+                    onTabbed: function(from, back) { root.stepFocus(back) }
+                    onActivated: root.submit()
+                }
+            }
+            Column {
+                width: parent.width
+                spacing: Theme.spacing.gap
                 Text {
                     width: parent.width
                     visible: root.inputAction
@@ -257,30 +308,6 @@ FocusScope {
                     wrapMode: Text.Wrap
                     color: root.errorText ? Theme.color.error : Theme.color.muted
                     font { family: Theme.font.family; pixelSize: Theme.font.caption }
-                }
-                Row {
-                    anchors.right: parent.right
-                    spacing: Theme.spacing.gap
-                    Flea.DialogButton {
-                        id: closeButton
-                        label: root.action === "properties" ? "Close" : "Cancel"
-                        available: !(root.busy && root.committing && root.action === "newFile")
-                        tabHandle: true
-                        tabStop: true
-                        onTabbed: function(from, back) { root.stepFocus(back) }
-                        onActivated: root.close()
-                    }
-                    Flea.DialogButton {
-                        id: submitButton
-                        visible: root.action !== "properties" && root.action !== "deletePermanently"
-                        label: root.action === "newFile" ? "Create" : root.action === "moveTo" ? "Move" : "Copy"
-                        primary: true
-                        available: root.canSubmit
-                        tabHandle: true
-                        tabStop: true
-                        onTabbed: function(from, back) { root.stepFocus(back) }
-                        onActivated: root.submit()
-                    }
                 }
             }
         }

@@ -72,6 +72,9 @@ FastScrollHandler 1.0 FastScrollHandler.qml
 ViewportScrollBar 1.0 ViewportScrollBar.qml
 ViewportScrollBars 1.0 ViewportScrollBars.qml
 CardScroll 1.0 CardScroll.qml
+CardFrame 1.0 CardFrame.qml
+Reveal 1.0 Reveal.qml
+FlyoutFade 1.0 FlyoutFade.qml
 DeviceMounts 1.0 DeviceMounts.qml
 DropboxMark 1.0 DropboxMark.qml
 HyprlandMark 1.0 HyprlandMark.qml

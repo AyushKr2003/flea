@@ -9,7 +9,10 @@ import "js/RunFile.js" as RunFile
 FocusScope {
     id: root
     anchors.fill: parent
-    visible: opened
+    visible: opened || opacity > 0
+    // Closed means no input, even while the fade-out is still drawn.
+    enabled: opened
+    opacity: 0
     property bool opened: false
     property string path: ""
     property string kind: "script"
@@ -130,6 +133,7 @@ FocusScope {
         root.keyPressed(event.key, event.isAutoRepeat, event.modifiers)
         event.accepted = true
     }
+    Flea.Reveal { target: root; shown: root.opened; lift: card }
     Process {
         id: runChild
 
@@ -229,7 +233,7 @@ FocusScope {
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             onWheel: function (wheel) { wheel.accepted = true }
         }
-        Flea.CardScroll {
+        Flea.CardFrame {
             id: body
             bleed: Theme.focusClearance
             anchors.fill: parent
@@ -237,50 +241,46 @@ FocusScope {
             anchors.rightMargin: card.cardPadding + Theme.spacing.hairline - Theme.focusClearance
             anchors.topMargin: card.cardPadding + Theme.spacing.hairline - Theme.focusClearance
             anchors.bottomMargin: card.cardBottomPadding + Theme.spacing.hairline - Theme.focusClearance
-            Column {
-                width: body.holderWidth
+            title: Flea.DialogHeader {
+                id: title
+                width: parent.width
+                text: RunFile.titleFor(root.fileName)
+            }
+            buttons: Row {
+                id: buttons
+                anchors.right: parent.right
+                topPadding: card.buttonsAir
                 spacing: Theme.spacing.gap
-                Flea.DialogHeader {
-                    id: title
-                    width: parent.width
-                    text: RunFile.titleFor(root.fileName)
-                }
-                Row {
-                    width: parent.width
-                    height: Theme.fileRowHeight
-                    spacing: Theme.spacing.gap
-                    Flea.Glyph {
-                        width: Theme.markSize
-                        height: parent.height
-                        name: RunFile.glyphFor(root.kind, root.listedGlyph)
-                        color: Theme.color.foreground
-                    }
-                    Text {
-                        width: Math.max(0, parent.width - Theme.markSize - parent.spacing)
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: RunFile.subtitleFor(root.kind, root.size)
-                        textFormat: Text.PlainText
-                        elide: Text.ElideRight
-                        color: Theme.color.foreground
-                        font { family: Theme.font.family; pixelSize: Theme.font.body }
+                Repeater {
+                    id: buttonRow
+                    model: root.buttons
+                    Flea.DialogButton {
+                        required property string modelData
+                        label: RunFile.labelFor(modelData, handlerLabel.elidedText) || modelData
+                        primary: modelData === root.defaultName
+                        focused: root.focusName === modelData
+                        onActivated: root.press(modelData)
                     }
                 }
-                Row {
-                    id: buttons
-                    anchors.right: parent.right
-                    topPadding: card.buttonsAir
-                    spacing: Theme.spacing.gap
-                    Repeater {
-                        id: buttonRow
-                        model: root.buttons
-                        Flea.DialogButton {
-                            required property string modelData
-                            label: RunFile.labelFor(modelData, handlerLabel.elidedText) || modelData
-                            primary: modelData === root.defaultName
-                            focused: root.focusName === modelData
-                            onActivated: root.press(modelData)
-                        }
-                    }
+            }
+            Row {
+                width: parent.width
+                height: Theme.fileRowHeight
+                spacing: Theme.spacing.gap
+                Flea.Glyph {
+                    width: Theme.markSize
+                    height: parent.height
+                    name: RunFile.glyphFor(root.kind, root.listedGlyph)
+                    color: Theme.color.foreground
+                }
+                Text {
+                    width: Math.max(0, parent.width - Theme.markSize - parent.spacing)
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: RunFile.subtitleFor(root.kind, root.size)
+                    textFormat: Text.PlainText
+                    elide: Text.ElideRight
+                    color: Theme.color.foreground
+                    font { family: Theme.font.family; pixelSize: Theme.font.body }
                 }
             }
         }

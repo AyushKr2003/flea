@@ -261,9 +261,13 @@ Item {
     }
 
     anchors.fill: parent
-    visible: root.opened
+    visible: root.opened || root.opacity > 0
+    // Closed means no input, even while the fade-out is still drawn.
+    enabled: root.opened
+    opacity: 0
     // Above the context menu and the keymap sheet: the panel is the surface that opened last.
     z: 3
+    Flea.Reveal { target: root; shown: root.opened; lift: card }
 
     Rectangle {
         anchors.fill: parent

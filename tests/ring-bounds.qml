@@ -419,6 +419,8 @@ ShellRoot {
         }
         root.check(seen === 9, tag + " grid focused " + seen + " boxes, not nine")
     }
+    // A card is measured once its open fade has ended, when its 10 px rise is gone and its rect is whole pixels.
+    function fadeEnded(item) { return item.opacity === 1 }
     function dialogNamed(name) {
         for (var i = 0; i < root.dialogs.length; i++)
             if (root.dialogs[i].name === name) return root.dialogs[i]
@@ -564,7 +566,7 @@ ShellRoot {
             var dlg = root.dialogs[root.dialogIndex]
             if (!root.dialogOpened) { dlg.open(); root.dialogOpened = true; return false }
             var item = dlg.item()
-            if (!item || !dlg.ready(item)) return false
+            if (!item || !dlg.ready(item) || !root.fadeEnded(item)) return false
             root.measureDialog(tag + " " + dlg.name, "stop " + combo.stop + " " + dlg.name, item, dlg.field !== false, dlg.unpinned, dlg.noCard)
             if (dlg.after) dlg.after(tag + " " + dlg.name, item)
             dlg.close(item)
@@ -577,7 +579,7 @@ ShellRoot {
             var permissions = root.dialogNamed("permissions")
             if (!root.dialogOpened) { permissions.open(); root.dialogOpened = true; return false }
             var card = permissions.item()
-            if (!card || !permissions.ready(card)) return false
+            if (!card || !permissions.ready(card) || !root.fadeEnded(card)) return false
             root.measureGridFocus(tag + " permissions", card)
             permissions.close(card)
             root.dialogOpened = false

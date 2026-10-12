@@ -32,6 +32,17 @@ ShellRoot {
     readonly property int trashRows: 3
     readonly property int milli: 1000
     readonly property string sandboxRoot: Quickshell.env("DIALOGBOARD_ROOT") || ""
+    // The roomy window the dialogs lay out in, and the short one that overflows every body.
+    readonly property int roomyWidth: 900
+    readonly property int roomyHeight: 720
+    readonly property int shortWidth: 600
+    // A short window cuts this share of the body the card wants, so every body outgrows its room and the title and buttons still fit.
+    readonly property real bodyCut: 0.6
+    property int hostWidth: shell.roomyWidth
+    property int hostHeight: shell.roomyHeight
+    // The dialog the geometry legs are reading, so a step settles on its own layout too.
+    property var subject: null
+    property var permissionsSent: []
 
     property int checks: 0
     property var failures: []
@@ -173,11 +184,22 @@ ShellRoot {
         Item {
             id: dialogHost
             y: 0
-            width: parent.width
-            height: parent.height
+            width: shell.hostWidth
+            height: shell.hostHeight
             Flea.OpenWithDialog { id: openWith }
             Flea.ConvertDialog { id: convert }
             Flea.ArchiveCompressDialog { id: compress }
+            Flea.ArchivePasswordDialog { id: password }
+            Flea.FatNamesConfirm { id: fatNames }
+            Flea.TrashConfirm { id: trash }
+            Flea.CollideConfirm { id: collide }
+            Flea.BulkRenameDialog { id: bulk }
+            Flea.MenuActionDialog { id: menuAction }
+            Flea.UnlockDialog { id: unlock }
+            Flea.NetworkDialog { id: network }
+            Flea.RunCard { id: runCard }
+            Flea.KeymapSheet { id: sheet; anchors.fill: parent }
+            Flea.PermissionsDialog { id: permissions; onRequested: function (message) { shell.permissionsSent.push(message) } }
         }
 
         // Qt's own default fill, read off a bare rectangle so no ancestor may wear it.
@@ -204,6 +226,19 @@ ShellRoot {
             }
         }
         Item { id: parking; y: 700; width: 10; height: 10; focus: true }
+        Item {
+            id: sheetHolder
+            property bool dualMode: false
+            property string home: "/dialog-board"
+            property var sidebar: null
+            property bool listInFlight: false
+            property var cursorRow: ({ n: "a.txt", d: false })
+            property var context: ({})
+            function sheetMenuAction(action) {}
+            function checkShebang() {}
+            function message(text, sticky) {}
+            function contextMenu() { return { listingContext: function () { return sheetHolder.context } } }
+        }
 
         TestEvent { id: driver }
     }
@@ -212,8 +247,141 @@ ShellRoot {
     function watch() {
         var row = openWith.applicationsItem.itemAtIndex(0)
         return JSON.stringify([view.backItem.scale, view.upItem.scale, openWith.cardItem.height, openWith.listHeight,
-                               row ? row.y : -1, convert.cardItem.height, compress.cardItem.height])
+                               row ? row.y : -1, convert.cardItem.height, compress.cardItem.height,
+                               shell.subject ? shell.snapshot(shell.subject) : ""])
     }
+
+    // The visible Text and DialogButton rectangles of a dialog's card in the card's own coordinates, sorted top to bottom, plus the card itself in the scene.
+    function rectIn(item, ref) {
+        var at = item.mapToItem(ref, 0, 0)
+        return [Math.round(at.x), Math.round(at.y), Math.round(item.width), Math.round(item.height)]
+    }
+    function byPlace(a, b) { return a[1] - b[1] || a[0] - b[0] }
+    function snapshot(d) {
+        var card = d.cardItem
+        var inside = function (o) { var r = shell.rectIn(o, card); return r[1] >= 0 && r[1] + r[3] <= card.height && r[0] >= 0 && r[0] + r[2] <= card.width }
+        var buttons = shell.findAll(card, function (o) { return shell.isType(o, "DialogButton") && o.visible && inside(o) }).map(function (o) { return shell.rectIn(o, card) })
+        var texts = shell.findAll(card, function (o) { return shell.isType(o, "Text") && o.visible && o.text.length > 0 && inside(o) }).map(function (o) { return shell.rectIn(o, card) })
+        return { card: shell.rectIn(card, null), buttons: buttons.sort(shell.byPlace), texts: texts.sort(shell.byPlace).slice(0, shell.textsRead) }
+    }
+    readonly property int textsRead: 6
+
+    // The dialogs the geometry legs read, each opened as the framegap harness opens it.
+    function subjects() {
+        return [
+            { name: "archive-password", item: password, open: function () { password.open({ path: "/dialog-board/locked.7z", dest: "/dialog-board" }, holder, "") } },
+            { name: "fat-names", item: fatNames, open: function () { fatNames.open("Some names change on this drive", [{ old: "a:b.txt", new: "a_b.txt", d: false, i: "" }], "The drive cannot store these characters.") } },
+            { name: "trash", item: trash, open: function () { trash.open({ token: 1, all: true, count: 3, bytes: 4096 }) } },
+            { name: "collide", item: collide, open: function () { collide.open("1 item already exists here", [{ n: "a.txt", d: false, i: "" }], "", true) } },
+            { name: "bulk-rename", item: bulk, open: function () { bulk.open(["/dialog-board/a.txt", "/dialog-board/b.txt"], parking) } },
+            { name: "menu-action", item: menuAction, open: function () { menuAction.open("newFile", 1, "/dialog-board", parking) } },
+            { name: "unlock", item: unlock, open: function () { unlock.openFor("/dev/sdb1", "Backup", 500000000000, "crypto_LUKS", "2") } },
+            { name: "network", item: network, open: function () { network.open() } },
+            { name: "run-card", item: runCard, open: function () { runCard.open({ path: "/dialog-board/tool.sh", raw: '{"ask":"run","kind":"script","size":9420,"handlerId":"","handlerName":"","dev":"8","ino":"9","mtimeS":"11","mtimeNs":"12","target":"/dialog-board/tool.sh"}' }, null) } },
+            { name: "keymap-sheet", item: sheet, open: function () { sheet.open(sheetHolder) } },
+            { name: "convert", item: convert, open: function () { convert.open("photo.png", holder) } },
+            { name: "archive-compress", item: compress, open: function () { compress.open({ paths: ["/dialog-board/notes.txt"], menuId: 0 }, "dialog-board", holder) } },
+            { name: "permissions", item: permissions, open: function () {
+                var marked = shell.permissionsSent.length
+                permissions.openMany(["/dialog-board/a", "/dialog-board/b"], holder)
+                for (var i = marked; i < shell.permissionsSent.length; i++)
+                    if (shell.permissionsSent[i].op === "inspect")
+                        permissions.receiveMany({ op: "inspect", id: shell.permissionsSent[i].id, ok: true, mode: "0644", reason: "" })
+            } },
+            { name: "open-with", item: openWith, open: function () {
+                openWith.open("openWith", 9, "", parking)
+                openWith.receive({ op: "applications", id: 9, ok: true, path: "/dialog-board/notes.txt", kind: "Plain text document", mime: "text/plain",
+                                   applications: [{ id: "a.desktop", label: "Alpha", icon: "a", default: true }],
+                                   installed: [{ id: "a.desktop", label: "Alpha", icon: "a" }, { id: "b.desktop", label: "Beta", icon: "b" }] })
+            } }
+        ]
+    }
+    function closeDialog(d) { if (d.close) d.close(); d.opened = false }
+
+    // The geometry legs, then the pinned-card legs, one pair of steps per dialog.
+    function geometrySteps() {
+        var steps = []
+        shell.subjects().forEach(function (subject) {
+            steps.push({ name: "geometry-" + subject.name, act: function () {
+                Flea.Theme.reducedMotion = true
+                shell.hostWidth = shell.roomyWidth; shell.hostHeight = shell.roomyHeight
+                shell.subject = subject.item
+                subject.open()
+            }, record: function () {
+                var now = JSON.stringify(shell.snapshot(subject.item))
+                shell.check(subject.name + ": at a roomy window the card, title, body and buttons lie where the base laid them", now, shell.baseGeometry[subject.name])
+            } })
+            steps.push({ name: "pinned-" + subject.name, act: function () {
+                var pins = shell.pinnedParts(subject.item.cardItem)
+                var wanted = pins === null ? 0 : pins.frame.scrollItem.wanted
+                shell.hostWidth = shell.shortWidth
+                // The card clamps to its window less two gaps, so the window is the card less the body's cut, plus those two gaps.
+                shell.hostHeight = Math.round(subject.item.cardItem.height - wanted * shell.bodyCut + 2 * Flea.Theme.spacing.gap)
+            }, record: function () {
+                var card = subject.item.cardItem
+                var pins = shell.pinnedParts(card)
+                var slots = pins !== null && (pins.title.childrenRect.height > 0 || subject.name === "permissions") && (subject.name === "keymap-sheet" || pins.buttons.childrenRect.height > 0)
+                shell.check(subject.name + ": the card stands on a CardFrame whose title slot and button slot hold the title and the buttons", slots, true)
+                if (pins === null) return
+                var before = shell.pinRects(pins, card)
+                shell.check(subject.name + ": a short window leaves the body taller than its room", pins.frame.scrollItem.contentHeight > pins.frame.scrollItem.height, true)
+                pins.frame.scrollItem.contentY = Math.max(0, pins.frame.scrollItem.contentHeight - pins.frame.scrollItem.height)
+                shell.pinnedBefore = before
+                shell.pinnedPins = pins
+                shell.pinnedCard = card
+            } })
+            steps.push({ name: "scrolled-" + subject.name, act: function () {}, record: function () {
+                if (shell.pinnedPins !== null) {
+                    var now = shell.pinRects(shell.pinnedPins, shell.pinnedCard)
+                    shell.check(subject.name + ": scrolled to its end the body leaves the title and the button row where they were", now, shell.pinnedBefore)
+                    shell.check(subject.name + ": and both stay inside the card", shell.pinnedInside(now, shell.pinnedCard), true)
+                }
+                shell.closeDialog(subject.item)
+                shell.subject = null
+                shell.pinnedPins = null
+                shell.hostWidth = shell.roomyWidth; shell.hostHeight = shell.roomyHeight
+            } })
+        })
+        return steps
+    }
+    // The CardFrame under a card, and its title slot and button slot by name.
+    function pinnedParts(card) {
+        var frames = shell.findAll(card, function (o) { return shell.isType(o, "CardFrame") })
+        if (frames.length === 0) return null
+        var title = shell.findAll(frames[0], function (o) { return o.objectName === "cardTitle" })[0]
+        var buttons = shell.findAll(frames[0], function (o) { return o.objectName === "cardButtons" })[0]
+        return { frame: frames[0], title: title, buttons: buttons }
+    }
+    function pinRects(pins, card) {
+        return { title: pins.title ? shell.rectIn(pins.title, null) : null, buttons: pins.buttons ? shell.rectIn(pins.buttons, null) : null }
+    }
+    function pinnedInside(rects, card) {
+        var c = shell.rectIn(card, null)
+        return ["title", "buttons"].every(function (k) {
+            var r = rects[k]
+            return r === null || r[2] === 0 || (r[0] >= c[0] && r[1] >= c[1] && r[0] + r[2] <= c[0] + c[2] && r[1] + r[3] <= c[1] + c[3])
+        })
+    }
+    property var pinnedBefore: null
+    property var pinnedPins: null
+    property var pinnedCard: null
+    // Recorded from the base tree (c60af62cc) before any dialog moved onto a CardFrame.
+    readonly property var baseGeometry: ({
+        "archive-password": "{\"card\":[156,277,589,166],\"buttons\":[[417,122,70,30],[496,122,79,30]],\"texts\":[[14,14,530,20],[14,57,67,17],[427,127,50,20],[506,127,59,20]]}",
+        "fat-names": "{\"card\":[226,277,448,167],\"buttons\":[[101,122,70,30],[181,122,96,30],[285,122,146,30]],\"texts\":[[17,17,383,20],[45,62,59,20],[113,62,25,20],[17,96,414,17],[111,127,50,20],[191,127,76,20]]}",
+        "trash": "{\"card\":[242,280,417,160],\"buttons\":[[208,115,70,30],[288,115,112,30]],\"texts\":[[43,17,357,20],[17,46,383,60],[218,120,50,20],[298,120,92,20]]}",
+        "collide": "{\"card\":[226,275,448,170],\"buttons\":[[35,127,70,30],[114,127,54,30],[177,127,96,30],[281,127,62,30],[352,127,79,30]],\"texts\":[[17,17,383,20],[45,61,386,20],[17,95,414,17],[45,132,50,20],[124,132,34,20],[187,132,76,20]]}",
+        "bulk-rename": "{\"card\":[130,223,640,275],\"buttons\":[[293,228,154,30],[457,228,70,30],[536,228,87,30]],\"texts\":[[17,17,575,20],[17,46,34,17],[327,46,59,17],[17,106,65,17],[327,106,65,17],[17,127,296,31]]}",
+        "menu-action": "{\"card\":[174,278,552,165],\"buttons\":[[388,121,70,30],[468,121,70,30]],\"texts\":[[14,14,493,20],[14,53,524,20],[23,87,506,20],[398,126,50,20],[478,126,50,20]]}",
+        "unlock": "{\"card\":[226,259,448,202],\"buttons\":[[282,160,70,30],[362,160,70,30]],\"texts\":[[16,16,385,20],[44,60,388,20],[16,94,84,17],[292,165,50,20],[372,165,50,20]]}",
+        "network": "{\"card\":[201,63,499,594],\"buttons\":[[248,547,70,30],[328,547,154,30]],\"texts\":[[17,17,434,20],[27,54,25,20],[76,54,34,20],[134,54,34,20],[191,54,51,20],[267,54,25,20]]}",
+        "run-card": "{\"card\":[200,288,500,144],\"buttons\":[[74,101,70,30],[153,101,121,30],[283,101,45,30],[337,101,146,30]],\"texts\":[[17,17,435,20],[45,61,438,20],[84,106,50,20],[163,106,101,20],[293,106,25,20],[347,106,126,20]]}",
+        "keymap-sheet": "{\"card\":[135,8,630,704],\"buttons\":[],\"texts\":[[14,14,31,18],[544,15,72,17],[14,40,33,17],[322,40,33,17],[145,63,163,17],[453,63,163,17]]}",
+        "convert": "{\"card\":[253,128,394,464],\"buttons\":[[222,420,70,30],[301,420,79,30]],\"texts\":[[14,14,335,20],[41,57,330,20],[41,98,330,20],[41,140,330,20],[41,181,330,20],[41,223,330,20]]}",
+        "archive-compress": "{\"card\":[156,157,589,406],\"buttons\":[[409,362,70,30],[488,362,87,30]],\"texts\":[[14,14,530,20],[14,57,561,17],[23,81,14,17],[57,81,22,17],[14,116,34,17],[23,142,534,20]]}",
+        "permissions": "{\"card\":[210,223,480,275],\"buttons\":[[322,228,70,30],[401,228,62,30]],\"texts\":[[40,4,165,17],[113,45,117,19],[230,45,116,19],[346,45,117,19],[17,78,96,20],[17,118,96,20]]}",
+        "open-with": "{\"card\":[135,96,630,529],\"buttons\":[[483,485,70,30],[562,485,54,30]],\"texts\":[[14,14,571,20],[46,66,159,20],[14,118,301,17],[41,144,516,20],[566,145,50,17],[14,183,142,17]]}"
+    })
 
     function buildScript() {
         shell.script = [
@@ -267,7 +435,7 @@ ShellRoot {
                 shell.check("convert: a pointer from the ground takes the row it reaches on its first move", convert.cursor, target)
                 convert.opened = false
             } },
-            { name: "strip-rest", act: function () { parking.forceActiveFocus(); shell.park() }, record: function () {
+            { name: "strip-rest", act: function () { Flea.Theme.reducedMotion = false; parking.forceActiveFocus(); shell.park() }, record: function () {
                 var back = view.backItem
                 var up = view.upItem
                 var hit = Flea.Theme.hitMin
@@ -302,7 +470,7 @@ ShellRoot {
             } },
             { name: "back-click", act: function () { driver.mouseClick(view.backItem, view.backItem.width / 2, view.backItem.height / 2, Qt.LeftButton, Qt.NoModifier, shell.noDelay) },
               record: function () { shell.check("strip: a click on Back goes back", shell.backRequests, 1) } }
-        ]
+        ].concat(shell.geometrySteps())
     }
 
     // The sandbox proof first: every path the product resolves lies under the marked root before anything is assigned.
@@ -337,6 +505,8 @@ ShellRoot {
             if (!shell.pinned()) { shell.finish(); return }
             // Assigned only once every path is proved under the root, because the store may write on assignment.
             Flea.ViewState.state = { display: { textSize: { mode: TextSize.nearest(shell.pinnedSize) } } }
+            // The board reads each card at rest, and a card fading out under the next one would swallow its pointer, so the fades snap; tests/reveal.sh measures the fade.
+            Flea.Theme.reducedMotion = true
             shell.buildScript()
             return
         }

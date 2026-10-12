@@ -32,8 +32,15 @@ Item {
     readonly property var cardItem: card
 
     anchors.fill: parent
-    visible: root.opened
+    visible: root.opened || root.opacity > 0
+    // Closed means no input, even while the fade-out is still drawn.
+    enabled: root.opened
+    opacity: 0
     z: 2
+
+    Flea.Reveal { target: root; shown: root.opened; lift: card }
+    // The sentence and the title clear once the fade ended, so the card stays still while it fades out; open() sets both again.
+    onOpacityChanged: if (root.opacity === 0 && !root.opened) { root.errorText = ""; root.leaf = "" }
 
     // The tab order, answered at the root because the field owns Tab as a signal; a disabled stop is skipped.
     function tabStops() {
@@ -97,8 +104,6 @@ Item {
         passwordField.heldMask = 0
         root.retryKey = ""
         root.retryLength = 0
-        root.errorText = ""
-        root.leaf = ""
         root.source = null
         root.opened = false
         if (root.owner && root.owner.listArea)
@@ -159,96 +164,92 @@ Item {
             onWheel: function (wheel) { wheel.accepted = true }
         }
 
-        Flea.CardScroll {
+        Flea.CardFrame {
             id: body
             bleedY: Theme.focusClearance
             anchors.fill: parent
             anchors.topMargin: Theme.spacing.rowPaddingX - Theme.focusClearance
             anchors.bottomMargin: Theme.spacing.rowPaddingX - Theme.focusClearance
+            spacing: Theme.spacing.rowPaddingX
 
-            Column {
+            title: Item {
                 width: parent.width
-                spacing: Theme.spacing.rowPaddingX
+                height: header.implicitHeight + Theme.spacing.gap
 
-                Item {
-                    width: parent.width
-                    height: header.implicitHeight + Theme.spacing.gap
-
-                    Flea.DialogTitle {
-                        id: header
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.margins: Theme.spacing.rowPaddingX
-                        text: ArchiveCard.encryptedTitle(root.leaf)
-                        elide: Text.ElideMiddle
-                    }
-
-                    Rectangle {
-                        anchors.bottom: parent.bottom
-                        x: Theme.spacing.rowPaddingX
-                        width: parent.width - 2 * Theme.spacing.rowPaddingX
-                        height: Theme.spacing.hairline
-                        color: Theme.color.muted
-                        opacity: 0.4
-                    }
+                Flea.DialogTitle {
+                    id: header
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.margins: Theme.spacing.rowPaddingX
+                    text: ArchiveCard.encryptedTitle(root.leaf)
+                    elide: Text.ElideMiddle
                 }
 
-                // The wrong-password specimen: the field in the error frame, then its bare sentence directly under it.
-                Column {
+                Rectangle {
+                    anchors.bottom: parent.bottom
                     x: Theme.spacing.rowPaddingX
                     width: parent.width - 2 * Theme.spacing.rowPaddingX
+                    height: Theme.spacing.hairline
+                    color: Theme.color.muted
+                    opacity: 0.4
+                }
+            }
+
+            buttons: Item {
+                width: parent.width
+                height: Math.max(cancelButton.implicitHeight, extractButton.implicitHeight)
+                Row {
+                    anchors.bottom: parent.bottom
+                    anchors.right: parent.right
+                    anchors.rightMargin: Theme.spacing.rowPaddingX
                     spacing: Theme.spacing.gap
 
-                    Flea.DialogField {
-                        id: passwordField
-                        width: parent.width
-                        label: "Password"
-                        secret: true
-                        error: root.errorText.length > 0
-                        onEdited: root.errorText = ""
-                        onAccepted: root.commit()
+                    Flea.DialogButton {
+                        id: cancelButton
+                        label: "Cancel"
+                        focused: root.focusPart === 1
+                        available: true
+                        enabled: true
+                        onActivated: root.close()
                         onTabbed: function (from, back) { root.stepTab(back) }
                     }
 
-                    Text {
-                        width: parent.width
-                        visible: root.errorText.length > 0
-                        text: root.errorText
-                        color: Theme.color.error
-                        font { family: Theme.font.family; pixelSize: Theme.font.caption }
-                        textFormat: Text.PlainText
-                        wrapMode: Text.Wrap
+                    Flea.DialogButton {
+                        id: extractButton
+                        label: "Extract"
+                        primary: true
+                        focused: root.focusPart === 2
+                        onActivated: root.commit()
+                        onTabbed: function (from, back) { root.stepTab(back) }
                     }
                 }
+            }
 
-                Item {
+            // The wrong-password specimen: the field in the error frame, then its bare sentence directly under it.
+            Column {
+                x: Theme.spacing.rowPaddingX
+                width: parent.width - 2 * Theme.spacing.rowPaddingX
+                spacing: Theme.spacing.gap
+
+                Flea.DialogField {
+                    id: passwordField
                     width: parent.width
-                    height: Math.max(cancelButton.implicitHeight, extractButton.implicitHeight)
-                    Row {
-                        anchors.bottom: parent.bottom
-                        anchors.right: parent.right
-                        anchors.rightMargin: Theme.spacing.rowPaddingX
-                        spacing: Theme.spacing.gap
+                    label: "Password"
+                    secret: true
+                    error: root.errorText.length > 0
+                    onEdited: root.errorText = ""
+                    onAccepted: root.commit()
+                    onTabbed: function (from, back) { root.stepTab(back) }
+                }
 
-                        Flea.DialogButton {
-                            id: cancelButton
-                            label: "Cancel"
-                            focused: root.focusPart === 1
-                            available: true
-                            enabled: true
-                            onActivated: root.close()
-                            onTabbed: function (from, back) { root.stepTab(back) }
-                        }
-
-                        Flea.DialogButton {
-                            id: extractButton
-                            label: "Extract"
-                            primary: true
-                            focused: root.focusPart === 2
-                            onActivated: root.commit()
-                            onTabbed: function (from, back) { root.stepTab(back) }
-                        }
-                    }
+                Text {
+                    width: parent.width
+                    visible: root.errorText.length > 0
+                    text: root.errorText
+                    color: Theme.color.error
+                    font { family: Theme.font.family; pixelSize: Theme.font.caption }
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
                 }
             }
         }

@@ -7,7 +7,11 @@ import "js/Permissions.js" as Permissions
 FocusScope {
     id: root
     anchors.fill: parent
-    visible: opened
+    visible: opened || opacity > 0
+    // Closed means no input, even while the fade-out is still drawn.
+    enabled: opened
+    opacity: 0
+    Flea.Reveal { target: root; shown: root.opened; lift: card }
     property bool opened: false
     property int requestId: 0
     // Inspect ids are request blocks of this width; a wider selection reserves whole blocks.
@@ -402,7 +406,7 @@ FocusScope {
             }
             Rule { anchors.bottom: parent.bottom }
         }
-        Flea.CardScroll {
+        Flea.CardFrame {
             id: body
             anchors.left: parent.left
             anchors.right: parent.right
@@ -413,6 +417,7 @@ FocusScope {
             anchors.rightMargin: root.bodyInset - Theme.focusClearance
             anchors.topMargin: Theme.spacing.rowPaddingX - Theme.focusClearance
             anchors.bottomMargin: root.bodyInset - Theme.focusClearance
+            spacing: 0
             Column {
                 width: body.holderWidth
                 spacing: 0
@@ -619,6 +624,9 @@ FocusScope {
                     color: Theme.color.foreground
                     font { family: Theme.font.family; pixelSize: Theme.font.caption }
                 }
+            }
+            buttons: Column {
+                width: parent.width
                 Item { width: parent.width; height: root.isMulti ? root.multiGap + root.buttonLead : Theme.settings.railPaddingY + Theme.spacing.hairline }
                 Row {
                     anchors.right: parent.right

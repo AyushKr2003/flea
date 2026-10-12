@@ -14,10 +14,16 @@ function run(check) {
 
 // The transitions a fullscreen take or a dialog open runs through, so a curve change here is a product change.
 function runStructural(check) {
-    var files = ["ui/Preview.qml", "ui/ShareBrowser.qml", "ui/NetworkDialog.qml", "ui/EmptyState.qml", "ui/FleaMark.qml"]
+    var files = ["ui/Preview.qml", "ui/Reveal.qml", "ui/EmptyState.qml", "ui/FleaMark.qml"]
     for (var i = 0; i < files.length; i++) {
         var src = Source.source(files[i])
         check(files[i] + " carries OutCubic", src.indexOf("Easing.OutCubic") >= 0, true)
         check(files[i] + " carries no BezierSpline", src.indexOf("BezierSpline") < 0, true)
+    }
+    var shared = ["ui/ShareBrowser.qml", "ui/NetworkDialog.qml"]
+    for (var j = 0; j < shared.length; j++) {
+        var own = Source.source(shared[j])
+        check(shared[j] + " fades through Reveal", own.indexOf("Reveal") >= 0, true)
+        check(shared[j] + " carries no easing of its own", own.indexOf("easing.type") < 0, true)
     }
 }
