@@ -367,3 +367,85 @@ case_dualdivider() {
     export XDG_STATE_HOME="$suite_home"
     kill_flea
 }
+# The auto-hidden rail's slide, driven for a recording: dwell, leave, re-enter mid-hide, Tab in and Tab out, single view then Dual (runs by name only).
+railmotion_state() { printf 'RAILMOTION %s %s: %s\n' "$1" "$2" "$(ipc railState)"; sleep "${railmotion_pause:-1}"; }
+# A railmotion failure names the rail and the pointer, so a log shows whether the pointer rested on the reveal edge.
+railmotion_fail() { fail "$1 (railState=$(ipc railState 2>&1 || true) cursorpos=$(hyprctl cursorpos 2>&1 || true))"; }
+railmotion_point() {
+    omarchy-drive move "$1" "$2" >/dev/null || railmotion_fail "cap_railmotion: the pointer move to $1,$2 failed"
+    # Hyprland's cursor move sends no pointer frame, so a one pixel seat nudge makes Qt hear the hover.
+    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null || railmotion_fail "cap_railmotion: ydotool mousemove failed"
+}
+# Scheduling slack added to each rail wait: it absorbs the frame and event-loop delay after a timer fires.
+railmotion_slack_ms=100
+# The rail's own times, read from the code that owns them: the dwell and the open and close slides in ui/js/Motion.js, the settle in ui/PaneRail.qml.
+railmotion_times() {
+    local dwell settle open close
+    # Motion.js line "var dwellMs = 120", the dwell in ms.
+    dwell=$(sed -nE 's/^var dwellMs = ([0-9]+).*/\1/p' "$flea_ui/js/Motion.js")
+    # Motion.js line "    open: 180,", the open slide in ms (a trailing comma).
+    open=$(sed -nE 's/^ *open: ([0-9]+),.*/\1/p' "$flea_ui/js/Motion.js")
+    # Motion.js line "    close: 140", the close slide in ms (the last key, no comma).
+    close=$(sed -nE 's/^ *close: ([0-9]+)$/\1/p' "$flea_ui/js/Motion.js")
+    # PaneRail.qml line "    readonly property int settleMs: 220", the settle in ms.
+    settle=$(sed -nE 's/^ *readonly property int settleMs: ([0-9]+).*/\1/p' "$flea_ui/PaneRail.qml")
+    [[ "$dwell" =~ ^[0-9]+$ && "$open" =~ ^[0-9]+$ && "$close" =~ ^[0-9]+$ && "$settle" =~ ^[0-9]+$ ]] \
+        || fail "cap_railmotion: the rail times are not readable (dwell=$dwell open=$open close=$close settle=$settle)"
+    # The reveal is the dwell then the open slide, the hide the settle then the close slide, each plus the slack.
+    rail_reveal_ms=$((dwell + open + railmotion_slack_ms)); rail_hide_ms=$((settle + close + railmotion_slack_ms))
+}
+railmotion_wait() { sleep "$(printf '%d.%03d' $(($1 / 1000)) $(($1 % 1000)))"; }
+railmotion_walk() {
+    local mode="$1" wx wy ww wh edge_x away_x y hid=false rail_reveal_ms rail_hide_ms
+    railmotion_times
+    read -r wx wy ww wh < <(window_box) || fail "cap_railmotion: native window coordinates unavailable"
+    edge_x=$((wx + 1)); away_x=$((wx + ww * 6 / 10)); y=$((wy + wh / 2))
+    # A relaunched window can open under a pointer on the reveal edge, which keeps the rail up.
+    railmotion_point "$away_x" "$y"
+    railmotion_wait "$rail_hide_ms"
+    for _attempt in $(seq 1 60); do
+        [[ "$(ipc railState | jq -r '.hidden')" == "true" ]] && { hid=true; break; }
+        sleep 0.05
+    done
+    [[ "$hid" == true ]] || railmotion_fail "cap_railmotion: $mode: the rail never hid before the walk"
+    railmotion_state "$mode" rest
+    railmotion_point "$edge_x" "$y"
+    railmotion_wait "$rail_reveal_ms"
+    railmotion_state "$mode" dwell
+    railmotion_point "$away_x" "$y"
+    railmotion_wait "$rail_hide_ms"
+    railmotion_state "$mode" leave
+    railmotion_point "$edge_x" "$y"
+    railmotion_wait "$rail_reveal_ms"
+    railmotion_state "$mode" reveal-again
+    railmotion_point "$away_x" "$y"
+    # The settle is 220 ms and the hide slide 140 ms, so the pointer returns while the rail is part way out.
+    sleep 0.3
+    railmotion_point "$edge_x" "$y"
+    railmotion_state "$mode" re-enter-mid-hide
+    railmotion_point "$away_x" "$y"
+    railmotion_wait "$rail_hide_ms"
+    key -k Tab >/dev/null
+    railmotion_state "$mode" tab-in
+    key -k Tab >/dev/null
+    railmotion_state "$mode" tab-out
+}
+case_cap_railmotion() {
+    local dir="$fixture_root/railmotion" state="$fixture_root/railmotion-state" suite_home="$XDG_STATE_HOME" i
+    command -v ydotool >/dev/null || fail "cap_railmotion: no ydotool on PATH"
+    [[ -S "${XDG_RUNTIME_DIR:-}/.ydotool_socket" ]] || fail "cap_railmotion: no ydotool socket at ${XDG_RUNTIME_DIR:-}/.ydotool_socket"
+    sandbox_scratch "$dir"
+    mkdir -p "$dir/left" "$dir/right"
+    for i in $(seq -f '%02g' 1 20); do : > "$dir/left/l$i.txt"; : > "$dir/right/r$i.txt"; done
+    seed_ui_state "$state" "$(jq -cn --arg l "$dir/left" '{places:{autoHide:true},dual:{paths:[$l,$l],focus:0}}')"
+    launch "$dir/left"
+    wait_listing 20
+    railmotion_walk single
+    # The seed wipes the state directory first, so the Dual leg names auto-hide again.
+    seed_ui_state "$state" "$(jq -cn --arg l "$dir/left" '{view:"dual",places:{autoHide:true},dual:{paths:[$l,$l],focus:0}}')"
+    launch "$dir/left"
+    wait_listing 20
+    railmotion_walk dual
+    export XDG_STATE_HOME="$suite_home"
+    kill_flea
+}

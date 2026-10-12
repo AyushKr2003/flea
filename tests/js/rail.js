@@ -5,6 +5,7 @@
 .import "../../ui/js/Cloud.js" as Cloud
 .import "../../ui/js/NetFs.js" as NetFs
 .import "../../ui/js/Messages.js" as Messages
+.import "../../ui/js/Motion.js" as Motion
 .import "sourcefixture.js" as Source
 
 // RailAdditions rules 1 and 2: the volumes nothing has mounted, behind their own switch, and the
@@ -389,6 +390,7 @@ function run(check) {
     check("a local fstype keeps its square", NetFs.isCifsFstype("ext4"), false)
     check("no fstype at all keeps its square", NetFs.isCifsFstype(""), false)
     runCursorFollow(check)
+    runSlide(check)
 }
 
 // After an unlock the shipped ui/UnlockHost.qml follow puts the cursor on the crypt row, sliced from the file over a stub rail.
@@ -452,3 +454,18 @@ function runCursorFollow(check) {
         Source.source("ui/UnlockHost.qml").indexOf("root.lockedCursor = root.cursorOnRow(device)") >= 0, true)
 }
 
+
+// The auto-hidden rail slides on x in the shell's curve and builds once; docked mode keeps its own Loader condition.
+function runSlide(check) {
+    var rail = Source.source("ui/PaneRail.qml")
+    check("the pointer rests 120 ms at the edge before the rail opens", Motion.dwellMs, 120)
+    check("the show reads the open duration", rail.indexOf("root.revealed ? Motion.durMs.open : Motion.durMs.close") >= 0, true)
+    check("the slide eases on OutCubic", rail.indexOf("easing.type: Easing.OutCubic") >= 0, true)
+    check("the slide is off with reduced motion", Source.slice(rail, "Behavior on slide", "NumberAnimation").indexOf("enabled: !Theme.reducedMotion") >= 0, true)
+    check("the dwell timer reads the token", Source.slice(rail, "id: dwell", "onTriggered").indexOf("interval: Motion.dwellMs") >= 0, true)
+    check("the strip is one row lead-in wide", Source.slice(rail, "id: strip", "enabled:").indexOf("width: Theme.spacing.rowPaddingX") >= 0, true)
+    check("the rail moves on x and not on width", Source.slice(rail, "id: rail", "visible:").indexOf("x: root.overlay ? (root.slide - 1) * width : 0") >= 0, true)
+    check("visible drops when the hide slide ends", rail.indexOf("visible: !root.held && (!root.overlay || root.slide > 0)") >= 0, true)
+    check("an auto-hide Sidebar stays built after its first reveal", rail.indexOf("(root.overlay ? (root.built || root.releaseHold) : (!root.hidden || root.releaseHold))") >= 0, true)
+    check("a withdrawn rail reads zero width", rail.indexOf("railWidth: root.hidden ? 0 : rail.width") >= 0, true)
+}
