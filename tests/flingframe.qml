@@ -137,7 +137,7 @@ ShellRoot {
             property var sidebar: null
             property var listArea: null
             property var swap: null
-            onCursorIndexChanged: root.tally.cursor += 1
+            onCursorIndexChanged: { root.tally.cursor += 1; root.tally.clampWrites += root.inClamp ? 1 : 0 }
             function renameEditor() { return null }
             function join(base, name) { return String(base) + "/" + String(name) }
             function rowFor(index) { root.tally.rowFor += 1; var o = index - held; return (o >= 0 && o < rows.length) ? rows[o] : null }
@@ -158,7 +158,9 @@ ShellRoot {
     }
     Component { id: menuStub; QtObject { function close() {} function openBackground(point) {} } }
 
-    property var tally: ({ rowFor: 0, isSelected: 0, thumb: 0, thumbcancel: 0, dirsize: 0, dirsizecancel: 0, window: 0, askMeta: 0, cursor: 0, clamped: 0 })
+    // True only while the clamp hook writes the cursor, so a write is credited to the clamp by where it ran.
+    property bool inClamp: false
+    property var tally: ({ rowFor: 0, isSelected: 0, thumb: 0, thumbcancel: 0, dirsize: 0, dirsizecancel: 0, window: 0, askMeta: 0, cursor: 0, clamped: 0, clampWrites: 0 })
     property var stubBackend: backendStub.createObject(root)
     property var stubPane: paneStub.createObject(root, { backend: root.stubBackend, swap: swapStub.createObject(root) })
 
@@ -268,7 +270,9 @@ ShellRoot {
             root.tally.clamped += 1
             var p = root.stubPane
             var to = Math.max(first, Math.min(last, p.cursorIndex))
+            root.inClamp = true
             if (to !== p.cursorIndex) p.cursorIndex = to
+            root.inClamp = false
         })
         return true
     }
@@ -294,7 +298,8 @@ ShellRoot {
         // The stroke is the frame: a mid start has a full pool, and the rows it may reveal are those the pixels it moved cross.
         var per = (Math.ceil(Math.abs(v.contentY - y0) / root.rowH()) + 1) * root.columnsOf()
         measure.judge(tag, measure.flat(moved), per, true, root.wheelUpdates).forEach(root.fail)
-        if (root.cursorOutside() && (moved.tally.clamped < 1 || moved.tally.cursor < 1)) root.fail(tag + "the cursor started above the view and no clamp pulled it, so the clamp write is not exercised")
+        if (root.cursorOutside() && moved.tally.clampWrites < 1) root.fail(tag + "the cursor started above the view and no clamp hook wrote it, so the clamp write is not exercised")
+        if (moved.tally.cursor !== moved.tally.clampWrites) root.fail(tag + "the cursor moved " + moved.tally.cursor + " times in the stroke but the clamp hook wrote it " + moved.tally.clampWrites + ", so another writer moved it")
         return true
     }
 
