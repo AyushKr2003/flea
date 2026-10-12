@@ -134,6 +134,24 @@ function run(check) {
     busy.wire.reread()
     land(busy, ["a", "b", "c", "d", "e"])
     check("deferred permissions reread keeps marks", busy.selectedIndices().join(","), MARKS.join(","))
+    var free = pane("list", false, false)
+    apply(free, "batch")
+    check("the same apply sends with no button held", free.sent.length > 0, true)
+    var pressed = pane("list", false, false)
+    pressed.pointerHeld = true
+    apply(pressed, "batch")
+    check("a held button holds permissions reread", pressed.sent.length, 0)
+    check("a held button retains the debt", pressed.wire.stale, true)
+    // The two PaneWire expressions that pay the debt on a release, read from its source and run on the stub wire.
+    var wireSource = Source.source("ui/PaneWire.qml")
+    var onBusyChanged = new Function("root", "watchSettle", wireSource.match(/onWatchBusyChanged: (.*)\n/)[1])
+    var onSettled = new Function("root", wireSource.match(/id: watchSettle[\s\S]*?onTriggered: (.*)\n/)[1])
+    var settle = {running: false, start: function () { settle.running = true }}
+    pressed.pointerHeld = false
+    onBusyChanged(pressed.wire, settle)
+    check("the release arms the burst timer", settle.running, true)
+    onSettled(pressed.wire)
+    check("the released button pays the reread", pressed.sent.join("|"), free.sent.join("|"))
     var deep = pane("list", true, true)
     deep.held = DEEP_START
     deep.total = DEEP_START + deep.rows.length
