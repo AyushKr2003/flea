@@ -1,186 +1,177 @@
-// MakerNote fixtures: notes whose signatures bound them (Nikon, Olympus) and notes that
-// do not (unknown, truncated, inline), so the walk enters only what it can bound.
+// MakerNote fixtures in the vendors' own layouts (Nikon, Olympus new and old, Pentax), and notes the walk must skip without entering.
+use super::*;
 use crate::backend::rawexif as ex;
 use crate::backend::rawtiff::inspect_file;
+use crate::backend::rawtiff::tests::{at, jpeg, patch, write, Ev, Log, Tb, PLACE};
 use crate::backend::rawembed::Ctx;
 use crate::backend::testdir::TestDir;
 
-fn tsize(t: u16) -> usize {
-    match t {
-        1 | 2 | 6 | 7 => 1,
-        3 | 8 => 2,
-        4 | 9 | 11 => 4,
-        _ => 8,
+fn order_bytes(le: bool) -> &'static [u8] {
+    if le {
+        b"II"
+    } else {
+        b"MM"
     }
 }
 
-enum Ev {
-    B(u16, Vec<u8>),
+// One IFD of LONG tags then a zero next pointer; the values are written as given, so a placeholder survives for patching.
+fn ifd_of(le: bool, entries: &[(u16, u32)]) -> Vec<u8> {
+    let w16 = |v: u16| if le { v.to_le_bytes() } else { v.to_be_bytes() };
+    let w32 = |v: u32| if le { v.to_le_bytes() } else { v.to_be_bytes() };
+    let mut b = w16(entries.len() as u16).to_vec();
+    for &(tag, value) in entries {
+        b.extend_from_slice(&w16(tag));
+        b.extend_from_slice(&w16(4));
+        b.extend_from_slice(&w32(1));
+        b.extend_from_slice(&w32(value));
+    }
+    b.extend_from_slice(&w32(0));
+    b
 }
 
-struct Tb {
-    b: Vec<u8>,
+// Sample input: "Nikon\0" 02 10 00 00, then "MM\0*" and the IFD offset 8 at +10, then the IFD; offsets count from that header.
+pub(crate) fn nikon_note(le: bool, entries: &[(u16, u32)]) -> Vec<u8> {
+    let mut b = b"Nikon\x00\x02\x10\x00\x00".to_vec();
+    b.extend_from_slice(order_bytes(le));
+    b.extend_from_slice(&if le { 42u16.to_le_bytes() } else { 42u16.to_be_bytes() });
+    b.extend_from_slice(&if le { 8u32.to_le_bytes() } else { 8u32.to_be_bytes() });
+    b.extend_from_slice(&ifd_of(le, entries));
+    b
 }
 
-impl Tb {
-    fn new() -> Tb {
-        let mut b = b"II*\x00".to_vec();
-        b.extend_from_slice(&[0, 0, 0, 0]);
-        Tb { b }
-    }
-
-    fn w16(&mut self, v: u16) {
-        let b = v.to_le_bytes();
-        self.b.extend_from_slice(&b);
-    }
-
-    fn w32(&mut self, v: u32) {
-        let b = v.to_le_bytes();
-        self.b.extend_from_slice(&b);
-    }
-
-    fn blob(&mut self, data: &[u8]) -> u32 {
-        let off = self.b.len() as u32;
-        self.b.extend_from_slice(data);
-        off
-    }
-
-    fn ifd(&mut self, entries: Vec<(u16, Ev)>, next: u32) -> u32 {
-        let off = self.b.len() as u32;
-        self.w16(entries.len() as u16);
-        let mut patches: Vec<(usize, Vec<u8>)> = Vec::new();
-        for (tag, ev) in entries {
-            self.w16(tag);
-            match ev {
-                Ev::B(typ, data) => {
-                    let cnt = (data.len() / tsize(typ)) as u32;
-                    self.w16(typ);
-                    self.w32(cnt);
-                    if data.len() <= 4 {
-                        let mut pad = data;
-                        pad.resize(4, 0);
-                        self.b.extend_from_slice(&pad);
-                    } else {
-                        patches.push((self.b.len(), data));
-                        self.w32(0);
-                    }
-                }
-            }
-        }
-        self.w32(next);
-        for (pos, data) in patches {
-            let doff = self.b.len() as u32;
-            self.b.extend_from_slice(&data);
-            self.b[pos..pos + 4].copy_from_slice(&doff.to_le_bytes());
-        }
-        off
-    }
-
-    fn set_ifd0(&mut self, off: u32) {
-        self.b[4..8].copy_from_slice(&off.to_le_bytes());
-    }
+// Sample input: "OLYMPUS\0" "II" 03 00, then the IFD at +12; offsets count from the note's start.
+fn olympus_note(le: bool, entries: &[(u16, u32)]) -> Vec<u8> {
+    let mut b = b"OLYMPUS\x00".to_vec();
+    b.extend_from_slice(order_bytes(le));
+    b.extend_from_slice(&[0x03, 0x00]);
+    b.extend_from_slice(&ifd_of(le, entries));
+    b
 }
 
-fn jpeg(w: u16, h: u16) -> Vec<u8> {
-    let mut v = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x08, 1, 2, 3, 4, 5, 6];
-    v.extend_from_slice(&[0xFF, 0xC0, 0x00, 0x0B, 0x08]);
-    v.extend_from_slice(&h.to_be_bytes());
-    v.extend_from_slice(&w.to_be_bytes());
-    v.extend_from_slice(&[0x01, 0x01, 0x22, 0x00, 0xFF, 0xD9]);
-    v
+// Sample input: "OLYMP\0" 01 00, then the IFD at +8 in the file's byte order; offsets count from the file.
+fn olymp_note(le: bool, entries: &[(u16, u32)]) -> Vec<u8> {
+    let mut b = b"OLYMP\x00\x01\x00".to_vec();
+    b.extend_from_slice(&ifd_of(le, entries));
+    b
 }
 
-fn write(d: &TestDir, name: &str, bytes: &[u8]) -> std::path::PathBuf {
-    let p = d.join(name);
-    std::fs::write(&p, bytes).unwrap();
-    p
+// Sample input: "AOC\0" "MM", then the IFD at +6; offsets count from the file.
+pub(crate) fn aoc_note(le: bool, entries: &[(u16, u32)]) -> Vec<u8> {
+    let mut b = b"AOC\x00".to_vec();
+    b.extend_from_slice(order_bytes(le));
+    b.extend_from_slice(&ifd_of(le, entries));
+    b
 }
 
-#[test]
-fn a_nikon_makernote_is_bounded_and_walked() {
-    let d = TestDir::new("rawnikon");
-    let mut t = Tb::new();
-    let pic = jpeg(500, 400);
-    // The note's sub-IFD stores offsets relative to the note's own TIFF header, so the
-    // JPEG offset is patched once the layout is known; the placeholder keeps it unique.
-    const PLACE: u32 = 0xDEADBEEF;
-    let mut note = b"Nikon\x00\x02\x10II*\x00".to_vec();
-    // The sub-IFD follows the note's 8-byte TIFF header directly.
-    note.extend_from_slice(&8u32.to_le_bytes());
-    note.extend_from_slice(&2u16.to_le_bytes());
-    note.extend_from_slice(&ex::JPEG_OFF.to_le_bytes());
-    note.extend_from_slice(&4u16.to_le_bytes());
-    note.extend_from_slice(&1u32.to_le_bytes());
-    note.extend_from_slice(&PLACE.to_le_bytes());
-    note.extend_from_slice(&ex::JPEG_LEN.to_le_bytes());
-    note.extend_from_slice(&4u16.to_le_bytes());
-    note.extend_from_slice(&1u32.to_le_bytes());
-    note.extend_from_slice(&(pic.len() as u32).to_le_bytes());
-    note.extend_from_slice(&0u32.to_le_bytes());
-    let ifd0 = t.ifd(vec![(ex::MAKER_NOTE, Ev::B(7, note))], 0);
+// A TIFF whose IFD0 holds the note, with the JPEG after it; the note's placeholder becomes offset(note start, JPEG start).
+fn with_note(le: bool, note_le: bool, note: &[u8], pic: &[u8], offset: impl Fn(u64, u64) -> u64) -> (Vec<u8>, u64) {
+    let mut t = Tb::new(le);
+    let ifd0 = t.ifd(vec![(ex::MAKER_NOTE, Ev::B(7, note.to_vec()))], 0);
     t.set_ifd0(ifd0);
-    let jb = t.blob(&pic);
-    let bytes = t.b.clone();
-    let noff = bytes.windows(6).position(|w| w == b"Nikon\x00").expect("the note is in the file") as u64;
-    let rel = (jb as u64).checked_sub(noff + 8).expect("the JPEG sits past the note") as u32;
-    let at = bytes.windows(4).position(|w| w == &PLACE.to_le_bytes()).expect("one placeholder");
-    t.b[at..at + 4].copy_from_slice(&rel.to_le_bytes());
-    let p = write(&d, "a.nef", &t.b);
-    let ctx = Ctx::open(&p).expect("opens");
-    let (cands, _) = inspect_file(&mut { ctx }).expect("walks");
-    assert_eq!(cands, vec![(jb as u64, pic.len() as u64)]);
+    let jb = t.blob(pic) as u64;
+    let note_at = at(&t.b, &note[..8]);
+    patch(&mut t.b, note_le, offset(note_at, jb) as u32);
+    (t.b, jb)
+}
+
+fn candidates(d: &TestDir, name: &str, bytes: &[u8]) -> Vec<(u64, u64)> {
+    let p = write(d, name, bytes);
+    inspect_file(&mut Ctx::open(&p).expect("opens")).expect("walks").0
 }
 
 #[test]
-fn an_olympus_makernote_preview_counts_from_its_own_header() {
-    // Exact layout, every offset known: header(8) IFD0(18) note(46) JPEG.
-    // Note TIFF header at 34, sub-IFD at 42, JPEG at 72, so start reads 38.
-    let d = TestDir::new("rawoly");
+fn a_nikon_type_3_note_has_its_tiff_header_at_plus_10() {
+    let d = TestDir::new("rawnikon");
+    let pic = jpeg(500, 400);
+    for le in [true, false] {
+        let note = nikon_note(le, &[(ex::JPEG_OFF, PLACE), (ex::JPEG_LEN, pic.len() as u32)]);
+        let (bytes, jb) = with_note(le, le, &note, &pic, |n, jb| jb - (n + 10));
+        assert_eq!(candidates(&d, "a.nef", &bytes), vec![(jb, pic.len() as u64)], "little-endian {}", le);
+    }
+}
+
+#[test]
+fn a_new_olympus_note_counts_its_offsets_from_its_own_start() {
+    let d = TestDir::new("rawolynew");
     let pic = jpeg(300, 220);
-    let mut b = b"II*\x00".to_vec();
-    b.extend_from_slice(&8u32.to_le_bytes());
-    b.extend_from_slice(&1u16.to_le_bytes());
-    b.extend_from_slice(&ex::MAKER_NOTE.to_le_bytes());
-    b.extend_from_slice(&7u16.to_le_bytes());
-    b.extend_from_slice(&46u32.to_le_bytes());
-    b.extend_from_slice(&26u32.to_le_bytes());
-    b.extend_from_slice(&0u32.to_le_bytes());
-    b.extend_from_slice(b"OLYMPUS\x00II*\x00");
-    b.extend_from_slice(&8u32.to_le_bytes());
-    b.extend_from_slice(&2u16.to_le_bytes());
-    b.extend_from_slice(&ex::OLY_PREVIEW_START.to_le_bytes());
-    b.extend_from_slice(&4u16.to_le_bytes());
-    b.extend_from_slice(&1u32.to_le_bytes());
-    b.extend_from_slice(&38u32.to_le_bytes());
-    b.extend_from_slice(&ex::OLY_PREVIEW_LEN.to_le_bytes());
-    b.extend_from_slice(&4u16.to_le_bytes());
-    b.extend_from_slice(&1u32.to_le_bytes());
-    b.extend_from_slice(&(pic.len() as u32).to_le_bytes());
-    b.extend_from_slice(&0u32.to_le_bytes());
-    assert_eq!(b.len(), 72, "the JPEG lands exactly where the relative start says");
-    b.extend_from_slice(&pic);
-    let p = write(&d, "a.orf", &b);
-    let ctx = Ctx::open(&p).expect("opens");
-    let (cands, _) = inspect_file(&mut { ctx }).expect("walks");
-    assert_eq!(cands, vec![(72u64, pic.len() as u64)]);
+    // The note's byte order may differ from the file's, since it names its own.
+    for (file_le, note_le) in [(true, true), (true, false), (false, true)] {
+        let note = olympus_note(note_le, &[(ex::OLY_PREVIEW_START, PLACE), (ex::OLY_PREVIEW_LEN, pic.len() as u32)]);
+        let (bytes, jb) = with_note(file_le, note_le, &note, &pic, |n, jb| jb - n);
+        assert_eq!(candidates(&d, "a.orf", &bytes), vec![(jb, pic.len() as u64)], "file {} note {}", file_le, note_le);
+    }
 }
 
 #[test]
-fn unknown_and_truncated_notes_are_skipped_not_entered() {
+fn an_old_olymp_note_counts_its_offsets_from_the_file() {
+    let d = TestDir::new("rawolyold");
+    let pic = jpeg(300, 220);
+    for le in [true, false] {
+        let note = olymp_note(le, &[(ex::OLY_PREVIEW_START, PLACE), (ex::OLY_PREVIEW_LEN, pic.len() as u32)]);
+        let (bytes, jb) = with_note(le, le, &note, &pic, |_, jb| jb);
+        assert_eq!(candidates(&d, "a.orf", &bytes), vec![(jb, pic.len() as u64)], "little-endian {}", le);
+    }
+}
+
+#[test]
+fn a_pentax_aoc_note_names_its_byte_order_and_counts_from_the_file() {
+    let d = TestDir::new("rawaoc");
+    let pic = jpeg(160, 120);
+    for (file_le, note_le) in [(false, false), (true, true), (true, false)] {
+        let note = aoc_note(note_le, &[(ex::JPEG_OFF, PLACE), (ex::JPEG_LEN, pic.len() as u32)]);
+        let (bytes, jb) = with_note(file_le, note_le, &note, &pic, |_, jb| jb);
+        assert_eq!(candidates(&d, "a.pef", &bytes), vec![(jb, pic.len() as u64)], "file {} note {}", file_le, note_le);
+    }
+}
+
+// Offers the note at `at` with `total` bytes to the walk, answering every read it made and what it collected.
+fn offer(data: &[u8], at: u64, total: u32) -> (Vec<(u64, usize)>, Vec<(u64, u64)>) {
+    let mut src = Log { data, reads: Vec::new() };
+    let mut w = Walk::new();
+    let loc = IfdLoc { base: 0, little_endian: true, depth: 0, in_sub_ifd: false, index_in_chain: 0, is_exif: false, olympus_base: None };
+    let _ = makernote(&mut src, &mut w, &loc, 7, total, &(at as u32).to_le_bytes());
+    (src.reads, w.cands)
+}
+
+// The note's bytes then filler that would form a walkable IFD, so a read past the value would not simply fail.
+fn after(note: &[u8]) -> Vec<u8> {
+    let mut data = note.to_vec();
+    data.extend_from_slice(&ifd_of(true, &[(ex::JPEG_OFF, 0), (ex::JPEG_LEN, 64)]));
+    data.resize(data.len() + 64, 0);
+    data
+}
+
+#[test]
+fn a_note_is_skipped_after_one_signature_read_or_none() {
+    // Too short for any header: no read at all.
+    let short = after(b"Nikon\x00\x02");
+    assert!(offer(&short, 0, 7).0.is_empty(), "7 bytes is skipped before a read");
+    // No known signature: the signature window is read once and the note is not entered.
+    let junk = after(b"PENTAXFAKE-not-a-tiff-header!!");
+    assert_eq!(offer(&junk, 0, 30).0, vec![(0, 30)]);
+    // The control: a whole note reads past its signature, so the log tells entering from skipping.
+    let whole = nikon_note(true, &[(ex::JPEG_OFF, 0), (ex::JPEG_LEN, 64)]);
+    assert!(offer(&whole, 0, whole.len() as u32).0.len() > 1, "an entered note reads its TIFF header and IFD");
+}
+
+#[test]
+fn a_note_cut_inside_its_header_is_never_read_past_its_value() {
+    // Nikon cut in the middle of its TIFF header: 14 of the 18 bytes the header and its first count need.
+    let nikon = after(&nikon_note(true, &[(ex::JPEG_OFF, 0), (ex::JPEG_LEN, 64)])[..14]);
+    assert_eq!(offer(&nikon, 0, 14), (vec![(0, 14)], vec![]));
+    // Olympus cut after its byte order and version: the IFD count at +12 lies outside the note.
+    let olympus = after(&olympus_note(true, &[(ex::OLY_PREVIEW_START, 0), (ex::OLY_PREVIEW_LEN, 64)])[..12]);
+    assert_eq!(offer(&olympus, 0, 12), (vec![(0, 12)], vec![]));
+    // Pentax with no byte order after its signature is not a note this walk knows.
+    let aoc = after(b"AOC\x00\x00\x00\x00\x00\x00\x00\x00\x00");
+    assert_eq!(offer(&aoc, 0, 12), (vec![(0, 12)], vec![]));
+}
+
+#[test]
+fn a_skipped_note_is_not_a_failure() {
     let d = TestDir::new("rawnoteskip");
-    let mut t = Tb::new();
-    // No known signature: the note is skipped and the file still walks.
+    let mut t = Tb::new(true);
     let ifd0 = t.ifd(vec![(ex::MAKER_NOTE, Ev::B(7, b"PENTAXFAKE-not-a-tiff-header!!".to_vec()))], 0);
     t.set_ifd0(ifd0);
-    let p = write(&d, "a.pef", &t.b);
-    let ctx = Ctx::open(&p).expect("opens");
-    let (cands, _) = inspect_file(&mut { ctx }).expect("a skipped note is not a failure");
-    assert!(cands.is_empty());
-    // A Nikon signature cut before its TIFF header: skipped, never read past the value.
-    let mut t2 = Tb::new();
-    let i2 = t2.ifd(vec![(ex::MAKER_NOTE, Ev::B(7, b"Nikon\x00\x02".to_vec()))], 0);
-    t2.set_ifd0(i2);
-    let p2 = write(&d, "b.nef", &t2.b);
-    let ctx2 = Ctx::open(&p2).expect("opens");
-    assert!(inspect_file(&mut { ctx2 }).is_some());
+    assert!(candidates(&d, "a.pef", &t.b).is_empty());
 }

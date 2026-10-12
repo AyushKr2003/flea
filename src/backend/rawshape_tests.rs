@@ -1,11 +1,11 @@
-// One synthetic file per RAW kind PLAN item 3 names, laid out the way the walker reads that kind, each with the
-// preview it must choose; rawhard_tests.rs sweeps the same table. The layouts are synthetic, not camera files.
+// One synthetic file per RAW kind, laid out the way the walker reads it, each with the preview it must choose; rawhard_tests.rs sweeps the table.
 use crate::backend::rawbmff::tests::{cr3, tiff as cmt_tiff};
 use crate::backend::rawembed::{self, Ctx, Preview, RawFacts};
 use crate::backend::rawexif as ex;
+use crate::backend::rawnote::tests::{aoc_note, nikon_note};
 use crate::backend::rawraf::tests::{jpeg_with_app1, raf};
 use crate::backend::rawtiff::inspect_file;
-use crate::backend::rawtiff::tests::{jpeg, jpeg_sof, write, Ev, Tb};
+use crate::backend::rawtiff::tests::{at, jpeg, jpeg_sof, pair, patch, strip, write, Ev, Tb, PLACE};
 use crate::backend::testdir::TestDir;
 
 pub(crate) struct Shape {
@@ -14,26 +14,9 @@ pub(crate) struct Shape {
     pub want: Preview,
 }
 
-// Where the preview's bytes sit in the finished file, so no offset is worked out by hand.
-fn at(bytes: &[u8], needle: &[u8]) -> u64 {
-    bytes.windows(needle.len()).position(|w| w == needle).expect("the bytes are in the file") as u64
-}
-
 fn shape(kind: &'static str, bytes: Vec<u8>, jpg: &[u8], width: u32, height: u32) -> Shape {
     let want = Preview { offset: at(&bytes, jpg), length: jpg.len() as u64, width, height };
     Shape { kind, bytes, want }
-}
-
-fn pair(off: u32, len: usize) -> Vec<(u16, Ev)> {
-    vec![(ex::JPEG_OFF, Ev::T(4, off)), (ex::JPEG_LEN, Ev::T(4, len as u32))]
-}
-
-fn strip(off: u32, len: usize, compression: u32) -> Vec<(u16, Ev)> {
-    vec![
-        (ex::STRIP_OFF, Ev::T(4, off)),
-        (ex::STRIP_LEN, Ev::T(4, len as u32)),
-        (ex::COMPRESSION, Ev::T(3, compression)),
-    ]
 }
 
 fn cat(a: Vec<(u16, Ev)>, b: Vec<(u16, Ev)>) -> Vec<(u16, Ev)> {
@@ -42,34 +25,6 @@ fn cat(a: Vec<(u16, Ev)>, b: Vec<(u16, Ev)>) -> Vec<(u16, Ev)> {
 
 fn text(tag: u16, s: &str) -> (u16, Ev) {
     (tag, Ev::B(2, format!("{}\0", s).into_bytes()))
-}
-
-// A MakerNote's own TIFF block: header, then one IFD of LONG tags, in the order the file uses.
-fn note_tiff(le: bool, entries: &[(u16, u32)]) -> Vec<u8> {
-    let w16 = |v: u16| if le { v.to_le_bytes() } else { v.to_be_bytes() };
-    let w32 = |v: u32| if le { v.to_le_bytes() } else { v.to_be_bytes() };
-    let mut b = if le { b"II".to_vec() } else { b"MM".to_vec() };
-    b.extend_from_slice(&w16(42));
-    b.extend_from_slice(&w32(8));
-    b.extend_from_slice(&w16(entries.len() as u16));
-    for &(tag, value) in entries {
-        b.extend_from_slice(&w16(tag));
-        b.extend_from_slice(&w16(4));
-        b.extend_from_slice(&w32(1));
-        b.extend_from_slice(&w32(value));
-    }
-    b.extend_from_slice(&w32(0));
-    b
-}
-
-const PLACE: u32 = 0xDEAD_BEEF;
-
-// A note's sub-IFD counts from the note's own TIFF header, so its offset is patched once the layout is fixed.
-fn patch(bytes: &mut [u8], le: bool, value: u32) {
-    let from = if le { PLACE.to_le_bytes() } else { PLACE.to_be_bytes() };
-    let to = if le { value.to_le_bytes() } else { value.to_be_bytes() };
-    let i = at(bytes, &from) as usize;
-    bytes[i..i + 4].copy_from_slice(&to);
 }
 
 fn cr2() -> Shape {
@@ -106,8 +61,7 @@ fn nef() -> Shape {
 // The preview rides in a Nikon MakerNote with its own TIFF header; IFD1 holds only the thumbnail.
 fn nrw() -> Shape {
     let (big, thumb) = (jpeg(1600, 1200), jpeg(160, 120));
-    let mut note = b"Nikon\x00\x02\x10".to_vec();
-    note.extend_from_slice(&note_tiff(true, &[(ex::JPEG_OFF, PLACE), (ex::JPEG_LEN, big.len() as u32)]));
+    let note = nikon_note(true, &[(ex::JPEG_OFF, PLACE), (ex::JPEG_LEN, big.len() as u32)]);
     let mut t = Tb::new(true);
     let exif = t.ifd(vec![(ex::MAKER_NOTE, Ev::B(7, note))], 0);
     let to = t.blob(&thumb);
@@ -119,7 +73,7 @@ fn nrw() -> Shape {
     t.set_ifd0(i0);
     let bo = t.blob(&big);
     let note_at = at(&t.b, b"Nikon\x00\x02\x10");
-    patch(&mut t.b, true, (bo as u64 - (note_at + 8)) as u32);
+    patch(&mut t.b, true, (bo as u64 - (note_at + 10)) as u32);
     shape("nrw", t.b, &big, 1600, 1200)
 }
 
@@ -191,8 +145,7 @@ fn rw2() -> Shape {
 // Pentax: a big-endian file with the preview in a SubIFD and a thumbnail in an "AOC" MakerNote.
 fn pef() -> Shape {
     let (big, thumb) = (jpeg(1024, 768), jpeg(160, 120));
-    let mut note = b"AOC\x00".to_vec();
-    note.extend_from_slice(&note_tiff(false, &[(ex::JPEG_OFF, PLACE), (ex::JPEG_LEN, thumb.len() as u32)]));
+    let note = aoc_note(false, &[(ex::JPEG_OFF, PLACE), (ex::JPEG_LEN, thumb.len() as u32)]);
     let mut t = Tb::new(false);
     let bo = t.blob(&big);
     let exif = t.ifd(vec![(ex::MAKER_NOTE, Ev::B(7, note))], 0);
@@ -208,8 +161,7 @@ fn pef() -> Shape {
     );
     t.set_ifd0(i0);
     let to = t.blob(&thumb);
-    let note_at = at(&t.b, b"AOC\x00");
-    patch(&mut t.b, false, (to as u64 - (note_at + 4)) as u32);
+    patch(&mut t.b, false, to);
     shape("pef", t.b, &big, 1024, 768)
 }
 

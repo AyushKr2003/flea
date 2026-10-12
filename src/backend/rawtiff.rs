@@ -1,6 +1,4 @@
-// The TIFF/IFD walk shared by CR2 NEF NRW ARW SR2 DNG ORF RW2 PEF, because every one of
-// them is a TIFF header followed by IFD chains: IFD0 and its chain, SubIFDs, the EXIF IFD,
-// and a MakerNote only when it carries its own TIFF header. One bounded walker serves all.
+// The TIFF/IFD walk shared by CR2 NEF NRW ARW SR2 DNG ORF RW2 PEF: IFD0 and its chain, SubIFDs, the EXIF IFD and the MakerNotes rawnote can bound.
 use crate::backend::rawembed::{Ctx, RawFacts};
 use crate::backend::rawexif as ex;
 
@@ -66,8 +64,7 @@ impl Walk {
     }
 }
 
-// Where one IFD sits: its TIFF header, byte order, nesting, chain position, and whether an
-// Olympus note owns it, in one value rather than a parameter list.
+// Where one IFD sits: the base its offsets count from, byte order, nesting, chain position and Olympus owner, in one value.
 pub(crate) struct IfdLoc {
     pub base: u64,
     pub little_endian: bool,
@@ -187,10 +184,10 @@ pub(crate) fn walk_ifd<S: Src>(src: &mut S, w: &mut Walk, loc: &IfdLoc, ifd: u64
             t if t == ex::STRIP_LEN => strip.1 = ex::one_u32(src, base, le, typ, cnt, val),
             t if t == ex::COMPRESSION => strip.2 = ex::one_u32(src, base, le, typ, cnt, val),
             t if t == ex::RW2_JPGFROMRAW && (typ == 1 || typ == 7) => {
-                if let Some((ex::Val::At(off, n), total)) = ex::locate(base, le, typ, cnt, val) {
-                    // The tag's value bytes are the JPEG; an inline one is too short to be one.
-                    if total >= 20 {
-                        rw2 = Some((off, n as u64));
+                // The tag's value bytes are the JPEG, which can be far past MAX_VALUE.
+                if let Some((off, n)) = ex::blob_at(base, le, cnt, val) {
+                    if n >= 20 {
+                        rw2 = Some((off, n));
                     }
                 }
             }
@@ -229,8 +226,7 @@ pub(crate) fn walk_ifd<S: Src>(src: &mut S, w: &mut Walk, loc: &IfdLoc, ifd: u64
         }
     }
     if let (Some(o), Some(n), Some(c)) = strip {
-        // Any lone JPEG-compressed strip is a preview, IFD0 included: Canon CR2 keeps its
-        // full-size preview exactly there, and the SOF rule keeps raw sensor data out.
+        // Any lone JPEG-compressed strip is a preview, IFD0 included (Canon CR2 keeps its full-size one there); the SOF rule keeps raw data out.
         if (c == 6 || c == 7) && n > 0 {
             if let Some(a) = loc.base.checked_add(o) {
                 w.cands.push((a, n));
@@ -241,7 +237,7 @@ pub(crate) fn walk_ifd<S: Src>(src: &mut S, w: &mut Walk, loc: &IfdLoc, ifd: u64
         w.cands.push(c);
     }
     if let (Some(s), Some(n)) = oly_pair {
-        // Olympus counts from its own MakerNote TIFF header, not the file's.
+        // Olympus previews count from the note's own base: the note start for the new layout, the file for OLYMP.
         if n > 0 {
             if let Some(ob) = loc.olympus_base {
                 if let Some(a) = ob.checked_add(s) {
@@ -268,7 +264,10 @@ pub(crate) fn walk_ifd<S: Src>(src: &mut S, w: &mut Walk, loc: &IfdLoc, ifd: u64
     let tail = abs
         .checked_add(2)?
         .checked_add((count as u64).checked_mul(ENTRY_LEN as u64)?)?;
-    let next = rd32(&src.get(tail, 4)?, le)? as u64;
+    // A next pointer that cannot be read ends the walk and keeps what it collected.
+    let Some(next) = src.get(tail, 4).and_then(|b| rd32(&b, le)).map(u64::from) else {
+        return Some(());
+    };
     if next != 0 {
         // The chain carries the position on: same depth, same home, next index.
         let child = IfdLoc {
@@ -308,8 +307,7 @@ pub(crate) fn inspect_file(ctx: &mut Ctx) -> Option<(Vec<(u64, u64)>, RawFacts)>
     Some((w.cands, w.facts))
 }
 
-// A bare TIFF in hand (a CR3 CMT box, a RAF APP1): an Exif TIFF carries EXIF tags at its
-// own top level, so the caller names what its first IFD is rather than the walk guessing.
+// A bare TIFF in hand (a CR3 CMT box, a RAF APP1); the caller names whether its first IFD is the EXIF one, the walk never guesses.
 pub(crate) fn facts_from_slice(data: &[u8], exif_top: bool) -> RawFacts {
     let mut src = SliceSrc::new(data);
     let mut w = Walk::new();
@@ -325,3 +323,7 @@ pub(crate) fn facts_from_slice(data: &[u8], exif_top: bool) -> RawFacts {
 #[cfg(test)]
 #[path = "rawtiff_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "rawwalk_tests.rs"]
+mod walk_tests;

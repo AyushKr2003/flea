@@ -1,6 +1,4 @@
-// The RAW container walker: given a camera RAW file, the largest embedded JPEG preview and
-// the photo's EXIF facts, reading headers and directory structures only, never image data.
-// Wiring into thumbnails, the preview, the protocol and the UI belongs to a later unit.
+// The RAW container walker: the largest embedded JPEG preview and the EXIF facts of a camera RAW, from headers and directories only.
 use crate::backend::regfile::open_regular;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom};
@@ -119,10 +117,7 @@ impl Ctx {
     }
 }
 
-// The candidate's first frame header, walked segment by segment through a Take capped at
-// the candidate's own span, so a typical preview costs its headers and never its pixels.
-// imagesize's walk cannot serve this: it answers dimensions but never the marker, and the
-// marker is the verdict here. Every pass consumes a Take byte or fails, so the span ends it.
+// Walks the candidate's segments through a Take capped at its span, so a preview costs its headers, and the SOF marker is the verdict.
 fn sof_first(r: &mut BufReader<std::io::Take<&mut File>>) -> Option<(u8, u32, u32)> {
     let mut two = [0u8; 2];
     r.read_exact(&mut two).ok()?;
@@ -177,8 +172,7 @@ fn sof_first(r: &mut BufReader<std::io::Take<&mut File>>) -> Option<(u8, u32, u3
     }
 }
 
-// A candidate is valid only if its first frame is Huffman-coded (SOF0, SOF1, SOF2). SOF3
-// and the arithmetic frames are how DNG and CR2 store raw sensor data, so they are refused.
+// A candidate is valid only if its first frame is Huffman-coded (SOF0, SOF1, SOF2); SOF3 and the arithmetic frames hold raw sensor data.
 pub(crate) fn preview_dims(ctx: &mut Ctx, off: u64, len: u64) -> Option<(u32, u32)> {
     // A span running past the end of the file is a cut file, not a preview.
     if len < 20 || ctx.sof_left == 0 || !matches!(off.checked_add(len), Some(end) if end <= ctx.len) {

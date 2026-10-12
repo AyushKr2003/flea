@@ -1,5 +1,4 @@
-// Synthetic fixtures: a tiny TIFF writer (little and big endian, chains, SubIFDs, EXIF)
-// plus a minimal valid JPEG (SOI + SOF0 + EOI), so every walk is proved without a camera file.
+// Synthetic fixtures: a tiny TIFF writer (either endian, chains, SubIFDs, EXIF) and a minimal valid JPEG, so no walk needs a camera file.
 use super::*;
 use crate::backend::rawembed::{self, Ctx, RawFacts};
 use crate::backend::rawexif as ex;
@@ -9,7 +8,7 @@ fn tsize(t: u16) -> usize {
     match t {
         1 | 2 | 6 | 7 => 1,
         3 | 8 => 2,
-        4 | 9 | 11 => 4,
+        4 | 9 | 11 | 13 => 4,
         _ => 8,
     }
 }
@@ -117,7 +116,49 @@ pub(crate) fn write(d: &TestDir, name: &str, bytes: &[u8]) -> std::path::PathBuf
     p
 }
 
-fn ctx_of(p: &std::path::Path) -> Ctx {
+pub(crate) fn pair(off: u32, len: usize) -> Vec<(u16, Ev)> {
+    vec![(ex::JPEG_OFF, Ev::T(4, off)), (ex::JPEG_LEN, Ev::T(4, len as u32))]
+}
+
+pub(crate) fn strip(off: u32, len: usize, compression: u32) -> Vec<(u16, Ev)> {
+    vec![
+        (ex::STRIP_OFF, Ev::T(4, off)),
+        (ex::STRIP_LEN, Ev::T(4, len as u32)),
+        (ex::COMPRESSION, Ev::T(3, compression)),
+    ]
+}
+
+// A byte source that logs every read as (offset, length), so a test can tell a note skipped before a read from one entered and failed.
+pub(crate) struct Log<'a> {
+    pub(crate) data: &'a [u8],
+    pub(crate) reads: Vec<(u64, usize)>,
+}
+
+impl Src for Log<'_> {
+    fn get(&mut self, off: u64, n: usize) -> Option<Vec<u8>> {
+        self.reads.push((off, n));
+        let end = off.checked_add(n as u64)?;
+        self.data.get(off as usize..end as usize).map(<[u8]>::to_vec)
+    }
+}
+
+// Where a run of bytes sits in a finished file, so no offset is worked out by hand.
+pub(crate) fn at(bytes: &[u8], needle: &[u8]) -> u64 {
+    bytes.windows(needle.len()).position(|w| w == needle).expect("the bytes are in the file") as u64
+}
+
+// A placeholder a fixture writes where an offset is known only once the layout is fixed.
+pub(crate) const PLACE: u32 = 0xDEAD_BEEF;
+
+// Replaces the one placeholder in the file with the offset the finished layout gives it.
+pub(crate) fn patch(bytes: &mut [u8], le: bool, value: u32) {
+    let from = if le { PLACE.to_le_bytes() } else { PLACE.to_be_bytes() };
+    let to = if le { value.to_le_bytes() } else { value.to_be_bytes() };
+    let i = at(bytes, &from) as usize;
+    bytes[i..i + 4].copy_from_slice(&to);
+}
+
+pub(crate) fn ctx_of(p: &std::path::Path) -> Ctx {
     Ctx::open(p).expect("a regular file opens")
 }
 
@@ -319,13 +360,7 @@ fn hostile_files_are_none_or_empty_and_never_panic() {
     let cyc = c.ifd(vec![(ex::MAKE, Ev::B(2, b"T\0".to_vec()))], 8);
     c.set_ifd0(cyc);
     let pc = write(&d, "cycle.cr2", &c.b);
-    assert!(inspect_file(&mut ctx_of(&pc)).is_some(), "a self-cycle terminates");    // Entry count 0xFFFF is refused before any allocation or loop.
-    let mut e = Tb::new(true);
-    let eo = e.b.len() as u32;
-    e.b.extend_from_slice(&0xFFFFu16.to_le_bytes());
-    e.set_ifd0(eo);
-    let pe = write(&d, "entries.cr2", &e.b);
-    assert!(inspect_file(&mut ctx_of(&pe)).is_none(), "0xFFFF entries walks no IFD");
+    assert!(inspect_file(&mut ctx_of(&pc)).is_some(), "a self-cycle terminates");
     // An empty file and a non-TIFF file walk nothing.
     let pz = write(&d, "empty.cr2", &[]);
     assert!(inspect_file(&mut ctx_of(&pz)).is_none());
@@ -338,8 +373,7 @@ fn a_two_ifd_cycle_collects_each_preview_once() {
     let mut t = Tb::new(true);
     let pic = jpeg(64, 48);
     let po = t.blob(&pic);
-    // A holds the pair and points at B; B points back at A. Without the visited set the
-    // pair would be collected on every lap until the IFD cap; with it, exactly once.
+    // A holds the pair and B points back at A: without the visited set the pair is collected on every lap.
     let a = t.ifd(
         vec![
             (ex::JPEG_OFF, Ev::T(4, po)),
@@ -354,21 +388,4 @@ fn a_two_ifd_cycle_collects_each_preview_once() {
     let p = write(&d, "cycle2.cr2", &t.b);
     let (cands, _) = inspect_file(&mut ctx_of(&p)).expect("a two-cycle terminates");
     assert_eq!(cands, vec![(po as u64, pic.len() as u64)]);
-}
-
-#[test]
-fn a_700_entry_ifd_is_walked_without_hanging() {
-    let d = TestDir::new("rawbudget");
-    let mut t = Tb::new(true);
-    let mut entries = Vec::new();
-    for i in 0..700u16 {
-        entries.push((0xC000 + i, Ev::B(7, vec![i as u8; 1500])));
-    }
-    let ifd0 = t.ifd(entries, 0);
-    t.set_ifd0(ifd0);
-    let p = write(&d, "hungry.cr2", &t.b);
-    let mut ctx = ctx_of(&p);
-    let _ = inspect_file(&mut ctx);
-    // Reaching here without hanging or panicking is the assertion; unknown tags cost
-    // no value reads, so the budget arm itself is proved at the Ctx level instead.
 }

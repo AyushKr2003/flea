@@ -1,5 +1,4 @@
-// EXIF tag numbers and the value decoders every RAW walk shares, because the facts are the
-// same TIFF tags whatever container carried them.
+// EXIF tag numbers and the value decoders every RAW walk shares, because the facts are the same TIFF tags in any container.
 use crate::backend::rawtiff::{rd16, rd32, Src};
 
 // A value longer than this is image data or a corrupt count, and no fact needs more.
@@ -30,16 +29,22 @@ pub(crate) const OLY_PREVIEW_LEN: u16 = 0x0102;
 
 // A displayed string is short, so anything longer is a corrupt count, not a name.
 const MAX_STR: usize = 64;
+const IFD_TYPE: u16 = 13;
 
-// Byte size of one TIFF value of this type; the table is TIFF 6.0 section 2.
+// Byte size of one TIFF value of this type; TIFF 6.0 section 2 plus type 13, a 4-byte IFD offset (ExifTool Exif.pm formatSize).
 pub(crate) fn type_size(typ: u16) -> Option<u64> {
     match typ {
         1 | 2 | 6 | 7 => Some(1),
         3 | 8 => Some(2),
-        4 | 9 | 11 => Some(4),
+        4 | 9 | 11 | IFD_TYPE => Some(4),
         5 | 10 | 12 => Some(8),
         _ => None,
     }
+}
+
+// Some writers type a SubIFD or ExifIFD pointer as 13, which reads as a LONG offset.
+fn is_long(typ: u16) -> bool {
+    typ == 4 || typ == IFD_TYPE
 }
 
 // Sample input: b"Canon\0\0\0  " (NUL-terminated, space-padded) answers "Canon".
@@ -84,7 +89,7 @@ pub(crate) fn small(bytes: &[u8], typ: u16, le: bool) -> Option<u32> {
         } else {
             u16::from_be_bytes([v[0], v[1]]) as u32
         })
-    } else if typ == 4 {
+    } else if is_long(typ) {
         let v = bytes.get(0..4)?;
         Some(if le {
             u32::from_le_bytes([v[0], v[1], v[2], v[3]])
@@ -98,7 +103,7 @@ pub(crate) fn small(bytes: &[u8], typ: u16, le: bool) -> Option<u32> {
 
 pub(crate) enum Val {
     Inline([u8; 4]),
-    At(u64, usize),
+    At(u64),
 }
 
 // The value's bytes, wherever they live: inline in the entry, or at an offset past it.
@@ -113,14 +118,22 @@ pub(crate) fn locate(base: u64, le: bool, typ: u16, cnt: u32, val: &[u8]) -> Opt
         Some((Val::Inline(inline), total as usize))
     } else {
         let off = rd32(val, le)? as u64;
-        Some((Val::At(base.checked_add(off)?, total as usize), total as usize))
+        Some((Val::At(base.checked_add(off)?), total as usize))
     }
+}
+
+// A byte blob's span with no MAX_VALUE cap, for a preview the file length bounds; four bytes or fewer ride inline and are too short to be one.
+pub(crate) fn blob_at(base: u64, le: bool, cnt: u32, val: &[u8]) -> Option<(u64, u64)> {
+    if cnt <= 4 {
+        return None;
+    }
+    Some((base.checked_add(rd32(val, le)? as u64)?, cnt as u64))
 }
 
 pub(crate) fn bytes_of<S: Src>(src: &mut S, v: Val, total: usize) -> Option<Vec<u8>> {
     match v {
         Val::Inline(a) => Some(a[..total].to_vec()),
-        Val::At(off, _) => src.get(off, total),
+        Val::At(off) => src.get(off, total),
     }
 }
 
@@ -133,7 +146,7 @@ pub(crate) fn one_u32<S: Src>(
     cnt: u32,
     val: &[u8],
 ) -> Option<u64> {
-    if cnt == 0 || (typ != 3 && typ != 4) {
+    if cnt == 0 || (typ != 3 && !is_long(typ)) {
         return None;
     }
     let (v, total) = locate(base, le, typ, cnt, val)?;
@@ -149,7 +162,7 @@ pub(crate) fn offsets<S: Src>(
     cnt: u32,
     val: &[u8],
 ) -> Option<Vec<u64>> {
-    if typ != 3 && typ != 4 {
+    if typ != 3 && !is_long(typ) {
         return None;
     }
     let n = (cnt as u64).min(MAX_PTRS as u64) as usize;
@@ -184,11 +197,10 @@ pub(crate) fn ascii_of<S: Src>(
         return None;
     }
     let (v, total) = locate(base, le, typ, cnt, val)?;
-    // A displayed string is short; only its head is ever read.
-    let capped = total.min(64);
+    let capped = total.min(MAX_STR);
     let b = match v {
         Val::Inline(a) => a[..capped].to_vec(),
-        Val::At(off, _) => src.get(off, capped)?,
+        Val::At(off) => src.get(off, capped)?,
     };
     Some(ascii(&b))
 }

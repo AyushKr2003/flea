@@ -1,6 +1,4 @@
-// Canon CR3: an ISO BMFF file, so the previews and the EXIF ride in uuid boxes rather
-// than in a TIFF: PRVW holds the large JPEG, and the moov uuid holds CMT1 (IFD0 TIFF),
-// CMT2 (EXIF TIFF) and THMB (small JPEG). Facts come from the CMT boxes, pixels from PRVW.
+// Canon CR3 is ISO BMFF: the large JPEG rides in a top-level PRVW uuid box, the CMT TIFFs and the small THMB JPEG in the uuid inside moov.
 use crate::backend::rawembed::{Ctx, RawFacts};
 use crate::backend::rawtiff;
 
@@ -14,8 +12,12 @@ const MOOV_UUID: [u8; 16] = [
 ];
 const MAX_BOXES: u32 = 64;
 const MAX_INNER: u32 = 32;
-// The PRVW tag sits at its payload's head; the scan is only for a writer that padded it.
-const PRVW_SCAN: u64 = 65_536;
+// Sample input after the usertype: 0, 1, PRVW size, "PRVW", 0, u16 1, width, height, u16 1, JPEG length(4), then FF D8.
+const PRVW_HEAD: u64 = 32;
+const PRVW_TAG_AT: usize = 12;
+const PRVW_LEN_AT: usize = 28;
+// A THMB payload is u32, width, height, JPEG length(4) and 4 reserved bytes, then the JPEG.
+const THMB_HEAD: u64 = 16;
 // CMT TIFFs are metadata, so anything larger is a corrupt size, not a directory.
 const MAX_CMT: u64 = 262_144;
 
@@ -24,26 +26,20 @@ fn be32(b: &[u8]) -> Option<u32> {
     Some(u32::from_be_bytes([s[0], s[1], s[2], s[3]]))
 }
 
-// The PRVW box is size(4) "PRVW"(4) JPEG(size-8); its bytes stay on disk until validated.
+// The PRVW payload names its JPEG length in a header, and the JPEG's bytes stay on disk until validated.
 fn prvw(ctx: &mut Ctx, off: u64, len: u64) -> Option<(u64, u64)> {
-    let b = ctx.read_blob(off, len.min(PRVW_SCAN))?;
-    let i = b.windows(4).position(|w| w == b"PRVW")?;
-    if i < 4 || i + 4 > b.len() {
+    if len <= PRVW_HEAD {
         return None;
     }
-    let size = be32(b.get(i - 4..i)?)? as u64;
-    if size < 8 {
+    let h = ctx.read_at(off, PRVW_HEAD as usize)?;
+    if h.get(PRVW_TAG_AT..PRVW_TAG_AT + 4)? != b"PRVW" {
         return None;
     }
-    let jl = size.checked_sub(8)?;
-    let jo = off.checked_add(i as u64)?.checked_add(4)?;
-    if jo.checked_add(jl)? > off.checked_add(len)? {
+    let jl = be32(h.get(PRVW_LEN_AT..)?)? as u64;
+    if jl == 0 || jl > len - PRVW_HEAD {
         return None;
     }
-    if jl == 0 {
-        return None;
-    }
-    Some((jo, jl))
+    Some((off.checked_add(PRVW_HEAD)?, jl))
 }
 
 fn merge(dst: &mut RawFacts, src: RawFacts) {
@@ -76,7 +72,45 @@ fn merge(dst: &mut RawFacts, src: RawFacts) {
     }
 }
 
-// The moov uuid payload is plain size+type boxes: CMT1, CMT2, THMB and whatever else.
+// The next plain size+type box at p inside end: its type and size, or None where the walk stops.
+fn child(ctx: &mut Ctx, p: u64, end: u64) -> Option<([u8; 4], u64)> {
+    let h = ctx.read_at(p, 8)?;
+    let size = be32(&h[0..4])? as u64;
+    if size < 8 || p.checked_add(size)? > end {
+        return None;
+    }
+    Some(([h[4], h[5], h[6], h[7]], size))
+}
+
+// The Canon uuid payload is plain size+type boxes: CMT1, CMT2, THMB and whatever else.
+fn canon(ctx: &mut Ctx, off: u64, len: u64, cands: &mut Vec<(u64, u64)>, facts: &mut RawFacts) {
+    let end = match off.checked_add(len) {
+        Some(e) if e <= ctx.len => e,
+        _ => return,
+    };
+    let mut p = off;
+    let mut n = 0u32;
+    while p < end && n < MAX_INNER {
+        n += 1;
+        let Some((kind, size)) = child(ctx, p, end) else {
+            break;
+        };
+        if kind == *b"CMT1" || kind == *b"CMT2" {
+            let dl = size - 8;
+            if dl > 0 && dl <= MAX_CMT {
+                if let Some(b) = ctx.read_blob(p + 8, dl) {
+                    // CMT1 is an IFD0 TIFF and CMT2 an EXIF TIFF, which is what their tops are read as.
+                    merge(facts, rawtiff::facts_from_slice(&b, kind == *b"CMT2"));
+                }
+            }
+        } else if kind == *b"THMB" && size > 8 + THMB_HEAD {
+            cands.push((p + 8 + THMB_HEAD, size - 8 - THMB_HEAD));
+        }
+        p += size;
+    }
+}
+
+// The Canon uuid is a child of the top-level moov box, found among the other children by its usertype.
 fn moov(ctx: &mut Ctx, off: u64, len: u64, cands: &mut Vec<(u64, u64)>, facts: &mut RawFacts) {
     let end = match off.checked_add(len) {
         Some(e) if e <= ctx.len => e,
@@ -86,32 +120,18 @@ fn moov(ctx: &mut Ctx, off: u64, len: u64, cands: &mut Vec<(u64, u64)>, facts: &
     let mut n = 0u32;
     while p < end && n < MAX_INNER {
         n += 1;
-        let Some(h) = ctx.read_at(p, 8) else {
+        let Some((kind, size)) = child(ctx, p, end) else {
             break;
         };
-        let size = match be32(&h[0..4]) {
-            Some(s) if s >= 8 => s as u64,
-            _ => break,
-        };
-        let bend = match p.checked_add(size) {
-            Some(e) if e <= end => e,
-            _ => break,
-        };
-        let kind = h.get(4..8);
-        if kind == Some(b"CMT1".as_slice()) || kind == Some(b"CMT2".as_slice()) {
-            let dl = size - 8;
-            if dl > 0 && dl <= MAX_CMT {
-                if let Some(b) = ctx.read_blob(p + 8, dl) {
-                    // CMT1 is an IFD0 TIFF and CMT2 an EXIF TIFF, which is what their tops are read as.
-                    merge(facts, rawtiff::facts_from_slice(&b, kind == Some(b"CMT2".as_slice())));
-                }
-            }
-        } else if kind == Some(b"THMB".as_slice()) {
-            if size > 8 {
-                cands.push((p + 8, size - 8));
+        if kind == *b"uuid" && size >= 8 + 16 {
+            let Some(ut) = ctx.read_at(p + 8, 16) else {
+                break;
+            };
+            if ut.as_slice() == MOOV_UUID {
+                canon(ctx, p + 24, size - 24, cands, facts);
             }
         }
-        p = bend;
+        p += size;
     }
 }
 
@@ -143,19 +163,18 @@ pub(crate) fn inspect_file(ctx: &mut Ctx) -> Option<(Vec<(u64, u64)>, RawFacts)>
             Some(e) if e <= ctx.len => e,
             _ => break,
         };
-        // A uuid box shorter than its header and usertype holds no payload.
-        if h.get(4..8) == Some(b"uuid".as_slice()) && size >= hlen + 16 {
+        let kind = h.get(4..8);
+        if kind == Some(b"moov".as_slice()) {
+            moov(ctx, pos + hlen, size - hlen, &mut cands, &mut facts);
+        } else if kind == Some(b"uuid".as_slice()) && size >= hlen + 16 {
+            // A uuid box shorter than its header and usertype holds no payload.
             let Some(ut) = ctx.read_at(pos + hlen, 16) else {
                 break;
             };
-            let poff = pos + hlen + 16;
-            let plen = size - hlen - 16;
             if ut.as_slice() == PRVW_UUID {
-                if let Some(c) = prvw(ctx, poff, plen) {
+                if let Some(c) = prvw(ctx, pos + hlen + 16, size - hlen - 16) {
                     cands.push(c);
                 }
-            } else if ut.as_slice() == MOOV_UUID {
-                moov(ctx, poff, plen, &mut cands, &mut facts);
             }
         }
         if end <= pos {

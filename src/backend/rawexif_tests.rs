@@ -1,4 +1,6 @@
 use super::*;
+use crate::backend::rawtiff::tests::Log;
+use crate::backend::rawtiff::SliceSrc;
 
 #[test]
 fn ascii_stops_at_nul_and_trims_spaces() {
@@ -9,15 +11,23 @@ fn ascii_stops_at_nul_and_trims_spaces() {
 }
 
 #[test]
-fn ascii_caps_at_64_bytes_on_a_char_boundary() {
-    let long = vec![b'A'; 200];
-    assert_eq!(ascii(&long).len(), 64);
-    let mut multi = vec![b'B'; 63];
+fn ascii_caps_at_the_string_cap_on_a_char_boundary() {
+    assert_eq!(ascii(&vec![b'A'; 200]).len(), MAX_STR);
+    // The cap falls inside a two-byte é, so the cut lands one byte earlier, before it.
+    let mut multi = vec![b'B'; MAX_STR - 1];
     multi.extend_from_slice("é".as_bytes());
     multi.extend_from_slice(b"tail");
-    let s = ascii(&multi);
-    assert!(s.len() <= 64 && s != "", "cut before the two-byte é, never through it");
-    assert!(String::from_utf8(s.into_bytes()).is_ok());
+    assert_eq!(ascii(&multi), "B".repeat(MAX_STR - 1));
+}
+
+#[test]
+fn ascii_of_reads_no_more_than_the_string_cap() {
+    let mut data = vec![0u8; 8];
+    data.extend_from_slice(&[b'A'; 200]);
+    let mut src = Log { data: &data, reads: Vec::new() };
+    let s = ascii_of(&mut src, 0, true, 2, 200, &8u32.to_le_bytes()).expect("a string reads");
+    assert_eq!(src.reads, vec![(8, MAX_STR)], "only the head of a 200-byte value is read");
+    assert_eq!(s.len(), MAX_STR);
 }
 
 #[test]
@@ -52,13 +62,31 @@ fn type_size_covers_the_tiff_table_and_refuses_the_rest() {
     for t in [3u16, 8] {
         assert_eq!(type_size(t), Some(2));
     }
-    for t in [4u16, 9, 11] {
+    for t in [4u16, 9, 11, 13] {
         assert_eq!(type_size(t), Some(4));
     }
     for t in [5u16, 10, 12] {
         assert_eq!(type_size(t), Some(8));
     }
     assert_eq!(type_size(0), None);
-    assert_eq!(type_size(13), None);
+    assert_eq!(type_size(14), None);
     assert_eq!(type_size(0xFFFF), None);
+}
+
+#[test]
+fn type_13_is_a_four_byte_ifd_offset_read_as_a_long() {
+    assert_eq!(small(&[0x64, 0x00, 0x00, 0x00], 13, true), Some(100));
+    let mut none = SliceSrc::new(&[]);
+    assert_eq!(one_u32(&mut none, 0, true, 13, 1, &[0x64, 0x00, 0x00, 0x00]), Some(100));
+    let mut data = vec![0u8; 8];
+    data.extend_from_slice(&[16, 0, 0, 0, 32, 0, 0, 0]);
+    let mut src = SliceSrc::new(&data);
+    assert_eq!(offsets(&mut src, 0, true, 13, 2, &8u32.to_le_bytes()), Some(vec![16, 32]));
+}
+
+#[test]
+fn a_byte_blob_past_the_value_cap_keeps_its_span() {
+    assert_eq!(blob_at(100, true, 200_000, &8u32.to_le_bytes()), Some((108, 200_000)));
+    assert_eq!(blob_at(100, true, 4, &[0; 4]), None, "an inline value is too short to be a JPEG");
+    assert_eq!(blob_at(u64::MAX, true, 200_000, &8u32.to_le_bytes()), None, "the offset sum overflows");
 }

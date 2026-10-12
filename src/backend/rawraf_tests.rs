@@ -1,16 +1,7 @@
-// Synthetic RAF: the 16-byte magic, big-endian JPEG offset at 84 and length at 88,
-// then a JPEG carrying an APP1 Exif TIFF, so the offset walk and the fact read are proved.
+// Synthetic RAF: the 16-byte magic, a big-endian JPEG offset at 84 and length at 88, then a JPEG carrying an APP1 Exif TIFF.
 use crate::backend::rawembed;
+use crate::backend::rawtiff::tests::{jpeg, write};
 use crate::backend::testdir::TestDir;
-
-fn jpeg(w: u16, h: u16) -> Vec<u8> {
-    let mut v = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x08, 1, 2, 3, 4, 5, 6];
-    v.extend_from_slice(&[0xFF, 0xC0, 0x00, 0x0B, 0x08]);
-    v.extend_from_slice(&h.to_be_bytes());
-    v.extend_from_slice(&w.to_be_bytes());
-    v.extend_from_slice(&[0x01, 0x01, 0x22, 0x00, 0xFF, 0xD9]);
-    v
-}
 
 // A minimal APP1 Exif TIFF: one IFD holding Make and Model as ASCII.
 fn exif_tiff() -> Vec<u8> {
@@ -61,12 +52,6 @@ pub(crate) fn raf(jpeg_off: u32, jpeg_len: u32, jpeg: &[u8]) -> Vec<u8> {
     b
 }
 
-fn write(d: &TestDir, name: &str, bytes: &[u8]) -> std::path::PathBuf {
-    let p = d.join(name);
-    std::fs::write(&p, bytes).unwrap();
-    p
-}
-
 #[test]
 fn a_raf_yields_its_jpeg_and_the_app1_facts() {
     let d = TestDir::new("rawrafok");
@@ -84,10 +69,10 @@ fn a_raf_yields_its_jpeg_and_the_app1_facts() {
 fn hostile_offsets_are_refused_and_junk_is_no_preview() {
     let d = TestDir::new("rawrafno");
     let j = jpeg(100, 80);
-    // Past EOF: the header names bytes the file does not hold, so None, never a wrapped read.
-    let mut past = raf(128, j.len() as u32, &j);
-    past.truncate(92);
-    let p = write(&d, "past.raf", &past);
+    // The header is whole and the offset is inside the file, but the JPEG's last byte is missing: None, never a wrapped read.
+    let whole = raf(128, j.len() as u32, &j);
+    assert!(rawembed::inspect(&write(&d, "whole.raf", &whole)).is_some(), "the control: the whole file inspects");
+    let p = write(&d, "past.raf", &whole[..whole.len() - 1]);
     assert!(rawembed::inspect(&p).is_none());
     // Zero length: recognised, nothing to validate.
     let p = write(&d, "zero.raf", &raf(128, 0, &[]));

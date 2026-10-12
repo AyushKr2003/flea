@@ -1,69 +1,27 @@
-// Dispatcher and choice tests: extension matching, format routing, the largest-valid
-// rule with its tie-break, and the hostile shapes the brief names, proved end to end.
+// Dispatcher and choice tests: extension matching, format routing, the largest-valid rule with its tie-break, and the hostile shapes, end to end.
 use super::*;
 use crate::backend::rawexif as ex;
+use crate::backend::rawtiff::tests::{jpeg, jpeg_sof, pair, strip, write, Ev, Tb};
 use crate::backend::testdir::TestDir;
 
-fn jpeg(w: u16, h: u16) -> Vec<u8> {
-    let mut v = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x08, 1, 2, 3, 4, 5, 6];
-    v.extend_from_slice(&[0xFF, 0xC0, 0x00, 0x0B, 0x08]);
-    v.extend_from_slice(&h.to_be_bytes());
-    v.extend_from_slice(&w.to_be_bytes());
-    v.extend_from_slice(&[0x01, 0x01, 0x22, 0x00, 0xFF, 0xD9]);
-    v
-}
-
-// A TIFF chaining one IFD per JPEG pair: header(8) + 4 IFDs (30 bytes each) + blobs.
-// Each pair lives in its own IFD because one IFD holds one pair, not four.
-fn tiff_chain(blobs: &[&[u8]]) -> Vec<u8> {
-    let mut b = b"II*\x00".to_vec();
-    b.extend_from_slice(&8u32.to_le_bytes());
-    let mut offs = Vec::new();
-    let mut at = 8u32;
-    for i in 0..blobs.len() {
-        let next = if i + 1 < blobs.len() { at + 30 } else { 0 };
-        b.extend_from_slice(&2u16.to_le_bytes());
-        for tag in [0x0201u16, 0x0202] {
-            b.extend_from_slice(&tag.to_le_bytes());
-            b.extend_from_slice(&4u16.to_le_bytes());
-            b.extend_from_slice(&1u32.to_le_bytes());
-            offs.push(b.len());
-            b.extend_from_slice(&0u32.to_le_bytes());
-        }
-        b.extend_from_slice(&next.to_le_bytes());
-        at = next;
+// A TIFF chaining one IFD per JPEG, blobs first and the IFDs last to first so each knows its next; answers the blob offsets too.
+fn tiff_chain(blobs: &[&[u8]]) -> (Vec<u8>, Vec<u32>) {
+    let mut t = Tb::new(true);
+    let offs: Vec<u32> = blobs.iter().map(|b| t.blob(b)).collect();
+    let mut next = 0;
+    for (off, blob) in offs.iter().zip(blobs).rev() {
+        next = t.ifd(pair(*off, blob.len()), next);
     }
-    let mut base = b.len() as u32;
-    for (i, blob) in blobs.iter().enumerate() {
-        b[offs[2 * i]..offs[2 * i] + 4].copy_from_slice(&base.to_le_bytes());
-        b[offs[2 * i + 1]..offs[2 * i + 1] + 4].copy_from_slice(&(blob.len() as u32).to_le_bytes());
-        base += blob.len() as u32;
-    }
-    for blob in blobs {
-        b.extend_from_slice(blob);
-    }
-    b
+    t.set_ifd0(next);
+    (t.b, offs)
 }
 
 // A TIFF with a single JPEG pair in IFD0: 8 + 2 + 24 + 4 = 38 bytes before the blob.
 pub(super) fn tiff_one(off: u32, len: u32) -> Vec<u8> {
-    let mut b = b"II*\x00".to_vec();
-    b.extend_from_slice(&8u32.to_le_bytes());
-    b.extend_from_slice(&2u16.to_le_bytes());
-    for (tag, v) in [(0x0201u16, off), (0x0202, len)] {
-        b.extend_from_slice(&tag.to_le_bytes());
-        b.extend_from_slice(&4u16.to_le_bytes());
-        b.extend_from_slice(&1u32.to_le_bytes());
-        b.extend_from_slice(&v.to_le_bytes());
-    }
-    b.extend_from_slice(&0u32.to_le_bytes());
-    b
-}
-
-fn write(d: &TestDir, name: &str, bytes: &[u8]) -> std::path::PathBuf {
-    let p = d.join(name);
-    std::fs::write(&p, bytes).unwrap();
-    p
+    let mut t = Tb::new(true);
+    let ifd0 = t.ifd(pair(off, len as usize), 0);
+    t.set_ifd0(ifd0);
+    t.b
 }
 
 // A baseline JPEG buried behind segs 60 KiB APP1 segments, so one validation walks ~segs*60 KiB.
@@ -81,17 +39,22 @@ pub(super) fn fat_jpeg(w: u16, h: u16, segs: usize) -> Vec<u8> {
     v
 }
 
-#[test]
-fn sof_validation_stops_when_the_mib_is_spent() {    let d = TestDir::new("rawsofbudget");
-    // Five mediums walk ~240 KiB each past the 1 MiB budget; the huge one riding last is
-    // never validated, so a medium wins despite losing on pixels. Exact byte arithmetic,
-    // not timing: four spends cannot reach the budget and five must exceed it.
-    let med = fat_jpeg(320, 240, 4);
+// Five JPEGs that each cost segs x 60 KB of SOF walk, then a huge one riding last; the winner shows whether the huge one was validated.
+fn winner_after_five_mediums(d: &TestDir, segs: usize) -> Option<(u32, u32)> {
+    let med = fat_jpeg(320, 240, segs);
     let huge = jpeg(640, 480);
     let blobs: [&[u8]; 6] = [&med, &med, &med, &med, &med, &huge];
-    let p = write(&d, "budget.cr2", &tiff_chain(&blobs));
-    let (preview, _) = inspect(&p).expect("inspects");
-    assert_eq!(preview.map(|v| (v.width, v.height)), Some((320, 240)));
+    let p = write(d, "budget.cr2", &tiff_chain(&blobs).0);
+    inspect(&p).expect("inspects").0.map(|v| (v.width, v.height))
+}
+
+#[test]
+fn sof_validation_stops_when_the_mib_is_spent() {
+    let d = TestDir::new("rawsofbudget");
+    // The control: five cheap walks leave the budget alone, so the sixth candidate is reached and wins on pixels.
+    assert_eq!(winner_after_five_mediums(&d, 1), Some((640, 480)));
+    // Four walks of ~240 KiB stay under the 1 MiB, the fifth runs out before its SOF, and nothing is left for the huge one.
+    assert_eq!(winner_after_five_mediums(&d, 4), Some((320, 240)));
 }
 
 #[test]
@@ -108,26 +71,21 @@ fn extensions_match_case_insensitively_on_the_basename() {
 fn the_largest_valid_preview_wins_and_length_breaks_ties() {
     let d = TestDir::new("rawchoice");
     let small = jpeg(160, 120);
-    let big = jpeg(640, 480);
-    let big2 = jpeg(640, 480);
-    // big2 carries a longer APP0 tail, so the same pixels lose nothing on length.
-    let mut big2 = big2;
-    big2.extend_from_slice(&[0u8; 64]);
+    let short = jpeg(640, 480);
+    // The same pixels with a longer tail, so only the length tells the two apart.
+    let mut long = jpeg(640, 480);
+    long.extend_from_slice(&[0u8; 64]);
     let junk = vec![7u8; 200];
-    let blobs: [&[u8]; 4] = [&small, &big, &big2, &junk];
-    let f = tiff_chain(&blobs);
-    // Blob i starts past the four IFDs at 8 + 4*30 = 128, laid back to back.
-    let mut want_off = 128u32;
-    let mut offs = Vec::new();
-    for blob in &blobs {
-        offs.push(want_off);
-        want_off += blob.len() as u32;
+    // The longer one rides both before and after the shorter, so neither a first-wins nor a last-wins chooser passes.
+    let cases: [([&[u8]; 4], usize); 2] = [([&small, &long, &short, &junk], 1), ([&small, &short, &long, &junk], 2)];
+    for (n, (blobs, winner)) in cases.iter().enumerate() {
+        let (f, offs) = tiff_chain(blobs);
+        let p = write(&d, &format!("choice{}.cr2", n), &f);
+        let pv = inspect(&p).expect("inspects").0.expect("a valid candidate exists");
+        assert_eq!((pv.width, pv.height), (640, 480), "case {}", n);
+        assert_eq!(pv.length, long.len() as u64, "case {}: equal pixels break the tie by length", n);
+        assert_eq!(pv.offset, offs[*winner] as u64, "case {}", n);
     }
-    let p = write(&d, "choice.cr2", &f);    let (preview, _) = inspect(&p).expect("inspects");
-    let pv = preview.expect("a valid candidate exists");
-    assert_eq!((pv.width, pv.height), (640, 480));
-    assert_eq!(pv.length, big2.len() as u64, "equal pixels break the tie by length");
-    assert_eq!(pv.offset, offs[2] as u64);
 }
 
 #[test]
@@ -143,14 +101,24 @@ fn a_non_jpeg_candidate_is_quietly_skipped() {
 }
 
 #[test]
-fn overflow_and_past_eof_candidates_validate_to_nothing() {
-    let d = TestDir::new("rawoverflow");
-    // offset + length overflows u64 and points past the file at once.
-    let mut f = tiff_one(u32::MAX, u32::MAX);
-    f.extend_from_slice(&[0u8; 16]);
-    let p = write(&d, "over.cr2", &f);
-    let (preview, _) = inspect(&p).expect("inspects");
-    assert!(preview.is_none(), "an unrepresentable range is not read");
+fn a_length_past_the_end_of_the_file_is_no_preview_and_a_u64_overflow_is_not_read() {
+    let d = TestDir::new("rawpasteof");
+    let pic = jpeg(640, 480);
+    // The JPEG is whole and in place; only the length field names bytes the file does not hold.
+    let with_len = |len: u32| {
+        let mut f = tiff_one(38, len);
+        f.extend_from_slice(&pic);
+        f
+    };
+    let exact = write(&d, "exact.cr2", &with_len(pic.len() as u32));
+    assert!(inspect(&exact).expect("inspects").0.is_some(), "the exact length is a preview");
+    for len in [pic.len() as u32 + 1, u32::MAX] {
+        let p = write(&d, "past.cr2", &with_len(len));
+        assert!(inspect(&p).expect("inspects").0.is_none(), "length {} runs past the end", len);
+    }
+    // TIFF fields are u32, so only a direct call reaches a sum past u64.
+    let mut ctx = Ctx::open(&exact).expect("opens");
+    assert_eq!(preview_dims(&mut ctx, u64::MAX - 10, 100), None);
 }
 
 #[test]
@@ -180,110 +148,20 @@ fn unknown_bytes_empty_and_directories_inspect_to_none() {
     assert!(inspect(&short).is_none(), "a header fragment is not a TIFF");
 }
 
-// A frame JPEG with a chosen SOF marker: C0 baseline, C3 lossless raw, and the rest.
-fn jpeg_sof(marker: u8, w: u16, h: u16) -> Vec<u8> {
-    let mut v = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x08, 1, 2, 3, 4, 5, 6];
-    v.extend_from_slice(&[0xFF, marker, 0x00, 0x0B, 0x08]);
-    v.extend_from_slice(&h.to_be_bytes());
-    v.extend_from_slice(&w.to_be_bytes());
-    v.extend_from_slice(&[0x01, 0x01, 0x22, 0x00, 0xFF, 0xD9]);
-    v
-}
-
-enum Sv {
-    N(u16, u32),
-    A(Vec<u32>),
-}
-
-// Minimal LE strip-chain builder for the shaped fixtures: blobs first, then chained IFDs.
-struct Sb {
-    b: Vec<u8>,
-}
-
-impl Sb {
-    fn new() -> Sb {
-        let mut b = b"II*\x00".to_vec();
-        b.extend_from_slice(&8u32.to_le_bytes());
-        Sb { b }
-    }
-
-    fn blob(&mut self, data: &[u8]) -> u32 {
-        let off = self.b.len() as u32;
-        self.b.extend_from_slice(data);
-        off
-    }
-
-    fn ifd(&mut self, entries: Vec<(u16, Sv)>, next: u32) -> u32 {
-        let off = self.b.len() as u32;
-        self.b.extend_from_slice(&(entries.len() as u16).to_le_bytes());
-        let mut patches = vec![];
-        for (tag, ev) in entries {
-            self.b.extend_from_slice(&tag.to_le_bytes());
-            match ev {
-                Sv::N(typ, v) => {
-                    self.b.extend_from_slice(&typ.to_le_bytes());
-                    self.b.extend_from_slice(&1u32.to_le_bytes());
-                    if typ == 3 {
-                        self.b.extend_from_slice(&(v as u16).to_le_bytes());
-                        self.b.extend_from_slice(&[0, 0]);
-                    } else {
-                        self.b.extend_from_slice(&v.to_le_bytes());
-                    }
-                }
-                Sv::A(vs) => {
-                    self.b.extend_from_slice(&4u16.to_le_bytes());
-                    self.b.extend_from_slice(&(vs.len() as u32).to_le_bytes());
-                    patches.push((self.b.len(), vs));
-                    self.b.extend_from_slice(&0u32.to_le_bytes());
-                }
-            }
-        }
-        self.b.extend_from_slice(&next.to_le_bytes());
-        for (pos, vs) in patches {
-            let doff = self.b.len() as u32;
-            for v in vs {
-                self.b.extend_from_slice(&v.to_le_bytes());
-            }
-            self.b[pos..pos + 4].copy_from_slice(&doff.to_le_bytes());
-        }
-        off
-    }
-
-    fn set_ifd0(&mut self, off: u32) {
-        self.b[4..8].copy_from_slice(&off.to_le_bytes());
-    }
-}
-
-fn strip(off: u32, len: u32, comp: u32, nst: Option<u32>) -> Vec<(u16, Sv)> {
-    let mut v = vec![
-        (ex::STRIP_OFF, Sv::N(4, off)),
-        (ex::STRIP_LEN, Sv::N(4, len)),
-        (ex::COMPRESSION, Sv::N(3, comp)),
-    ];
-    if let Some(n) = nst {
-        // NewSubfileType rides along as inert data: the SOF rule alone decides, 0 or 1.
-        v.push((0x00FE, Sv::N(4, n)));
-    }
-    v
-}
-
 #[test]
 fn a_cr2_shaped_file_prefers_ifd0_and_refuses_sof3() {
     let d = TestDir::new("rawcr2shape");
     let big = jpeg(1620, 1080);
     let small = jpeg(160, 120);
     let raw = jpeg_sof(0xC3, 3000, 2000);
-    let mut t = Sb::new();
+    let mut t = Tb::new(true);
     let bo = t.blob(&big);
     let so = t.blob(&small);
     let ro = t.blob(&raw);
-    let i3 = t.ifd(strip(ro, raw.len() as u32, 6, None), 0);
-    let i2 = t.ifd(vec![(0x0100, Sv::N(4, 100))], i3);
-    let i1 = t.ifd(
-        vec![(ex::JPEG_OFF, Sv::N(4, so)), (ex::JPEG_LEN, Sv::N(4, small.len() as u32))],
-        i2,
-    );
-    let i0 = t.ifd(strip(bo, big.len() as u32, 6, None), i1);
+    let i3 = t.ifd(strip(ro, raw.len(), 6), 0);
+    let i2 = t.ifd(vec![(0x0100, Ev::T(4, 100))], i3);
+    let i1 = t.ifd(pair(so, small.len()), i2);
+    let i0 = t.ifd(strip(bo, big.len(), 6), i1);
     t.set_ifd0(i0);
     let p = write(&d, "a.cr2", &t.b);
     let (preview, _) = inspect(&p).expect("inspects");
@@ -298,23 +176,35 @@ fn a_dng_shaped_file_prefers_the_reduced_subifd_over_sof3_raw() {
     let prev = jpeg(800, 600);
     let raw = jpeg_sof(0xC3, 2000, 1500);
     let flat = vec![9u8; 64];
-    let mut t = Sb::new();
+    let mut t = Tb::new(true);
     let fo = t.blob(&flat);
     let ro = t.blob(&raw);
     let po = t.blob(&prev);
-    let a = t.ifd(strip(ro, raw.len() as u32, 7, Some(0)), 0);
-    let b = t.ifd(strip(po, prev.len() as u32, 7, Some(1)), 0);
-    let ifd0 = t.ifd(
-        vec![
-            (ex::STRIP_OFF, Sv::N(4, fo)),
-            (ex::STRIP_LEN, Sv::N(4, flat.len() as u32)),
-            (ex::COMPRESSION, Sv::N(3, 1)),
-            (ex::SUB_IFD, Sv::A(vec![a, b])),
-        ],
-        0,
-    );
+    // NewSubfileType rides along as inert data: the SOF rule alone decides, 0 or 1.
+    let mut sub_a = strip(ro, raw.len(), 7);
+    sub_a.push((0x00FE, Ev::T(4, 0)));
+    let mut sub_b = strip(po, prev.len(), 7);
+    sub_b.push((0x00FE, Ev::T(4, 1)));
+    let a = t.ifd(sub_a, 0);
+    let b = t.ifd(sub_b, 0);
+    let mut head = strip(fo, flat.len(), 1);
+    head.push((ex::SUB_IFD, Ev::B(4, [a.to_le_bytes(), b.to_le_bytes()].concat())));
+    let ifd0 = t.ifd(head, 0);
     t.set_ifd0(ifd0);
     let p = write(&d, "a.dng", &t.b);
     let (preview, _) = inspect(&p).expect("inspects");
     assert_eq!(preview.map(|v| (v.width, v.height)), Some((800, 600)));
+}
+
+#[test]
+fn a_panasonic_jpgfromraw_over_64_kib_is_a_candidate() {
+    let d = TestDir::new("rawrw2big");
+    let pic = fat_jpeg(1920, 1080, 2);
+    assert!(pic.len() > 65_536, "the fixture is past the value cap");
+    let mut t = Tb { b: b"IIU\x00\x08\x00\x00\x00".to_vec(), le: true };
+    let i0 = t.ifd(vec![(ex::RW2_JPGFROMRAW, Ev::B(7, pic.clone()))], 0);
+    t.set_ifd0(i0);
+    let p = write(&d, "big.rw2", &t.b);
+    let pv = inspect(&p).expect("inspects").0.expect("a JPEG past the value cap is still the preview");
+    assert_eq!((pv.width, pv.height, pv.length), (1920, 1080, pic.len() as u64));
 }

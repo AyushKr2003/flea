@@ -1,5 +1,4 @@
-// Fujifilm RAF: 16 magic bytes, then big-endian u32 JPEG offset at 84 and length at 88.
-// The photo's facts ride in that JPEG's own APP1 Exif TIFF, which is read bounded in memory.
+// Fujifilm RAF: after 16 magic bytes, a big-endian u32 JPEG offset at 84 and length at 88; the facts ride in that JPEG's APP1 Exif TIFF.
 use crate::backend::rawembed::{Ctx, RawFacts, JPEG_PREFIX};
 use crate::backend::rawtiff;
 
