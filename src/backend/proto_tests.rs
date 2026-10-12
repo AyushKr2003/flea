@@ -325,6 +325,13 @@ fn emits_an_error_line_naming_operation_and_path() {
 }
 
 #[test]
+fn a_devs_request_carries_the_paths_named_and_a_bare_one_carries_none() {
+    assert!(matches!(parse_request(r#"{"c":"devs","paths":["/","/home/gm","/odd, [dir]"]}"#),
+        Request::Devs { paths } if paths == ["/", "/home/gm", "/odd, [dir]"]));
+    assert!(matches!(parse_request(r#"{"c":"devs"}"#), Request::Devs { paths } if paths.is_empty()));
+}
+
+#[test]
 fn a_jump_request_carries_both_client_sources_and_a_bare_one_carries_none() {
     assert!(matches!(parse_request(r#"{"c":"jump","id":4,"favourites":["/home/gm/Projects"],"recent":["/home/gm/a, b.txt"]}"#),
         Request::Jump { id: 4, ranking: 0, favourites, recent } if favourites == ["/home/gm/Projects"] && recent == ["/home/gm/a, b.txt"]));

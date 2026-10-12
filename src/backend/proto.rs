@@ -85,6 +85,8 @@ pub enum Request {
     // Directive 71: op is "peers" for the flyout's own list and "send" for the transfer it chooses.
     LocalSend { op: String, peer: String, paths: Vec<String>, id: usize },
     TrashBrowse { line: String },
+    // The device of each path named, symlinks followed, for the drop verb of a target that is not the listing; see docs/protocol.md "devs".
+    Devs { paths: Vec<String> },
     // The path bar's folder jump: the favourites and recent files the client read, joined with zoxide's ranking.
     Jump { id: usize, ranking: usize, favourites: Vec<String>, recent: Vec<String> },
     // The system clipboard for files, owned across windows; see docs/protocol.md "clip".
@@ -284,6 +286,7 @@ pub fn parse_request(line: &str) -> Request {
             tag: field_str(line, "tag").unwrap_or_default(),
         },
         Some("tagstates") => Request::TagStates { rows: field_usize_array(line, "rows"), id: field_usize(line, "id").unwrap_or(0) },
+        Some("devs") => Request::Devs { paths: field_str_array(line, "paths") },
         Some("jump") => Request::Jump { id: field_usize(line, "id").unwrap_or(0), ranking: field_usize(line, "ranking").unwrap_or(0), favourites: field_str_array(line, "favourites"), recent: field_str_array(line, "recent") },
         Some("clipSet") => Request::ClipSet {
             op: field_str(line, "op").unwrap_or_default(),

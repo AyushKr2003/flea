@@ -1172,6 +1172,21 @@ check "with no zoxide installed its source is empty and nothing else changes" \
   "{\"t\":\"jumped\",\"id\":7,\"favourites\":[\"$D/sub\"],\"zoxide\":[],\"recent\":[\"$D\"],\"frecency\":{}" \
   "$(jump_run "$NO_ZOXIDE")"
 
+# devs through the real binary: a symlink answers the device of the directory it names (/proc is never on the sandbox's device), and a missing or relative path answers 0.
+DV_SB="$SB/devs"
+mkdir -p "$DV_SB"
+ln -s /proc "$DV_SB/link"
+devs_run() {
+  ( printf '{"c":"devs","paths":["%s","%s/link","%s/gone","."]}\n' "$DV_SB" "$DV_SB" "$DV_SB"
+    sleep 1
+    printf '{"c":"quit"}\n' ) | $BIN --backend 2>/dev/null | grep '"t":"devs"'
+}
+check "devs answers a symlink with its target's device and 0 for a path it cannot read" \
+  "{\"t\":\"devs\",\"devs\":{\"$DV_SB\":$(stat -c %d "$DV_SB"),\"$DV_SB/link\":$(stat -L -c %d "$DV_SB/link"),\"$DV_SB/gone\":0,\".\":0}}" \
+  "$(devs_run)"
+check "and the link's answer is not the device its own directory sits on" "differs" \
+  "$([ "$(stat -c %d "$DV_SB")" != "$(stat -L -c %d "$DV_SB/link")" ] && echo differs || echo same)"
+
 # One zoxide run per open, one ranking for both asks; a second run answers another folder so a rerun shows in the rows.
 COUNT_BIN="$SB/count-bin"
 mkdir -p "$COUNT_BIN"
