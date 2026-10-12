@@ -239,6 +239,8 @@ case_cap_dropmods() {
     grep -aq "PROBE drop#1 .*formats=.*application/x-flea-rows" "$probe_log" || fail "cap_dropmods: the plain drop carried no Flea marker"
     grep -aq "PROBE drop#1 chose=copy" "$probe_log" || fail "cap_dropmods: the plain drop chose no copy"
     printf 'CAP_DROPMODS c1: foreign drop offers %s\n' "$offered1"
+    # Focus followed the drag onto the probe and stays there, so key() would refuse the seek's keys.
+    cap_dropmods_focus_pid "$(flea_pid)" "$dir"
     seek_row_named "probe2.txt" || fail "cap_dropmods: probe2.txt never came under the cursor"
     src_pt=$(ipc rowCentre "$(row_index_of probe2.txt)"); read -r cx cy <<< "$src_pt"
     read -r wx wy ww wh <<< "$(window_box)"

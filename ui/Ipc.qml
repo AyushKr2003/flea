@@ -141,7 +141,7 @@ QtObject {
         function statusActivityState(): string {
             var card = root.bar.transferCard
             return JSON.stringify({activities: root.bar.activities.map(function(activity) {
-                var owner = activity.owner === root.bar.dragFeedbackOwner ? activity.owner.pane : activity.owner
+                var owner = activity.owner === root.bar.dragFeedbackOwner ? activity.owner.host : activity.owner
                 return {id: activity.transfer.id, text: activity.text, running: activity.transfer.running,
                     cancelling: activity.cancelling, ownerPath: owner.path, ownerFocused: owner.paneFocused}
             }), errors: root.bar.errors.length, notice: root.bar.notice,
