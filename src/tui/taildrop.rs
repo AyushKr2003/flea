@@ -350,10 +350,14 @@ mod tests {
                 if taildrop.child.is_none() { break; }
                 std::thread::sleep(std::time::Duration::from_millis(25));
             }
-            taildrop.error.clone()
+            (taildrop.error.clone(), taildrop.peers.iter().map(|peer| peer.label.clone()).collect::<Vec<_>>())
         };
-        assert_eq!(after(Box::new(io::repeat(b'x'))), TOO_LARGE);
-        assert_eq!(after(Box::new(io::repeat(b'x').take(MAX_STATUS_BYTES))), "Taildrop status could not be read", "a reply at the limit is read, and is not JSON");
+        // A valid status padded with spaces to an exact size, so only the size differs between the legs.
+        let status = br#"{"BackendState":"Running","Self":{"Capabilities":["https://tailscale.com/cap/file-sharing"]},"Peer":{"a":{"Online":true,"TaildropTarget":1,"HostName":"alpha"}}}"#;
+        let padded = |size: u64| -> Box<dyn Read + Send> { Box::new(io::Cursor::new(status.as_slice()).chain(io::repeat(b' ')).take(size)) };
+        assert_eq!(after(Box::new(io::repeat(b'x'))), (TOO_LARGE.to_string(), Vec::new()));
+        assert_eq!(after(padded(MAX_STATUS_BYTES + 1)), (TOO_LARGE.to_string(), Vec::new()), "one byte past the limit is refused");
+        assert_eq!(after(padded(MAX_STATUS_BYTES)), (String::new(), vec!["alpha".to_string()]), "a reply at the limit is read whole and parsed");
     }
     #[test]
     fn provider_state_overrides_stale_peer_eligibility() {

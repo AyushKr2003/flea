@@ -214,13 +214,13 @@ function runPresets(check) {
         Keymap.setPreset(running)
     }
     check("no preset draws an empty hint row or a sentence with a key missing from it", hollow.join(","), "")
-    // Every shipped preset binds the four actions, so the omitting branches only run on a table that leaves them unbound.
+    // Every shipped preset binds the four actions, so the omitting branches only run on a table that leaves them unbound; the control first shows the bound rows draw both hints.
+    var hintCount = function (test) { return Settings.rows("display", displayState(TextSize.follow(), 14)).concat(Settings.rows("preview", { data: { preview: { loadOn: "manual" } } })).filter(function (r) { return r.kind === "hint" && test.test(String(r.label)) }).length }
+    check("with the keys bound both hints draw, so the zeros below are not vacuous", Math.min(hintCount(/step through them/), hintCount(/loads the current selection/)) >= 1, true)
     withoutKeys(["textSizeUp", "textSizeDown", "textSizeReset", "loadPreview"], function () {
-        var drawn = Settings.rows("display", displayState(TextSize.follow(), 14)).concat(Settings.rows("preview", { data: { preview: { loadOn: "manual" } } }))
-        var hints = drawn.filter(function (r) { return r.kind === "hint" }).map(function (r) { return String(r.label) })
-        check("an unbound text size key leaves its hint out of Display", hints.filter(function (l) { return l.indexOf("step through them") >= 0 }).length, 0)
-        check("an unbound load key leaves its hint out of Preview", hints.filter(function (l) { return l.indexOf("loads the current selection") >= 0 }).length, 0)
-        check("no hint left on those panes is empty or holed", hints.filter(function (l) { return l.trim().length === 0 || /^ | {2}| [.,;]/.test(l) }).length, 0)
+        check("an unbound text size key leaves its hint out of Display", hintCount(/step through them/), 0)
+        check("an unbound load key leaves its hint out of Preview", hintCount(/loads the current selection/), 0)
+        check("no hint left on those panes is empty or holed", hintCount(/^\s*$|^ | {2}| [.,;]/), 0)
         check("an override with no reset key announces the size alone", TextSize.announce({ mode: 16 }, 14), "Text size 16px")
     })
     var menuRows = Settings.menuRows([], true)

@@ -4095,6 +4095,8 @@ The join of that Tab ring with the Dual Tab walk keeps one ring in `ui/js/Focus.
 
 `WindowBody.focusPane` hands the pane the keyboard left its list back whichever side is taken, so a click on either pane never leaves the other holding a rail, bar or strip stop the ring would resume from; it moves two ceilings with `wc -l`, `ui/WindowBody.qml` 809 to 810 for the second pane's reset and `tests/js/focus.js` 834 to 837 for the Dual rig.
 
+The refused-stop wording moves one ceiling, re-derived with `wc -l`: `src/backend/menu_registry.rs` 569 to 570 for the test-only `REFUSED_KILL` errno hook in `terminate`, which lets the wording test drive a refused stop through `Registry::cancel` without sending a signal.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
