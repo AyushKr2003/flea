@@ -30,6 +30,8 @@ ShellRoot {
     readonly property var sampleRow: ({ n: "contrast.txt", i: "text-x-generic", p: 420, d: false, s: 13, m: 1758835200, t: false, k: 0, v: 0 })
 
     property int checks: 0
+    // Palettes whose lit Red swatch differs from its plain one: only there can the lit swatch check tell the two apart.
+    property int litSwatchDiffers: 0
     property int ticks: 0
     property var failures: []
 
@@ -136,6 +138,7 @@ ShellRoot {
         var swatches = Object.keys(Flea.Theme.tag.menuLitColors)
         for (var k = 0; k < swatches.length; k++)
             shell.atLeast(name, "tag swatch " + swatches[k], "wash", Flea.Theme.tag.menuLitColors[swatches[k]] ? Contrast.ratio(String(Flea.Theme.tag.menuLitColors[swatches[k]]), lit) : 99, Flea.Theme.frameContrast)
+        if (Flea.Theme.tag.menuLitColors.Red && String(Flea.Theme.tag.menuLitColors.Red) !== String(Flea.Theme.tag.menuColors.Red)) shell.litSwatchDiffers += 1
         shell.check(name + " a lit tag row draws the lit swatch colours", litTagRow.tagItem !== null && (!Flea.Theme.tag.menuLitColors.Red || shell.swatchOf(litTagRow) === String(Flea.Theme.tag.menuLitColors.Red)), true)
         // Not gated: the picked row's fill beside the cursor wash, both over the surface, for the ruling on a pick list.
         var pickedWash = Probe.find(pickedRow, "menuWash")
@@ -168,6 +171,7 @@ ShellRoot {
         shell.check("a wash ground keeps the colour's own alpha", shell.groundOf({ color: Qt.rgba(1, 1, 1, 0.5), opacity: 0.5 }, "#000000"), "#404040")
         for (var i = 0; i < Palettes.PALETTES.length; i++)
             shell.sweep(Palettes.PALETTES[i])
+        shell.check("some palette lifts its lit Red swatch, so the lit swatch check can go red", shell.litSwatchDiffers > 0, true)
         shell.finish()
     }
 
