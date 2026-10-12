@@ -1213,6 +1213,25 @@ check "a whole ask naming its provisional ask runs zoxide once" "1" "$(wc -l < "
 check "and both asks answer with the same ranking" "2" "$(printf '%s\n' "$pair_answers" | grep -c "\"zoxide\":\[\"$D/ranked\"\],\"recent\":\[\],\"frecency\":{\"$D/ranked\":9.5}")"
 jump_pair '{"c":"jump","id":8,"favourites":[],"recent":[]}' > /dev/null
 check "an ask naming no ranking runs zoxide itself" "2" "$(wc -l < "$SB/zoxide-runs" | tr -d ' ')"
+# Properties on a folder counts through the menu worker's own dispatch (src/backend/menu_actions.rs), which a direct serve() call in Rust never reaches.
+# A snapshot answers nothing, so its step waits a fixed second; each contents then reads the folder that snapshot captured.
+sandbox_make "$CO_SB"
+mkdir -p "$CO_SB/count/box/deep"
+printf 'abcd' > "$CO_SB/count/box/four.txt"
+printf 'ab' > "$CO_SB/count/box/deep/two.txt"
+out=$(backend_steps "$(printf '{"c":"list","path":"%s/count","first":10}' "$CO_SB")" 'wait:"t":"rows"' \
+  '{"c":"menuaction","op":"snapshot","id":6,"rows":[0]}' 'do:sleep 1' \
+  '{"c":"menuaction","op":"contents","id":6}' 'wait:"op":"contents"' \
+  '{"c":"menuaction","op":"contents","id":7}' 'wait:"id":7' \
+  '{"c":"menuaction","op":"snapshot","id":8,"rows":[0]}' 'do:sleep 1' \
+  '{"c":"menuaction","op":"contents","id":8}' 'wait:"id":8,"op":"contents"')
+check "contents through the worker ends on one done line for the captured folder" '"id":6,"op":"contents","ok":true' "$(echo "$out" | grep -oE '"id":6,"op":"contents","ok":true')"
+check "that line counts every entry below the folder and ends the count" '"items":3,"partial":false,"done":true' "$(echo "$out" | grep '"id":6,"op":"contents"' | grep -oE '"items":[0-9]+,"partial":(true|false),"done":(true|false)')"
+check "a contents naming another id than the snapshot is refused and not walked" '"id":7,"op":"contents","ok":false' "$(echo "$out" | grep -oE '"id":7,"op":"contents","ok":false')"
+check "and the worker keeps serving the next snapshot after both" '"id":8,"op":"contents","ok":true' "$(echo "$out" | grep -oE '"id":8,"op":"contents","ok":true')"
+check "a folder that ends inside the cadence answers that one line and no other" "1" "$(echo "$out" | grep -c '"id":6,"op":"contents"')"
+sandbox_remove "$CO_SB"
+
 
 # The flasher's wire: the probe runs on fixture bytes and no case opens a block device for writing.
 mkdir -p "$SB/flash"

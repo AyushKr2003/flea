@@ -9018,6 +9018,8 @@ The Dual divider keeps its grab through a real drag: the divider zone overlays t
 
 The dual pane Quick Look fix qualifies the right pane's `previewLoader` binding in `ui/WindowBody.qml` as `primaryPane.previewLoader`, since the bare name resolved to the right pane's own property and stayed null. `tests/startup-units.txt` keeps its 170 units while its `bytes` line moves from 1596965 to 1596977, the 12 characters of `primaryPane.`, and `tests/quicklook-firstframe.qml` moves its ceiling from 438 to 452 for the dual leg's checks.
 
+The Contents walk's mount charge moves one ceiling, re-derived with `wc -l`: `src/backend/dirsize.rs` 400 to 412, for the lines in `list_into` that look up a directory entry's device from the mount table before its metadata call, tell `entering` when it crosses onto another device and hand the walk back to the listed folder once that stat returns, so a hang in the stat that crosses into a mount is charged to that mount and a later sibling's is not. The remote walk's test seams (its pace and the silence that marks a mount) live in `src/backend/menucontents_seams.rs`.
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one
