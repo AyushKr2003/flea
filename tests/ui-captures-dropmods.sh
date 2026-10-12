@@ -41,30 +41,40 @@ cap_dropmods_before="[]"
 cap_dropmods_wait_s=15
 # A copy or move across two windows says its message after the transfer, as ui.sh wait_message allows.
 cap_dropmods_message_s=25
+cap_dropmods_file_s=15
+# The status activities of the newest window, or of the window whose qs pid is the one optional argument.
+cap_dropmods_status() {
+    if [[ -n "${1:-}" ]]; then cap_dropmods_ipc "$1" statusActivityState; else ipc statusActivityState; fi
+}
 cap_dropmods_mark() {
-    cap_dropmods_before=$(ipc statusActivityState | jq -ce '[.activities[].id]') || fail "cap_dropmods: statusActivityState unreadable at the mark"
+    [[ "$#" -le 1 ]] || fail "cap_dropmods: mark takes at most a pid, got $#"
+    cap_dropmods_before=$(cap_dropmods_status "${1:-}" | jq -ce '[.activities[].id]') || fail "cap_dropmods: statusActivityState unreadable at the mark"
 }
 # Same-window rows keep the floor signal dark, so a status activity reading the whole line, one not seen at the mark, shows the hover.
+# With a pid the line is read from that window, and a miss says where the pointer stood, since a drag over the wrong spot of a window reads as no line.
 cap_dropmods_wait_line() {
-    [[ "$#" -eq 1 ]] || fail "cap_dropmods: wait_line needs a line, got $#"
-    local want="$1" seen="" end=$((SECONDS + cap_dropmods_wait_s))
+    [[ "$#" -ge 1 && "$#" -le 2 ]] || fail "cap_dropmods: wait_line needs a line and at most a pid, got $#"
+    local want="$1" seen="" end=$((SECONDS + cap_dropmods_wait_s)) where=""
     while (( SECONDS < end )); do
-        seen=$(ipc statusActivityState 2>/dev/null | jq -r --arg w "$want" --argjson before "$cap_dropmods_before" \
+        seen=$(cap_dropmods_status "${2:-}" 2>/dev/null | jq -r --arg w "$want" --argjson before "$cap_dropmods_before" \
             '.activities[] | select(.running == false and (.id as $i | $before | index([$i]) | not)) | .text | select(. == $w)' 2>/dev/null | head -n 1 || true)
         [[ -n "$seen" ]] && return 0
         sleep 0.1
     done
-    fail "cap_dropmods: no drag line reading '$want' (status lines: $(ipc statusActivityState 2>/dev/null | jq -r '[.activities[].text] | join(" | ")' 2>/dev/null))"
+    [[ -z "${2:-}" ]] || where="; pointer $(hyprctl cursorpos 2>/dev/null || printf unavailable), window $2 box $(cap_dropmods_box "$2" 2>/dev/null || printf unavailable)"
+    fail "cap_dropmods: no drag line reading '$want' (status lines: $(cap_dropmods_status "${2:-}" 2>/dev/null | jq -r '[.activities[].text] | join(" | ")' 2>/dev/null)$where)"
 }
 # A press that lands on the parked probe starts no drag, so a probe covering the source point fails the case before the press.
 cap_dropmods_probe_clear_of() {
     [[ "$#" -eq 2 ]] || fail "cap_dropmods: probe_clear_of needs x and y, got $#"
-    local found
-    found=$(hyprctl clients -j 2>/dev/null | jq -er '[.[] | select(.title == "DropProbe")] | length') \
+    local clients found
+    clients=$(hyprctl clients -j 2>/dev/null) \
+        || fail "cap_dropmods: hyprctl clients was unreadable, so the parked probe could not be located"
+    found=$(jq -er '[.[] | select(.title == "DropProbe")] | length' <<< "$clients") \
         || fail "cap_dropmods: hyprctl clients was unreadable, so the parked probe could not be located"
     [[ "$found" == "1" ]] || fail "cap_dropmods: expected one parked DropProbe window, found $found"
-    hyprctl clients -j 2>/dev/null | jq -e --argjson x "$1" --argjson y "$2" '[.[] | select(.title == "DropProbe")] | .[0]
-        | (.at[0] <= $x and $x < .at[0] + .size[0] and .at[1] <= $y and $y < .at[1] + .size[1]) | not' >/dev/null \
+    jq -e --argjson x "$1" --argjson y "$2" '[.[] | select(.title == "DropProbe")] | .[0]
+        | (.at[0] <= $x and $x < .at[0] + .size[0] and .at[1] <= $y and $y < .at[1] + .size[1]) | not' <<< "$clients" >/dev/null \
         || fail "cap_dropmods: the parked probe covers the source point $1,$2, so the press would miss the row"
 }
 # ydotool key 29 is left Ctrl and 42 left Shift.
@@ -73,11 +83,13 @@ cap_dropmods_key() {
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key "$1:$2" >/dev/null 2>&1 || fail "cap_dropmods: key $1:$2 refused"
     sleep 0.3
 }
+# A second argument names the case's own directory to search on a miss, so a copy that landed elsewhere says where.
 cap_dropmods_wait_file() {
-    [[ "$#" -eq 1 ]] || fail "cap_dropmods: wait_file needs a path, got $#"
-    local end=$((SECONDS + 15))
+    [[ "$#" -ge 1 && "$#" -le 2 ]] || fail "cap_dropmods: wait_file needs a path and at most a root, got $#"
+    local end=$((SECONDS + cap_dropmods_file_s)) found=""
     while (( SECONDS < end )); do [[ -e "$1" ]] && return 0; sleep 0.1; done
-    fail "cap_dropmods: $1 never landed"
+    [[ -z "${2:-}" ]] || found=" (a file of that name exists at: $(find "$2" -name "${1##*/}" 2>/dev/null | tr '\n' ' '))"
+    fail "cap_dropmods: $1 never landed$found"
 }
 cap_dropmods_wait_gone() {
     [[ "$#" -eq 1 ]] || fail "cap_dropmods: wait_gone needs a path, got $#"
@@ -225,17 +237,20 @@ case_cap_dropmods() {
     cap_dropmods_wait_total "$win1" 6
     src_pt=$(cap_dropmods_row_centre "$win1" b1.txt); read -r cx cy <<< "$src_pt"
     cap_dropmods_focus_pid "$win1" "$dir"
+    cap_dropmods_mark "$win2"
     cap_dropmods_press_at "$cx" "$cy"
     cap_dropmods_steer_to "$tx" "$ty"
     sleep 0.5
     seen=$(cap_dropmods_active_pid)
     [[ "$seen" == "$win2" ]] || { cap_dropmods_abandon; fail "cap_dropmods: focus never followed the drag to window $win2 (the compositor focuses $seen), so no mid-drag key could reach it"; }
+    # Window 2 names the hovered row before Ctrl: a drop that lands elsewhere in it fails here, with the pointer and box, not as a missing file.
+    cap_dropmods_wait_line "Move 1 item to sub2 · ctrl at lift copies" "$win2"
     cap_dropmods_key 29 1
     cap_dropmods_release
     cap_dropmods_key 29 0
     cap_dropmods_wait_message "$win2" "Copied 1 item · z undoes"
     cap_dropmods_wait_file "$dir/b1.txt"
-    cap_dropmods_wait_file "$dir2/sub2/b1.txt"
+    cap_dropmods_wait_file "$dir2/sub2/b1.txt" "$dir2"
     printf 'CAP_DROPMODS b1: cross-window ctrl at drop copies a plain lift\n'
     rm -f "$dir2/sub2/b1.txt"
     src_pt=$(cap_dropmods_row_centre "$win1" b2.txt); read -r cx cy <<< "$src_pt"

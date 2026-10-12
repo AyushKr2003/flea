@@ -156,7 +156,7 @@ cap_drops_trash_remove() {
     [[ -n "$name" && "$name" != */* && "$dir" == /*/* && -f "${dir%/*}/$SANDBOX_MARKER" ]] || return 1
     sandbox_require "$dir"
     trash=$(cap_drops_trash_holding "$dir" "$name") || return 0
-    # Sample: Path=/run/media/u/USB/cap%20drops/Pasted image.png (absolute), or cap-drops/x.png relative to the mount top.
+    # Sample: Path=/run/media/u/USB/cap%20drops/Pasted%20image.png (absolute), or cap-drops/x.png relative to the mount top.
     # Names here hold letters, digits, spaces, hyphens and dots, so a space is the one escape trashinfo carries.
     path=$(sed -n 's/^Path=//p' "$trash/info/$name.trashinfo" 2>/dev/null | head -n 1)
     path=${path//%20/ }
@@ -184,6 +184,19 @@ cap_drops_trash_disarm() {
     if [[ -n "${cap_drops_trash_saved:-}" ]]; then eval "$cap_drops_trash_saved"; else trap - EXIT; fi
     cap_drops_trash_saved=""
 }
+cap_drops_column_s=15
+# A neighbour column lists its rows after the switch, so the case waits on the name it will drag; leaves the "|" joined names in cap_drops_names, so a miss fails the case itself and not a command substitution.
+cap_drops_wait_column() {
+    [[ "$#" -eq 2 ]] || fail "cap_drops: wait_column needs a slot and a name, got $#"
+    local end=$((SECONDS + cap_drops_column_s))
+    cap_drops_names=""
+    while (( SECONDS < end )); do
+        cap_drops_names=$(ipc columnNames "$1" 2>/dev/null || true)
+        printf '%s' "$cap_drops_names" | tr '|' '\n' | grep -qxF -- "$2" && return 0
+        sleep 0.1
+    done
+    fail "cap_drops: the $1 column never listed $2 (it drew: $cap_drops_names)"
+}
 case_cap_drops() {
     local dir="$fixture_root/cap-drops" menus_checks=0 cap_drops_wx=0 cap_drops_wy=0
     local i src_pt dst_pt cx cy tx ty count target names index ax ay aw ah img
@@ -196,6 +209,8 @@ case_cap_drops() {
     printf 'p one\n' > "$dir/Photos/p1.txt"
     printf 'p two\n' > "$dir/Photos/p2.txt"
     printf 'note\n' > "$dir/deep/outer/inner/note.txt"
+    printf 'p one\n' > "$dir/deep/outer/p1.txt"
+    printf 'p two\n' > "$dir/deep/outer/p2.txt"
     for i in $(seq -w 1 200); do printf 'pad\n' > "$dir/pad-$i.txt"; done
     seed_ui_state "$fixture_root/cap-drops-state" '{"keys":"default","view":"list"}'
     # On a box whose fixture shares HOME's device the pasted image's Delete goes to this data home, never the operator's.
@@ -314,19 +329,20 @@ case_cap_drops() {
     key -k BackSpace >/dev/null
     wait_path "$dir"
     cap_drops_wait_settled 203
-    seek_row_named "Photos" || fail "cap_drops: Photos never came under the cursor"
+    seek_row_named "deep" || fail "cap_drops: deep never came under the cursor for the columns leg"
     key -k Return >/dev/null
-    wait_path "$dir/Photos"
-    wait_listing 2
+    wait_path "$dir/deep"
+    wait_listing 1
     click_chrome columns
     settle
     [[ "$(ipc viewMode)" == "columns" ]] || fail "cap_drops: the chrome never reached columns"
-    [[ "$(ipc columnNames child)" == *"p1.txt"* ]] || fail "cap_drops: the child column never listed p1.txt"
-    names=$(ipc columnNames parent)
-    index=$(printf '%s' "$names" | tr '|' '\n' | grep -nx "deep" | head -n 1 | cut -d: -f1 || true)
-    [[ -n "$index" ]] || fail "cap_drops: the parent column never listed deep: $names"
+    # The child column draws the folder under the cursor (outer, row 0 of deep), never the files of the folder shown, and both neighbours list after the switch.
+    cap_drops_wait_column child p1.txt
+    index=$(printf '%s' "$cap_drops_names" | tr '|' '\n' | grep -nx "p1.txt" | head -n 1 | cut -d: -f1 || true)
+    src_pt=$(cap_drops_centre columnChildRowCentre "$((index - 1))")
+    cap_drops_wait_column parent deep
+    index=$(printf '%s' "$cap_drops_names" | tr '|' '\n' | grep -nx "deep" | head -n 1 | cut -d: -f1 || true)
     dst_pt=$(cap_drops_centre columnParentRowCentre "$((index - 1))")
-    src_pt=$(cap_drops_centre columnChildRowCentre 0)
     read -r tx ty <<< "$dst_pt"
     read -r cx cy <<< "$src_pt"
     cap_drops_press "$cx" "$cy"
@@ -341,7 +357,7 @@ case_cap_drops() {
     cap_drops_steer "$tx" "$ty"
     cap_drops_release
     [[ ! -e "$dir/deep/p1.txt" ]] || fail "cap_drops: the columns release moved p1.txt"
-    [[ -f "$dir/Photos/p1.txt" ]] || fail "cap_drops: the columns leg lost p1.txt"
+    [[ -f "$dir/deep/outer/p1.txt" ]] || fail "cap_drops: the columns leg lost p1.txt"
     cap_drops_fat_skip
     wl-copy --clear >/dev/null 2>&1 || true
     cap_drops_trash_disarm
