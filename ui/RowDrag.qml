@@ -30,6 +30,8 @@ Item {
 
     // The drop destination this delegate last recorded on the session, kept so leaving clears only its own record.
     property string recorded: ""
+    // False where the view answers drops from one shared area, so the row builds no DropArea.
+    property bool dropsLocal: true
 
     anchors.fill: parent
     // A peek column's row lifts through the session's peekSource; which drops it takes is the DropArea's call alone.
@@ -50,42 +52,56 @@ Item {
         onCentroidChanged: if (active) root.session.liftMoved(lift.centroid)
     }
 
-    DropArea {
+    // Built with the row where per-row areas answer, unbuilt where one shared area answers.
+    Loader {
         anchors.fill: parent
-        // A peek row takes drops only as a folder, through its dropScope; without one it would aim the drop at the pane's own folder.
-        enabled: root.pane !== null || (root.dropScope !== null && !!root.row && root.row.d === true && root.targetPane !== null && !root.targetPane.listInFlight)
-        keys: [DragOps.ROWS_MIME, "text/uri-list", "text/plain"]
-        onEntered: function (drag) {
-            // xw6: a tab drag carries only the private tab type and is never a file drop.
-            if (drag.getDataAsString(Tabs.TAB_MIME) !== "") {
-                drag.accepted = false
-                return
-            }
-            drag.accepted = root.enter(drag.getDataAsString(DragOps.ROWS_MIME), drag.urls,
-                                       drag.getDataAsString(DragOps.SHELF_MIME),
-                                       drag.getDataAsString("text/plain"), drag.proposedAction,
-                                       drag.getDataAsString(DragOut.keys.liftMime))
-            root.hoverAt(drag)
+        active: root.dropsLocal
+        sourceComponent: DropArea {
+            anchors.fill: parent
+            // A peek row takes drops only as a folder, through its dropScope; without one it would aim the drop at the pane's own folder.
+            enabled: root.pane !== null || (root.dropScope !== null && !!root.row && root.row.d === true && root.targetPane !== null && !root.targetPane.listInFlight)
+            keys: [DragOps.ROWS_MIME, "text/uri-list", "text/plain"]
+            onEntered: function (drag) { root.enterAt(drag, drag) }
+            onPositionChanged: function (drag) { root.moveAt(drag) }
+            onExited: root.leaveRow()
+            onDropped: function (drop) { root.dropAt(drop) }
         }
-        onPositionChanged: function (drag) {
-            if (root.lit()) {
-                root.session.showTarget(root.row.n, root.destDev)
-                root.hoverAt(drag)
-            }
+    }
+
+    // A drop area's entrance, at a point in this row's own coordinates: the per-row area passes its drag, a shared one the mapped point.
+    function enterAt(drag, at) {
+        // xw6: a tab drag carries only the private tab type and is never a file drop.
+        if (drag.getDataAsString(Tabs.TAB_MIME) !== "") {
+            drag.accepted = false
+            return
         }
-        onExited: root.leaveRow()
-        onDropped: function (drop) {
-            if (drop.getDataAsString(Tabs.TAB_MIME) !== "")
-                return
-            var marker = drop.getDataAsString(DragOps.ROWS_MIME)
-            var shelf = drop.getDataAsString(DragOps.SHELF_MIME)
-            var plain = drop.getDataAsString("text/plain")
-            if (root.refuseDrop(marker, drop.urls, shelf, plain)) return
-            if (root.dropped(marker, drop.urls, shelf, plain, drop.proposedAction)) {
-                drop.accept(Qt.CopyAction)
-            }
-            root.session.hoverEnded()
+        drag.accepted = root.enter(drag.getDataAsString(DragOps.ROWS_MIME), drag.urls,
+                                   drag.getDataAsString(DragOps.SHELF_MIME),
+                                   drag.getDataAsString("text/plain"), drag.proposedAction,
+                                   drag.getDataAsString(DragOut.keys.liftMime))
+        root.hoverAt(at)
+    }
+
+    function moveAt(at) {
+        if (root.lit()) {
+            root.session.showTarget(root.row.n, root.destDev)
+            root.hoverAt(at)
         }
+    }
+
+    function leaveAt() { root.leaveRow() }
+
+    function dropAt(drop) {
+        if (drop.getDataAsString(Tabs.TAB_MIME) !== "")
+            return
+        var marker = drop.getDataAsString(DragOps.ROWS_MIME)
+        var shelf = drop.getDataAsString(DragOps.SHELF_MIME)
+        var plain = drop.getDataAsString("text/plain")
+        if (root.refuseDrop(marker, drop.urls, shelf, plain)) return
+        if (root.dropped(marker, drop.urls, shelf, plain, drop.proposedAction)) {
+            drop.accept(Qt.CopyAction)
+        }
+        root.session.hoverEnded()
     }
 
     // The pointer leaves this delegate: the destination it recorded goes, even when a swap reused the delegate on another row, and a destination another row recorded since stays.
@@ -185,14 +201,14 @@ Item {
     }
 
     // In the view's own coordinates, so the band reads the listing, not the row.
-    function hoverAt(drag) {
-        if (root.dropScope !== null)
+    function hoverAt(at) {
+        if (root.dropScope !== null || !at)
             return
         var viewer = root.session.pane
         var list = viewer ? viewer.listArea : null
         if (!list || !viewer || root.targetDir !== Search.baseOf(viewer))
             return
-        var pt = root.mapToItem(list, drag.x, drag.y)
+        var pt = root.mapToItem(list, at.x, at.y)
         if (root.lit())
             root.session.hoverBegan(root.listingIndex, root.targetPane.join(root.targetDir, root.row.n), pt.y, list.height)
         else

@@ -14,6 +14,8 @@ Item {
     property var row: null
     property bool cursor: false
     property bool hovered: false
+    // False while the selection band runs, so the wash keeps the highlight off while the tip still reads hovered.
+    property bool hoverShown: true
     property bool selected: false
     property bool dropTarget: false
     property bool dropCopying: false
@@ -58,7 +60,7 @@ Item {
     function commitEditor() { return renameLoader.item ? renameLoader.item.commit() : false }
 
     // A lifted tile is the cursor, the pointer or a selection member, the same ladder Row.qml climbs.
-    readonly property bool lifted: root.cursor || root.hovered || root.selected
+    readonly property bool lifted: root.cursor || (root.hovered && root.hoverShown) || root.selected
     // A thumbnail path is not a thumbnail: the cache file can be evicted between the pane's answer
     // and the decode, and a tile whose Image failed to load has to be marked by its kind instead.
     readonly property bool thumbDrawn: root.thumb.length > 0 && tileThumb.status !== Image.Error
@@ -75,7 +77,7 @@ Item {
         anchors.margins: Theme.spacing.hairline
         color: root.cursor ? Style.selectedAccentFill
              : root.selected ? Style.selectionFill
-             : root.hovered ? Style.hoverFill
+             : (root.hovered && root.hoverShown) ? Style.hoverFill
              : "transparent"
         // Only the cursor gets a frame; marked tiles retain their separate fill.
         border.width: root.cursor ? Theme.spacing.hairline : 0

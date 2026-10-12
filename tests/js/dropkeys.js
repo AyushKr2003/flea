@@ -129,8 +129,8 @@ function rowWiring(check) {
     dropArea(at.target).exited()
     at.keys.settle()
     check("a drag with no lift that leaves the row ends there", at.keys.marker + " " + at.keys.shift, " -1")
-    // The row's shipped entered handler, run as written, hands the drag's own lift number to the entrance.
-    var entered = Source.block(Source.source("ui/RowDrag.qml"), "onEntered: function (drag)", "ui/RowDrag.qml")
+    // The row's shipped entrance, run as written, hands the drag's own lift number to the entrance.
+    var entered = Source.block(Source.source("ui/RowDrag.qml"), "function enterAt(drag, at)", "ui/RowDrag.qml")
     var onEntered = eval("(function (root, Tabs, DragOps, DragOut) { return function (drag) {" + entered + "} })")(
         { enter: function () { return at.target.enter.apply(at.target, arguments) }, hoverAt: function () {} },
         Tabs, Drag, { keys: at.keys })
@@ -190,7 +190,9 @@ function leaveWiring(check) {
 // The row's own DropArea, whose exited handler is the shipped leave path.
 function dropArea(row) {
     for (var i = 0; i < row.children.length; i++) {
-        if (row.children[i].containsDrag !== undefined) return row.children[i]
+        var kid = row.children[i]
+        if (kid.containsDrag !== undefined) return kid
+        if (kid.item && kid.item.containsDrag !== undefined) return kid.item
     }
     throw new Error("RowDrag has no DropArea")
 }
