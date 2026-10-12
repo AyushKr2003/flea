@@ -1,11 +1,11 @@
 use super::*;
 use crate::backend::testdir::TestDir;
 use crate::clip::protocol::{DISPLAY, DISPLAY_GET_REGISTRY, DISPLAY_SYNC};
-use crate::clip::testutil::DisplayEnv;
 use crate::clip::wire::Conn;
 use crate::json::field_str;
 use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixListener;
+use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{JoinHandle, ThreadId};
@@ -37,11 +37,10 @@ fn clip_line(message: OpMsg) -> String {
 }
 
 // A silent compositor for the clear path: it signals the handshake, then holds the stream open until released.
-fn fake_compositor(tag: &str) -> (TestDir, DisplayEnv, Receiver<()>, Sender<()>, JoinHandle<()>) {
+fn fake_compositor(tag: &str) -> (TestDir, PathBuf, Receiver<()>, Sender<()>, JoinHandle<()>) {
     let dir = TestDir::new(tag);
     let sock = dir.join("fake-hung");
     let listener = UnixListener::bind(&sock).unwrap();
-    let env = DisplayEnv::set(Some(&sock));
     let (accepted_tx, accepted) = channel();
     let (release_tx, release) = channel();
     let worker = std::thread::spawn(move || {
@@ -56,7 +55,7 @@ fn fake_compositor(tag: &str) -> (TestDir, DisplayEnv, Receiver<()>, Sender<()>,
         // The accepted stream stays open and silent until the test lets go of it.
         release.recv_timeout(TEST_HOLD_WATCHDOG).unwrap();
     });
-    (dir, env, accepted, release_tx, worker)
+    (dir, sock, accepted, release_tx, worker)
 }
 
 #[test]
@@ -106,15 +105,13 @@ fn a_silent_set_owner_never_holds_the_request_loop_and_still_refuses() {
 
 #[test]
 fn a_hung_compositor_gets_a_refusal_once_it_lets_go() {
-    let (_dir, env, accepted, release, compositor) = fake_compositor("clip-clear-hang");
+    let (_dir, sock, accepted, release, compositor) = fake_compositor("clip-clear-hang");
     let queue = SetQueue::new();
     let (replies, result) = channel();
-    queue.clear(replies, || clear_line("", &["/tmp/a.txt".to_string()]));
+    queue.clear(replies, move || clear_line("", &["/tmp/a.txt".to_string()], Some(&sock)));
     accepted.recv_timeout(TEST_WATCHDOG).unwrap();
     release.send(()).unwrap();
-    // The reply is the clear worker's last act, so the display is restored only after it read it.
     let line = clip_line(result.recv_timeout(TEST_WATCHDOG).unwrap());
-    drop(env);
     compositor.join().unwrap();
     assert!(line.contains(r#""ok":false"#), "{}", line);
     assert_eq!(field_str(&line, "error").as_deref(), Some("the compositor closed the connection"));
@@ -123,8 +120,9 @@ fn a_hung_compositor_gets_a_refusal_once_it_lets_go() {
 #[test]
 fn a_watch_starts_once_and_the_second_is_silent() {
     use crate::backend::{dirsizeworker::Worker, listing::Listing, state::{Held, State}};
-    // No display, so the thread ends after one honest error line and the channel closes with it.
-    let _env = DisplayEnv::set(None);
+    // A socket nobody listens on, so the thread ends after one honest error line and the channel closes with it.
+    let dir = TestDir::new("clip-watch-no-compositor");
+    let missing = dir.join("no-compositor");
     let (tx, rx) = channel();
     let (events, _events) = channel();
     // Exhaustive construction pins that the backend retains no clipboard report state.
@@ -144,13 +142,14 @@ fn a_watch_starts_once_and_the_second_is_silent() {
         held: Held::List,
         clip_watching: false,
     };
-    request_watch(tx.clone(), &mut state.clip_watching);
+    request_watch(tx.clone(), &mut state.clip_watching, Some(missing.clone()));
     assert!(state.clip_watching);
-    request_watch(tx, &mut state.clip_watching);
+    request_watch(tx, &mut state.clip_watching, Some(missing.clone()));
     let mut lines = 0;
     for m in rx.iter() {
         let line = clip_line(m);
         assert!(line.contains(r#""op":"changed""#));
+        assert!(line.contains(&missing.display().to_string()), "the error names the socket the request passed: {}", line);
         lines += 1;
     }
     assert_eq!(lines, 1, "one watcher means one error line, never two");
@@ -216,7 +215,7 @@ fn a_clear_waits_for_the_held_set_to_answer() {
     queue.clear(clear_replies, move || {
         record_start_event(&clear_events, "second start");
         observed.send(set_result.lock().unwrap().try_recv().map(clip_line)).unwrap();
-        let line = clear_line("", &[]);
+        let line = clear_line("", &[], None);
         record_start_event(&clear_events, "second end");
         line
     });
@@ -231,14 +230,13 @@ fn a_clear_waits_for_the_held_set_to_answer() {
 
 #[test]
 fn a_silent_compositor_clear_reports_the_timeout() {
-    let (_dir, env, _accepted, release, compositor) = fake_compositor("clip-clear-timeout");
+    let (_dir, sock, _accepted, release, compositor) = fake_compositor("clip-clear-timeout");
     let queue = SetQueue::new();
     let (replies, result) = channel();
-    queue.clear(replies, || clear_line("", &["/tmp/a.txt".into()]));
+    queue.clear(replies, move || clear_line("", &["/tmp/a.txt".into()], Some(&sock)));
     let line = clip_line(result.recv_timeout(TEST_HOLD_WATCHDOG).unwrap());
     release.send(()).unwrap();
     compositor.join().unwrap();
-    drop(env);
     assert!(line.contains(r#""ok":false"#), "{}", line);
     assert!(line.contains("the compositor timed out waiting for a message"), "{}", line);
 }
@@ -247,7 +245,7 @@ fn a_silent_compositor_clear_reports_the_timeout() {
 fn an_empty_clear_token_is_refused() {
     let queue = SetQueue::new();
     let (tx, rx) = channel();
-    queue.clear(tx, || clear_line("", &[]));
+    queue.clear(tx, || clear_line("", &[], None));
     let line = clip_line(rx.recv_timeout(TEST_WATCHDOG).expect("a clear reply"));
     assert!(line.contains(r#""ok":false"#));
     assert_eq!(field_str(&line, "op").as_deref(), Some("clear"));

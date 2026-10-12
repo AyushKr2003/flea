@@ -95,23 +95,6 @@ fn the_socket_path_prefers_an_absolute_display() {
     assert_eq!(socket_path_in(None, name("/run/user/7")).unwrap_err(), "WAYLAND_DISPLAY is not set, so there is no clipboard to use");
 }
 
-// Every writer of XDG_RUNTIME_DIR takes one lock: the gvfs prefetch tests, the TUI warm tests and a display env.
-#[test]
-fn a_display_env_holds_the_lock_the_gvfs_prefetch_tests_take() {
-    use crate::clip::testutil::DisplayEnv;
-    use std::time::Duration;
-    let (tx, rx) = std::sync::mpsc::channel();
-    let env = DisplayEnv::set(None);
-    let other = std::thread::spawn(move || {
-        let (_lock, _env) = crate::gvfsprefetch::hold_env();
-        tx.send(()).unwrap();
-    });
-    assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "a gvfs prefetch test took the runtime dir while a display env held it");
-    drop(env);
-    rx.recv_timeout(Duration::from_secs(5)).expect("the gvfs prefetch test runs once the display env is dropped");
-    other.join().unwrap();
-}
-
 #[test]
 fn a_partial_message_timeout_is_not_eof_and_can_resume() {
     use std::io::Write;

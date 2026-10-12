@@ -43,7 +43,8 @@ pub fn sanitize(name: &str) -> String {
     for ch in name.chars() {
         out.push(match ch {
             ':' | '?' | '*' | '"' | '<' | '>' | '|' | '\\' => '_',
-            other if (other as u32) < 0x20 || other == '\u{7f}' => '_',
+            // Linux vfat_bad_char and exfat_bad_char, and the exFAT spec's Table 35, refuse below 0x20 only; 0x7f (DEL) is legal.
+            other if (other as u32) < 0x20 => '_',
             other => other,
         });
     }
@@ -204,9 +205,9 @@ mod tests {
         assert_eq!(sanitize("a\\b.txt"), "a_b.txt");
         assert_eq!(sanitize("a\tb"), "a_b");
         assert_eq!(sanitize("a\u{1}b\u{1f}c"), "a_b_c");
-        assert_eq!(sanitize("a\u{7f}b"), "a_b");
-        assert_eq!(sanitize("x\u{7f}\n:y.mp4"), "x___y.mp4");
-        assert!(needs_rename("a\u{7f}b") && needs_rename("a\u{1}b"));
+        assert_eq!(sanitize("a\u{7f}b"), "a\u{7f}b", "DEL is a legal FAT and exFAT name character");
+        assert_eq!(sanitize("x\u{7f}\n:y.mp4"), "x\u{7f}__y.mp4");
+        assert!(!needs_rename("a\u{7f}b") && needs_rename("a\u{1}b"));
         assert_eq!(sanitize("a\u{80}b"), "a\u{80}b", "a C1 character is a legal FAT name character");
         assert!(needs_rename("clip: final.mp4"));
     }

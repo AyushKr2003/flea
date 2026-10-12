@@ -54,7 +54,12 @@ pub(crate) fn env_prefetch_from(get: impl Fn(&str) -> Option<std::ffi::OsString>
 
 // $XDG_RUNTIME_DIR/flea, or None when the session names none.
 pub fn runtime_dir() -> Option<PathBuf> {
-    let root = std::env::var_os("XDG_RUNTIME_DIR").filter(|v| !v.is_empty())?;
+    runtime_dir_from(std::env::var_os("XDG_RUNTIME_DIR"))
+}
+
+// Split so a test names the session's runtime root without writing this process's environment.
+pub(crate) fn runtime_dir_from(root: Option<std::ffi::OsString>) -> Option<PathBuf> {
+    let root = root.filter(|v| !v.is_empty())?;
     Some(PathBuf::from(root).join("flea"))
 }
 
@@ -110,10 +115,15 @@ fn sweep_dir(dir: &Path, now: SystemTime) {
 
 // The launcher's side: our dir, last leftovers gone, this launch's file named.
 pub fn prepare(path: &str) -> Option<(PathBuf, u64)> {
+    prepare_for(path, runtime_dir())
+}
+
+// Split so a test names the runtime dir without writing this process's environment.
+pub(crate) fn prepare_for(path: &str, runtime: Option<PathBuf>) -> Option<(PathBuf, u64)> {
     if !gvfslist::is_gvfs(Path::new(path)) {
         return None;
     }
-    prepare_in(runtime_dir())
+    prepare_in(runtime)
 }
 
 // Split so a test names the runtime dir without writing this process's environment.
@@ -211,12 +221,7 @@ fn shrink_claim(claimed: &Path) {
     }
 }
 
-// The backend's first gvfs scan of the prefetched path adopts the file; else None.
-pub(crate) fn adopt_matching(path: &str, hidden: bool, prefetch: &Prefetch) -> Option<(Listing, f64)> {
-    adopt_matching_in(path, hidden, prefetch, runtime_dir().as_deref())
-}
-
-// Split so a test names the runtime dir without writing this process's environment.
+// The backend's first gvfs scan of the prefetched path adopts the file, in the runtime dir the caller names; else None.
 pub(crate) fn adopt_matching_in(path: &str, hidden: bool, prefetch: &Prefetch, runtime: Option<&Path>) -> Option<(Listing, f64)> {
     if prefetch.path != path {
         return None;
@@ -327,6 +332,3 @@ fn read_prefetch(dest: &Path, start_ms: u64) -> Option<Vec<u8>> {
 #[cfg(test)]
 #[path = "gvfsprefetch_tests.rs"]
 mod tests;
-// The TUI warm tests and the clip display env set the same runtime dir, so they take this guard too.
-#[cfg(test)]
-pub(crate) use tests::{hold_env, EnvGuard};

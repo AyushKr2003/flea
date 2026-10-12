@@ -75,19 +75,20 @@ pub fn request_get(replies: Sender<OpMsg>) {
 
 // Either clear form can block on a foreign owner, so it waits in the mutation queue off the loop.
 pub fn request_clear(replies: Sender<OpMsg>, token: String, cut: Vec<String>) {
-    SETS.get_or_init(SetQueue::new).clear(replies, move || clear_line(&token, &cut));
+    SETS.get_or_init(SetQueue::new).clear(replies, move || clear_line(&token, &cut, None));
 }
 
-fn clear_line(token: &str, cut: &[String]) -> String {
+// The socket is None in production, the session's display; a test names the fake compositor's.
+fn clear_line(token: &str, cut: &[String], socket: Option<&std::path::Path>) -> String {
     if !cut.is_empty() {
-        match control::clear_cut(cut) {
+        match control::clear_cut(cut, socket) {
             Ok(cleared) => reply::reply_clear(Ok(cleared)),
             Err(e) => reply::reply_clear(Err(e.as_str())),
         }
     } else if token.is_empty() {
         reply::reply_clear(Err("the token names the copy to clear"))
     } else {
-        clear_token_line(token, control::clear)
+        clear_token_line(token, |token| control::clear(token, socket))
     }
 }
 
@@ -109,12 +110,13 @@ fn beside(replies: Sender<OpMsg>, work: impl FnOnce() -> String + Send + 'static
 }
 
 // Idempotent: the first starts the watcher's one thread, later ones answer nothing.
-pub fn request_watch(replies: Sender<OpMsg>, watching: &mut bool) {
+// The socket is None in production, the session's display; a test names the fake compositor's.
+pub fn request_watch(replies: Sender<OpMsg>, watching: &mut bool, socket: Option<std::path::PathBuf>) {
     if *watching {
         return;
     }
     *watching = true;
-    watch::start(replies);
+    watch::start(replies, socket);
 }
 
 #[cfg(test)]

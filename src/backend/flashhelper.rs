@@ -52,24 +52,24 @@ pub fn helper_path() -> String {
 }
 
 // Under the bench feature the helper learns the marked root, so it may call a loop inside it a drive; any other build adds nothing.
-fn seam_args(cmd: &mut std::process::Command) {
+fn seam_args(cmd: &mut std::process::Command, loop_root: Option<&std::path::Path>) {
     #[cfg(feature = "flash-test-seam")]
     {
-        if let Some(root) = crate::backend::flashseam::root() {
+        if let Some(root) = loop_root.and_then(crate::backend::flashseam::marked) {
             cmd.arg("--loop-root").arg(root);
         }
     }
     #[cfg(not(feature = "flash-test-seam"))]
     {
-        let _ = cmd;
+        let _ = (cmd, loop_root);
     }
 }
 
 // The helper run in drives mode for these disks, its stdout, or None when it did not run or answer.
-fn drives_text(path: &str, devs: &[String], limit: Duration) -> Option<String> {
+fn drives_text(path: &str, devs: &[String], limit: Duration, loop_root: Option<&std::path::Path>) -> Option<String> {
     let mut cmd = std::process::Command::new(path);
     cmd.arg("drives");
-    seam_args(&mut cmd);
+    seam_args(&mut cmd, loop_root);
     for dev in devs {
         cmd.arg(dev);
     }
@@ -80,7 +80,7 @@ fn drives_text(path: &str, devs: &[String], limit: Duration) -> Option<String> {
 
 // The drives that survive the daemon's own system-disk judgement; a helper that fails leaves all.
 pub fn surviving(devs: &[String]) -> Vec<String> {
-    match drives_text(&helper_path(), devs, HELPER_TIMEOUT) {
+    match drives_text(&helper_path(), devs, HELPER_TIMEOUT, crate::backend::flasheligible::seam_root().as_deref()) {
         Some(text) => apply_drives(devs, &text),
         None => devs.to_vec(),
     }
@@ -105,7 +105,7 @@ pub fn confirm(path: &str, dev: &str) -> bool {
 }
 
 pub(crate) fn confirm_at(path: &str, dev: &str, limit: Duration) -> bool {
-    let Some(text) = drives_text(path, &[dev.to_string()], limit) else { return false };
+    let Some(text) = drives_text(path, &[dev.to_string()], limit, crate::backend::flasheligible::seam_root().as_deref()) else { return false };
     parse_drives(&text).is_some_and(|listed| listed.iter().any(|(name, system)| name == dev && *system == Some(false)))
 }
 
@@ -133,7 +133,7 @@ pub(crate) fn open_device_at(path: &str, dev: &str, serial: &str, bytes: u64, sp
     let mut child = {
         let mut cmd = std::process::Command::new(path);
         cmd.arg("open");
-        seam_args(&mut cmd);
+        seam_args(&mut cmd, crate::backend::flasheligible::seam_root().as_deref());
         cmd.arg(dev).arg(serial).arg(bytes.to_string());
         cmd.stdin(std::process::Stdio::from(theirs)).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::piped());
         cmd.spawn().map_err(|e| OpenFail::Helper(e.to_string()))?
@@ -186,7 +186,7 @@ pub fn eject(dev: &str) -> Result<(), String> {
 pub(crate) fn eject_at(path: &str, dev: &str, limit: Duration) -> Result<(), String> {
     let mut cmd = std::process::Command::new(path);
     cmd.arg("eject");
-    seam_args(&mut cmd);
+    seam_args(&mut cmd, crate::backend::flasheligible::seam_root().as_deref());
     cmd.arg(dev);
     cmd.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null());
     // Every unanswered path answers the protocol word, so the caller never forwards a free sentence.

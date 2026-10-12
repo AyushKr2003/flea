@@ -5,11 +5,6 @@ use std::path::{Path, PathBuf};
 // The relative link text a disk's device entry really holds: the SCSI address three levels up, naming no bus.
 pub(crate) const DEVICE_LINK: &str = "../../../2:0:0:0";
 
-// The loop seam reads one process-global variable, so every test that sets it holds this one lock.
-pub(crate) static LOOP_ENV_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
-// The variable that names the bench's marked root.
-pub(crate) const LOOP_ENV: &str = "FLEA_FLASH_ALLOW_LOOP";
-
 // The swaps file with no active swap, the header line alone.
 pub(crate) const NO_SWAPS: &str = "Filename Type Size Used Priority\n";
 

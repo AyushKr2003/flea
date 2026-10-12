@@ -6,7 +6,7 @@ const GIB: u64 = 1024 * 1024 * 1024;
 
 fn names(f: &Fake, mountinfo: &str, swaps: &str) -> Vec<String> {
     let (exe, ui) = roots();
-    let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui };
+    let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui, loop_root: None };
     list_drives(&r, mountinfo, swaps, None, None).into_iter().map(|d| d.dev).collect()
 }
 

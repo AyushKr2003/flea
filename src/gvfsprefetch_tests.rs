@@ -5,8 +5,8 @@ use std::os::fd::AsRawFd;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::sync::{Mutex, MutexGuard};
 
-// Process-wide XDG_RUNTIME_DIR setters hold this; the _in variants take the dir and skip it.
-static ENV_LOCK: Mutex<()> = Mutex::new(());
+// Held by the tests that touch the process-wide CONSUMED flag; no test writes the environment.
+static CONSUMED_LOCK: Mutex<()> = Mutex::new(());
 
 // A literal gvfs path, so is_gvfs answers without reading the environment.
 const SHARE: &str = "/run/user/1000/gvfs/smb-share:server=t,share=u/dir";
@@ -44,33 +44,9 @@ fn fresh_start_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64 - 1000
 }
 
-// Save the four variables env tests touch; restored on drop, never the real runtime dir.
-pub(crate) struct EnvGuard {
-    saved: Vec<(String, Option<String>)>,
-}
-
-pub(crate) fn hold_env() -> (MutexGuard<'static, ()>, EnvGuard) {
-    let guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let saved = ["XDG_RUNTIME_DIR", PREFETCH_ENV, PATH_ENV, START_ENV]
-        .iter()
-        .map(|k| (k.to_string(), std::env::var(k).ok()))
-        .collect();
-    (guard, EnvGuard { saved })
-}
-
-impl Drop for EnvGuard {
-    fn drop(&mut self) {
-        for (k, v) in self.saved.drain(..) {
-            // A test that wrote nothing writes nothing back: a setenv racing another thread's getenv is the hazard.
-            if std::env::var(&k).ok() == v {
-                continue;
-            }
-            match v {
-                Some(v) => std::env::set_var(&k, v),
-                None => std::env::remove_var(&k),
-            }
-        }
-    }
+// The once flag is process-wide, so every test that spends or reads it holds this for its whole run.
+fn hold_consumed() -> MutexGuard<'static, ()> {
+    CONSUMED_LOCK.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 fn reset_consumed() {
@@ -127,7 +103,7 @@ fn a_second_reader_finds_the_claim_and_returns_at_once() {
 
 #[test]
 fn a_completed_prefetch_adopts_through_scan_with_no_gio_child() {
-    let (_lock, _env) = hold_env();
+    let _lock = hold_consumed();
     reset_consumed();
     let dir = TestDir::new("gvfs-adopt");
     let runtime = dir.path().join("runtime/flea");
@@ -347,7 +323,7 @@ fn the_sweeper_reaps_only_old_prefetch_files() {
 
 #[test]
 fn a_different_path_never_spends_the_once_flag() {
-    let (_lock, _env) = hold_env();
+    let _lock = hold_consumed();
     reset_consumed();
     let (_dir, runtime) = runtime_fixture("gvfs-other-path");
     let dest = write_prefetch(&runtime, "gvfs-1.list", TWO_ROWS);
@@ -363,7 +339,7 @@ fn a_different_path_never_spends_the_once_flag() {
 
 #[test]
 fn the_scan_adopts_once_then_falls_back_to_gio() {
-    let (_lock, _env) = hold_env();
+    let _lock = hold_consumed();
     reset_consumed();
     let dir = TestDir::new("gvfs-once");
     let runtime = dir.path().join("runtime/flea");
@@ -391,8 +367,14 @@ fn the_scan_adopts_once_then_falls_back_to_gio() {
 fn the_launcher_arms_only_a_gvfs_path() {
     let dir = TestDir::new("gvfs-prepare");
     let root = dir.path().join("runtime");
-    assert!(prepare("/home/gm").is_none(), "a local launch does nothing new");
-    let (dest, start_ms) = prepare_in(Some(root.join("flea"))).expect("a gvfs launch names its file");
+    let runtime = runtime_dir_from(Some(root.clone().into_os_string()));
+    assert_eq!(runtime, Some(root.join("flea")), "the session's runtime root names Flea's own dir under it");
+    assert!(runtime_dir_from(Some("".into())).is_none() && runtime_dir_from(None).is_none(), "a session naming no runtime root names no dir");
+    // prepare_for is the gate prepare runs with the session's dir, so both arms are driven here.
+    assert!(prepare_for("/home/gm", runtime.clone()).is_none(), "a local launch does nothing new");
+    assert!(!root.exists(), "a local launch makes no directory");
+    assert!(prepare_for(SHARE, None).is_none(), "a gvfs launch in a session without a runtime dir arms nothing");
+    let (dest, start_ms) = prepare_for(SHARE, runtime).expect("a gvfs launch names its file");
     assert!(start_ms > 0);
     assert_eq!(dest.parent(), Some(root.join("flea").as_path()));
     assert!(dest.file_name().unwrap().to_string_lossy().starts_with("gvfs-"));
