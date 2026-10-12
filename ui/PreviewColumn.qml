@@ -253,8 +253,7 @@ Item {
                     item.compact = true
                 }
             }
-            // The PDF's pages, one under another at the frame's width, which is the frame's whole content for
-            // that state. QtPdf is reached only through this Loader, so a folder with no PDF in it never opens one.
+            // The PDF's pages, one under another at the frame's width; QtPdf is reached only through this Loader, so a folder with no PDF never opens one.
             Flickable {
                 id: pdfFlick
                 anchors.fill: parent
@@ -399,6 +398,7 @@ Item {
     }
     // Whether a PdfDocument exists at all, which is what makes the Loader worth having.
     function pdfLoaded() { return pdfLoader.item !== null }
+    function pdfLanded() { return pdfLoader.item ? pdfLoader.item.landedPages() : [] }
 
     // For the geometry gate: the box of the page under the frame's top, null until the document below built it.
     function pdfPageItem() { return pdfLoader.item ? pdfLoader.item.pageSlot(pdfLoader.item.page) : null }

@@ -53,6 +53,7 @@ def pdf(name, sizes):
 pdf('report.pdf', [(612, 792)] * 12)
 pdf('receipt.pdf', [(226, 640)])
 pdf('slip.pdf', [(612, 300)])
+pdf('big.pdf', [(612, 792)] * 500)
 PY
 
 # run LABEL WIDTH HEIGHT: one probe launch over the sandbox's own state directory.
@@ -80,6 +81,6 @@ judge() {
     printf '%s\n' "$output" | grep -a 'FLOW COUNTS\|FLOW QMLTALLY' | sed 's/^.*FLOW /FLOW '"$label"' /'
 }
 
-out=$(run wide 1200 760); judge "1200x760" "$out" $? 35
-out=$(run narrow 760 560); judge "760x560" "$out" $? 35
+out=$(run wide 1200 760); judge "1200x760" "$out" $? 45
+out=$(run narrow 760 560); judge "760x560" "$out" $? 45
 exit $verdict

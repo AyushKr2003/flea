@@ -102,7 +102,7 @@ QtObject {
         if (!p) return "null"
         if (!overlay)
             return JSON.stringify({ page: p.pdfPage(), pages: p.pdfPages, frame: root.fleaWindow.rectOf(p.pdfFrameItem),
-                scrollY: p.pdfScrollY, focused: p.activeFocus })
+                scrollY: p.pdfScrollY, focused: p.activeFocus, landed: p.pdfLanded() })
         return JSON.stringify({ page: p.page, pages: p.pageCount, zoom: p.zoom, scrollY: p.pdfScrollY, focused: p.activeFocus, control: p.pdfControlIndex,
             controls: p.pdfControls.map(function (control) { return { name: control.accessName, enabled: control.enabled,
                 visible: control.visible, centre: root.fleaWindow.centreOf(control),

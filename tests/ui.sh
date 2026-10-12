@@ -5136,16 +5136,18 @@ case_columns() {
     settle
     (( $(ipc pdfState false | jq '.scrollY | floor') > 0 )) \
         || fail "columns: l left the pdf at its top, scrolled to $(ipc pdfState false | jq .scrollY)"
-    # PdfPageImage renders asynchronously, so the scroll lands before the pixels do; the poll is
-    # the wait and the assertion at once. Page two is 34 per cent dark against page one's 0.7, both
-    # measured on the built file, so an unchanged count means the render never followed the scroll.
-    page2_white=$page1_white
+    # PdfPageImage renders asynchronously, so the scroll lands before the pixels do. Page two counts as
+    # drawn only once its own image has landed: a pixel count alone also moves when the scroll shows the
+    # gap or a slot still waiting for its render.
     for i in $(seq 1 20); do
-        shot columns-pdf-page2
-        page2_white=$(count_pixels "$evidence_dir/columns-pdf-page2.png" "$whole" "$near_white")
-        (( page2_white != page1_white )) && break
+        [[ "$(ipc pdfState false | jq '.landed | index(1) != null')" == "true" ]] && break
         sleep 0.2
     done
+    [[ "$(ipc pdfState false | jq '.landed | index(1) != null')" == "true" ]] \
+        || fail "columns: page two never rendered after l, the landed pages are $(ipc pdfState false | jq -c .landed)"
+    settle
+    shot columns-pdf-page2
+    page2_white=$(count_pixels "$evidence_dir/columns-pdf-page2.png" "$whole" "$near_white")
     (( page2_white != page1_white )) \
         || fail "columns: the scrolled pdf draws the same $page1_white near-white pixels as page one, so the scroll changed nothing"
     key -M ctrl -k Tab -m ctrl >/dev/null

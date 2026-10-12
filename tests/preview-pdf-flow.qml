@@ -26,6 +26,8 @@ ShellRoot {
     property int sampled: 0
     property int peakImages: 0
     property int focusCalls: 0
+    property int inset: 0
+    property real bigWidth: 0
 
     function log(line) { console.log("FLOW " + line) }
     function check(name, got, want) {
@@ -67,7 +69,8 @@ ShellRoot {
     readonly property var rowsList: [
         { n: "report.pdf", d: false, k: 0, p: 33188, s: 2400000, m: 1758835200, t: false, i: "x-office-document" },
         { n: "receipt.pdf", d: false, k: 0, p: 33188, s: 31000, m: 1758835201, t: false, i: "x-office-document" },
-        { n: "slip.pdf", d: false, k: 0, p: 33188, s: 12000, m: 1758835202, t: false, i: "x-office-document" }
+        { n: "slip.pdf", d: false, k: 0, p: 33188, s: 12000, m: 1758835202, t: false, i: "x-office-document" },
+        { n: "big.pdf", d: false, k: 0, p: 33188, s: 90000, m: 1758835203, t: false, i: "x-office-document" }
     ]
 
     QtObject {
@@ -98,10 +101,10 @@ ShellRoot {
         property int coalesceMs: 16
         property int refetchMargin: 25
         property int buffer: 150
-        property int total: 3
+        property int total: 4
         property int held: 0
         property var shown: null
-        property int shownTotal: 3
+        property int shownTotal: 4
         property int renamingIndex: -1
         property int selectionVersion: 0
         property var clipboard: null
@@ -126,7 +129,7 @@ ShellRoot {
         implicitWidth: root.winW
         implicitHeight: root.winH
         color: Flea.Theme.color.background
-        Flea.ColumnsArea { id: area; anchors.fill: parent; pane: pane; menu: menu }
+        Flea.ColumnsArea { id: area; anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: parent.width - root.inset; pane: pane; menu: menu }
         Flea.PdfViewer {
             id: look
             anchors.fill: parent
@@ -151,9 +154,11 @@ ShellRoot {
     function slots() {
         var p = root.pdf()
         var out = []
-        for (var i = 0; p && i < p.pageCount; i++) out.push(p.pageSlot(i))
+        for (var i = 0; p && i < p.pageCount; i++) if (p.pageSlot(i)) out.push(p.pageSlot(i))
         return out
     }
+    // Every page slot the stack holds, found by what a slot is rather than through the page lookup.
+    function slotItems() { return root.all(root.pdf(), []).filter(function (it) { return it.rendering !== undefined && it.errored !== undefined }) }
     // The slots a frame of the flickable shows any part of.
     function inView() {
         var f = root.flick()
@@ -210,6 +215,7 @@ ShellRoot {
         root.check("no chevron, page chip or zoom mark is in the column", root.stripItems().length, 0)
         root.check("the line states the pages", root.col.factRows.length > 0 && root.factsLine().indexOf("12 pages") >= 0, true)
         root.check("page 1 is rendered at the first settled frame", root.landed(s0) && root.landed(s1), true)
+        root.check("the column reads page 1 and 2 as landed", root.col.pdfLanded().indexOf(0) >= 0 && root.col.pdfLanded().indexOf(1) >= 0, true)
         var im = root.images(root.col)
         var visible = root.inView().length
         root.check("at rest at most the visible pages and two are built", im.length <= visible + 2, true)
@@ -273,6 +279,32 @@ ShellRoot {
         root.check("a tall single page taller than the frame has the knob", f.contentHeight > f.height && b.overflow, true)
     }
 
+    function failedPage() {
+        root.pdf().pageSlot(0).imageStatus(Image.Error)
+        root.check("a page whose render failed puts the pane in the failure state", root.col.pdfFailed && root.col.previewState === "error", true)
+    }
+
+    // A 500-page document: the slots and images stay with the frame, and the page sizes are read once per document, never per width.
+    function big() {
+        var p = root.pdf()
+        var visible = root.inView().length
+        root.bigWidth = p.width
+        root.check("a 500-page document builds slots only near the frame", root.slotItems().length <= visible + 2, true)
+        root.check("and images only near the frame", root.images(root.col).length <= visible + 2, true)
+        root.check("and reads its 500 page sizes once", p.sizeReads, 500)
+        root.log("COUNTS big slots=" + root.slotItems().length + " images=" + root.images(root.col).length + " visible=" + visible + " sizeReads=" + p.sizeReads)
+        root.inset = 120
+    }
+    function bigNarrow() {
+        var p = root.pdf()
+        var visible = root.inView().length
+        root.check("the frame is narrower", p.width < root.bigWidth, true)
+        root.check("a narrower 500-page stack builds slots only near the frame", root.slotItems().length <= visible + 2, true)
+        root.check("and images only near the frame", root.images(root.col).length <= visible + 2, true)
+        root.check("and still has read its page sizes once", p.sizeReads, 500)
+        root.log("COUNTS big narrow slots=" + root.slotItems().length + " images=" + root.images(root.col).length + " visible=" + visible + " sizeReads=" + p.sizeReads)
+    }
+
     function slip() {
         var f = root.flick()
         var b = root.bar()
@@ -292,6 +324,7 @@ ShellRoot {
 
     function back() {
         root.check("a row opens at page 1's top", root.col.pdfPage() + "|" + root.flick().contentY, "0|0")
+        root.check("and a failed page of the last document is not carried over", root.col.pdfFailed, false)
     }
 
     readonly property var plan: [
@@ -299,6 +332,9 @@ ShellRoot {
         { row: 0, scroll: true, run: function () { root.scrolled() } },
         { row: 1, run: function () { root.receipt() } },
         { row: 2, run: function () { root.slip() } },
+        { row: 3, run: function () { root.big() } },
+        { row: 3, stay: true, narrowed: true, run: function () { root.bigNarrow() } },
+        { row: 3, stay: true, run: function () { root.failedPage() } },
         { row: 0, run: function () { root.back() } },
         { row: 0, look: true, run: function () { root.quickLookChecks() } }
     ]
@@ -328,7 +364,7 @@ ShellRoot {
                 if (step.look) {
                     if (!look.visible) root.quickLook()
                     if (look.pageCount <= 0 || look.shownPage < 0) return
-                } else if (!root.settled(root.rowsList[step.row].n) || !root.pdf()) return
+                } else if (!root.settled(root.rowsList[step.row].n) || !root.pdf() || (step.narrowed && root.pdf().width >= root.bigWidth)) return
                 if (step.scroll) { root.stage = "scroll"; root.sinceWheel = 0; return }
                 step.run()
                 root.advance()
@@ -351,7 +387,7 @@ ShellRoot {
         root.stepAt += 1
         if (root.stepAt >= root.plan.length) { root.stop(); return }
         root.stage = "wait"
-        if (!root.plan[root.stepAt].look) root.move(root.plan[root.stepAt].row)
+        if (!root.plan[root.stepAt].look && !root.plan[root.stepAt].stay) root.move(root.plan[root.stepAt].row)
     }
 
     Component.onCompleted: { root.since = Date.now(); stepper.start() }

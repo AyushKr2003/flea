@@ -42,7 +42,9 @@ Item {
 
     // What the facts table shows as Pages; 0 until the document is ready, or if it never becomes so.
     readonly property int pageCount: doc.status === PdfDocument.Ready ? doc.pageCount : 0
-    readonly property bool failed: doc.status === PdfDocument.Error || root.copyError.length > 0
+    // A page of the stack whose render failed fails the document for the column, the way a document that did not load does.
+    property bool pageFailed: false
+    readonly property bool failed: doc.status === PdfDocument.Error || root.copyError.length > 0 || root.pageFailed
 
     // The page whose render is on screen, -1 until one has landed for this document.
     property int shownPage: -1
@@ -57,19 +59,33 @@ Item {
     // broken width binding is a page that never resizes when the frame or the zoom changes.
     // corner: a document mixing page shapes draws the old page in the new page's box until its render lands.
     readonly property real pageAspect: {
-        if (doc.status !== PdfDocument.Ready || root.pageCount <= 0)
+        if (root.continuous || doc.status !== PdfDocument.Ready || root.pageCount <= 0)
             return 1
         var box = doc.pagePointSize(Math.min(root.page, root.pageCount - 1))
         return box.height > 0 ? box.width / box.height : 1
     }
 
-    // Each page's top and height at this item's width, from the document's page sizes, so the stack is as tall as it will be before any page renders.
+    // Each page's height over its width, read from the document once when it becomes ready; the sizes read are counted for the tests.
+    property var pageRatios: []
+    property int sizeReads: 0
+    Connections {
+        target: doc
+        function onStatusChanged() {
+            var ratios = []
+            for (var i = 0; root.continuous && doc.status === PdfDocument.Ready && i < doc.pageCount; i++) {
+                var box = doc.pagePointSize(i)
+                ratios.push(box.width > 0 ? box.height / box.width : 0)
+            }
+            root.sizeReads += ratios.length
+            root.pageRatios = ratios
+        }
+    }
+    // Each page's top and height at this item's width, so the stack is as tall as it will be before any page renders.
     readonly property var layout: {
         var tops = [], heights = [], y = 0
-        for (var i = 0; root.continuous && root.width > 0 && i < root.pageCount; i++) {
-            var box = doc.pagePointSize(i)
+        for (var i = 0; root.width > 0 && i < root.pageRatios.length; i++) {
             tops.push(y)
-            heights.push(box.width > 0 ? Math.round(root.width * box.height / box.width) : 0)
+            heights.push(Math.round(root.width * root.pageRatios[i]))
             y += heights[i] + Theme.spacing.gap
         }
         return { tops: tops, heights: heights, height: Math.max(0, y - Theme.spacing.gap) }
@@ -83,7 +99,9 @@ Item {
     // The Qt render width in device pixels, held through small resizes so a drag does not render every pixel.
     property int renderWidth: 0
     onWidthChanged: root.fitRenderWidth()
-    onLayoutChanged: root.pageFromOffset()
+    onLayoutChanged: { root.pageFromOffset(); root.syncWindow() }
+    onNearFirstChanged: root.syncWindow()
+    onNearLastChanged: root.syncWindow()
     onViewTopChanged: root.pageFromOffset()
 
     // The page whose band, its height and the gap after it, holds the offset.
@@ -97,7 +115,32 @@ Item {
         }
         return Math.max(0, lo)
     }
-    function pageSlot(index) { return pages.itemAt(index) }
+    function pageSlot(index) {
+        for (var i = 0; i < pages.count; i++)
+            if (pages.itemAt(i).pageNo === index) return pages.itemAt(i)
+        return null
+    }
+    function landedPages() {
+        var out = []
+        for (var i = 0; i < pages.count; i++)
+            if (pages.itemAt(i).landed) out.push(pages.itemAt(i).pageNo)
+        return out
+    }
+    // The slots are the pages of the near window and any page still rendering; a slot is added or dropped without moving the others.
+    function syncWindow() {
+        var last = Math.min(root.nearLast, root.layout.tops.length - 1)
+        var have = {}
+        for (var i = windowPages.count - 1; i >= 0; i--) {
+            var no = windowPages.get(i).pageNo
+            var busy = pages.itemAt(i) !== null && pages.itemAt(i).rendering
+            if (no > root.layout.tops.length - 1 || ((no < root.nearFirst || no > last) && !busy))
+                windowPages.remove(i)
+            else
+                have[no] = true
+        }
+        for (var n = root.nearFirst; n <= last; n++)
+            if (!have[n]) windowPages.append({ pageNo: n })
+    }
     function pageFromOffset() { if (root.continuous && root.pageCount > 0) root.page = root.pageAt(root.viewTop) }
     function fitRenderWidth() {
         var target = Math.round(root.width * Screen.devicePixelRatio)
@@ -110,8 +153,8 @@ Item {
         if (!root.continuous || root.shownPage >= 0 || root.pageCount <= 0)
             return
         for (var i = root.pageAt(root.viewTop); i <= root.pageAt(root.viewTop + root.viewHeight); i++) {
-            var slot = pages.itemAt(i)
-            if (!slot || !slot.landed)
+            var slot = root.pageSlot(i)
+            if (!slot || !slot.settled)
                 return
         }
         root.shownPage = root.pageAt(root.viewTop)
@@ -215,6 +258,7 @@ Item {
         renderCap.stop()
         root.fellBack = false
         root.shownPage = -1
+        root.pageFailed = false
         root.opened = next
         if (root.continuous && root.viewport)
             root.viewport.contentY = 0
@@ -340,28 +384,40 @@ Item {
         }
     }
 
-    // The continuous stack: a slot per page at its place, holding an image only while the page is near the frame or still rendering.
+    // The continuous stack: a slot per page of the near window, each holding an image while its page is near the frame or still rendering.
+    ListModel { id: windowPages }
     Repeater {
         id: pages
-        model: root.layout.tops.length
+        model: windowPages
         delegate: Item {
             id: slot
-            required property int index
-            readonly property bool near: slot.index >= root.nearFirst && slot.index <= root.nearLast
+            required property int pageNo
+            readonly property bool near: slot.pageNo >= root.nearFirst && slot.pageNo <= root.nearLast
             readonly property bool landed: pageLoader.item !== null && pageLoader.item.landed
+            // A failed render counts as settled, so the first frame is never held for a page that will not come.
+            property bool errored: false
+            readonly property bool settled: slot.landed || slot.errored
             // A page that left the frame keeps its image until the render in flight lands, so no render is cut off by its own page going away.
             property bool rendering: false
-            y: root.layout.tops[slot.index]
+            y: root.layout.tops[slot.pageNo] || 0
             width: root.width
-            height: root.layout.heights[slot.index]
-            onLandedChanged: root.firstDrawn()
+            height: root.layout.heights[slot.pageNo] || 0
+            onSettledChanged: root.firstDrawn()
+            onRenderingChanged: if (!slot.rendering) Qt.callLater(root.syncWindow)
+
+            function imageStatus(status) {
+                slot.rendering = status === Image.Loading
+                slot.errored = status === Image.Error
+                if (slot.errored)
+                    root.pageFailed = true
+            }
 
             Loader {
                 id: pageLoader
                 anchors.fill: parent
                 active: slot.near || slot.rendering
                 sourceComponent: Item {
-                    readonly property bool landed: image.status === Image.Ready
+                    readonly property bool landed: image.status === Image.Ready && image.implicitWidth > 0
                     Rectangle {
                         anchors.fill: parent
                         visible: image.status === Image.Ready
@@ -371,12 +427,12 @@ Item {
                         id: image
                         anchors.fill: parent
                         document: doc
-                        currentFrame: slot.index
+                        currentFrame: slot.pageNo
                         fillMode: Image.Stretch
                         asynchronous: true
                         retainWhileLoading: true
                         sourceSize: Qt.size(root.renderWidth, 0)
-                        onStatusChanged: slot.rendering = image.status === Image.Loading
+                        onStatusChanged: slot.imageStatus(image.status)
                     }
                 }
             }
