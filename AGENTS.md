@@ -4060,6 +4060,8 @@ The picker save line's whole-sentence templates and name joints move three ceili
 
 The Tags flyout that stays open moves three ceilings, each re-derived with `wc -l`: `ui/ContextMenu.qml` 751 to 752, `ui/PaneMenuActions.qml` 490 to 491 and `ui/Pane.qml` 1180 to 1181, one comment line each for the Tags branch of `chooseSub`, the repeatable tag activation and the `tg`-blind held-rows identity.
 
+The Empty Trash body and the Network password hint move four ceilings, each re-derived with `wc -l`: `ui/Ipc.qml` 966 to 967 for the confirmation body and the password hint readers, `ui/NetworkDialog.qml` 457 to 458 for its hint reader, `ui/NetworkForm.qml` 413 to 426 for the hint row and its property, and `tests/button-members.qml` 488 to 513 for the three hint checks.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

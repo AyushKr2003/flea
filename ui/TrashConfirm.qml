@@ -2,7 +2,6 @@ import QtQuick
 import qs.Commons
 import "." as Flea
 import "js/Format.js" as Format
-import "js/Keymap.js" as Keymap
 import "js/Ops.js" as Ops
 
 // The destructive choice must be reached deliberately; a reflexive Enter activates Cancel.
@@ -23,6 +22,7 @@ FocusScope {
     readonly property var cancelItem: cancelButton
     readonly property var dangerItem: dangerButton
     readonly property string titleText: title.text
+    readonly property string bodyText: bodyLabel.text
     function open(value) { snapshot = value; destructiveFocus = false; body.contentY = 0; opened = true; forceActiveFocus() }
     function close() { opened = false }
     function cancel() { close(); cancelled() }
@@ -97,9 +97,10 @@ FocusScope {
                     }
                 }
                 Text {
+                    id: bodyLabel
                     width: parent.width
                     text: root.snapshot.all
-                        ? Ops.deleteAllLine(root.snapshot.count, Format.size(root.snapshot.bytes || 0), Keymap.hintFor("undo"))
+                        ? Ops.deleteAllLine(root.snapshot.count, Format.size(root.snapshot.bytes || 0))
                         : Ops.deleteScopeLine(root.scopeName, root.snapshot.count)
                     textFormat: Text.PlainText
                     wrapMode: Text.Wrap

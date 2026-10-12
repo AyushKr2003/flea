@@ -30,6 +30,7 @@ Column {
         protocol: root.protocol, host: root.host, port: root.port, path: root.path,
         domain: root.domain, user: root.user, tls: root.tls
     })
+    readonly property string passwordHintText: passwordHint.visible ? passwordHint.text : ""
     readonly property bool complete: Protocols.complete({ host: root.host, port: root.port })
 
     spacing: Style.space(12)
@@ -277,6 +278,18 @@ Column {
         secret: true
         onAccepted: root.submitted()
         onTabbed: function (from, back) { root.step(from, back ? -1 : 1) }
+    }
+
+    Text {
+        id: passwordHint
+        visible: root.spec.credentials
+        width: parent.width
+        height: visible ? implicitHeight : 0
+        text: "The password is not saved."
+        color: Theme.color.muted
+        font.family: Theme.font.family
+        font.pixelSize: Theme.font.caption
+        textFormat: Text.PlainText
     }
 
     Text {

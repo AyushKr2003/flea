@@ -52,8 +52,10 @@ function run(check) {
           Ops.deleteScopeLine("items", 1),
           "This item is deleted from disk. This cannot be undone.")
     check("an empty-trash body deletes 'it' for one and 'them' otherwise",
-          Ops.deleteAllLine(1, "4 KiB", "^z") + " // " + Ops.deleteAllLine(2, "4 KiB", "^z"),
-          "1 item, 4 KiB. This deletes it from disk. ^z cannot undo it and the undo journal does not cover it. // 2 items, 4 KiB. This deletes them from disk. ^z cannot undo it and the undo journal does not cover it.")
+          Ops.deleteAllLine(1, "4 KiB") + " // " + Ops.deleteAllLine(1234, "1.2 GiB"),
+          "1 item, 4 KiB. This deletes it from disk. This cannot be undone. // 1,234 items, 1.2 GiB. This deletes them from disk. This cannot be undone.")
+    check("an empty-trash body no longer cites an undo key or the journal",
+          /cannot undo |journal/.test(Ops.deleteAllLine(1, "4 KiB") + Ops.deleteAllLine(1234, "1.2 GiB")), false)
     check("a finished Trash delete names its total",
           Ops.doneOf("Deleted", 1, 1) + " // " + Ops.doneOf("Deleted", 1, 2) + " // " + Ops.doneOf("Restored", 0, 1),
           "Deleted 1 of 1 item // Deleted 1 of 2 items // Restored 0 of 1 item")

@@ -240,6 +240,30 @@ ShellRoot {
         shell.check("a member is no Tab stop of Qt's own", items[1].activeFocusOnTab, false)
     }
 
+    // The password hint sits under the Password field on every protocol that takes credentials, and the form keeps one height through the five.
+    function passwordHint() {
+        var hint = "The password is not saved."
+        var texts = [], heights = []
+        Protocols.PROTOCOLS.forEach(function (name) {
+            form.pick(name)
+            form.forceLayout()
+            texts.push(form.passwordHintText)
+            heights.push(form.height)
+        })
+        shell.check("the password hint reads on SMB, SFTP, FTPS and WebDAV and is empty on NFS",
+                    texts, Protocols.PROTOCOLS.map(function (name) { return name === "NFS" ? "" : hint }))
+        shell.check("the form is one height through every protocol", heights.every(function (h) { return h === heights[0] }), true)
+        form.pick("FTPS")
+        form.forceLayout()
+        var rows = Array.prototype.slice.call(form.children)
+        var at = rows.findIndex(function (r) { return r.label === "Password" })
+        var note = rows.find(function (r) { return r.text === hint })
+        var after = rows.slice(at + 1).find(function (r) { return r !== note && r.visible && r.height > 0 })
+        shell.check("the hint sits directly below the password field and above the next row",
+                    at >= 0 && !!note && rows[at + 1] === note && note.y >= rows[at].y + rows[at].height && !!after && after.y >= note.y + note.height, true)
+        form.pick("SMB")
+    }
+
     // A focused set member, picked or not, is its own accent hairline frame where the accent has hue; a focused plain button is its foreground hairline frame; a disabled one never draws either.
     function focusFrames(items) {
         var c = Flea.Theme.color, rgba = Probe.rgba
@@ -445,6 +469,7 @@ ShellRoot {
             shell.ladder("plain", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground))
             shell.ladder("accept", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground), answerSizes)
             shell.members()
+            shell.passwordHint()
             shell.trailingWalk()
             shell.boxes()
             shell.answers()
