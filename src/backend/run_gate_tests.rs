@@ -132,6 +132,30 @@ fn requests_a_close_and_a_burst_seen_during_a_scan_wait_for_it_and_replay_in_ord
     assert_eq!(lines[3], paths_line(&[text(&kept)]), "the second request is answered against the new listing");
 }
 
+// A decode failure while a scan is out reports at once, then waits as a close does, so the requests read before it are answered.
+#[test]
+fn a_read_error_while_a_scan_is_out_waits_for_it_and_answers_the_queued_request() {
+    let mut l = Loop::new("rungate-readerror");
+    let new = l.dir.dir("new");
+    let kept = l.dir.file("new/b.txt", "b");
+    let _body = crate::backend::iomount::test_hold_body(remote_body(l.dir.path()));
+    let hold = scanhold::hold(&text(&new), Stage::Read);
+    assert!(l.request(&list(&new)) == Control::Continue);
+    hold.entered.recv_timeout(EVENT_DEADLINE).expect("the scan is out and held at its read");
+    assert!(l.request(r#"{"c":"paths","rows":[0]}"#) == Control::Continue);
+    let failure = crate::error::from_io("read", "stdin", &std::io::Error::from(std::io::ErrorKind::InvalidData));
+    assert!(l.feed(Event::ReadError(failure)) == Control::Continue, "a decode failure while the scan is out waits for its answer");
+    hold.release();
+    let landed = l.wait(is_list);
+    assert!(l.feed(landed) == Control::Quit, "the loop leaves once the scan and the queued request are answered");
+    let said = l.said();
+    let lines: Vec<&str> = said.lines().collect();
+    assert_eq!(lines.len(), 4, "the report, then listed, rows and the queued request: {said}");
+    assert_eq!(field_str(lines[0], "t").as_deref(), Some("error"), "{said}");
+    assert_eq!(field_str(lines[1], "t").as_deref(), Some("listed"), "{said}");
+    assert_eq!(lines[3], paths_line(&[text(&kept)]), "the request read before the failure is answered against the new listing");
+}
+
 // Issue 144: the loop keeps delivering a transfer's progress while a remote scan is out, so the gate holds requests and nothing else.
 #[test]
 fn a_transfer_progress_line_goes_out_while_a_scan_is_out() {
