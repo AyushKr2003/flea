@@ -91,8 +91,11 @@ case_keyreach() {
     keyreach_tab
     keyreach_expect list "Tab from the left list reaches the right one"
     [[ "$(keyreach_side)" == 1 ]] || fail "keyreach: Tab from the left list left the keyboard on side '$(keyreach_side)', not the right"
+    # The rail is the left pane's, so the ring runs right list, rail, bar (tests/ui-railpointer.sh dualtab pins the first step).
     keyreach_tab
-    keyreach_expect "chrome:arrow-up" "Tab from the right list reaches the bar"
+    keyreach_expect rail "Tab from the right list reaches the rail"
+    keyreach_tab
+    keyreach_expect "chrome:arrow-up" "Tab from the rail reaches the bar"
     shot keyreach-chrome-dual
     key -M ctrl -k 1 -m ctrl >/dev/null
     settle
