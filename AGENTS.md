@@ -8963,6 +8963,8 @@ The Network Tab ring moves three ceilings, each re-derived with `wc -l`: `ui/Net
 
 The OutCubic and surface-safe frame line keeps `tests/startup-units.txt` at its 170 units while its `bytes` line moves from 1596965 to 1597129, the sum the probe's tool takes over them with the press easing in `ui/ChromeButton.qml` and `ui/DialogButton.qml`, the `Motion.durMs` fades in `ui/EmptyState.qml` and `ui/FleaMark.qml`, and the accent frame role and reduced-motion switch in `ui/TransferCard.qml`.
 
+Quick Look's warm kind units keep `tests/startup-units.txt` at its 170 units while its `bytes` line moves from 1596965 to 1597222, the sum the probe's tool takes over them with the warm `Loader` in `ui/WindowBody.qml` that replaces the `createObject` of `QuickLookWarm.qml`.
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one

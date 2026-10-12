@@ -36,14 +36,14 @@ Rectangle {
     // Null until the first Quick Look opens, see previewLoader below.
     readonly property var quickLook: previewLoader.item
     readonly property bool quickLookActive: view.quickLook !== null && view.quickLook.active
-    // QuickLookWarm, built by the cursor's first landing on a Markdown file and kept: a move off it must not drop the compiled units.
-    property var warm: null
+    // QuickLookWarm, built by the cursor's first landing on a file and kept: a move off it must not drop the compiled units. A Markdown file builds it in that turn, any other file off the key once a key has moved the cursor, so a launch builds none.
     readonly property var cursorFile: view.currentPane.cursorRow
     onCursorFileChanged: {
-        if (view.warm !== null || !Prepared.isMarkdownRow(view.cursorFile)) return
-        view.warm = Qt.createComponent("QuickLookWarm.qml").createObject(view)
-        view.warm.pane = Qt.binding(function () { return view.currentPane })
+        var markdown = Prepared.isMarkdownRow(view.cursorFile)
+        if (warmLoader.active || !view.cursorFile || view.cursorFile.d || !(markdown || view.currentPane.inputAt > 0)) return
+        warmLoader.asynchronous = !markdown; warmLoader.active = true
     }
+    Loader { id: warmLoader; active: false; source: "QuickLookWarm.qml"; onLoaded: item.pane = Qt.binding(function () { return view.currentPane }) }
     readonly property var currentPane: dualMode && focusSide === 1 && secondPane.item ? secondPane.item.pane : primaryPane
     property bool initialized: false
     property bool closing: false
