@@ -205,10 +205,7 @@ function railCursorAfter(before, after, index) {
     return matches.length === oldCount ? matches[occurrence] : -1
 }
 
-// The rail row that holds what the pane shows: the deepest row whose folder is dir or holds it, the first in rail
-// order on a tie, "/" holding every local path. view is { kind, tag, shareKey }: kind "recent", "trash" or "tag"
-// lights that row (tag by its name), kind "dir" lights by folder. A directory under gvfs belongs to no path the rail
-// holds, so only the mounted row opened under shareKey, the normalized address of its alias, lights, never the disk.
+// Under gvfs only the mounted row opened under view.shareKey lights, never a folder prefix or the disk.
 function heldBy(entries, dir, view) {
     var list = entries || []
     var at = view || ({ kind: "dir" })
@@ -240,8 +237,7 @@ function heldBy(entries, dir, view) {
     return best
 }
 
-// The view heldBy reads from a pane's state: Trash, Recent and a tag walk are their own rows, anything else a folder.
-// pathAlias is the pane's remembered gvfs share for its path, or null; its key is the share's normalized address.
+// pathAlias is the pane's remembered gvfs share (or null); its key is the share's normalized address.
 function litView(trashOpened, recentMode, searchMode, answeredQuery, pathAlias) {
     if (trashOpened) return { kind: "trash" }
     if (String(recentMode || "").length > 0) return { kind: "recent" }

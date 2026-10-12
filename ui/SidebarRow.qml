@@ -69,8 +69,7 @@ Item {
     Accessible.role: Accessible.ListItem
     Accessible.name: root.modelData.label
 
-    // A rail row is a row, so its lit place is the list row's cursor look: a square full-bleed fill and the
-    // accent bar, per the canvas and the icon spec's "the rail rounds nothing"; see ui/Row.qml.
+    // The rail rounds nothing: a lit place is the list row's square full-bleed fill, see ui/Row.qml.
     Rectangle {
         anchors.fill: parent
         color: root.lit

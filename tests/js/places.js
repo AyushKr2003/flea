@@ -183,7 +183,7 @@ function heldByCases(check) {
     check("a volume wins over slash for a folder on it", at("/run/media/gm/USB/photos"), 11)
     check("a kernel share wins over slash for its mountpoint", at("/mnt/nas"), 9)
     check("a tie goes to the first row in rail order", Places.heldBy([favTwin, documents], "/home/gm/Documents/x", dir), 0)
-    check("an unmounted volume never lights", Places.heldBy([ejected, disk], "/", dir), 1)
+    check("an unmounted volume never lights", Places.heldBy([{ kind: "volume", path: "/run/media/gm/USB", mounted: false }, disk], "/run/media/gm/USB/photos", dir), 1)
     check("a row with an invalid record never lights", Places.heldBy([{ kind: "favourite", path: "/a", error: "bad" }], "/a", dir), -1)
     check("nothing holding the folder answers -1", Places.heldBy([homeRow, documents], "/srv/x", dir), -1)
     check("an empty rail answers -1", Places.heldBy([], "/a", dir), -1)
@@ -203,6 +203,8 @@ function heldByCases(check) {
           Places.heldBy(rail, gvfs, { kind: "dir", shareKey: "smb://nas/idle" }), -1)
     check("a gvfs path never lights a row by folder prefix",
           Places.heldBy([disk, homeRow], gvfs, { kind: "dir", shareKey: "smb://other/x" }), -1)
+    check("a pathless share with no mountUri and another address is passed over for the share that holds the folder",
+          Places.heldBy([{ kind: "share", path: "", uri: "smb://nas/a", mounted: true }, share], gvfs, { kind: "dir", shareKey: "smb://nas/data" }), 1)
     check("a share row also answers by the address it is mounted under",
           Places.heldBy([{ kind: "share", path: "", uri: "smb://nas/alias", mountUri: "smb://nas/data", mounted: true }], gvfs, { kind: "dir", shareKey: "smb://nas/data" }), 0)
 
