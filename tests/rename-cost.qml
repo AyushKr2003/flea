@@ -38,12 +38,11 @@ ShellRoot {
     readonly property int idleTicks: 20
     // An armed frame hook draws on every vsync, so an idle second past half of one is a leak, below it noise.
     readonly property int idleFloor: 30
-    // The most frames one case drew beyond or below another run of itself in the suite logs under .superpowers/ip265a (dual 26 to 32), and the margin on top of it.
-    readonly property int frameSpread: 6
-    readonly property int frameMargin: 2
-    readonly property int frameSlack: root.frameSpread + root.frameMargin
+    // Frames one view may draw beyond its other phase over the same sixteen keys; dual alone drew 26 in one phase and 32 in the other of one case (a spread of 6, plus a margin of 2), grid and the rest differed by 2 at most.
+    readonly property int frameSlack: 4
+    readonly property int frameSlackDual: 8
     readonly property int readsPerBump: 5
-    // The row reads of one columns case on the last row ran from 208 to 211 over the suite logs under .superpowers/ip265a, so a selecting end gets the spread beside its bumps.
+    // The far columns case read 209 to 211 row fields before its rename across logged runs, so that case alone gets this beside its selection bumps.
     readonly property int readsSpread: 3
     // The views the positive control scrolls through, one at a time.
     readonly property var controlViews: ["list", "grid", "columns", "dual"]
@@ -71,8 +70,9 @@ ShellRoot {
     property int rowsReplies: 0
     property int inputs: 0
     property int cursorRowEvals: 0
-    // Fields the rows replies armed on arrival; none means the handler ran before the pane held the reply's rows.
-    property int replyArmed: 0
+    // Per case: the rows replies it saw, the fields they armed on arrival, and the fields still unarmed in the pane one turn after a reply (the handler arms the reply's rows, not the pane's).
+    property var replyLog: []
+    property int escapeChecked: 0
     // Field reads of held rows, in an object never reassigned: a getter that wrote a property would loop every binding that reads a row.
     readonly property var tally: ({ rowReads: 0 })
 
@@ -144,6 +144,13 @@ ShellRoot {
         for (var i = 0; i < pane.rows.length; i++)
             for (var field in pane.rows[i])
                 if (root.armField(pane.rows[i], field)) armed++
+        return armed
+    }
+    function armItems(items) {
+        var armed = 0
+        for (var i = 0; i < items.length; i++)
+            for (var field in items[i])
+                if (root.armField(items[i], field)) armed++
         return armed
     }
     function armField(row, field) {
@@ -310,7 +317,7 @@ ShellRoot {
         if (root.stage === 5) {
             var after = root.phase(tag + " after")
             if (after === false) return false
-            root.compare(tag, root.before, after)
+            root.compare(c, tag, root.before, after)
             root.caseIndex++
             root.stage = 0
             return true
@@ -370,7 +377,7 @@ ShellRoot {
     }
 
     // Per rename end and view, no count of the sixteen keys is higher after the rename than before it; a landed row's selection follows the cursor by design, one bump per key, so selection may rise to the key count.
-    function compare(tag, a, b) {
+    function compare(c, tag, a, b) {
         root.check(a.listFocus && a.missed === 0, tag + " before the rename " + a.missed + " keys missed the key handler, list focus " + a.listFocus)
         root.check(b.listFocus, tag + " the list area lost the keyboard to " + b.focus)
         root.check(b.missed === 0, tag + " " + b.missed + " of " + root.keys.length + " keys never reached the key handler: " + b.trace)
@@ -382,12 +389,13 @@ ShellRoot {
         var costs = ["rows", "cursorRow", "built", "destroyed", "rebound"]
         for (var n = 0; n < costs.length; n++)
             root.check(b.keys[costs[n]] <= a.keys[costs[n]], tag + " " + costs[n] + " over " + root.keys.length + " keys " + a.keys[costs[n]] + " before, " + b.keys[costs[n]] + " after")
-        // The same sixteen keys draw 40 to 45 frames in the grid and 26 to 32 in dual from run to run, so frames get the measured spread and a margin.
-        root.check(b.keys.frames <= a.keys.frames + root.frameSlack, tag + " frames over " + root.keys.length + " keys " + a.keys.frames + " before, " + b.keys.frames + " after")
+        root.check(b.keys.frames <= a.keys.frames + (c.view === "dual" ? root.frameSlackDual : root.frameSlack), tag + " frames over " + root.keys.length + " keys " + a.keys.frames + " before, " + b.keys.frames + " after")
         // Each bump of the landed row's selection makes the status strip total that one row in five field reads; an Escape end bumps nothing, so its row reads get no selection allowance.
-        var escape = tag.slice(-7) === " escape"
-        root.check(b.keys.rowReads <= a.keys.rowReads + (escape ? 0 : root.readsPerBump * b.keys.selection + root.readsSpread), tag + " row field reads over " + root.keys.length + " keys " + a.keys.rowReads + " before, " + b.keys.rowReads + " after, " + b.keys.selection + " selection bumps")
+        var escape = c.end === Qt.Key_Escape
+        var spread = c.view === "columns" && c.far === true ? root.readsSpread : 0
+        root.check(b.keys.rowReads <= a.keys.rowReads + (escape ? 0 : root.readsPerBump * b.keys.selection + spread), tag + " row field reads over " + root.keys.length + " keys " + a.keys.rowReads + " before, " + b.keys.rowReads + " after, " + b.keys.selection + " selection bumps")
         if (escape) {
+            root.escapeChecked++
             root.check(a.keys.selection === 0, tag + " selection bumps " + a.keys.selection + " before an Escape rename over " + root.keys.length + " keys")
             root.check(b.keys.selection === 0, tag + " selection bumps " + b.keys.selection + " after an Escape rename over " + root.keys.length + " keys")
         } else {
@@ -399,7 +407,17 @@ ShellRoot {
 
     function report() {
         stepper.running = false
-        root.check(root.replyArmed > 0, "no rows reply armed a fresh row on arrival")
+        var escapes = 0
+        for (var n = 0; n < root.cases.length; n++) {
+            var c = root.cases[n]
+            if (c.end === Qt.Key_Escape) escapes++
+            if (c.control) continue
+            var seen = root.replyLog[n]
+            root.line("reply case " + n, seen === undefined ? {} : seen)
+            root.check(seen === undefined || seen.late === 0, "case " + n + " " + c.view + " " + (c.target || "") + " held " + (seen ? seen.late : 0) + " row fields a rows reply never armed")
+            root.check(c.end !== Qt.Key_Return || (seen !== undefined && seen.armed > 0), "case " + n + " " + c.view + " " + (c.target || "") + " armed no row field on any rows reply")
+        }
+        root.check(root.escapeChecked === escapes, "the Escape branch ran for " + root.escapeChecked + " of " + escapes + " Escape cases")
         root.check(root.caseIndex === root.cases.length, "ran " + root.caseIndex + " of " + root.cases.length + " cases")
         console.log("RENAMECOST DONE checks=" + root.checks + " failed=" + root.failures.length)
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
@@ -425,8 +443,15 @@ ShellRoot {
     }
     Connections {
         target: root.pane ? root.pane.backend : null
-        // This handler runs after the pane's own takeRows, so the reply's rows are already held and arming them keeps every later read counted.
-        function onRows() { root.rowsReplies++; root.replyArmed += root.armRows() }
+        // This handler runs before the pane's own takeRows, so it arms the reply's own row objects, which the pane then holds.
+        function onRows(start, items) {
+            root.rowsReplies++
+            var seen = root.replyLog[root.caseIndex]
+            if (seen === undefined) { seen = { replies: 0, armed: 0, late: 0 }; root.replyLog[root.caseIndex] = seen }
+            seen.replies++
+            seen.armed += root.armItems(items)
+            Qt.callLater(function () { seen.late += root.armRows() })
+        }
     }
 
     Timer {
