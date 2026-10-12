@@ -64,6 +64,11 @@ pub(crate) fn mount_entry_in(path: &Path, body: &str) -> Option<MountEntry> {
     best.map(|(_, entry)| entry)
 }
 
+// Every mount point with whether its filesystem can wedge a syscall, a later line winning a point mounted twice as mount_entry_in does.
+pub(crate) fn wedge_points_in(body: &str) -> std::collections::HashMap<PathBuf, bool> {
+    body.lines().filter_map(parse_line).map(|(mount, fstype, _, _)| (mount, super::netfs::can_wedge(&fstype))).collect()
+}
+
 // The super options of the deepest mount owning path, so a caller can read windows_names off ntfs3.
 pub(crate) fn mount_options_in(path: &Path, body: &str) -> Option<String> {
     let mut best: Option<(usize, String)> = None;

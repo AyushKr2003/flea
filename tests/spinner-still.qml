@@ -5,7 +5,7 @@ import Quickshell
 import qs.Commons
 import "flea" as Flea
 
-// tests/spinner-still.sh's harness: the real ui/Spinner.qml rests for its first second on screen, then crawls; a hide resets it.
+// tests/spinner-still.sh's harness: the real ui/Spinner.qml rests for its first second on screen, then crawls, and a hide resets it; frames and dash writes are counted, never timed.
 ShellRoot {
     id: root
 
@@ -13,6 +13,13 @@ ShellRoot {
     property var failures: []
     property int step: 0
     property real sample: 0
+    property int frames: 0
+    property int spinChanges: 0
+    property int ownChanges: 0
+    // Writes that moved the dash back toward its start; one wrap per loop is the crawl's own, anything more is a second writer.
+    property int spinRises: 0
+    property real lastOffset: 0
+    property var marks: ({})
 
     function check(label, actual, expected) {
         root.checks += 1
@@ -30,13 +37,27 @@ ShellRoot {
         root.quit()
     }
     // The mark's ShapePath: the Shape is the spinner's only child item, and the path is the Shape's only data entry.
-    function offset(spinner) { return spinner.children[0].data[0].dashOffset }
+    function path(spinner) { return spinner.children[0].data[0] }
+    function offset(spinner) { return root.path(spinner).dashOffset }
+    // A mark is the counters at a step; since() is what changed from it to now, plus the ms for the per-second line only.
+    function mark(name) { root.marks[name] = { frames: root.frames, spin: root.spinChanges, own: root.ownChanges, rises: root.spinRises, at: Date.now() } }
+    function since(name) {
+        var m = root.marks[name]
+        return { frames: root.frames - m.frames, spin: root.spinChanges - m.spin, own: root.ownChanges - m.own, rises: root.spinRises - m.rises, ms: Date.now() - m.at }
+    }
 
     FloatingWindow {
         implicitWidth: 200
         implicitHeight: 100
         color: Flea.Theme.color.background
 
+        Item {
+            id: frameProbe
+            Connections {
+                target: frameProbe.Window.window
+                function onFrameSwapped() { root.frames += 1 }
+            }
+        }
         Item {
             id: host
             width: 48
@@ -46,19 +67,50 @@ ShellRoot {
         Flea.Spinner { id: own; x: 100; width: 48; height: 48 }
     }
 
+    Connections {
+        target: root.path(spin)
+        function onDashOffsetChanged() {
+            var now = root.offset(spin)
+            if (now > root.lastOffset) root.spinRises += 1
+            root.lastOffset = now
+            root.spinChanges += 1
+        }
+    }
+    Connections {
+        target: root.path(own)
+        function onDashOffsetChanged() { root.ownChanges += 1 }
+    }
+
     // Each entry runs once its ms have passed since the last show or hide (the start first), so a late step never moves a window.
     readonly property var plan: [
         [400, function () {
             root.check("still at 400 ms", spin.crawling, false)
             root.check("rest offset at 400 ms", root.offset(spin), 0)
+            root.mark("rest")
         }],
-        [850, function () { root.check("rest offset at 850 ms", root.offset(spin), 0) }],
+        [850, function () {
+            root.check("rest offset at 850 ms", root.offset(spin), 0)
+            var rest = root.since("rest")
+            root.check("a resting mark asks for no frame between 400 and 850 ms", rest.frames, 0)
+            root.check("a resting mark writes no dash offset", root.spinChanges, 0)
+        }],
         [1300, function () {
             root.check("crawling after its first second", spin.crawling, true)
             root.sample = root.offset(spin)
+            root.mark("crawl")
         }],
-        [1450, function () {
+        [2300, function () {
+            var crawl = root.since("crawl")
+            // The counts a second of crawl makes, printed for the record and never compared with a number.
+            console.log("SPINNERSTILL rate frames=" + crawl.frames + " spin-dash-changes=" + crawl.spin + " own-dash-changes=" + crawl.own + " in " + crawl.ms + " ms")
+            root.check("the crawl writes the dash offset", crawl.spin > 0, true)
+            root.check("the crawl is drawn", crawl.frames > 0, true)
+            root.check("the crawl writes the dash offset no oftener than the window draws", crawl.spin <= crawl.frames, true)
+            root.check("the crawl walks the dash one way and wraps once a loop", crawl.rises <= 1, true)
+        }],
+        [2450, function () {
             root.check("the dash moves once crawling", root.offset(spin) !== root.sample, true)
+            root.mark("hidden")
             host.visible = false
             root.anchor = Date.now()
         }],
@@ -69,6 +121,8 @@ ShellRoot {
         [1300, function () {
             root.check("no crawl starts while hidden", spin.crawling, false)
             root.check("the dash stays at rest while hidden", root.offset(spin), 0)
+            // The hide reset writes the offset once; nothing after it does, and its own mark is the one still drawing.
+            root.check("a hidden mark writes no dash offset after its reset", root.since("hidden").spin <= 1, true)
             host.visible = true
             root.anchor = Date.now()
         }],

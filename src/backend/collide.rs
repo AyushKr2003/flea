@@ -259,8 +259,25 @@ fn resolved_parent(path: &Path) -> Option<PathBuf> {
 
 // The item already lives in dest: its name there is the item itself, through a symlinked folder too.
 pub fn already_there(src: &Path, name: &str, dst: &Path, dest_real: &Path) -> bool {
+    already_there_in(src, name, dst, dest_real, &mut Parents::default())
+}
+
+// The folders one question has resolved: a selection shares a few, and a canonicalize is a readlink per component.
+#[derive(Default)]
+pub(crate) struct Parents(HashMap<PathBuf, PathBuf>);
+
+impl Parents {
+    fn resolve(&mut self, parent: &Path) -> &Path {
+        if !self.0.contains_key(parent) {
+            self.0.insert(parent.to_path_buf(), parent.canonicalize().unwrap_or_else(|_| parent.to_path_buf()));
+        }
+        &self.0[parent]
+    }
+}
+
+pub(crate) fn already_there_in(src: &Path, name: &str, dst: &Path, dest_real: &Path, parents: &mut Parents) -> bool {
     let src_here = match src.parent() {
-        Some(parent) => parent.canonicalize().unwrap_or_else(|_| parent.to_path_buf()).join(name),
+        Some(parent) => parents.resolve(parent).join(name),
         None => src.to_path_buf(),
     };
     dst == src || dest_real.join(name) == src_here
@@ -291,6 +308,7 @@ fn ask(id: usize, paths: &[String], dest: &str, fat: Option<super::fatnames::Cho
     let Ok(dest_path) = usable_dest(dest) else { return (question, shown) };
     let on_fat = super::fatnames::answered_on_fat(fat, &dest_path);
     let dest_real = dest_path.canonicalize().unwrap_or_else(|_| dest_path.clone());
+    let (mut parents, table) = (Parents::default(), Table::read(&dest_path));
     for raw in paths {
         let src = Path::new(raw);
         if !src.is_absolute() {
@@ -300,10 +318,10 @@ fn ask(id: usize, paths: &[String], dest: &str, fat: Option<super::fatnames::Cho
         let Ok(meta) = src.symlink_metadata() else { continue };
         let Some((dst, leaf)) = super::fatnames::ask_leaf(fat, on_fat, &dest_path, name) else { continue };
         // Same-folder items never ask: a copy keeps both and a move stays put, see Policy::place.
-        if already_there(src, &leaf, &dst, &dest_real) {
+        if already_there_in(src, &leaf, &dst, &dest_real, &mut parents) {
             continue;
         }
-        let Ok(there) = ItemIdentity::inspect(&dst) else { continue };
+        let Ok(there) = identity_in(&dst, &table) else { continue };
         if question.seen.insert(src.to_path_buf(), there).is_none() && shown.len() < SHOWN {
             shown.push(Shown { name: leaf, dir: meta.is_dir(), mode: meta.mode() });
         }
@@ -361,6 +379,10 @@ pub(crate) fn landed(ops: &mut Ops, turn: usize, question: Question) -> bool {
     }
     latest
 }
+
+#[path = "collide_table.rs"]
+mod table;
+pub(crate) use table::{identity_in, Table};
 
 #[cfg(test)]
 #[path = "collide_tests.rs"]

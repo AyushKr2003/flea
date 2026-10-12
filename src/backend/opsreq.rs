@@ -11,10 +11,13 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-// One progress line per item at most this often, so a fast copy of a small file may emit none at all.
+// One progress line per operation at most this often, so a run of small files shares one window, see opspace.rs.
 pub(crate) const PROGRESS_EVERY: Duration = Duration::from_millis(150);
+#[path = "opspace.rs"]
+pub(crate) mod opspace;
+use opspace::Pace;
 
 // Test builds only: set the cancel flag at this item, past the loop-top check, so a mid-item cancel is deterministic.
 #[cfg(test)]
@@ -287,6 +290,7 @@ pub(crate) fn run_transfer_checked(
     spawn_total(&paths, &dest, policy.skipping(), &cancel, &settled, &sweep.flag);
     let mut durability = crate::backend::durable::Durability::begin(&dest);
     durability.rename_fat = policy.renames_inside();
+    let pace = Pace::new();
     let mut steps: Vec<Step> = Vec::new();
     // One deferred trash session for every Replace in the batch, begun only by the first one.
     let mut deferred: Option<super::mergeapply::Deferred> = None;
@@ -401,7 +405,7 @@ pub(crate) fn run_transfer_checked(
             }
         };
         if merging { kept_top = super::merge::kept_name(&dst, &name); }
-        let mut land = |steps: &mut Vec<Step>| one_item(id, index, &name, moving, &src, &dst, source.clone(), &cancel, &tx, &settled, steps, &mut durability);
+        let mut land = |steps: &mut Vec<Step>| one_item(id, index, &name, moving, &src, &dst, source.clone(), &cancel, &tx, (&settled, &pace), steps, &mut durability);
         // A replace trashes through the batch's deferred session, so its copy still follows its own trash.
         if replace {
             let slot = deferred.get_or_insert_with(super::mergeapply::Deferred::begin);
@@ -417,7 +421,7 @@ pub(crate) fn run_transfer_checked(
                 }
             } else {
                 if !batch.is_empty() { let closed = close_open(&mut batch, id, &tx, &mut steps, &mut durability, [&mut ok, &mut failed, &mut skipped], &mut retry); close_merged(&closed, merging, &mut merged_total, &mut kept_total); }
-                Landed::Now(one_item(id, index, &name, moving, &src, &dst, source.clone(), &cancel, &tx, &settled, &mut steps, &mut durability))
+                Landed::Now(one_item(id, index, &name, moving, &src, &dst, source.clone(), &cancel, &tx, (&settled, &pace), &mut steps, &mut durability))
             }
         } else {
             Landed::Now(land(&mut steps))
@@ -485,6 +489,8 @@ pub(crate) fn run_transfer_checked(
             retry.extend(retried);
         }
     }
+    // The bytes the throttled lines left unreported go out before the drive flush, which the card shows as copied.
+    pace.close(&tx, id, &settled);
     // A batch that replaced nothing lists nothing; every Replace settles here, cancel included.
     if let Some(slot) = deferred.as_mut() {
         slot.settle(&mut steps);
@@ -538,28 +544,15 @@ fn one_item(
     source: ItemIdentity,
     cancel: &AtomicBool,
     tx: &Sender<OpMsg>,
-    settled: &AtomicU64,
+    (settled, pace): (&AtomicU64, &Pace),
     steps: &mut Vec<Step>,
     durability: &mut super::durable::Durability,
 ) -> Result<(), FleaError> {
-    let mut last = Instant::now() - PROGRESS_EVERY;
-    let mut sink = |done: u64, total: u64| {
-        if last.elapsed() < PROGRESS_EVERY {
-            return;
-        }
-        last = Instant::now();
-        let _ = tx.send(OpMsg::Progress {
-            id,
-            index,
-            name: name.to_string(),
-            bytes: done,
-            total,
-            // Still 0 while the sweep counts, and the batch's own total from the moment it settles.
-            scanned: settled.load(Ordering::Relaxed),
-        });
-    };
+    // scanned is still 0 while the sweep counts, and the batch's own total from the moment it settles.
+    let mut sink = |done: u64, total: u64| pace.report(tx, id, (index, name), (done, total), settled);
     let mut p = Progress { cancel, on_bytes: &mut sink, partial: None, tree: None, manifest: if moving { super::copymanifest::writer_for_move(src, dst) } else { super::copymanifest::writer_for(src, dst) }, durability: Some(durability), for_move: moving };
     let mut outcome = if moving { move_any(src, dst, &mut p) } else { copy_any(src, dst, &mut p) };
+    pace.ended(index, name);
     match &outcome {
         Ok(()) if moving => steps.push(undo::moved(src, dst, source)?),
         Ok(()) => steps.push(undo::copied(src, dst, source)?),
