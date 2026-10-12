@@ -269,11 +269,14 @@ transferlive_check_rate() {
     fi
     transferlive_harness_rate "$at" "$transferlive_rate_window_ms" || return 0
     low=$transferlive_harness_low high=$transferlive_harness_high spans=$transferlive_harness_span
-    if transferlive_harness_rate "$at" "$((transferlive_rate_window_ms + transferlive_rate_reach_ms))"; then
-        (( transferlive_harness_low >= low )) || low=$transferlive_harness_low
-        (( transferlive_harness_high <= high )) || high=$transferlive_harness_high
-        spans="$spans and $transferlive_harness_span"
+    # The card's window can start at the transfer's zero-byte first sample, which no reading matches, so judge only past it.
+    if ! transferlive_harness_rate "$at" "$((transferlive_rate_window_ms + transferlive_rate_reach_ms))"; then
+        transferlive_seen_rate_unproven=$((transferlive_seen_rate_unproven + 1))
+        return 0
     fi
+    (( transferlive_harness_low >= low )) || low=$transferlive_harness_low
+    (( transferlive_harness_high <= high )) || high=$transferlive_harness_high
+    spans="$spans and $transferlive_harness_span"
     if (( (speed + speed_slack) * transferlive_rate_band_percent < low * 100 || (speed - speed_slack) * 100 > high * transferlive_rate_band_percent )); then
         fail "transferlive: $leg: the card says $(transferlive_size "$speed")/s, the moved figure grew $(transferlive_size "$low")/s to $(transferlive_size "$high")/s over $spans ms: [$line]"
     fi
