@@ -26,6 +26,7 @@ chmod +x "$test_root/bin/hyprctl" || exit 1
 cat > "$test_root/bin/ydotool" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$XDG_RUNTIME_DIR/ydotool.log"
+[[ "$*" == "click 0x80" ]] && printf 'release\n' >> "$XDG_RUNTIME_DIR/order.log"
 exit 0
 EOF
 chmod +x "$test_root/bin/ydotool" || exit 1
@@ -49,9 +50,13 @@ ipc() { printf '{"opened":false}\n'; }
 # Each case runs in a subshell of its own, so a failing case cannot swap out this script's own cleanup trap.
 ylog="$test_root/ydotool.log"
 holdlog="$test_root/hold.log"
+# The fake release click and the case trap append to this one log, so it alone says which ran first.
+orderlog="$test_root/order.log"
+trapstatus="$test_root/trap-status.log"
 # Sample input: a case trap set before the press runs on exit and is back after cap_drops_release or cap_drops_abandon.
-reset_logs() { : > "$ylog"; : > "$holdlog"; }
-case_trap() { printf 'case-trap\n' >> "$holdlog"; }
+reset_logs() { : > "$ylog"; : > "$holdlog"; : > "$orderlog"; : > "$trapstatus"; }
+# The trap records the status it was entered with, which the chained release must not reset.
+case_trap() { local st=$?; printf 'case-trap\n' >> "$holdlog"; printf 'case-trap\n' >> "$orderlog"; printf '%s\n' "$st" >> "$trapstatus"; }
 reset_logs
 ( trap case_trap EXIT
   cap_drops_press 1 1 || fail "stub press refused"
@@ -75,6 +80,8 @@ reset_logs
 [[ $? -eq 3 ]] || fail "the held exit status was lost"
 [[ "$(cat "$ylog")" == "click 0x80" ]] || fail "an exit with a case trap and a held button clicked '$(tr '\n' ' ' < "$ylog")', want click 0x80 once"
 [[ "$(cat "$holdlog")" == "case-trap" ]] || fail "an exit with a held button skipped the case trap: '$(tr '\n' ' ' < "$holdlog")'"
+[[ "$(tr '\n' ' ' < "$orderlog")" == "release case-trap " ]] || fail "the held exit ran '$(tr '\n' ' ' < "$orderlog")', want release before case-trap"
+[[ "$(cat "$trapstatus")" == "3" ]] || fail "the case trap was entered with status '$(cat "$trapstatus")', want the held exit status 3"
 printf 'DROPMODSBOX PASS exithold=release-then-case-trap\n'
 # A bare press has no trap before it: the press arms the release, release and abandon clear it.
 reset_logs
