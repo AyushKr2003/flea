@@ -1,12 +1,13 @@
 // Properties on a folder counts its contents with the folder size walker, on the menu worker and under the request's own cancel.
-use super::dirsize::{walk_counted, Progress, Tally};
+use super::dirsize::{walk_core, walk_counted, Progress, Tally};
 use super::menu_actions::{response, Selected};
 use super::opsreq::{OpMsg, PROGRESS_EVERY};
 use super::trashmanifest::Cancellation;
 use crate::json::field_usize;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -77,11 +78,7 @@ struct RemoteShared {
     at: Mutex<PathBuf>,
 }
 
-// A walk that counted nothing for this long by the deadline is hung in a syscall; the window stays under the deadline.
-const STALL_WINDOW: Duration = Duration::from_secs(1);
-
-// A remote walk runs beside the menu worker under the bulk deadline; past it the menu answers the floor so far.
-// A walk that kept counting marks no mount; one stalled at the deadline marks the mount holding its folder.
+// A remote walk runs beside the menu worker under the bulk deadline; past it the menu answers the floor and a watcher decides any mark.
 fn serve_remote(line: &str, item: &Selected, replies: &Sender<OpMsg>, cancel: &Cancellation, deadline: Duration, body: &str) -> bool {
     let at = Mutex::new(item.path.clone());
     let shared = Arc::new(RemoteShared { stop: AtomicBool::new(false), floor: Mutex::new(Tally { bytes: 0, items: 0, partial: true }), at });
@@ -90,12 +87,13 @@ fn serve_remote(line: &str, item: &Selected, replies: &Sender<OpMsg>, cancel: &C
     let worker_cancel = cancel.clone();
     let worker_shared = Arc::clone(&shared);
     let pace = test_pace();
-    std::thread::spawn(move || remote_walk(&worker_item, &worker_cancel, &worker_shared, pace, &done_tx));
-    remote_wait(line, replies, cancel, &shared, &done_rx, deadline, body)
+    let mount_points: HashSet<PathBuf> = super::mountinfo::mounts_in(body).into_iter().map(|(mount, _)| mount).filter(|mount| mount.starts_with(&item.path)).collect();
+    std::thread::spawn(move || remote_walk(&worker_item, &worker_cancel, &worker_shared, pace, &mount_points, &done_tx));
+    remote_wait(line, replies, cancel, &shared, done_rx, deadline, body)
 }
 
 // The single syscall that decides the folder happens on the worker too, so a hung mount never holds the menu worker.
-fn remote_walk(item: &Selected, cancel: &Cancellation, shared: &RemoteShared, pace: Option<Duration>, done: &std::sync::mpsc::Sender<RemoteMsg>) {
+fn remote_walk(item: &Selected, cancel: &Cancellation, shared: &RemoteShared, pace: Option<Duration>, mount_points: &HashSet<PathBuf>, done: &Sender<RemoteMsg>) {
     let outcome = match item.current() {
         Ok(meta) if meta.is_dir() => {
             shared.floor.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).bytes = meta.len();
@@ -111,8 +109,12 @@ fn remote_walk(item: &Selected, cancel: &Cancellation, shared: &RemoteShared, pa
                     let _ = done.send(RemoteMsg::Report(*tally));
                 }
             };
-            let entering = |folder: &Path| *shared.at.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = folder.to_path_buf();
-            let tally = walk_counted(&item.path, &stop, Some(Progress { every: Duration::ZERO, report: &mut report, entering: Some(&entering) }));
+            let entering = |folder: &Path| {
+                *shared.at.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = folder.to_path_buf();
+                if let Some(pace) = pace { std::thread::sleep(pace); }
+            };
+            let dev_of = |entry: &Path| mount_points.contains(entry).then_some(u64::MAX);
+            let tally = walk_core(&item.path, &stop, Some(&dev_of), Some(Progress { every: Duration::ZERO, report: &mut report, entering: Some(&entering) }));
             Ok(RemoteDone { tally, cancelled: cancel.check().is_err() || shared.stop.load(Ordering::Relaxed) })
         }
         Ok(_) => Err("Only a folder has contents to count.".into()),
@@ -122,16 +124,10 @@ fn remote_walk(item: &Selected, cancel: &Cancellation, shared: &RemoteShared, pa
 }
 
 // Every wire line leaves from the menu worker, so a progress line never lands past the final one.
-fn remote_wait(line: &str, replies: &Sender<OpMsg>, cancel: &Cancellation, shared: &RemoteShared, done: &std::sync::mpsc::Receiver<RemoteMsg>, deadline: Duration, body: &str) -> bool {
+fn remote_wait(line: &str, replies: &Sender<OpMsg>, cancel: &Cancellation, shared: &Arc<RemoteShared>, done: Receiver<RemoteMsg>, deadline: Duration, body: &str) -> bool {
     let bound = Instant::now() + deadline;
-    let stall = STALL_WINDOW.min(deadline / 2);
     let mut progress_due = Instant::now();
-    let (mut counted, mut moved) = (counted_of(shared), Instant::now());
     loop {
-        let now = counted_of(shared);
-        if now != counted {
-            (counted, moved) = (now, Instant::now());
-        }
         match done.recv_timeout(Duration::from_millis(20)) {
             Ok(RemoteMsg::Report(tally)) => {
                 if Instant::now() >= progress_due {
@@ -143,7 +139,7 @@ fn remote_wait(line: &str, replies: &Sender<OpMsg>, cancel: &Cancellation, share
                 }
             }
             Ok(RemoteMsg::Done(outcome)) => return land_remote(line, replies, outcome),
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+            Err(RecvTimeoutError::Timeout) => {
                 // A walk blocked in a syscall never sees the cancel, so the menu thread answers it here.
                 if cancel.check().is_err() {
                     shared.stop.store(true, Ordering::Relaxed);
@@ -151,17 +147,35 @@ fn remote_wait(line: &str, replies: &Sender<OpMsg>, cancel: &Cancellation, share
                 }
                 if Instant::now() >= bound {
                     shared.stop.store(true, Ordering::Relaxed);
-                    if moved.elapsed() >= stall {
-                        let at = shared.at.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
-                        super::walkmounts::mark_holding(&at, body);
-                    }
+                    let (watched, body, silence) = (Arc::clone(shared), body.to_string(), stall_silence());
+                    std::thread::spawn(move || watch_stall(&watched, &done, silence, &body));
                     return send(replies, line, Ok(fields(&timed_out_floor(shared), true)));
                 }
             }
             // A dead worker leaves the floor already reported, marked partial rather than exact.
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            Err(RecvTimeoutError::Disconnected) => {
                 return send(replies, line, Ok(fields(&timed_out_floor(shared), true)));
             }
+        }
+    }
+}
+
+// Past the deadline a walk silent for the single call bound is hung, so its folder's mount is marked; a walk that ends or counts again marks none.
+fn watch_stall(shared: &RemoteShared, done: &Receiver<RemoteMsg>, silence: Duration, body: &str) {
+    let (mut counted, mut moved) = (counted_of(shared), Instant::now());
+    loop {
+        match done.recv_timeout(Duration::from_millis(20)) {
+            Ok(RemoteMsg::Done(_)) | Err(RecvTimeoutError::Disconnected) => return,
+            Ok(RemoteMsg::Report(_)) | Err(RecvTimeoutError::Timeout) => {}
+        }
+        let now = counted_of(shared);
+        if now != counted {
+            (counted, moved) = (now, Instant::now());
+        }
+        if moved.elapsed() >= silence {
+            let at = shared.at.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
+            super::walkmounts::mark_holding(&at, body);
+            return;
         }
     }
 }
@@ -186,42 +200,6 @@ fn land_remote(line: &str, replies: &Sender<OpMsg>, outcome: Result<RemoteDone, 
     }
 }
 
-// Test-only stretch of each stop check; production passes None through test_pace, so the walk is unpaced.
-#[cfg(test)]
-thread_local! {
-    static TEST_PACE: std::cell::Cell<Option<Duration>> = const { std::cell::Cell::new(None) };
-}
-
-// Read on the menu thread and moved onto the worker, so holding it never races the walk.
-#[cfg(test)]
-fn test_pace() -> Option<Duration> {
-    TEST_PACE.with(|slot| slot.get())
-}
-
-// Holds the stretch until the guard drops, so one test's slow walk never leaks into the next.
-#[cfg(test)]
-pub(crate) struct PaceGuard;
-
-// Starts the stretch; the worker takes the value, so the hold itself is race free.
-#[cfg(test)]
-pub(crate) fn test_hold_pace(pace: Duration) -> PaceGuard {
-    TEST_PACE.with(|slot| slot.set(Some(pace)));
-    PaceGuard
-}
-
-// Dropping the guard hands the walk back its unpaced stop, so no later test walks slowly.
-#[cfg(test)]
-impl Drop for PaceGuard {
-    fn drop(&mut self) {
-        TEST_PACE.with(|slot| slot.set(None));
-    }
-}
-
-#[cfg(not(test))]
-fn test_pace() -> Option<Duration> {
-    None
-}
-
 // The one captured item, and only while it is still a folder: a link to one is described as the link.
 fn folder_of(line: &str, id: usize, items: &[Selected]) -> Result<PathBuf, String> {
     if id == 0 || field_usize(line, "id") != Some(id) || items.len() != 1 {
@@ -235,6 +213,11 @@ fn fields(tally: &Tally, done: bool) -> String {
     format!(r#""bytes":{},"items":{},"partial":{},"done":{}"#, tally.bytes, tally.items, tally.partial, done)
 }
 
+#[path = "menucontents_seams.rs"]
+mod seams;
+use seams::{stall_silence, test_pace};
+#[cfg(test)]
+pub(crate) use seams::{test_hold_pace, test_hold_silence};
 #[cfg(test)]
 #[path = "menucontents_tests.rs"]
 mod tests;
