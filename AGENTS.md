@@ -667,6 +667,8 @@ red where it cannot act, a folder owned by somebody else (its word is not yours)
 stays plain where its owner may still fix it, which is the way back in. `tests/js/menu.js` pins the
 rows and the absent parent rows, `tests/js/nav.js` the target.
 
+**A watched re-read waits out a held button.** The landing of any re-read of an unchanged listing runs `Nav.forget`, the count passes through 0 and every delegate is rebuilt in the list, the grid and the columns alike, so a press whose release came after the landing never tapped: the right press opened no menu and the left press moved no cursor, on any folder whose files change under it. `ui/PaneStates.qml` holds a passive `PointHandler` above the rows that writes `pane.pointerHeld` (a press a row grabs is still seen, and so is its release after the row is rebuilt), `ui/js/Anchor.js busy` reads it, and `ui/PaneWire.qml reread` therefore stays owed until the button is up, then `onWatchBusyChanged` pays it after the 400 ms burst timer. A press that begins while a listing is out never reached a row (the `MouseArea` above takes it), so the one window is closed; `tests/presskeep.sh` holds a press 700 ms across a real `changed` line in each view and each button, with a quiet control per case. It moves one ceiling, re-derived with `wc -l`: `ui/Pane.qml` 1224 to 1226 for the `pointerHeld` property and its comment.
+
 ## The preview swap
 
 A cursor move drew the next preview half-built: v0.3.4 shows 145 to 151 mid frames over 18 column
