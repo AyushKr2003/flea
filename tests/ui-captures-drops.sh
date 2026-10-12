@@ -267,10 +267,10 @@ case_cap_drops() {
     key -k BackSpace >/dev/null
     wait_path "$dir"
     cap_drops_wait_settled 203
-    seek_row_named "Photos" || fail "cap_drops: Photos never came under the cursor"
+    seek_row_named "deep" || fail "cap_drops: deep never came under the cursor for the columns leg"
     key -k Return >/dev/null
-    wait_path "$dir/Photos"
-    wait_listing 2
+    wait_path "$dir/deep"
+    wait_listing 1
     click_chrome columns
     settle
     [[ "$(ipc viewMode)" == "columns" ]] || fail "cap_drops: the chrome never reached columns"
