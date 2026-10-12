@@ -195,4 +195,20 @@ function run(check) {
     var bigLater = Transfer.sampled(bigAt, 2, "big.mkv", 2000 * megabyte, 4200 * megabyte, 0)
     check("the line after it still names the size",
           Transfer.fileLine(bigLater), "big.mkv · 4.2 GB")
+
+    // A thousand held ok lines fold into the card with every file counted and the last one named; tests/transferhold.sh drives the real hold.
+    var thousand = { id: 7, n: 1000, moving: false, index: 0, name: "", done: 0, bytes: 0, total: 0, moved: 0,
+                     scanned: 4096000, running: true, failureReported: false }
+    var held = []
+    for (var i = 0; i < 1000; i++) held.push({ index: i, name: "f" + i + ".bin" })
+    var folded = Transfer.itemsDone(thousand, held)
+    check("the card counts every file with the last one named",
+          folded.done + "|" + folded.name, "1000|f999.bin")
+    check("no held items leave the card untouched",
+          Transfer.itemsDone(thousand, []), thousand)
+    // The sample input in ui/js/Transfer.js against literal values: the first file's sampled total joins moved, the second had no sample.
+    var sample = { id: 8, n: 2, moving: false, index: 0, name: "a", done: 0, bytes: 40, total: 100, moved: 0, scanned: 0, running: true, failureReported: false }
+    var two = Transfer.itemsDone(sample, [{ index: 0, name: "a" }, { index: 1, name: "b" }])
+    check("two held lines land as both files done with the last one named",
+          two.done + "|" + two.name + "|" + two.moved + "|" + two.bytes, "2|b|100|0")
 }

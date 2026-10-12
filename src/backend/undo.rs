@@ -32,7 +32,11 @@ impl ItemIdentity {
     pub(crate) fn from_parts(dev: u64, ino: u64, kind: u32, len: u64, mtime: (i64, i64), changed: (i64, i64), born: Option<(u64, u32)>) -> Self {
         Self { dev, ino, kind, len, mtime, changed, born }
     }
-    pub fn inspect(path: &std::path::Path) -> Result<Self, FleaError> { Self::inspect_in(path, &std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default()) }
+    pub fn inspect(path: &std::path::Path) -> Result<Self, FleaError> {
+        #[cfg(test)]
+        super::opsprobe::table_read(path);
+        Self::inspect_in(path, &std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default())
+    }
     // The same against a mount table the caller read once, so a pass over a thousand names does not read it a thousand times.
     pub fn inspect_in(path: &std::path::Path, body: &str) -> Result<Self, FleaError> {
         let owned = path.to_path_buf();
@@ -515,7 +519,12 @@ pub fn move_back(to: &std::path::Path, from: &std::path::Path) -> Result<(), Fle
 }
 
 pub fn copied(from: &std::path::Path, to: &std::path::Path, source: ItemIdentity) -> Result<Step, FleaError> {
-    Ok(Step::Copied { from: from.to_path_buf(), to: to.to_path_buf(), source, created: ItemIdentity::inspect(to)?, manifest: None, manifest_nonce: None, merge: false, rename_fat: false })
+    Ok(copied_as(from, to, source, ItemIdentity::inspect(to)?))
+}
+
+// The plain copy step for a destination the caller already inspected, so a batch reading the mount table once builds the same step.
+pub fn copied_as(from: &std::path::Path, to: &std::path::Path, source: ItemIdentity, created: ItemIdentity) -> Step {
+    Step::Copied { from: from.to_path_buf(), to: to.to_path_buf(), source, created, manifest: None, manifest_nonce: None, merge: false, rename_fat: false }
 }
 
 // A failed or cancelled tree copy carries what it managed to create; a success keeps the plain step.

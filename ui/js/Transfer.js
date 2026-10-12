@@ -26,6 +26,14 @@ function itemDone(t, index, name) {
                                  moved: (t.moved || 0) + sampled})
 }
 
+// Sample input: itemsDone(t, [{index: 0, name: "a"}, {index: 1, name: "b"}]) is itemDone(itemDone(t, 0, "a"), 1, "b") in one write.
+function itemsDone(t, held) {
+    var next = t
+    for (var i = 0; i < held.length; i++)
+        next = itemDone(next, held[i].index, held[i].name)
+    return next
+}
+
 // TransferCard rule 2: what the whole transfer has moved, the finished items plus the one in flight.
 function movedBytes(t) {
     return (t.moved || 0) + (t.bytes || 0)

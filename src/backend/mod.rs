@@ -162,6 +162,12 @@ pub mod xxh64;
 pub(crate) mod undoprobe;
 #[cfg(test)]
 mod undocost_tests;
+// Test-only: per-thread work counters the paste cost test reads.
+#[cfg(test)]
+pub(crate) mod opsprobe;
+// Test-only: the work one paste of many small files costs.
+#[cfg(test)]
+mod opscopymany_tests;
 #[cfg(test)]
 mod undostage_tests;
 // Test-only: a kernel network mount's EINVAL on RENAME_NOREPLACE, routed to a plain rename and never a copy.

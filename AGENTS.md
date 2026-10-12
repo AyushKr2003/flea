@@ -9247,3 +9247,5 @@ The stage4 join settles `tests/startup-units.txt` at 1656568, the sum the probe 
 The optrash journal gate moves one ceiling, re-derived with `wc -l`: `src/backend/undo.rs` 675 to 698 for the gate field, the push that queues behind an open trash reservation, and `reserve` and `fill`; the queue itself is the new `src/backend/journalgate.rs` at 94, with its tests inside it.
 
 A quit drains a trash batch past its announce: `drain` in `src/backend/run.rs` waits while `ops.settling` holds a batch, then files every entry the journal gate still holds, so a write accepted in the settle window keeps its undo entry when the window closes; this moves two ceilings, re-derived with `wc -l`: `src/backend/run.rs` 1105 to 1107 and `src/backend/undo.rs` 698 to 705 (`release_held`).
+
+The many-file paste moves one ceiling, re-derived with `wc -l`: `src/backend/undo.rs` 675 to 684, for `copied_as` (the plain copy step built from a destination the batch already inspected, which `copied` now calls) and the test-only work counter in `ItemIdentity::inspect`, each in the multi-line form the file uses.
