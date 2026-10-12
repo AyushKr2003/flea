@@ -73,6 +73,7 @@ tests/js/rail.js 429
 tests/js/picker.js 343
 tests/picker-grid.qml 450
 tests/picker-hunt.qml 448
+tests/picker-040.qml 567
 tests/js/network.js 307
 tests/js/ops.js 569
 tests/js/slowclick.js 309
@@ -83,7 +84,7 @@ tests/js/watch.js 540
 tests/js/xwwatch.js 295
 tests/js/tabs.js 710
 tests/js/search.js 336
-tests/button-members.qml 488
+tests/button-members.qml 491
 tests/chromering.qml 413
 tests/columnrow-geom.qml 409
 tests/columnscost.qml 416
@@ -135,7 +136,6 @@ ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 797
 ui/Preview.qml 739
 ui/PreviewColumn.qml 585
-ui/PickerChrome.qml 426
 ui/DeviceMounts.qml 528
 ui/PreviewMarkdown.qml 625
 ui/Row.qml 496
@@ -167,7 +167,7 @@ ui/js/Drag.js 343
 ui/js/Ops.js 480
 ui/js/Search.js 359
 ui/js/Mounts.js 298
-ui/js/Picker.js 328
+ui/js/Picker.js 314
 ui/js/Settings.js 459
 ui/js/Scroll.js 304
 ui/js/Tabs.js 717

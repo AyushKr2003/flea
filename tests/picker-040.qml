@@ -98,6 +98,36 @@ ShellRoot {
         var paints = (item.color !== undefined && item.color.a > 0) || item.acceptedButtons !== undefined
         return inside && paints ? item : null
     }
+    // The first item whose QML type is name, or null; the answer row and the filter are found by type.
+    function typed(name) {
+        return root.descendants(win.contentItem).filter(function(item) { return String(item).indexOf(name + "_QMLTYPE") === 0 })[0] || null
+    }
+    function named(name) {
+        return root.descendants(win.contentItem).filter(function(item) { return item.objectName === name })[0] || null
+    }
+    // Children and resources, recursively, the way tests/columnscost.qml counts a subtree.
+    function objectsUnder(item) {
+        var n = 0
+        var stack = [item]
+        while (stack.length > 0) {
+            var o = stack.pop()
+            n += 1
+            var kids = (o !== null && o.children !== undefined) ? o.children : []
+            for (var i = 0; i < kids.length; i++) stack.push(kids[i])
+            var res = (o !== null && o.resources !== undefined) ? o.resources : []
+            for (var j = 0; j < res.length; j++) stack.push(res[j])
+        }
+        return n - 1
+    }
+    // Cancel or the answer in the answer row only; the save area's collision card has buttons of its own.
+    function answerButtons() {
+        var bar = root.typed("PickerAnswers")
+        return bar ? root.descendants(bar).filter(function(item) { return item.tabHandle !== undefined && item.label !== undefined }) : []
+    }
+    function cancelButton() { return root.answerButtons().filter(function(item) { return !item.primary })[0] }
+    function acceptButton() { return root.answerButtons().filter(function(item) { return item.primary })[0] }
+    function at(item, x, y) { return item.mapToItem(win.contentItem, x, y) }
+    function near(a, b) { return Math.abs(a - b) <= 1 }
     function within(item, ancestor) {
         for (var at = item; at; at = at.parent) if (at === ancestor) return true
         return false
@@ -105,6 +135,141 @@ ShellRoot {
     function parentOf(path) {
         var cut = String(path).lastIndexOf("/")
         return cut <= 0 ? "/" : String(path).substring(0, cut)
+    }
+
+    // The 0.3.10 answer row: the title strip, the row under the listing, the filter dropdown and its menu.
+    // The objects under the window at open on the tree before this change, same request, per view; the change must not grow them.
+    readonly property var objectCeiling: ({list: 423, grid: 405})
+    readonly property int markedFiles: 3
+    function titleLine() {
+        var line = root.named("pickerTitleLine")
+        return line ? line.children.filter(function(item) { return item.visible }) : []
+    }
+    function rowIndex(name) {
+        return win.rows.map(function(row) { return row.n }).indexOf(name) + win.held
+    }
+    function answerRow() {
+        var bar = root.typed("PickerAnswers")
+        var accept = root.acceptButton()
+        var cancel = root.cancelButton()
+        // Cancel and the answer sit right-aligned, 14 from the edge with a gap of 9, whether or not a filter stands at the left.
+        root.check("the answer row sits under the listing", root.near(root.at(bar, 0, 0).y, root.at(win.viewItem(), 0, win.viewItem().height).y), true)
+        root.check("the answer row stands on the footer", root.near(root.at(bar, 0, bar.height).y + Flea.Theme.chromeHeight, win.contentItem.height), true)
+        root.check("the answer sits 14 from the right edge", root.near(root.at(accept, accept.width, 0).x, win.contentItem.width - Flea.Theme.spacing.rowPaddingX), true)
+        root.check("Cancel sits one gap left of the answer", root.near(root.at(cancel, cancel.width, 0).x + Flea.Theme.spacing.gap, root.at(accept, 0, 0).x), true)
+        root.check("the buttons are the 30 px body control", [cancel.height, accept.height], [30, 30])
+    }
+    function answersStep() {
+        var accept = root.acceptButton()
+        var trigger = root.typed("PickerFilter")
+        var menu = root.typed("ContextMenu")
+        if (stage === 0) {
+            root.logic = root.pickerLogic()
+            var ask = root.named("pickerAsk")
+            var texts = root.titleLine()
+            var baseline = texts.map(function(item) { return root.at(item, 0, item.baselineOffset).y })
+            // The line's height is the font's: 33 px with the board's face and one pixel more with the CI image's, so the strip is judged by its formula.
+            root.check("the title strip is one body line and its padding", ask.height, Math.max(Flea.Theme.chromeHeight, texts[0].implicitHeight + 2 * Flea.Theme.spacing.rowPaddingY))
+            root.check("the title strip holds no button", root.descendants(ask).filter(function(item) { return typeof item.activated === "function" }).length, 0)
+            root.check("the title line stands on one baseline", baseline.every(function(y) { return root.near(y, baseline[0]) }), true)
+            root.check("the title starts at the strip inset", root.near(root.at(texts[0], 0, 0).x, Flea.Theme.spacing.rowPaddingX), true)
+            root.answerRow()
+            if (scenario === "answers") {
+                root.check("a portal caller is named after a middot on the title line",
+                    texts.map(function(item) { return item.text }).join("").replace(/\u00a0/g, " "), "All Files \u00b7 Requested by org.chromium.Chromium")
+                root.check("the middot is muted caption and the requester is foreground caption", [Qt.colorEqual(texts[1].color, Flea.Theme.color.muted), Qt.colorEqual(texts[2].color, Flea.Theme.color.foreground), texts[1].font.pixelSize, texts[2].font.pixelSize], [true, true, Flea.Theme.font.caption, Flea.Theme.font.caption])
+                root.check("the trigger is the menu's width", trigger.width, Flea.Theme.menuWidth)
+                root.check("the trigger is the control height", trigger.height, accept.height)
+                root.check("the trigger sits 14 from the left", root.near(root.at(trigger, 0, 0).x, Flea.Theme.spacing.rowPaddingX), true)
+                root.check("the trigger names the current filter", root.descendants(trigger).filter(function(item) { return item.text === "Pictures" }).length, 1)
+                root.check("no menu object exists before the first open", menu === null, true)
+                console.log("PICKER_HUNT objects " + root.objectsUnder(win.contentItem))
+                root.check("the picker's object count at open stays within the earlier tree's", root.objectsUnder(win.contentItem) <= root.objectCeiling[win.viewMode], true)
+                trigger.forceActiveFocus(Qt.TabFocusReason)
+                root.stage = 51
+                root.stamp = Date.now()
+                return
+            }
+            // No filters: no trigger, no menu, and the buttons keep the places they have with one.
+            root.check("a host caller names no requester", texts.map(function(item) { return item.text }).join(""), "Picker hunt")
+            root.check("a request with no filters draws no trigger", trigger === null || !trigger.visible, true)
+            root.check("the answer area is one row 14 padded with a hairline rule", root.near(root.typed("PickerAnswers").height, 1 + 2 * Flea.Theme.spacing.rowPaddingX + accept.height), true)
+            // A folder or an empty listing drops Open to 0.55; a file keeps it live.
+            win.cursorIndex = root.rowIndex("sub")
+            root.check("Open drops to 0.55 on a folder", [accept.available, Math.abs(accept.opacity - Flea.Theme.disabledOpacity) < 0.001], [false, true])
+            win.cursorIndex = root.rowIndex("a.txt")
+            root.check("Open is live on a file in a one-file request", [accept.available, accept.opacity, accept.label], [true, 1, "Open"])
+            root.finish()
+            return
+        }
+        if (stage === 51) {
+            if (!trigger.activeFocus) { if (Date.now() - root.stamp > root.settleWaitMs) root.check("Tab focus reaches the trigger", trigger.activeFocus, true); return }
+            root.press(Qt.Key_Space)
+            root.stage = 52
+            root.stamp = Date.now()
+            return
+        }
+        if (stage === 52) {
+            if (!menu || !menu.opened) {
+                if (Date.now() - root.stamp > root.settleWaitMs) {
+                    root.check("the trigger opens the menu on Space", "no menu", "menu")
+                }
+                return
+            }
+            if (Date.now() - root.stamp < root.pollIntervalMs * 10) return
+            var frame = menu.frameItem
+            root.check("the menu opens flush above the trigger", root.near(root.at(frame, 0, frame.height).y, root.at(trigger, 0, 0).y), true)
+            root.check("the menu stands at the trigger's left", root.near(root.at(frame, 0, 0).x, root.at(trigger, 0, 0).x), true)
+            root.check("the menu is the menu width", frame.width, Flea.Theme.menuWidth)
+            root.check("the menu lists the caller's filters then All files", menu.entries.map(function(entry) { return entry.label }), ["Text", "Pictures", "Data", "All files"])
+            root.check("the menu keeps the mark slot empty", menu.entries.every(function(entry) { return entry.mark === "" }), true)
+            root.check("the menu rows are the 37 px row", menu.itemFor(0).height, Flea.Theme.rowHeight)
+            root.check("the cursor starts on the current filter", menu.cursor, 1)
+            root.listingsBefore = root.listings
+            root.press(Qt.Key_Down)
+            root.press(Qt.Key_Down)
+            root.press(Qt.Key_Return)
+            root.stage = 53
+            root.stamp = Date.now()
+            return
+        }
+        if (stage === 53) {
+            if (Date.now() - root.stamp < root.settleWaitMs) return
+            root.check("choosing All files sets the filter", win.filterIndex, -1)
+            root.check("choosing All files relists once", root.listings - root.listingsBefore, 1)
+            root.check("the menu closes on a choice", menu.opened, false)
+            root.check("the trigger names All files", root.descendants(trigger).filter(function(item) { return item.text === "All files" }).length, 1)
+            root.check("focus returns to the trigger", trigger.activeFocus, true)
+            root.press(Qt.Key_Down)
+            root.stage = 54
+            root.stamp = Date.now()
+            return
+        }
+        if (stage === 54) {
+            if (!menu.opened) { if (Date.now() - root.stamp > root.settleWaitMs) root.check("Down opens the menu", "closed", "open"); return }
+            root.check("the cursor starts on All files when it is current", menu.cursor, 3)
+            root.press(Qt.Key_Escape)
+            root.stage = 55
+            root.stamp = Date.now()
+            return
+        }
+        if (stage === 55) {
+            if (Date.now() - root.stamp < root.settleWaitMs) return
+            root.check("Esc closes the menu only", [menu.opened, win.answered, win.filterIndex], [false, false, -1])
+            root.stage = 56
+            root.stamp = Date.now()
+            return
+        }
+        if (stage === 56) {
+            // One mark is asked at a time, so each file waits for the answer to the one before.
+            if (win.markRequest) return
+            if (win.marks.length < root.markedFiles) {
+                win.toggleMark(root.rowIndex(["a.txt", "b.txt", "c.txt"][win.marks.length]))
+                return
+            }
+            root.check("three marked files make the answer read Open 3", accept.label, "Open 3")
+            root.finish()
+        }
     }
 
     Component.onCompleted: {
@@ -154,6 +319,7 @@ ShellRoot {
                 return
             }
             if (!win || win.listingState !== "ready" || !win.rows.length) return
+            if (scenario === "answers" || scenario === "single") { root.answersStep(); return }
             if (stage === 0) {
                 if (win.saving && !win.saveReady) return
                 var rowIndex = win.rows.findIndex(function(row) { return row.n === "a.txt" })
@@ -209,6 +375,10 @@ ShellRoot {
                     root.check("collision selects filename stem", form.fieldItem.selectedText, "a")
                     var labels = form.controls().filter(function(item) { return item.visible }).map(function(item) { return item.name })
                     root.check("collision offers Replace", labels.indexOf("Replace") >= 0, true)
+                    // The answer row stands under the save area in every mode; only the buttons moved out of the title strip.
+                    root.check("a save's answer row sits under the save area", root.near(root.at(root.typed("PickerAnswers"), 0, 0).y, root.at(form, 0, form.height).y), true)
+                    root.check("a save answers Save", root.acceptButton().label, "Save")
+                    root.check("a save keeps Cancel in the answer row", root.cancelButton().label, "Cancel")
                 }
                 if (scenario === "collision") { root.finish(); return }
                 root.stage = 2

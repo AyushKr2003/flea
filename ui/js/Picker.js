@@ -69,14 +69,15 @@ function title(req) {
 // Only a portal identity is ever shown here. A host application has none, and inventing one from
 // the window title would put a name the desktop never vouched for under a trusted-looking label.
 function subtitle(req) {
-    return req.app.length > 0 ? "Requested by " + req.app : ""
+    return req.app.length > 0 ? "Requested by %1".arg(req.app) : ""
 }
 
 // The primary button. The count rides on it in the multiple case, which is the board's "Send 3".
 function acceptLabel(req, count) {
     var base = req.accept.length > 0 ? req.accept : defaultAccept(req)
+    // The count goes in first and the caller's own text last, so a placeholder in it is never filled in.
     if (req.multiple && count > 1) {
-        return base + " " + Format.count(count)
+        return "%2 %1".arg(Format.count(count)).arg(base)
     }
     return base
 }
@@ -108,8 +109,8 @@ function hints(req) {
     return pick + " · Esc cancel"
 }
 
-// The chip row: the caller's filters, then All files, which is always explicit. An empty list is no
-// row at all, because a chooser with one chip is a chooser with nothing to choose between.
+// The filter menu's rows: the caller's filters, then All files, which is always explicit. No filters is no
+// dropdown at all, because a chooser with one filter is a chooser with nothing to choose between.
 function chips(req) {
     if (req.filters.length === 0) {
         return []
@@ -122,22 +123,7 @@ function chips(req) {
     return out
 }
 
-// Room the path label always keeps, so a narrow window still names where the list stands.
-var CHIP_PATH_MIN = 96
-
-// Sample input: chipStripWidth(300, 400, 96) answers 204, chipStripWidth(300, 100, 96) answers 100.
-function chipStripWidth(free, chipsWidth, pathMin) {
-    if (!(free > 0) || !(chipsWidth > 0)) {
-        return 0
-    }
-    var keep = pathMin > 0 ? pathMin : 0
-    if (free <= keep) {
-        return 0
-    }
-    return Math.min(chipsWidth, free - keep)
-}
-
-// Which chip starts active: the caller's current_filter when it names one of them, else the first.
+// Which filter starts current: the caller's current_filter when it names one of them, else the first.
 function currentChip(req) {
     if (req.filters.length === 0) {
         return -1

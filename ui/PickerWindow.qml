@@ -513,11 +513,8 @@ ShellRoot {
                 picker: win
                 listing: listing
                 backend: backend
-                onCancelRequested: win.cancel()
-                onAcceptRequested: win.accept()
                 onBackRequested: { win.focusView(); win.goBack() }
                 onUpRequested: { win.focusView(); win.goUp() }
-                onChipChosen: function (index) { win.filterIndex = index }
                 onViewChosen: function (mode) { win.setView(mode) }
             }
 
@@ -629,12 +626,15 @@ ShellRoot {
                 id: save
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.bottom: status.top
-                maximumHeight: Math.max(0, status.y - chrome.height - Theme.rowHeight)
+                anchors.bottom: answers.top
+                maximumHeight: Math.max(0, answers.y - chrome.height - Theme.rowHeight)
                 picker: win
                 onNameEdited: function (text) { win.saveName = text }
                 onAccepted: win.accept()
             }
+
+            // The answer row stands under the listing and the save area in every mode; the footer is under it.
+            Flea.PickerAnswers { id: answers; anchors.bottom: status.top; picker: win }
 
             // The footer: what is checked on the left, the keys that act on it on the right.
             Item {
@@ -743,7 +743,7 @@ ShellRoot {
             function pathBarOpen(): bool { return chrome.editing }
             function checks(): string { return JSON.stringify({marksBusy: win.markRequest > 0, saveBusy: win.saveRequest > 0, submitting: win.submitting, canAccept: win.canAccept, saveReady: win.saveReady, collision: win.saveCollision, review: win.saveReview.review || 0}) }
             function markedUris(): string { return JSON.stringify(win.marks.map(function(mark) { return mark.uri })) }
-            function controls(): string { return JSON.stringify(chrome.controls().concat(header.controls(), save.controls(), places.controls())) }
+            function controls(): string { return JSON.stringify(chrome.controls().concat(answers.controls(), header.controls(), save.controls(), places.controls())) }
             function rowCentre(index: int): string { return win.centre(win.viewItem().itemAtIndex(index)) }
             function saveState(): string { return JSON.stringify({name: win.saveName, path: win.saveReview.path || "", collision: win.saveCollision, error: win.saveError, field: win.centre(save.fieldItem)}) }
             function snapshot(): string {
@@ -760,7 +760,7 @@ ShellRoot {
                     marksBusy: win.markRequest > 0, saveBusy: win.saveRequest > 0, submitting: win.submitting, backendUnavailable: win.backendUnavailable,
                     canAccept: win.canAccept, saveReady: win.saveReady, collision: win.saveCollision,
                     saveName: win.saveName, saveError: win.saveError, message: win.message, messageError: win.messageError, hints: statusHints.text,
-                    controls: chrome.controls().concat(header.controls(), save.controls(), places.controls()), headerMark: header.sortBy, listFocus: list.activeFocus, gridFocus: grid.activeFocus,
+                    controls: chrome.controls().concat(answers.controls(), header.controls(), save.controls(), places.controls()), headerMark: header.sortBy, listFocus: list.activeFocus, gridFocus: grid.activeFocus,
                     railFocus: places.focusItem.activeFocus, preset: Flea.ViewState.keysPreset,
                     bodySmall: Theme.font.bodySmall, body: Theme.font.body, width: win.width, height: win.height,
                     themeLoaded: Theme.ready, themeForeground: String(Theme.color.foreground),
@@ -785,7 +785,7 @@ ShellRoot {
             return [point.x, point.y, item.width, item.height]
         }
         function stepFocus(from, back) {
-            var items = chrome.focusItems().concat([places.focusItem, win.viewItem()], save.focusItems())
+            var items = answers.focusItems().concat(chrome.focusItems(), [places.focusItem, win.viewItem()], save.focusItems())
                 .filter(function(item) { return item.visible && item.enabled && item.activeFocusOnTab })
             if (!items.length) return
             var at = items.indexOf(from)

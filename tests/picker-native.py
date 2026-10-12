@@ -449,14 +449,19 @@ def test_filters():
     filters = [("Images", [(0, "*.png")]), ("Text", [(1, "text/plain")])]
     filtered = Request("SP04-filters", folder=large, filters=GLib.Variant("a(sa(us))", filters), current_filter=GLib.Variant("(sa(us))", filters[0])).opened()
     filtered.until("glob reaches beyond original window", lambda state: state["total"] == 1 and state["cursorName"] == "zz-last.png")
-    filtered.click("Text")
-    filtered.until("MIME filter applies", lambda state: state["total"] == 150)
-    filtered.click("All files")
-    filtered.until("All files restores listing", lambda state: state["total"] == 151)
-    check("SP04 filter chip owns focus", filtered.control("All files")["focused"])
-    filtered.key("-k", "Tab")
-    filtered.until("Tab leaves filters for rail", lambda state: state["railFocus"])
-    filtered.key("-k", "Tab")
+    # The filter is a dropdown in the answer row: Return opens its menu on the current filter, Down moves, Return chooses.
+    filtered.focus_control("Filter")
+    for step, total in (("MIME filter applies", 150), ("All files restores listing", 151)):
+        filtered.key("-k", "Return")
+        filtered.key("-k", "Down")
+        filtered.key("-k", "Return")
+        filtered.until(step, lambda state, total=total: state["total"] == total)
+    check("SP04 filter trigger owns focus", filtered.control("Filter")["focused"])
+    for _ in range(8):
+        if filtered.state()["listFocus"]: break
+        before = filtered.state()["controls"]
+        filtered.key("-k", "Tab")
+        filtered.until("Tab advances", lambda state: state["listFocus"] or state["controls"] != before)
     filtered.until("Tab enters listing", lambda state: state["listFocus"])
     filtered.key("-k", "End")
     filtered.until("last window loads", lambda state: state["cursor"] == 150 and state["held"] > 0 and state["cursorName"] == "zz-last.png")

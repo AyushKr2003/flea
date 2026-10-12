@@ -135,6 +135,7 @@ var PATHS = {
     "eye-off": "M12 5 22 12 12 19 2 12z M10 10h4v4h-4z M4 4l16 16",
     // Replaces the "▸" Text the menu used to draw, so it stops mixing a font dingbat into a path language.
     "chevron-right": "M9 18l6-6-6-6",
+    "chevron-down": "M6 9l6 6 6-6",
     "chevron-left": "M15 18l-6-6 6-6",
     // The window chrome's own five marks, added with the bar that draws them.
     "arrow-left": "M19 12H5 M12 19l-7-7 7-7",

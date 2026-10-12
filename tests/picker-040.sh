@@ -26,7 +26,7 @@ failures=0
 phases=0
 probe_timeout_seconds=15
 for view in list grid; do
-    for scenario in path collision far probe; do
+    for scenario in path collision far probe answers single; do
         phase="$test_root/$view-$scenario"
         mkdir -p "$phase"/{home,state/flea,cache,data,runtime,tmp}
         chmod 700 "$phase/runtime"
@@ -37,6 +37,7 @@ for view in list grid; do
             mode=save
             multiple=false
         fi
+        [ "$scenario" = single ] && multiple=false
         # The path leg keeps one favourite, so a typed name shows the Jump dropdown over the listing.
         places=""
         [ "$scenario" = path ] && places=$(printf ',"places":{"favourites":[{"label":"sub","path":"%s/sub"}]}' "$fixture")
@@ -46,6 +47,7 @@ for view in list grid; do
 import json,sys
 request=dict(mode=sys.argv[1],multiple=sys.argv[2]=='true',folder=sys.argv[3],name='new.txt' if sys.argv[4]=='probe' else 'a.txt',title='Picker hunt')
 if sys.argv[4] in ('path','far'):request['filters']=[dict(label='Text',globs=['*.txt'],mimes=[])]
+if sys.argv[4]=='answers':request.update(title='All Files',app='org.chromium.Chromium',current='Pictures',filters=[dict(label=name,globs=[glob],mimes=[]) for name,glob in (('Text','*.txt'),('Pictures','*.png'),('Data','*.dat'))])
 print(json.dumps(request))
 PY
         )

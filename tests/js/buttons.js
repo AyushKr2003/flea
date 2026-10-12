@@ -129,7 +129,6 @@ function run(check) {
     check("set members sit four hairlines apart", Buttons.SET_GAP, 4)
     check("settings segments sit two hairlines apart", Buttons.SEGMENT_GAP, 2)
     check("the segments read that gap", Source.source("ui/SettingsSegment.qml").indexOf("spacing: Theme.spacing.hairline * Buttons.SEGMENT_GAP") >= 0, true)
-    check("the picker's chips read the set gap", Source.source("ui/PickerChrome.qml").indexOf("spacing: Theme.spacing.hairline * Buttons.SET_GAP") >= 0, true)
     check("the thick focus frame is 2 px", Buttons.RING, 2)
     check("a disabled control dims", Buttons.DISABLED_OPACITY, 0.55)
     check("hover is 8 percent of the ink", Buttons.WASH_HOVER, 0.08)
@@ -142,7 +141,7 @@ function run(check) {
     var theme = Source.source("ui/Theme.qml")
     check("Theme's washes and dim read Buttons.js",
         ["washHover: Buttons.WASH_HOVER", "washActive: Buttons.WASH_PRESS", "disabledOpacity: Buttons.DISABLED_OPACITY"].map(function (line) { return theme.indexOf(line) >= 0 }).join(" "), "true true true")
-    var pressers = ["ui/ChromeButton.qml", "ui/PickerChrome.qml", "ui/DialogButton.qml"]
+    var pressers = ["ui/ChromeButton.qml", "ui/DialogButton.qml"]
     for (var p = 0; p < pressers.length; p++) {
         var presser = codeOf(Source.source(pressers[p]))
         check(pressers[p] + " presses with the shared scale and duration, no literal",
