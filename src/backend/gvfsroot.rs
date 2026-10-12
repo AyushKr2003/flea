@@ -21,6 +21,15 @@ fn run_user_root() -> String {
     "/run/user/".to_string()
 }
 
+// Sample input: "/run/user/1000//gvfs/./smb-share:x/a" answers "/run/user/1000/gvfs/smb-share:x/a"; the text of a clean path is kept as is.
+fn folded(path: &Path) -> std::borrow::Cow<'_, str> {
+    let text = path.to_string_lossy();
+    if !text.contains("//") && !text.contains("/./") && !text.ends_with("/.") {
+        return text;
+    }
+    std::borrow::Cow::Owned(path.components().collect::<PathBuf>().to_string_lossy().into_owned())
+}
+
 // Splits "<run>/<uid>/gvfs/<share...>" into the root through "gvfs/" and the rest; None for any path off the gvfs mount root.
 fn gvfs_split(text: &str) -> Option<(String, &str)> {
     let run = run_user_root();
@@ -32,7 +41,7 @@ fn gvfs_split(text: &str) -> Option<(String, &str)> {
 
 // Sample input: "/run/user/1000/gvfs/mtp:host=X/" answers Some("phone"); "/home/gm/gvfs/mtp:host=X" answers None, since only the mount root counts.
 pub fn gvfs_class(path: &Path) -> Option<&'static str> {
-    let text = path.to_string_lossy();
+    let text = folded(path);
     let (_, share) = gvfs_split(&text)?;
     let share = share.to_ascii_lowercase();
     if share.starts_with("mtp:") || share.starts_with("gphoto2:") || share.starts_with("afc:") {
@@ -44,8 +53,24 @@ pub fn gvfs_class(path: &Path) -> Option<&'static str> {
 
 // Sample input: "/run/user/1000/gvfs/smb-share:server=n,share=x/dir" answers "/run/user/1000/gvfs/smb-share:server=n,share=x".
 pub fn gvfs_root(path: &Path) -> Option<PathBuf> {
-    let text = path.to_string_lossy();
+    let text = folded(path);
     let (root, share) = gvfs_split(&text)?;
     let name = share.split('/').next().filter(|name| !name.is_empty())?;
     Some(PathBuf::from(root + name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Doubled slashes and dot segments fold away before the gvfs root is matched, so no spelling of a mount path escapes the guard.
+    #[test]
+    fn an_unnormalized_gvfs_path_is_still_a_gvfs_path() {
+        for spelled in ["/run/user/1000//gvfs/smb-share:server=n,share=x/a", "/run/user/1000/./gvfs/smb-share:server=n,share=x/a",
+            "/run/user/1000/gvfs//smb-share:server=n,share=x/a", "//run/user/1000/gvfs/smb-share:server=n,share=x/a", "/run/user/1000/gvfs/smb-share:server=n,share=x/."] {
+            assert_eq!(gvfs_class(Path::new(spelled)), Some("network"), "{spelled} is a gvfs path");
+            assert_eq!(gvfs_root(Path::new(spelled)).as_deref(), Some(Path::new("/run/user/1000/gvfs/smb-share:server=n,share=x")), "{spelled} roots at its share");
+        }
+        assert_eq!(gvfs_class(Path::new("/home/u//gvfs/smb-share:server=n,share=x/a")), None, "a doubled slash does not turn a plain folder into a mount");
+    }
 }
