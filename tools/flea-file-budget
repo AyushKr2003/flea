@@ -193,6 +193,7 @@ tests/unlock-stdin.qml 485"
 status=0
 
 # A name listed twice would hand the lookup two ceilings, so it is refused outright.
+# Sample input: ui/Preview.qml 724, the first field of each known_over_cap line is its name.
 dups=$(printf '%s\n' "$known_over_cap" | awk '{ print $1 }' | sort | uniq -d)
 if [ -n "$dups" ]; then
   echo "DUPLICATE known_over_cap entry: $dups"
