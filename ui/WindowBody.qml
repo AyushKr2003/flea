@@ -352,7 +352,7 @@ Rectangle {
                 paneFocused: view.currentPane === otherPane
                 overlayParent: view
                 preview: primaryPane.preview
-                previewLoader: previewLoader
+                previewLoader: primaryPane.previewLoader
                 shareBrowser: primaryPane.shareBrowser
                 keymapSheet: primaryPane.keymapSheet
                 settingsPanel: primaryPane.settingsPanel

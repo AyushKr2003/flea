@@ -2092,6 +2092,7 @@ ui/WindowBody.qml	349	primaryPane	Declared QML id; component context access is v
 ui/WindowBody.qml	352	view	Declared QML id; component context access is valid at runtime.
 ui/WindowBody.qml	353	view	Declared QML id; component context access is valid at runtime.
 ui/WindowBody.qml	354	primaryPane	Declared QML id; component context access is valid at runtime.
+ui/WindowBody.qml	355	primaryPane	Declared QML id; component context access is valid at runtime.
 ui/WindowBody.qml	356	primaryPane	Declared QML id; component context access is valid at runtime.
 ui/WindowBody.qml	357	primaryPane	Declared QML id; component context access is valid at runtime.
 ui/WindowBody.qml	358	primaryPane	Declared QML id; component context access is valid at runtime.
@@ -3478,6 +3479,7 @@ ui/WindowBody.qml	349	primaryPane	Declared QML id; component context access is v
 ui/WindowBody.qml	352	view	Declared QML id; component context access is valid at runtime.
 ui/WindowBody.qml	353	view	Declared QML id; component context access is valid at runtime.
 ui/WindowBody.qml	354	primaryPane	Declared QML id; component context access is valid at runtime.
+ui/WindowBody.qml	355	primaryPane	Declared QML id; component context access is valid at runtime.
 ui/WindowBody.qml	356	primaryPane	Declared QML id; component context access is valid at runtime.
 ui/WindowBody.qml	357	primaryPane	Declared QML id; component context access is valid at runtime.
 ui/WindowBody.qml	358	primaryPane	Declared QML id; component context access is valid at runtime.
