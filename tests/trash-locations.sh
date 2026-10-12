@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# sandbox_trash_files_dir follows g_local_file_trash on both branches,
-# and sandbox_trash_remove_own removes only owned mount-top entries.
+# sandbox_trash_files_dir follows g_local_file_trash; sandbox_trash_remove_own removes only owned entries.
 set -u
 set -o pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 . "$repo/tools/flea-sandbox-guard"
+[ "$(id -u)" != 0 ] || { printf 'TRASHLOC REFUSED running as uid 0 makes [ -w ] meaningless\n' >&2; exit 1; }
 
 checks=0
 ok() {
@@ -78,14 +78,15 @@ printf 'devices root=%s other=%s\n' "$root_dev" "$second_dev"
 # One literal expectation per GLib layout, through a stat interposition for %m.
 fake_top="$test_root/faketop"
 slash_top="$test_root/slashtop"
-mkdir -p "$fake_top" "$slash_top" || fail "no fake tops"
+slash_fake="$test_root/slashfake"
+mkdir -p "$fake_top" "$slash_top" "$slash_fake" || fail "no fake tops"
 printf 'body\n' > "$fake_top/item.txt" || fail "no fake top item"
 printf 'body\n' > "$slash_top/item.txt" || fail "no slash top item"
 stat() {
     if [[ "${1:-}" == "-c" && "${2:-}" == "%m" ]]; then
         case "${@: -1}" in
             "$fake_top"*) printf '%s\n' "$fake_top"; return 0 ;;
-            "$slash_top"*) printf '%s\n' "/"; return 0 ;;
+            "$slash_top"*) printf '%s/\n' "$slash_fake"; return 0 ;;
         esac
     fi
     command stat "$@"
@@ -143,9 +144,9 @@ wipe "$fake_top/.Trash"
 got=$(sandbox_trash_files_dir "$fake_top/item.txt" "$home_other") || fail "absent choice refused"
 [[ "$got" == "$fake_top/.Trash-$uid/files" ]] || fail "absent choice gave $got"
 ok "absent .Trash falls back: $got"
-# The root top names its trash with one slash.
+# A trailing-slash top still names its trash with one slash, inside this marked root.
 got=$(sandbox_trash_files_dir "$slash_top/item.txt" "$home_other") || fail "slash top refused"
-[[ "$got" == "/.Trash-$uid/files" ]] || fail "slash top gave $got"
+[[ "$got" == "$slash_fake/.Trash-$uid/files" ]] || fail "slash top gave $got"
 ok "slash top: $got"
 unset -f stat
 
@@ -164,7 +165,9 @@ printf '[Trash Info]\nPath=/elsewhere/other.txt\nDeletionDate=2026-10-11T00:00:0
 printf 'escaped\n' > "$fake_files/escape.txt" || fail "no escaping files entry"
 printf '[Trash Info]\nPath=../../outside.txt\nDeletionDate=2026-10-11T00:00:00\n' > "$fake_info/escape.txt.trashinfo" || fail "no escaping info entry"
 printf 'unclaimed\n' > "$fake_files/orphan.txt" || fail "no info-less entry"
-sandbox_trash_remove_own "$fake_files" "$test_root" own.txt abs.txt other.txt escape.txt orphan.txt missing.txt || fail "owned removal refused"
+sandbox_trash_remove_own "$fake_files" "$test_root" own.txt abs.txt orphan.txt missing.txt || fail "owned removal refused"
+rc=0; sandbox_trash_remove_own "$fake_files" "$test_root" other.txt escape.txt || rc=$?
+[[ "$rc" == 2 ]] || fail "foreign removal gave $rc, not 2"
 [[ ! -e "$fake_files/own.txt" && ! -e "$fake_info/own.txt.trashinfo" ]] || fail "owned relative pair survived"
 [[ ! -e "$fake_files/abs.txt" && ! -e "$fake_info/abs.txt.trashinfo" ]] || fail "owned absolute pair survived"
 [[ "$(cat "$fake_files/other.txt")" == theirs && -f "$fake_info/other.txt.trashinfo" ]] || fail "foreign pair changed"
@@ -172,6 +175,23 @@ sandbox_trash_remove_own "$fake_files" "$test_root" own.txt abs.txt other.txt es
 [[ -f "$fake_files/orphan.txt" ]] || fail "info-less entry changed"
 [[ -d "$fake_files" && -d "$fake_info" ]] || fail "trash directories changed"
 ok "owned removal keeps foreign entries and the trash itself"
+printf 'gone\n' > "$fake_files/gone.txt" || fail "no gone files entry"
+printf '[Trash Info]\nPath=payload/gone.txt\nDeletionDate=2026-10-11T00:00:00\n' > "$fake_info/gone.txt.trashinfo" || fail "no gone info entry"
+sandbox_trash_remove_own "$fake_files" "$test_root" gone.txt || fail "gone-original removal refused"
+[[ ! -e "$fake_files/gone.txt" && ! -e "$fake_info/gone.txt.trashinfo" ]] || fail "gone-original pair survived"
+ok "removal clears an entry whose original is already gone"
+mkdir -p "$fake_files/owndir" "$test_root/top/payload/owndir" || fail "no owned dir entries"
+printf 'child\n' > "$fake_files/owndir/child.txt" || fail "no owned dir child"
+printf '[Trash Info]\nPath=payload/owndir\nDeletionDate=2026-10-11T00:00:00\n' > "$fake_info/owndir.trashinfo" || fail "no owned dir info"
+mkdir -p "$fake_files/extdir" || fail "no foreign dir entry"
+printf '[Trash Info]\nPath=/elsewhere/extdir\nDeletionDate=2026-10-11T00:00:00\n' > "$fake_info/extdir.trashinfo" || fail "no foreign dir info"
+sandbox_trash_remove_own "$fake_files" "$test_root" owndir || fail "owned dir removal refused"
+rc=0; sandbox_trash_remove_own "$fake_files" "$test_root" extdir || rc=$?
+[[ "$rc" == 2 ]] || fail "foreign dir removal gave $rc, not 2"
+[[ ! -e "$fake_files/owndir" && ! -e "$fake_info/owndir.trashinfo" ]] || fail "owned dir survived"
+[[ -d "$fake_files/extdir" && -f "$fake_info/extdir.trashinfo" ]] || fail "foreign dir changed"
+[[ -d "$test_root/.flea-trash-quarantine" ]] || fail "no quarantine dir in the marked root"
+ok "owned dir moves into the marked root, foreign dir stays"
 # A per-user mount-top trash resolves its relative Path against the same top.
 pu_files="$test_root/top/.Trash/$uid/files"
 pu_info="$test_root/top/.Trash/$uid/info"
@@ -188,15 +208,30 @@ home_info="$test_root/hometrash/Trash/info"
 mkdir -p "$home_files" "$home_info" || fail "no fake home trash"
 printf 'evil\n' > "$home_files/evil.txt" || fail "no home files entry"
 printf '[Trash Info]\nPath=%s\nDeletionDate=2026-10-11T00:00:00\n' "${test_root#/}/payload/evil.txt" > "$home_info/evil.txt.trashinfo" || fail "no home info entry"
-sandbox_trash_remove_own "$home_files" "$test_root" evil.txt || fail "home removal refused"
+rc=0; sandbox_trash_remove_own "$home_files" "$test_root" evil.txt || rc=$?
+[[ "$rc" == 2 ]] || fail "home relative removal gave $rc, not 2"
 [[ -f "$home_files/evil.txt" && -f "$home_info/evil.txt.trashinfo" ]] || fail "relative home-trash pair changed"
 ok "relative Path in a home trash stays foreign"
+pct_root="$test_root/sp ace%pct"
+pct_files="$pct_root/.Trash-$uid/files"
+pct_info="$pct_root/.Trash-$uid/info"
+mkdir -p "$pct_files" "$pct_info" "$pct_root/payload" || fail "no percent trash"
+printf 'pct\n' > "$pct_files/pct.txt" || fail "no percent files entry"
+printf 'pct\n' > "$pct_root/payload/pct.txt" || fail "no percent payload"
+printf '[Trash Info]\nPath=payload/pc%%74.txt\nDeletionDate=2026-10-11T00:00:00\n' > "$pct_info/pct.txt.trashinfo" || fail "no percent info entry"
+printf 'pct\n' > "$pct_files/abspct.txt" || fail "no percent absolute files entry"
+printf 'pct\n' > "$pct_root/payload/abs pct.txt" || fail "no percent absolute payload"
+escaped_root=${pct_root//%/\%25}; escaped_root=${escaped_root// /%20}
+printf '[Trash Info]\nPath=%s/payload/abs%%20pct.txt\nDeletionDate=2026-10-11T00:00:00\n' "$escaped_root" > "$pct_info/abspct.txt.trashinfo" || fail "no percent absolute info"
+sandbox_trash_remove_own "$pct_files" "$pct_root" pct.txt abspct.txt || fail "percent removal refused"
+[[ ! -e "$pct_files/pct.txt" && ! -e "$pct_info/pct.txt.trashinfo" ]] || fail "percent relative pair survived"
+[[ ! -e "$pct_files/abspct.txt" && ! -e "$pct_info/abspct.txt.trashinfo" ]] || fail "percent absolute pair survived"
+ok "percent-escaped Paths match a space-and-percent root"
 sandbox_trash_remove_own "$fake_files" "$test_root" "../escape.txt" && fail "slash name accepted"
 sandbox_trash_remove_own "$test_root/top" "$test_root" own.txt && fail "non-files trash accepted"
 ok "removal refuses slash names and non-files trashes"
 
-# Removes one mount-top trash dir only when this check created it and it holds nothing
-# but empty files and info dirs, by exact path; anything else is left and named.
+# Removes a trash dir this check made once its files and info dirs are empty; anything else stays.
 gio_sweep() {
     [[ "${2:-1}" == 0 ]] || return 0
     case "${1:-}" in "$gio_top/.Trash/$uid"|"$gio_top/.Trash-$uid") ;; *) return 0 ;; esac
@@ -246,6 +281,7 @@ else
         if [[ -f "$candidate/files/$gio_name" && -f "$candidate/info/$gio_name.trashinfo" ]]; then gio_trash="$candidate/files"; break; fi
     done
     [[ -n "$gio_trash" ]] || fail "gio put $gio_name outside $gio_top/.Trash and $gio_top/.Trash-$uid"
+    sandbox_trash_trap_own "$gio_trash" "$gio_dir" "$gio_name" || fail "gio entry registration refused"
     got=$(sandbox_trash_files_dir "$gio_dir/probe" "$HOME") || fail "helper refused the gio branch"
     [[ "$got" == "$gio_trash" ]] || fail "helper named $got, gio used $gio_trash"
     sandbox_trash_remove_own "$gio_trash" "$gio_dir" "$gio_name" || fail "owned removal refused the gio entry"

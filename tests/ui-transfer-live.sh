@@ -586,6 +586,7 @@ transferlive_replace() {
     kill_flea
     [[ "$(cat "$replace_trash/big.bin" 2>/dev/null)" == there ]] \
         || fail "transferlive: replace: the replaced big.bin is not in $replace_trash: $(ls -A "$replace_trash" 2>&1)"
+    trash_trap_own "$replace_trash" "$dir" "transferlive: replace" big.bin
     transferlive_holds "$dir/to" "big.bin"
     menus_same_file "replace: the incoming big.bin is byte-identical to its source" "$dir/big.bin" "$dir/to/big.bin"
     # A mount-top trash is shared, so only this run's own entry goes, each pair checked in the command.
