@@ -111,6 +111,12 @@ function run(check) {
     }), true)
     check("multi-selection keeps Rename enabled for the bulk card",
         entry(Menu.listingEntries(state({ hiddenActions: [], selectionCount: 2 })), "rename").disabled, false)
+    // MenuAdditions040 e and Tags a draw "Rename N items" with the ellipsis character, one whole template filled with the count.
+    function renameLabel(count) { return entry(Menu.listingEntries(state({ hiddenActions: [], selectionCount: count })), "rename").label }
+    check("the file menu's rename row reads Rename for one selected row", renameLabel(1), "Rename")
+    check("and Rename 2 items\u2026 for two", renameLabel(2), "Rename 2 items\u2026")
+    check("and Rename 12 items\u2026 for twelve", renameLabel(12), "Rename 12 items\u2026")
+    check("the rail menu's Rename keeps its one word", Menu.railEntries(savedOnly)[0].label, "Rename")
     // Permissions040: Permissions takes the whole selection, so it stays
     // enabled where the single-item rows above grey out.
     check("multi-selection keeps Permissions enabled on files",

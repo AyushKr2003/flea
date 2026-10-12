@@ -216,3 +216,65 @@ case_dualautohidereveal() {
     export XDG_STATE_HOME="$suite_home"
     kill_flea
 }
+# Dual view Tab walks the left pane's rail, the left list and the right list, Shift+Tab walks it back, and Tab reaching an auto-hide rail reveals it.
+dual_tab_at() {
+    local label=$1 side=$2 view=$3
+    settle
+    ipc dualState | jq -e --argjson side "$side" '.focused == $side' >/dev/null || fail "dualtab: $label left focus on pane $(ipc dualState | jq -r '.focused'), want $side"
+    [[ "$(ipc focusView)" == "$view" ]] || fail "dualtab: $label left the keyboard on $(ipc focusView), want $view"
+}
+dual_tab_launch() {
+    local dir=$1 state=$2 extra=$3 dual_json dual_ready=false
+    seed_ui_state "$state" "$(jq -cn --arg l "$dir/left" --arg r "$dir/right" --argjson extra "$extra" '{view:"dual",dual:{paths:[$l,$r],focus:0}} + $extra')"
+    launch "$dir/left"
+    for _attempt in $(seq 1 100); do
+        dual_json=$(ipc dualState)
+        [[ "$(jq -r '(.panes | length == 2) and all(.panes[]; . != null and .loading == false)' 2>/dev/null <<< "$dual_json")" == "true" ]] && { dual_ready=true; break; }
+        sleep 0.05
+    done
+    [[ "$dual_ready" == true ]] || fail "dualtab: two listed dual panes never appeared in 5 s (dualState=$dual_json)"
+    dual_tab_at "the launch" 0 list
+}
+case_dualtab() {
+    local dir="$fixture_root/dualtab" suite_home="$XDG_STATE_HOME" i
+    sandbox_scratch "$dir"
+    mkdir -p "$dir/left" "$dir/right"
+    for i in $(seq -f '%02g' 1 6); do : > "$dir/left/l$i.txt"; : > "$dir/right/r$i.txt"; done
+    dual_tab_launch "$dir" "$fixture_root/dualtab-state" '{}'
+    key -k Tab >/dev/null
+    dual_tab_at "Tab from the left list" 1 list
+    key -k Tab >/dev/null
+    dual_tab_at "Tab from the right list" 0 rail
+    shot dualtab-rail
+    key -k Tab >/dev/null
+    dual_tab_at "Tab from the rail" 0 list
+    key -M shift -k Tab -m shift >/dev/null
+    dual_tab_at "Shift+Tab from the left list" 0 rail
+    key -M shift -k Tab -m shift >/dev/null
+    dual_tab_at "Shift+Tab from the rail" 1 list
+    key -M shift -k Tab -m shift >/dev/null
+    dual_tab_at "Shift+Tab from the right list" 0 list
+    kill_flea
+    dual_tab_launch "$dir" "$fixture_root/dualtab-hide-state" '{"places":{"autoHide":true}}'
+    local hid=false hid_json
+    for _attempt in $(seq 1 60); do
+        hid_json=$(ipc railState)
+        [[ "$(jq -r '.hidden' 2>/dev/null <<< "$hid_json")" == "true" ]] && { hid=true; break; }
+        sleep 0.05
+    done
+    [[ "$hid" == true ]] || fail "dualtab: the auto-hide rail never hid before the Tab (railState=$hid_json)"
+    key -k Tab >/dev/null
+    dual_tab_at "Tab from the left list with the rail hidden" 1 list
+    key -k Tab >/dev/null
+    dual_tab_at "Tab from the right list with the rail hidden" 0 rail
+    local revealed=false rail_json
+    for _attempt in $(seq 1 60); do
+        rail_json=$(ipc railState)
+        [[ "$(jq -r '.hidden' 2>/dev/null <<< "$rail_json")" == "false" ]] && { revealed=true; break; }
+        sleep 0.05
+    done
+    [[ "$revealed" == true ]] || fail "dualtab: Tab from the right list never revealed the auto-hide rail (railState=$rail_json)"
+    printf 'DUALTAB cycle=ok autohide=revealed\n'
+    export XDG_STATE_HOME="$suite_home"
+    kill_flea
+}

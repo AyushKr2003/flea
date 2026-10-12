@@ -3,6 +3,7 @@ import QtQuick
 import qs.Commons
 import "."
 import "." as Flea
+import "js/Focus.js" as Focus
 import "js/MarkdownPrepared.js" as Prepared
 import "js/TextSize.js" as TextSize
 import "js/MouseNav.js" as MouseNav
@@ -63,9 +64,12 @@ Rectangle {
     function focusPane(side) {
         if (!dualMode) return
         focusSide = side
+        // The keyboard rail is the left pane's, so leaving it behind hands that pane its list back: Shift+Tab from the right then lands on the left list, not the rail.
+        if (side === 1) primaryPane.focusView = Focus.LIST
         currentPane.forceActiveFocus()
         Qt.callLater(view.rememberDual)
     }
+    function switchToLeftRail() { focusPane(0); primaryPane.focusView = Focus.RAIL }
     function rememberPaths() {
         // Path and tab changes in one turn share the deferred navigation patch.
         if (initialized && !dualMode && primaryPane.path)
@@ -289,6 +293,7 @@ Rectangle {
         railPane: view.currentPane
         onFocusRequested: view.focusPane(0)
         onSwitchPane: view.focusPane(1)
+        onSwitchToRail: view.switchToLeftRail()
         onPathChanged: view.rememberPaths()
         onListingStateChanged: if (primaryPane.listingState !== "loading") ipcLoader.active = true
         onListInFlightChanged: { if (!primaryPane.listInFlight) view.queueTabStrip() }
@@ -360,6 +365,7 @@ Rectangle {
                 onFocusRequested: view.focusPane(1)
                 onViewRequested: function (mode) { chrome.viewChosen(mode) }
                 onSwitchPane: view.focusPane(0)
+                onSwitchToRail: view.switchToLeftRail()
         onPathChanged: view.rememberPaths()
                 onClipboardChanged: if (primaryPane.clipboard !== clipboard) primaryPane.clipboard = clipboard
                 onMessage: function(text, error) { bar.say(text, error) }

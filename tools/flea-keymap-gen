@@ -218,7 +218,7 @@ function capRank(row, preset) {
     return (row.preset === preset ? 0 : 2) + (row.mods === "text" ? 0 : 1)
 }
 
-function sheetFor(name, frontend, dual) {
+function sheetFor(name, frontend) {
     var result = [], groups = {}
     var rows = bindingRows(name, frontend || "gui").concat(SHEET_EXTRA).filter(function (row) { return row.sheet !== false })
     for (var i = 0; i < rows.length; i++) {
@@ -261,10 +261,6 @@ function sheetFor(name, frontend, dual) {
     for (var d = 0; d < result.length; d++) {
         delete result[d].spellings
         delete result[d].alone
-    }
-    if (dual && groups.focusNext) {
-        groups.focusNext.keys = "tab"
-        groups.focusNext.label = "focus other pane"
     }
     return result
 }

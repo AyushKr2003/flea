@@ -1271,7 +1271,7 @@ read -r px py <<< "$point"
 omarchy-drive click "$((WX + px))" "$((WY + py))" left >/dev/null || die "dual control activation failed"
 for direction in left right; do
   side=$(ipc dualState | jq -er '.focused') || die "dual focus is unavailable"
-  [[ "$side" == 0 ]] || native_key -k Tab
+  [[ "$side" == 0 ]] || native_key -M shift -k Tab -m shift
   navigate "$left"
   native_key -k Tab
   navigate "$right"
@@ -1282,11 +1282,11 @@ for direction in left right; do
     source="$left"; destination="$right"; name=feedback-left; verb=Copy
     dual_destination_side=1
     dual_target_points saved-before
-    native_key -k Tab
+    native_key -M shift -k Tab -m shift
   else
     source="$right"; destination="$left"; name=feedback-right; verb=Move
     dual_destination_side=0
-    native_key -k Tab
+    native_key -M shift -k Tab -m shift
     dual_target_points saved-before
     native_key -k Tab
   fi

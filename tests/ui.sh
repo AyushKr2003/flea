@@ -11895,7 +11895,7 @@ case_dual() {
     key -M ctrl -k Tab -m ctrl >/dev/null
     settle
     ipc dualState | jq -e '.focused == 1' >/dev/null || fail "dual: single-pane preview chord moved dual focus"
-    key -k Tab >/dev/null
+    key -M shift -k Tab -m shift >/dev/null
     settle
     [[ "$(ipc cursor)" == 0 && "$(ipc path)" == "$dir/left" ]] || fail "dual: left state was overwritten"
     key l >/dev/null
@@ -11912,7 +11912,7 @@ case_dual() {
     settle
     transient_beside_disk "dual right"
     shot dual-transient-right
-    key -k Tab >/dev/null
+    key -M shift -k Tab -m shift >/dev/null
     settle
     key -k Tab >/dev/null
     settle
@@ -12098,7 +12098,7 @@ case_dualsort() {
     dual_sort_wait name:desc file-79.txt
     menus_expect dualState ".focused == 1 and ((.panes[0] | del(.focused)) == $left)" 'secondary reverse leaves primary listing, marks and requests unchanged'
     settings_wait_value '.sort.key == "name" and .sort.reverse == false'
-    key -k Tab >/dev/null
+    key -M shift -k Tab -m shift >/dev/null
     menus_equal 'primary scroll survives peer sorting' "$left_scroll" "$(ipc listContentY)"
     menus_equal 'primary sort survives peer sorting' name:asc "$(ipc sortMark)"
     dual_sort_header size
@@ -12110,7 +12110,7 @@ case_dualsort() {
     menus_expect listContentY '. > 0' 'secondary scrolls to its marked cursor'
     right=$(ipc dualState | jq -c '.panes[1] | del(.focused)')
     right_scroll=$(ipc listContentY)
-    key -k Tab >/dev/null; key S >/dev/null
+    key -M shift -k Tab -m shift >/dev/null; key S >/dev/null
     dual_sort_wait size:desc file-79.txt
     menus_expect dualState ".focused == 0 and ((.panes[1] | del(.focused)) == $right)" 'primary reverse leaves secondary listing, marks and requests unchanged'
     shot dual-sort-independent
@@ -12142,7 +12142,7 @@ case_dualsort() {
     settings_wait_value '.sort.key == "kind" and .sort.reverse == false'
     key -k Escape >/dev/null
     dual_sort_wait kind:asc file-00.txt
-    key -k Tab >/dev/null
+    key -M shift -k Tab -m shift >/dev/null
     dual_sort_wait kind:asc file-00.txt
     key -k Tab >/dev/null; key S >/dev/null
     dual_sort_wait kind:desc file-79.txt
@@ -12177,7 +12177,7 @@ case_dualsort() {
         dual_sort_wait mtime:asc "$kept_name" "$kept_at"
         menus_expect dualState ".panes[1].cursor == $kept_at" "dual Search $mode leaves the cursor on $kept_name"
         menus_expect dualState ".panes[1].listRequests == $((list_requests + 1))" "dual Search $mode consumes deferred sort in one listing"
-        key -k Tab >/dev/null
+        key -M shift -k Tab -m shift >/dev/null
         dual_sort_wait mtime:asc file-00.txt
         key -k Tab >/dev/null
         shot "dual-sort-search-$mode"
@@ -12195,7 +12195,7 @@ case_dualsort() {
     launch "$dir/left"
     menus_expect dualState '.active and .focused == 1 and all(.panes[]; .total == 80 and (.loading | not))' 'restart restores paths and focus with the saved default sort'
     dual_sort_wait kind:asc file-00.txt
-    key -k Tab >/dev/null
+    key -M shift -k Tab -m shift >/dev/null
     dual_sort_wait kind:asc file-00.txt
     kill_flea
     printf 'DUAL_SORT native-key=independent header-pointer=independent hidden-session=retained settings=live search-settings=deferred single-persistence=ok restart=defaults checks=%s\n' "$menus_checks"
@@ -15728,7 +15728,7 @@ case_readme() {
 . "$repo/tests/ui-captures-sweep.sh"
 . "$repo/tests/ui-captures-collide.sh"
 declare -a wanted=("$@")
-[[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick shiftscroll querypaste viewrestart dd ddclick collide sortrestart foldersort duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer dualautohidereveal preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap searchnoblank lookopen transferlive recent middleclick opentab xwundo folderviews hiddenlast marqueemargin relstart userthumbnailer)
+[[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick shiftscroll querypaste viewrestart dd ddclick collide sortrestart foldersort duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer dualautohidereveal preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap searchnoblank lookopen transferlive recent middleclick opentab xwundo folderviews hiddenlast marqueemargin relstart userthumbnailer dualtab)
 
 : > "$run_log"
 : > "$flea_log"

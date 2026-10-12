@@ -4046,6 +4046,8 @@ The Columns prebuild moves one ceiling, re-derived with `wc -l`: `ui/ColumnPane.
 
 The unfocused Dual selection and the rail's lit place move three ceilings, each re-derived with `wc -l`: `ui/Sidebar.qml` 693 to 729 for `litIndex`, `settleLit` with the pane signals it settles on, and a `lit` and a `cursor` binding on each row group in place of the one cursor binding; `tests/sidebar-flows.qml` 473 to 545 for the leg that navigates the real pane and reads which row draws the lit look and which the cursor frame; and `ui/js/Mounts.js` 298 to 303 for `inside`, the one prefix test `holding` and `Places.heldBy` both ask. `tests/startup-units.txt` keeps its units while its `bytes` line moves from 1596965 to 1602134, the sum the probe's tool takes over them with the new lines in `ui/Row.qml`, `ui/Sidebar.qml`, `ui/SidebarRow.qml`, `ui/js/Mounts.js`, `ui/js/Places.js` and `ui/js/RailKeys.js`.
 
+The Dual Tab cycle, the bulk card column inset, the bulk rename menu label and the flasher fill move seven ceilings, each re-derived with `wc -l`: `ui/js/Focus.js` 449 to 463 for `dualStep` and its two stop names, `ui/Pane.qml` 1180 to 1181 for the `switchToRail` signal, `ui/WindowBody.qml` 739 to 745 for the `Focus` import, `switchToLeftRail` and its one `onSwitchToRail` call per pane, and the line that hands the left pane its list back when focus moves to the right, `ui/js/Menu.js` 475 to 480 for the count template and its `.arg` row, `tests/js/focus.js` 760 to 834 for the cycle pins over the three rail modes, from actions and from the three key events, and the two-pane window rig, `tests/js/keymap.js` 315 to 319 for the sheet wording pins, and `tests/js/menu.js` 553 to 559 for the count pins; `tests/dialog-board.qml` 399 and `ui/BulkRenameDialog.qml` 372 stay under the hard cap. Shift+Tab in a list is bound in `keys.toml` (`listing` joins the `focusPrevious` rows, labelled "focus back", and the `move` sheet group claims it), so no key is hand-coded in `ui/js/Focus.js`.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
@@ -8991,6 +8993,8 @@ drp4 2026-10-11 raises the first-frame `bytes` line in `tests/startup-units.txt`
 The transfer close fix adds the closing-sample branch to the first-frame `ui/js/Transfer.js`, so `tests/startup-units.txt` keeps its units while its `bytes` line moves from 1596965 to 1597218, the sum the probe's tool takes over them; recompute again at merge, since IP208B edits the same line.
 
 The Quick Look volume track keeps `tests/startup-units.txt` at its 170 units while its `bytes` line moves from 1596965 to 1598076, the sum the probe's tool takes over them with the stored level in `ui/ViewState.qml` and the held level and its gain in `ui/MediaSound.qml`.
+
+The Dual Tab stops, the bulk rename row inset and the "Rename N items" label keep `tests/startup-units.txt` at its 170 units while its `bytes` line moves from 1596965 to 1598251, the sum the probe's tool takes over them with the tab walk in `ui/js/Focus.js`, the label template in `ui/js/Menu.js`, the rail hop and the left pane's list hand-back in `ui/WindowBody.qml`, its signal in `ui/Pane.qml`, and the Dual arm leaving `sheetFor` in `ui/js/Keymap.js`.
 
 ## The image flasher
 

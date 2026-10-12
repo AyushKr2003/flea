@@ -16,6 +16,10 @@ ShellRoot {
     readonly property int boardRuleToField: 18
     readonly property int boardFieldToEyebrowInk: 31
     readonly property real pressScale: 0.96
+    // Two lines are on the same rows when their tops are within half a pixel, and the colour no theme role owns tells accentFrame from accent.
+    readonly property real rowTolerance: 0.5
+    readonly property color sentinel: "#ff00ff"
+    property color accentFrameWas: "transparent"
     // Quiet ticks (the watched values unchanged) before a step is read; a count of frames, never time.
     readonly property int settleTicks: 4
     readonly property int tickMs: 16
@@ -76,6 +80,14 @@ ShellRoot {
             for (var i = 0; i < kids.length; i++) stack.push(kids[i])
         }
         return out
+    }
+    // The tops, in card coordinates and read top to bottom, of the name lines the card draws: its still Text rows or its TextInput fields.
+    function namesIn(card, editable) {
+        var names = ["IMG_4120.HEIC", "IMG_4121.MOV", "notes.txt"]
+        var lines = shell.findAll(card, function (o) {
+            return shell.isType(o, "TextInput") === editable && (editable || shell.isType(o, "Text")) && names.indexOf(o.text) >= 0
+        })
+        return lines.map(function (o) { return o.mapToItem(card, 0, 0).y }).sort(function (a, b) { return a - b })
     }
     function underRoot(path) {
         return shell.sandboxRoot.length > 0 && path.indexOf(shell.sandboxRoot + "/") === 0 && path.split("/").indexOf("..") < 0
@@ -178,7 +190,10 @@ ShellRoot {
             Flea.OpenWithDialog { id: openWith }
             Flea.ConvertDialog { id: convert }
             Flea.ArchiveCompressDialog { id: compress }
+            Flea.BulkRenameDialog { id: bulk }
         }
+        // The flasher's running step, off screen in the card-free corner, with a transfer half done.
+        Flea.FlashStepRow { id: flashRow; y: 640; width: 600; running: true; transfer: ({ share: 0.5, headText: "Writing to Stick", byteText: [], running: true }) }
 
         // Qt's own default fill, read off a bare rectangle so no ancestor may wear it.
         Rectangle { id: defaultFill; visible: false; width: 1; height: 1 }
@@ -212,7 +227,7 @@ ShellRoot {
     function watch() {
         var row = openWith.applicationsItem.itemAtIndex(0)
         return JSON.stringify([view.backItem.scale, view.upItem.scale, openWith.cardItem.height, openWith.listHeight,
-                               row ? row.y : -1, convert.cardItem.height, compress.cardItem.height])
+                               row ? row.y : -1, convert.cardItem.height, compress.cardItem.height, bulk.cardItem.height])
     }
 
     function buildScript() {
@@ -247,6 +262,30 @@ ShellRoot {
             }, record: function () {
                 shell.measureCheckBoxes("compress", compress.cardItem, 1)
                 compress.close()
+            } },
+            // LAYOUT-02: each old name sits on the same rows as its new name, so the two columns share one top inset.
+            { name: "open-bulkrename", act: function () {
+                bulk.open(["/dialog-board/IMG_4120.HEIC", "/dialog-board/IMG_4121.MOV", "/dialog-board/notes.txt"], holder)
+            }, record: function () {
+                var olds = shell.namesIn(bulk.cardItem, false), news = shell.namesIn(bulk.cardItem, true)
+                shell.check("bulkrename: the card draws three old names and three new names", [olds.length, news.length], [3, 3])
+                shell.check("bulkrename: each old name's top is its new name's top, in card coordinates",
+                            olds.map(function (top, i) { return Math.abs(top - news[i]) <= shell.rowTolerance ? 0 : shell.round3(top - news[i]) }), [0, 0, 0])
+                bulk.close()
+            } },
+            // FIELDS-24: the fill is the track's sibling, so the track's quarter opacity never reaches it.
+            { name: "flasher-run", act: function () { shell.accentFrameWas = Flea.Theme.color.accentFrame; Flea.Theme.color.accentFrame = shell.sentinel }, record: function () {
+                try {
+                    var bars = shell.findAll(flashRow, function (o) { return shell.isType(o, "Rectangle") && o.height === flashRow.barHeight })
+                    var track = bars.filter(function (o) { return shell.rgba(o.color) === shell.rgba(Flea.Theme.color.muted) })[0]
+                    var fill = bars.filter(function (o) { return o !== track })[0]
+                    var effective = 1
+                    for (var up = fill; up; up = up.parent) effective *= up.opacity
+                    shell.check("flasher: the fill is not a descendant of the track", shell.findAll(track, function (o) { return o === fill }).length, 0)
+                    shell.check("flasher: the fill's effective opacity is 1", shell.round3(effective), 1)
+                    shell.check("flasher: the fill takes accentFrame and not accent", [shell.rgba(fill.color), shell.rgba(Flea.Theme.color.accent) !== shell.rgba(fill.color)], [shell.rgba(shell.sentinel), true])
+                    shell.check("flasher: a half-done transfer fills half the track", shell.round3(fill.width / track.width), 0.5)
+                } finally { Flea.Theme.color.accentFrame = shell.accentFrameWas }
             } },
             // Each dialog's ground and card report the pointer, so one that crosses them onto a row takes the cursor on its first move.
             { name: "pointer-openwith", act: function () {

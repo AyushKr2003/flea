@@ -39,7 +39,7 @@ Item {
         return SheetQuery.rank(actions.concat(menus, places, recents), root.query)
     }
     function actionRows() {
-        var rows = Keymap.sheetFor(ViewState.keysPreset, "gui", root.pane ? root.pane.dualMode : false)
+        var rows = Keymap.sheetFor(ViewState.keysPreset, "gui")
         return root.focusHolder && root.focusHolder.sheetActionRows ? root.focusHolder.sheetActionRows(rows) : rows
     }
     // The cursor row's menu rows, hidden ones included so the sheet finds a row Settings Menus hides; disabled ones never run.
