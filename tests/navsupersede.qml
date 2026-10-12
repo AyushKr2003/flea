@@ -6,8 +6,7 @@ import Quickshell.Io
 import "flea" as Flea
 import "flea/js/Swap.js" as Swap
 
-// A folder asked for while another listing is out is taken: the pane asks for it, keeps the rows it drew, and lands on it alone.
-// Timing: the paused backend gives both requests heldMs to draw a frame, three 120 Hz frames inside Swap.CAP_MS.
+// A folder asked for while another listing is out is taken: the pane keeps the rows it drew and lands on it alone, heldMs inside Swap.CAP_MS.
 ShellRoot {
     id: root
     readonly property string fixture: Quickshell.env("FLEA_NAVSUPERSEDE_DIR") || ""

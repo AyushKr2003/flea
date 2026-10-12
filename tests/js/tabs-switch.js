@@ -1,5 +1,6 @@
 .import "../../ui/js/Tabs.js" as Tabs
 .import "tabsfixture.js" as Fixture
+.import "../../ui/js/Swap.js" as Swap
 
 // What a tab switch restores and what it must re-list: issues 91 and 93, nixfred. The stub pane
 // is tests/js/tabsfixture.js, shared with tests/js/tabs.js.
@@ -167,4 +168,13 @@ function run(check) {
     check("and lists its folder", Tabs.receiveTab(received, JSON.stringify(["222", "tok", "/tmp/r", "list", ""]), 1) + "|" + received.listed.join(",") + "|" + wait(received), "true|/tmp/r|false|loading|0")
     var sent = waitingTabs()
     check("a tab moved out of a waiting pane closes", Tabs.closeTabAfterMove(sent, 0) + "|" + Tabs.count(sent) + "|" + wait(sent), "closed|1|true|waiting|0")
+    var direct = Fixture.pane("/tmp/one")
+    Tabs.openNew(direct)
+    direct.listingPath = direct.path = "/tmp/two"
+    direct.listInFlight = true
+    direct.superseded = false
+    Tabs.closeAt(direct, 1)
+    check("a direct close while loading closes the tab, refusing nothing", Tabs.count(direct) + "|" + direct.said.join(""), "1|")
+    check("and the surviving tab is current, listed over the one out", Tabs.currentIndex(direct) + "|" + direct.path + "|" + direct.superseded, "0|/tmp/one|true")
+    check("and the closed tab's late listed line is dropped, the surviving tab's is not", Swap.onListed({}, true, "/tmp/two", direct.listingPath, false) + "|" + (Swap.onListed({}, true, "/tmp/one", direct.listingPath, false) !== Swap.DROP), Swap.DROP + "|true")
 }

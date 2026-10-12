@@ -10182,8 +10182,7 @@ case_hanglisting() {
         || fail "hanglisting: Up put the cursor on $up_name, not the waited folder"
     shot hanglisting-up
 
-    # Inside the wait a rail click is the newest request: it is taken, not refused, and the held listing's late rows never draw over it.
-    # 8 s keeps the held rows out past a native launch and its IPC reads, and still lands them before the 10 s wait.
+    # A rail click inside the wait is the newest request, taken not refused; 8 s holds the late rows past launch and lands them before the 10 s wait.
     export FLEA_HANGLISTING_MARKER="$dir/newest-delayed" FLEA_HANGLISTING_DELAY=8
     flea_bin="$dir/flea-proxy"
     launch "$dir"

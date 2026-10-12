@@ -1,7 +1,6 @@
 .import "tabsfixture.js" as Fixture
 .import "tabbarfixture.js" as BarFixture
 .import "../../ui/js/Tabs.js" as Tabs
-.import "sourcefixture.js" as Source
 
 function run(check) {
     // A search sets pane.path to the scope it walks and keeps the origin in searchFrom, which
@@ -178,9 +177,10 @@ function run(check) {
     cycling.listInFlight = true
     Tabs.act("tabPrevious", cycling)
     check("previous while a listing is loading switches tab without refusing", Tabs.currentIndex(cycling) + "|" + cycling.said.join("|"), "0|")
+    cycling.superseded = false
     Tabs.act("tabNext", cycling)
     check("next while a listing is loading switches tab without refusing", Tabs.currentIndex(cycling) + "|" + cycling.said.join("|"), "1|")
-    check("a tab switch asks for its folder as a navigation, so a listing out gives way", Source.slice(Source.source("ui/js/Tabs.js"), "function apply(", "function applyPending(").indexOf("supersede: true") >= 0, true)
+    check("a tab switch asks for its folder as a navigation, so a listing out gives way", cycling.superseded, true)
 
     var single = Fixture.pane("/tmp/only")
     single.preview.active = true
@@ -419,10 +419,6 @@ function run(check) {
     var kept = BarFixture.pair("/tmp/one")
     kept.listInFlight = true
     check("a loading source closes the tab that moved", Tabs.closeTabAfterMove(kept, 0) + "|" + Tabs.count(kept), "closed|1")
-    var direct = BarFixture.pair("/tmp/one")
-    direct.listInFlight = true
-    Tabs.closeAt(direct, 0)
-    check("a direct close while loading closes the tab", Tabs.count(direct), 1)
     check("no such tab keeps everything", Tabs.closeTabAfterMove(pair, 5), "kept")
     check("no such tab keeps both tabs", Tabs.count(pair), 2)
 

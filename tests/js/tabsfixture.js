@@ -50,6 +50,7 @@ function pane(path) {
         p.clearedAtOnce = !!options && options.clearAtOnce === true
         p.superseded = !!options && options.supersede === true
         p.listed.push(next)
+        p.listingPath = next
         p.path = next
         p.cursorIndex = 0
         p.selection.clear()
