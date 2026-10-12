@@ -53,6 +53,20 @@ ShellRoot {
         Flea.ContextMenu { id: menu; anchors.fill: parent }
     }
 
+    // The IPC probe reads the same live menu, so its wanted width is assertable headless.
+    QtObject { id: stubBackend; signal shebang(string path, bool hasShebang, int id) }
+    QtObject {
+        id: stubPane
+        property var backend: stubBackend
+        property var menuActions: ({ready: true, requestId: 0})
+        property string shebangAsked: ""
+        property bool rowHasShebang: false
+        property int shebangId: 0
+        function contextMenu() { return menu }
+    }
+    QtObject { id: windowStub; function rectOf(item) { return "" } }
+    Flea.IpcMenuState { id: probe; pane: stubPane; fleaWindow: windowStub }
+
     // One scene: {tag, stop, density, hints, all, kind: "file" | "background", flyout: action or "", edge, narrow}.
     function sceneList() {
         var out = []
@@ -354,6 +368,14 @@ ShellRoot {
         var tag = s.tag
         if (s.errored) shell.runErrored(s)
         var main = shell.readCard(menu.frameItem, menu.entries.length, menu.itemFor)
+        // The probe carries the frame's wanted width: an errored menu's frame width, else the token.
+        var st = JSON.parse(probe.state())
+        shell.check(tag + ": the probe states the frame wanted width", Math.abs(st.wanted - Math.max(Flea.Theme.menuWidth, main.wanted)) <= shell.roundingSlack, true)
+        shell.check(tag + ": the frame keeps the probe width inside the work area", Math.abs(menu.frameItem.width - Math.min(menu.workArea.width, st.wanted)) <= shell.roundingSlack, true)
+        if (s.errored && !s.narrow)
+            shell.check(tag + ": the probe width is the widened frame width", Math.abs(st.wanted - menu.frameItem.width) <= shell.roundingSlack, true)
+        if (!s.all && !s.errored)
+            shell.check(tag + ": the probe width of rows that all fit keeps Theme.menuWidth", st.wanted, Flea.Theme.menuWidth)
         var cards = [{ name: "frame", frame: menu.frameItem, read: main }]
         if (s.flyout)
             cards.push({ name: "flyout", frame: menu.submenuFrameItem,

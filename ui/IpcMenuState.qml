@@ -20,6 +20,14 @@ QtObject {
         }
     }
 
+    // The main frame's wanted width, read on call from the same widest row the frame fits.
+    function menuWanted(menu) {
+        if (!menu || typeof menu.widestRow !== "function" || typeof menu.itemFor !== "function" || menu.rowsBuilding) return Theme.menuWidth
+        var items = []
+        for (var i = 0; i < menu.entries.length; i++) { var it = menu.itemFor(i); if (it) items.push(it) }
+        return Math.max(Theme.menuWidth, menu.widestRow({children: items}))
+    }
+
     function state() {
         var menu = root.pane.contextMenu()
         return JSON.stringify({pane: String(root.pane), opened: menu.visible, entries: menu.entries, cursor: menu.cursor,
@@ -28,6 +36,7 @@ QtObject {
             shebangId: root.pane.shebangId, shebangReply: root.shebangReply, shebangLastReply: root.shebangLastReply,
             submenu: menu.submenuOpen, submenuCursor: menu.submenuCursor, submenuEntries: menu.submenuEntries,
             frame: root.fleaWindow.rectOf(menu.frameItem), flyout: root.fleaWindow.rectOf(menu.submenuFrameItem),
-            workArea: menu.workArea, forHeader: menu.forHeader, forRail: menu.forRail, hasRow: menu.hasRow})
+            workArea: menu.workArea, forHeader: menu.forHeader, forRail: menu.forRail, hasRow: menu.hasRow,
+            wanted: root.menuWanted(menu)})
     }
 }
