@@ -247,6 +247,9 @@ later `dirsize` for one of them is answered from the cache rather than walked tw
 the budget cut off seeds nothing, and is walked again by the worker at its own per-row
 deadline when the client asks, because a floor must not stand in for a size.
 
+On a network or phone listing (the classes the client refuses folder sizes on) a size sort walks no folder: each folder
+orders by its own entry size, the floor a walk past its deadline would give, and seeds nothing.
+
 **A size order is best effort on a directory large enough to exhaust the 250 ms budget.** A
 folder cut off by it is placed on the floor that was counted, and that floor is used for the
 order alone: it is never sent, so nothing on the wire says the order was built from one. The
