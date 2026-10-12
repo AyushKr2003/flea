@@ -715,9 +715,8 @@ ShellRoot {
             // other text, as the directory this window opens on.
             var start = win.req.folder.charAt(0) === "/" ? win.req.folder : win.home
             win.viewMode = Picker.rememberedView(ViewState.pickerView)
-            // Seeded here and not by a binding: a binding reads first inside saveReady, and its change handler writes saveReview there.
-            // Only a filename is adopted: tools/flea-portal passes current_name through verbatim, so a
-            // separator in it would put a path outside this folder in the field before anyone typed.
+            // A one-time seed, not a binding: a binding reads first inside saveReady, and its change handler writes saveReview there.
+            // Only a filename: flea-portal passes current_name verbatim, so a separator would put a path outside this folder in the field.
             win.saveName = Picker.validName(win.req.name) ? win.req.name : ""
             win.openWithoutHistory(start)
             // Measured on the box: without this the window has the keyboard but the list does not,
