@@ -1,7 +1,7 @@
 // The subtree walk behind a search request, ticked a slice at a time so a cancel is never blocked.
 use crate::backend::fuzzy::{rank_order, Fuzzy};
 use crate::backend::listing::Listing;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 // One tick reads this many directories before the loop looks at its channel again, the same "one at a time" idea dirsize uses.
@@ -14,8 +14,8 @@ pub struct Search {
     // Lowercased tag:<name> terms the query carried; every match must carry all of them.
     tags: Vec<String>,
     hidden: bool,
-    // Directories still to read, each a path relative to root; the empty string is root itself.
-    pending: Vec<String>,
+    // Directories still to read, each a path relative to root; the empty path is root itself.
+    pending: Vec<PathBuf>,
     // One score per pushed match, in push order, so ranking is a permutation of the listing's spans.
     scores: Vec<i32>,
     pub scanned: usize,
@@ -30,7 +30,7 @@ impl Search {
             fuzzy: Fuzzy::new(&text),
             tags,
             hidden,
-            pending: vec![String::new()],
+            pending: vec![PathBuf::new()],
             scores: Vec::new(),
             scanned: 0,
             started: Instant::now(),
@@ -48,8 +48,8 @@ impl Search {
         self.pending.is_empty()
     }
 
-    fn read_one(&mut self, rel: &str, listing: &mut Listing) {
-        let dir = if rel.is_empty() { self.root.clone() } else { self.root.join(rel) };
+    fn read_one(&mut self, rel: &Path, listing: &mut Listing) {
+        let dir = if rel.as_os_str().is_empty() { self.root.clone() } else { self.root.join(rel) };
         let body = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
         // One bound for opendir, getdents and d_type together, so a dead server costs one deadline, never one per entry.
         let owned = dir.clone();
@@ -59,13 +59,13 @@ impl Search {
         };
         let tagged = if self.tags.is_empty() { Vec::new() } else { super::searchtags::read_tags(&dir, &body, &entries, self.hidden) };
         for (i, (raw, is_dir)) in entries.into_iter().enumerate() {
-            let name = raw.to_string_lossy().into_owned();
             // corner: a dot-prefixed name is dropped before it is counted, matching scan.rs's own hidden rule.
-            if !self.hidden && name.starts_with('.') {
+            if !self.hidden && super::searchindex::is_hidden(&raw) {
                 continue;
             }
             self.scanned += 1;
-            let child = if rel.is_empty() { name.clone() } else { format!("{}/{}", rel, name) };
+            let child = rel.join(&raw);
+            let text = child.to_string_lossy();
             // The tags were read in bounded chunks for the names this walk can match; an unread entry carries none.
             if !self.tags.is_empty() && !carries(&tagged[i], &self.tags) {
                 if is_dir {
@@ -75,9 +75,9 @@ impl Search {
             }
             // The candidate is the whole relative path, not the base name, so one query can span a
             // separator: "dwnhelp" reaches "downloads/helper.txt", see docs/protocol.md "search".
-            if let Some(score) = self.fuzzy.score(&child) {
-                // The row's name is its path relative to the root, so base.join(name) still reaches the file and every per-row facility works unchanged.
-                listing.push(&child, is_dir);
+            if let Some(score) = self.fuzzy.score(&text) {
+                // The row's name is its path relative to the root; a name that is not UTF-8 rows as lossy text, like every row on the wire, so base.join(name) reaches only a UTF-8 name.
+                listing.push(&text, is_dir);
                 self.scores.push(score);
             }
             // corner: a symlink reports its own type here, so a link to a directory is never descended and no loop is possible.
@@ -345,6 +345,18 @@ mod tests {
         super::super::tags::write_names(&path, &["Red".to_string()]).unwrap();
         let (l, _) = walk_all(root(&d), "tag:Red", false);
         assert_eq!(l.len(), 1, "the tag is read at the entry's own path, never at a lossy copy of its name");
+    }
+
+    #[test]
+    fn a_folder_whose_name_is_not_utf8_is_descended() {
+        use std::os::unix::ffi::OsStrExt;
+        let d = TestDir::new("dirnonutf8");
+        let folder = d.path().join(std::ffi::OsStr::from_bytes(b"bad\xffdir"));
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(folder.join("bench.txt"), "").unwrap();
+        let (l, s) = walk_all(root(&d), "bench", false);
+        assert_eq!(names(&l), ["bad\u{fffd}dir/bench.txt"], "the folder is read at its own path, never at a lossy copy of its name");
+        assert_eq!(s.scanned, 2);
     }
 
     #[test]
