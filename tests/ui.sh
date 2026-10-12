@@ -7180,6 +7180,20 @@ case_tabs() {
     omarchy-drive click "$((cx + wx))" "$((cy + wy))" >/dev/null
     settle
     [[ "$(ipc tabIndex)" == "0" ]] || fail "tabs: clicking tab 0 did not select it, index=$(ipc tabIndex)"
+    # A count verdict stands until the count moves; the bar clears it after 4000 ms alone.
+    key w >/dev/null
+    settle
+    [[ "$(ipc tabCount)" == "1" ]] || fail "tabs: w did not close to one tab, count=$(ipc tabCount)"
+    # The clock starts before the press that raises the notice, so a read inside StatusBar.qml messageMs precedes its expiry.
+    local notice_seen_ns withdraw_within_ms=4000
+    notice_seen_ns=$(date +%s%N)
+    key w >/dev/null
+    wait_message "Can't close the last tab."
+    key t >/dev/null
+    settle
+    [[ "$(ipc tabCount)" == "2" ]] || fail "tabs: t did not reopen a second tab, count=$(ipc tabCount)"
+    [[ -z "$(ipc lastMessage)" ]] || fail "tabs: a tab-count notice outlived the count change"
+    (( $(date +%s%N) - notice_seen_ns < withdraw_within_ms * 1000000 )) || fail "tabs: the empty read landed past $withdraw_within_ms ms, inside the bar's own expiry"
     shot tabs-two
     printf 'TABS count=%s index=%s labels=%s\n' "$(ipc tabCount)" "$(ipc tabIndex)" "$(ipc tabLabels)"
     kill_flea

@@ -26,6 +26,8 @@ Item {
     property string fsName: ""
     property real fsFree: 0
     property string notice: ""
+    // Each notice carries a serial, so a withdrawal names the notice it owns.
+    property int noticeSerial: 0
     // [{text, detail, place}]: place is the path a no-Trash refusal was raised in, "" for every other error.
     property var errors: []
     // An arm's prompt and its record, kept apart from the notice so the arm's own life, not the text, ranks it.
@@ -113,7 +115,9 @@ Item {
             root.errors = Status.withError(root.errors, text, detail, root.path)
             return
         }
+        // The serial moves with the notice, so a later withdrawal names this one.
         root.notice = text
+        root.noticeSerial += 1
         root.syncNoticeTimer()
     }
 
@@ -128,6 +132,10 @@ Item {
     function dismiss() {
         if (root.transientIsError) root.errors = root.errors.slice(1)
         else root.notice = ""
+    }
+    // A stale serial names a past notice, so only the still-standing one is cleared.
+    function withdraw(serial) {
+        if (serial === root.noticeSerial) root.notice = ""
     }
     // A refusal and an arm belong to the place they were raised in, so leaving that place drops both.
     onPathChanged: {

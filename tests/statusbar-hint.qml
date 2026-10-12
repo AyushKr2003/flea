@@ -153,6 +153,28 @@ ShellRoot {
             bar880.activities = [{ owner: null, text: "Copying 1 of 2", transfer: { running: false } }]
             bar880.searchLine = root.repeat("s", 200)
             bar880.searchRunning = true
+        } else if (root.step === 6) {
+            settleBar(bar880)
+            bar880.say("Can't close the last tab.", false)
+            var serialOwn = bar880.noticeSerial
+            bar880.say("Copy failed.", true)
+            bar880.withdraw(serialOwn)
+            check("a matching withdraw clears the standing notice", bar880.notice, "")
+            check("a matching withdraw keeps the error", bar880.errors.length, 1)
+            check("and the error is what is drawn", bar880.transient_, "Copy failed.")
+        } else if (root.step === 7) {
+            settleBar(bar880)
+            bar880.say("Can't close the last tab.", false)
+            var serialStale = bar880.noticeSerial
+            bar880.say("Copy failed.", true)
+            bar880.say("Later notice.", false)
+            bar880.withdraw(serialStale)
+            check("a stale withdraw keeps the later notice", bar880.notice, "Later notice.")
+            check("and it keeps the error", bar880.errors.length, 1)
+            settleBar(bar880)
+            bar880.activities = [{ owner: null, text: "Copying 1 of 2", transfer: { running: false } }]
+            bar880.searchLine = root.repeat("s", 200)
+            bar880.searchRunning = true
         } else {
             check("long search still elides its tail", bar880.secondaryItem.truncated, true)
             root.done = true
