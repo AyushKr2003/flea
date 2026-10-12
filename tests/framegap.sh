@@ -64,6 +64,13 @@ if [ -n "$foreign_clipped" ]; then
     printf '%s\n' "$foreign_clipped" | head -10
 fi
 [ "$tally" = "FRAMEGAP DONE checks=$expected_checks failed=0 controls=$expected_controls controlMiss=0 focusMiss=0" ] || fail "the run reported '${tally:-nothing}', not $expected_checks checks, 0 failed, $expected_controls controls and no misses"
+# The chip rows must have run and none may have failed; the qml PASS line alone is not the verdict.
+chip_tally=$(printf '%s\n' "$output" | grep -ao 'FRAMEGAP CHIPS checks=[0-9]* failed=[0-9]*' | tail -1)
+case $chip_tally in
+  'FRAMEGAP CHIPS checks=0 '*|'') fail 'no picker chip row was read' ;;
+  *' failed=0') ;;
+  *) fail "a picker chip frame comes within the inset: '$chip_tally'" ;;
+esac
 [ "${hosts:-0}" = "$expected_hosts" ] || fail "the run measured ${hosts:-0} hosts, not $expected_hosts"
 if printf '%s\n' "$output" | grep -q 'FRAMEGAP CONTROLMISS'; then
     fail 'a negative control was not flagged, so the reader may be blind'

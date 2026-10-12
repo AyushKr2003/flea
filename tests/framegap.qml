@@ -22,6 +22,8 @@ ShellRoot {
     readonly property var inFlight: ({ id: 1, moving: false, n: 2, index: 1, name: "a.txt", running: true, done: 0, bytes: 1024, total: 4096, moved: 0, writing: false, drive: "" })
     // The picker's path strip with two chips, one chosen: every stop the Display section offers.
     readonly property var chipStops: [9, 10, 11, 12, 14, 16, 20]
+    // Cancel, Accept, Back and Up, which PickerChrome.focusItems() lists before its chips.
+    readonly property int pickerPlainItems: 4
     property int chipChecks: 0
     property int chipFailed: 0
 
@@ -42,7 +44,7 @@ ShellRoot {
         var hosts = Object.keys(root.seen).sort()
         root.log("HOSTS " + hosts.length + " " + hosts.join(","))
         if (root.chipChecks === 0) root.log("FAIL no picker chip row was read")
-        if (root.failed === 0 && root.controlMiss === 0 && root.focusMiss === 0)
+        if (root.failed === 0 && root.controlMiss === 0 && root.focusMiss === 0 && root.chipChecks > 0 && root.chipFailed === 0)
             root.log("PASS " + root.checks + " checks over " + hosts.length + " hosts plus " + root.controls + " controls, every frame keeps the inset and every control is flagged")
         root.log("DONE checks=" + root.checks + " failed=" + root.failed + " controls=" + root.controls + " controlMiss=" + root.controlMiss + " focusMiss=" + root.focusMiss)
         root.log("CHIPS checks=" + root.chipChecks + " failed=" + root.chipFailed)
@@ -88,14 +90,17 @@ ShellRoot {
         }
     }
 
+    // The chips are the focus items after the plain controls.
+    function pickerChips() { return pickerChrome.focusItems().slice(root.pickerPlainItems) }
+
     // Each picker chip frame against the path strip top and its rule, one row per side.
     function chipMeasure(state, stop) {
-        var chips = pickerChrome.focusItems().slice(4)
+        var chips = root.pickerChips()
         var strip = Probe.find(pickerChrome, "pickerWhere")
-        if (chips.length === 0 || !strip) {
+        if (chips.length === 0 || chips.length !== pickerChrome.chips.length || !strip) {
             root.chipChecks += 1
             root.chipFailed += 1
-            root.log("FAIL PickerChips no chips or strip built at stop " + stop)
+            root.log("FAIL PickerChips " + chips.length + " items for " + pickerChrome.chips.length + " chips, or no strip built at stop " + stop)
             return
         }
         // An offscreen window is never active, so the focus a chip takes shows as focus and not activeFocus; a pass with none would re-measure rest.
@@ -126,7 +131,7 @@ ShellRoot {
         })
     }
     function chipRest() { parking.forceActiveFocus() }
-    function chipFocus(i) { pickerChrome.focusItems().slice(4)[i].forceActiveFocus() }
+    function chipFocus(i) { root.pickerChips()[i].forceActiveFocus() }
 
     // A focused DialogButton frames itself in the rule's colour, read off Theme and never off focusFrame.
     function drawsFocus(button) {
