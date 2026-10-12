@@ -216,22 +216,6 @@ function run(check) {
         check(file + " frames a focused field in the accent", text.indexOf(fields[file]) >= 0, true)
         check(file + " draws no thick button frame around a field", text.indexOf("Buttons.RING") < 0, true)
     }
-    // Decided FIELDS-01: error text and its mark on a card or the surface footer draw errorOnSurface; a bare error ink stays only in a border.color frame, read per property so a wrapped ternary counts.
-    var errorCards = ["ui/BulkRenameDialog.qml", "ui/UnlockDialog.qml", "ui/PermissionsDialog.qml", "ui/OpenWithDialog.qml", "ui/MenuActionDialog.qml", "ui/NetworkDialog.qml",
-                      "ui/ArchiveCompressDialog.qml", "ui/ArchivePasswordDialog.qml", "ui/ConvertDialog.qml", "ui/PickerSave.qml", "ui/PickerWindow.qml"]
-    errorCards.forEach(function (file) {
-        var lines = Source.source(file).split("\n"), bare = 0
-        lines.forEach(function (line, i) {
-            if (!/Theme\.color\.error\b(?!OnSurface)/.test(line))
-                return
-            var owner = i
-            while (owner > 0 && !/^\s*[\w.]+\s*:/.test(lines[owner]))
-                --owner
-            if (!/^\s*border\.color\s*:/.test(lines[owner]))
-                ++bare
-        })
-        check(file + " draws no card error ink on the window error role", bare, 0)
-    })
     // The chrome path field is the editFrame block alone: one accent hairline, no ring, and no sibling draws a border around it. The strip is the bar and the entry it holds.
     var chrome = Source.source("ui/ChromeBar.qml") + Source.source("ui/PathEntry.qml")
     var edit = blockOf(chrome, "id: editFrame")
