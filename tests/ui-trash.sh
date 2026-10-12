@@ -45,6 +45,14 @@ case_railorder() {
     kill_flea
 }
 
+# Registers owned trash names for the EXIT trap, except in the data home's trash, which is inside the case's sandbox.
+trash_trap_own() {
+    local trash="$1" root="$2" label="$3"
+    shift 3
+    [[ "$trash" == "$XDG_DATA_HOME/Trash/files" ]] && return 0
+    sandbox_trash_trap_own "$trash" "$root" "$@" || fail "$label: owned entries could not be registered for $trash"
+}
+
 trash_guard() {
     local path="$1" canonical
     [[ -n "$path" && "$path" == /* ]] || fail "trash: empty or relative mutation path"
@@ -54,13 +62,16 @@ trash_guard() {
         || fail "trash: mutation path is outside this case's sandbox"
 }
 
-# A trash backing path, resolved, must sit inside the trash GLib used for this case (the caller's trash_files, or ROOT).
+# A trash backing path keeps trash_guard's checks where it can sit in the sandbox, and must always sit inside the trash GLib used (trash_files, or ROOT).
 trash_guard_backing() {
     local path="$1" root="${2:-${trash_files:-}}" canonical
     [[ -n "$path" && "$path" == /* && -n "$root" && "$root" == /* ]] || fail "trash: empty or relative backing path"
+    [[ -f "$trash_box/.flea-test-sandbox" ]] || fail "trash: missing owned fixture marker"
     canonical=$(realpath -m -- "$path") || fail "trash: could not resolve backing path $path"
     root=$(realpath -m -- "$root") || fail "trash: could not resolve trash directory $root"
     [[ "$canonical" == "$root/"* ]] || fail "trash: backing $path is outside $root"
+    # A private store lives inside this case's sandbox, so the full trash_guard holds there; a mount-top trash cannot.
+    [[ "$root" != "$trash_box/"* ]] || trash_guard "$path"
 }
 
 trash_bus_id() {
@@ -187,9 +198,7 @@ PY
 }
 
 trash_guard_store() {
-    local expected="$1" listing uri original backing count=0 trash_files
-    # Callers whose window runs under another HOME pass it; the trash the provider saw follows that HOME's device.
-    trash_files=$(sandbox_trash_files_dir "$XDG_DATA_HOME" "${2:-$HOME}") || fail "trash: no GLib trash directory for $XDG_DATA_HOME"
+    local expected="$1" listing uri original backing count=0 trash_files="" row_trash
     trash_private
     trash_guard "$XDG_DATA_HOME"
     listing=$(/usr/bin/gio trash --list) || fail "trash: provider listing failed"
@@ -198,8 +207,11 @@ trash_guard_store() {
         while IFS=$'\t' read -r uri original; do
             [[ "$uri" == trash:///* && -n "$original" ]] || fail "trash: malformed provider row"
             trash_guard "$original"
+            # The trash GLib used for this row follows the original's own device, never the data home's.
+            row_trash=$(sandbox_trash_files_dir "$original") || fail "trash: no GLib trash directory for $original"
             backing=$(trash_backing "$uri") || fail "trash: unavailable backing path"
-            trash_guard_backing "$backing"
+            trash_guard_backing "$backing" "$row_trash"
+            trash_files=$row_trash
             count=$((count + 1))
         done <<< "$listing"
     fi
@@ -359,6 +371,7 @@ case_trashfocus() {
     wait_listing 2
     trash_move alpha.txt 0 1
     trash_move beta.txt 1 0
+    trash_trap_own "$trash_files" "$payload" "trash" alpha.txt beta.txt
     trash_rail
     trash_wait '.opened and .total == 2 and (.busy == false)'
     state=$(ipc trashFocusEmpty)
@@ -414,6 +427,7 @@ case_trasharm() {
     wait_listing 2
     trash_move alpha.txt 0 1
     trash_move beta.txt 1 0
+    trash_trap_own "$trash_files" "$payload" "trasharm" alpha.txt beta.txt
     trash_rail
     trash_wait '.opened and .total == 2 and (.busy == false)'
     trash_click trashRowCentre 0 left
@@ -779,6 +793,7 @@ trash_sweep_case() {
     done
     # GLib trashes to the home store or the fixture mount's top trash by device.
     trash_files=$(sandbox_trash_files_dir "$payload") || fail "trash: no GLib trash directory for $payload"
+    trash_trap_own "$trash_files" "$payload" "trash" keep.txt stale-one.txt stale-two.txt
     trash_info="${trash_files%/files}/info"
     [[ -n "$trash_info" && "$trash_info" == /* ]] || fail "trash: no GLib trash info directory for $payload"
     # gio writes DeletionDate into the .trashinfo beside each item, and it is the same field the
@@ -871,6 +886,7 @@ case_trash() {
     wait_listing 2
     trash_move alpha.txt 0 1
     trash_move beta.txt 1 0
+    trash_trap_own "$trash_files" "$payload" "trash" beta.txt
     trash_wait '.count == 2'
     trash_guard_store 2
     trash_shot trash-full-not-current
@@ -916,11 +932,12 @@ case_trash() {
     wait_listing 3
     trash_move good.txt 0 2
     trash_move locked 1 1
+    trash_trap_own "$trash_files" "$payload" "trash" good.txt locked
     # The lock goes on where the permanent delete will meet it, which is the trash's own backing copy.
     # gio refuses to trash a directory it cannot write at all: measured on the box, "Unable to trash
     # file ...: Permission denied", so locking it before the move left the row in the listing and this
     # block never reached the failure it exists to prove.
-    locked_backing=$(trash_backing "$(/usr/bin/gio trash --list | grep -F "/locked" | cut -f1)") \
+    locked_backing=$(trash_backing "$(trash_uri "$payload/locked")") \
         || fail "trash: missing locked backing"
     trash_guard_backing "$locked_backing"
     chmod 0555 "$locked_backing"

@@ -5685,6 +5685,7 @@ case_dd() {
     # Hard rule 9 in the case itself: the rows went to this case's own trash and not the operator's.
     [[ -s "$dd_trash/f2.txt" && -s "$dd_trash/f3.txt" ]] \
         || fail "dd: the block did not land in $dd_trash, which holds $(ls -A "$dd_trash" 2>&1)"
+    trash_trap_own "$dd_trash" "$dir" "dd" f2.txt f3.txt
     wait_listing 4
     settle
     [[ "$(ipc cursor)" == "1" ]] \
@@ -5704,6 +5705,7 @@ case_dd() {
     key d >/dev/null
     for _attempt in $(seq 1 40); do [[ -e "$dir/f5.txt" ]] || break; sleep 0.25; done
     [[ -e "$dir/f5.txt" ]] && fail "dd: the row was not trashed, the bar reads $(ipc lastMessage)"
+    trash_trap_own "$dd_trash" "$dir" "dd" f5.txt
     wait_listing 3
     settle
     [[ "$(ipc cursor)" == "$at" ]] || fail "dd: the cursor left row $at for $(ipc cursor)"
@@ -5726,6 +5728,7 @@ case_dd() {
     key d >/dev/null
     for _attempt in $(seq 1 40); do [[ -e "$dir/f6.txt" ]] || break; sleep 0.25; done
     [[ -e "$dir/f6.txt" ]] && fail "dd: the last row was not trashed, the bar reads $(ipc lastMessage)"
+    trash_trap_own "$dd_trash" "$dir" "dd" f6.txt
     wait_listing 2
     settle
     [[ "$(ipc cursor)" == "$((at - 1))" ]] \
@@ -5791,6 +5794,7 @@ case_ddclick() {
         # Hard rule 9 in the case itself: the row went to this case's own trash and not the operator's.
         [[ -s "$ddclick_trash/$want" ]] \
             || fail "ddclick ($view): $want did not land in $ddclick_trash, which holds $(ls -A "$ddclick_trash" 2>&1)"
+        trash_trap_own "$ddclick_trash" "$dir" "ddclick ($view)" "$want"
         printf 'DDCLICK view=%s kept=f0.txt trashed=%s cursor=%s\n' "$view" "$want" "$cur"
         kill_flea
         # A mount-top trash is shared, so only this run's own entry goes, each pair checked in the command.
@@ -5946,6 +5950,7 @@ case_collide() {
     for _attempt in $(seq 1 300); do collide_holds "$collide_trash/photo.txt" there && break; sleep 0.05; done
     collide_holds "$collide_trash/photo.txt" there \
         || fail "collide: the replaced photo.txt is not in $collide_trash: $(ls -A "$collide_trash" 2>&1)"
+    trash_trap_own "$collide_trash" "$dir" "collide" photo.txt
     shot collide-replaced
     key z >/dev/null
     collide_until "Undo did not restore the replaced photo.txt" collide_untouched
