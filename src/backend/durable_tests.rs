@@ -1303,3 +1303,94 @@ fn a_redo_on_a_batch_target_leaves_nothing_open_when_it_returns() {
     assert_eq!(test_open_under(d.path()), 0, "no descriptor is left on the drive");
     test_reset();
 }
+
+// A destination reached through a symlink lands on the stick the link points at, so it batches like the stick's own path.
+#[test]
+fn a_symlinked_destination_into_a_vfat_stick_batches() {
+    test_reset();
+    let d = TestDir::new("durable-link-batch");
+    let stick = d.dir("stick").canonicalize().expect("the real stick path");
+    let link = d.join("link");
+    std::os::unix::fs::symlink(&stick, &link).expect("the link");
+    test_mark_durable(&link);
+    test_mark_durable(&stick);
+    let body = vfat_body_for(&stick);
+    assert!(super::Durability::begin_from(&stick, Some(&body)).batch_syncfs, "the stick's own path batches");
+    assert!(super::Durability::begin_from(&link, Some(&body)).batch_syncfs, "the link into it batches too");
+    let share = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n30 1 0:45 / {} rw - cifs //nas/media rw\n", stick.display());
+    assert!(!super::Durability::begin_from(&link, Some(&share)).batch_syncfs, "a link into a share never batches");
+    test_reset();
+}
+
+// A link into a share is followed no further than the share's edge: no readlink lands inside a mount that can wedge.
+#[test]
+fn a_link_into_a_share_is_never_read_past_the_share_edge() {
+    test_reset();
+    let d = TestDir::new("durable-link-wedge");
+    let share = d.dir("share").canonicalize().expect("the real share path");
+    let link = d.join("link");
+    std::os::unix::fs::symlink(&share, &link).expect("the link");
+    let body = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n30 1 0:45 / {} rw - cifs //nas/media rw\n", share.display());
+    let dest = link.join("sub").join("leaf");
+    let real = crate::backend::extclass::resolved_in(&dest, &body);
+    let reads = crate::backend::extclass::test_link_reads();
+    assert!(reads.contains(&link), "the link itself is read, so the hook sees the walk: {:?}", reads);
+    assert!(reads.iter().all(|p| !p.starts_with(&share)), "no syscall reaches the share: {:?}", reads);
+    assert_eq!(real, share.join("sub").join("leaf"), "the answer is the share's edge plus the unresolved tail");
+    test_reset();
+}
+
+// A chain of links lands on the stick, and a loop answers the raw path once the kernel's bound is passed.
+#[test]
+fn a_link_chain_resolves_and_a_loop_answers_the_raw_path() {
+    test_reset();
+    let d = TestDir::new("durable-link-chain");
+    let stick = d.dir("stick").canonicalize().expect("the real stick path");
+    let (first, second) = (d.join("first"), d.join("second"));
+    std::os::unix::fs::symlink("second", &first).expect("the relative link");
+    std::os::unix::fs::symlink(stick.join("..").join("stick"), &second).expect("the link through a parent step");
+    let body = "1 0 8:1 / / rw - ext4 /dev/a rw\n";
+    assert_eq!(crate::backend::extclass::resolved_in(&first, body), stick, "both links and the parent step are followed");
+    let (ping, pong) = (d.join("ping"), d.join("pong"));
+    std::os::unix::fs::symlink(&pong, &ping).expect("one end of the loop");
+    std::os::unix::fs::symlink(&ping, &pong).expect("the other end");
+    assert_eq!(crate::backend::extclass::resolved_in(&ping, body), ping, "a loop answers the raw path");
+    test_reset();
+}
+
+// Three small files through the link cost one syncfs and no per-file fsync, the count a bare stick path gives.
+#[test]
+fn a_transfer_through_a_symlinked_destination_confirms_with_one_syncfs() {
+    test_reset();
+    let d = TestDir::new("durable-link-transfer");
+    let stick = d.dir("stick").canonicalize().expect("the real stick path");
+    let link = d.join("link");
+    std::os::unix::fs::symlink(&stick, &link).expect("the link");
+    let sources: Vec<String> = ["a.txt", "b.txt", "c.txt"].iter().map(|n| d.file(n, "body").to_string_lossy().to_string()).collect();
+    test_mark_durable(&link);
+    test_set_fake_mountinfo(Some(&vfat_body_for(&stick)));
+    let (tx, rx) = std::sync::mpsc::channel();
+    crate::backend::opsreq::run_transfer(1, false, sources, link.clone(), std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)), tx);
+    test_set_fake_mountinfo(None);
+    drop(rx);
+    assert_eq!(test_counts().0, 0, "no file is fsynced on its own: {:?}", test_order());
+    assert_eq!(test_syncfs_count(), 1, "one syncfs covers the three files: {:?}", test_order());
+    assert!(stick.join("c.txt").exists(), "the files landed on the stick");
+    test_reset();
+}
+
+// A link into an rclone mount is rclone: the upload stays in the background and no file is fsynced to force it.
+#[test]
+fn a_symlinked_destination_into_an_rclone_mount_stays_rclone() {
+    test_reset();
+    let d = TestDir::new("durable-link-rclone");
+    let mount = d.dir("remote").canonicalize().expect("the real mount path");
+    let link = d.join("link");
+    std::os::unix::fs::symlink(&mount, &link).expect("the link");
+    test_mark_durable(&link);
+    let body = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n30 1 0:45 / {} rw - fuse.rclone remote: rw\n", mount.display());
+    let begun = super::Durability::begin_from(&link, Some(&body));
+    assert!(begun.rclone, "the link reads as the rclone mount it points into");
+    assert!(!begun.durable && !begun.batch_syncfs, "so nothing forces its upload");
+    test_reset();
+}

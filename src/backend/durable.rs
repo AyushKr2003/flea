@@ -144,6 +144,10 @@ pub(crate) fn batch_syncfs_for(dest: &Path, body: &str, durable: bool, rclone: b
     }
 }
 
+fn rclone_in(dest: &Path, body: &str) -> bool {
+    crate::backend::mountinfo::mount_entry_in(dest, body).is_some_and(|e| fstype_is_rclone(&e.fstype))
+}
+
 // The done line's own words for a folder the drive would not confirm, printable as-is.
 pub const DIR_UNCONFIRMED: &str = "copied, but the drive did not confirm the folder";
 
@@ -244,10 +248,11 @@ impl Durability {
 
     // Sample input: Some("... vfat /dev/sda1 ...") batches a durable dest, None never does without a mount table.
     fn begin_from(dest: &Path, mountinfo: Option<&str>) -> Durability {
-        let rclone = dest_is_rclone(dest);
+        let real = mountinfo.map_or_else(|| dest.to_path_buf(), |body| crate::backend::extclass::resolved_in(dest, body));
+        let rclone = mountinfo.map_or_else(|| dest_is_rclone(dest), |body| rclone_in(dest, body) || rclone_in(&real, body));
         let durable = !rclone && dest_is_durable(dest);
         let batch_syncfs = match mountinfo {
-            Some(body) => batch_syncfs_for(dest, body, durable, rclone),
+            Some(body) => batch_syncfs_for(dest, body, durable, rclone) || batch_syncfs_for(&real, body, durable, rclone),
             None => false,
         };
         Durability { durable, rclone, file_failed: false, batch_syncfs, rename_fat: false, unsettled: false, held: Vec::new(),
@@ -643,6 +648,7 @@ fn confirm_finish(id: usize, tx: &std::sync::mpsc::Sender<crate::backend::opsreq
 pub fn test_reset() {
     FORCE.with(|v| v.borrow_mut().clear());
     FAKE_MOUNTINFO.with(|v| *v.borrow_mut() = None);
+    crate::backend::extclass::test_reset_link_reads();
     FAIL_FILE.with(|v| v.set(false));
     FAIL_DIR.with(|v| v.set(false));
     FILE_FLUSHES.with(|v| v.set(0));

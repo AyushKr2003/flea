@@ -235,9 +235,12 @@ fn a_symlink_into_a_network_mount_answers_off_the_loop() {
     let body = format!("1 0 0:30 / / rw - ext4 /dev/a rw\n30 1 0:9 / {} rw - cifs //nas/media rw\n", target.display());
     // A statfs that takes half a second, so an answer inside a quarter of one proves it ran on the worker.
     let (mut fs, rx, _) = counted(500, 7);
+    super::super::extclass::test_reset_link_reads();
     let t = Instant::now();
     let (info, class, _) = fs.answer_in(&link, &body);
     assert!(t.elapsed() < Duration::from_millis(250), "no statfs ran on the loop, took {:?}", t.elapsed());
+    let reads = super::super::extclass::test_link_reads();
+    assert!(reads.contains(&link) && reads.iter().all(|p| !p.starts_with(&target)), "the link is read and nothing inside the share: {:?}", reads);
     assert_eq!(class, "network", "a symlink into a cifs mount is network, not local");
     assert!(info.is_none(), "its figures arrive on the worker, never blocked");
     assert_eq!(next_done(&rx).info.map(|i| i.free), Some(7), "and the worker does report them");

@@ -1,6 +1,6 @@
 // A slow mount's statfs is a network round trip (about 800 ms on the NAS), so it runs on a worker, never the loop.
 use super::events::Event;
-use super::extclass::{classify_entry_with_magic, fstype_is_network, gvfs_class, gvfs_root, resolved};
+use super::extclass::{classify_entry_with_magic, fstype_is_network, gvfs_class, gvfs_root, resolved_in};
 use super::fsinfo::Info;
 use super::mountinfo::{mount_entry_in, on_system_volume};
 use std::collections::{HashMap, HashSet};
@@ -82,7 +82,7 @@ impl FsInfo {
         if let Some(entry) = mount_entry_in(path, body).filter(|e| fstype_is_network(&e.fstype)) {
             return self.slow_answer(entry.mount, path, "network");
         }
-        let owned = resolved(path);
+        let owned = resolved_in(path, body);
         if let Some(root) = gvfs_root(&owned) {
             return self.slow_answer(root, path, slow_class(&owned));
         }
