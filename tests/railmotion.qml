@@ -28,6 +28,7 @@ ShellRoot {
     property int keptCursor: -1
     property real xRe: 0
     property real listWidth: 0
+    property int polls: 0
 
     RailIpc { id: railIpc; report: root.check }
     function check(name, actual, expected) {
@@ -55,6 +56,45 @@ ShellRoot {
     function sidebar() {
         if (!root.sidebarRef && root.host) root.sidebarRef = root.find(root.host, "Sidebar")
         return root.sidebarRef
+    }
+    // Listings the Sidebar's DeviceMounts has started; the rail keeps polling only while revealed.
+    function devicePolls() { var d = root.find(root.sidebar(), "DeviceMounts"); return d ? d._listingsStarted : -1 }
+    // The keep-running cases of DeviceMounts' poll, each held on a withdrawn rail; a release reveals the rail at once, so it is held on the parked poll itself.
+    readonly property var holds: [
+        { name: "a mount awaiting its folder", set: function (d) { d._pendingOpenDevice = "/dev/flea-rail-test" }, clear: function (d) { d._pendingOpenDevice = "" } },
+        { name: "a power-off chain", set: function (d) { d._powerOffDisk = "/dev/flea-rail-test" }, clear: function (d) { d._powerOffDisk = "" } },
+        { name: "no first answer yet", set: function (d) { d.firstAnswered = false }, clear: function (d) { } },
+        { name: "a release in flight", set: function (d) { d.polling = false; d._unmounting = true },
+          clear: function (d) { d._unmounting = false; d.polling = Qt.binding(function () { return root.sidebar().polling }) } }
+    ]
+    // The DEVICES poll's own Timer, found by its interval; running false is the parked state.
+    function pollParked() {
+        var d = root.find(root.sidebar(), "DeviceMounts")
+        for (var i = 0; d && i < d.data.length; i++)
+            if (d.data[i].interval === d.pollMs && d.data[i].triggeredOnStart) return !d.data[i].running
+        return false
+    }
+    // Each hold starts parked and ends parked, so a step's growth is its own and never the case before's leftover polling.
+    function holdSteps() {
+        var out = []
+        root.holds.forEach(function (hold) {
+            out.push(function () { return until("the rail withdrawn and the poll parked before " + hold.name, root.gone() && root.pollParked()) })
+            out.push(function () { root.polls = root.devicePolls(); hold.set(root.find(root.sidebar(), "DeviceMounts")); root.mark("hold"); return true })
+            out.push(function () {
+                var d = root.find(root.sidebar(), "DeviceMounts")
+                var grew = root.devicePolls() > root.polls
+                if (!grew && root.since("hold") < 1500) return false
+                check(hold.name + " keeps a parked poll running", [d.polling === false, grew], [true, true])
+                hold.clear(d)
+                return true
+            })
+            out.push(function () {
+                if (!until("the poll parked again after " + hold.name, root.pollParked())) return false
+                check(hold.name + " parks the poll again once cleared", [root.find(root.sidebar(), "DeviceMounts").firstAnswered, root.pollParked()], [true, true])
+                return true
+            })
+        })
+        return out
     }
     function mark(name) { root.marks[name] = Date.now() }
     function since(name) { return Date.now() - root.marks[name] }
@@ -245,8 +285,25 @@ ShellRoot {
             check("the rail's width never changes", shape.widths, 1)
             check("and every rail row keeps its y through the hide", root.distinct(root.samples.map(function (s) { return s.sig })), 1)
             check("railWidth reads 0 hidden", pane.sidebarWidth, 0)
+            root.polls = root.devicePolls()
+            check("the built Sidebar's DeviceMounts listed before it was withdrawn", root.polls >= 1, true)
+            root.mark("parked")
             return true
         },
+        // The built Sidebar stays, but its DEVICES poll (5000 ms) is parked while the rail is withdrawn, and a reveal lists at once.
+        function () {
+            if (since("parked") < 5600) return false
+            check("a withdrawn rail lists no devices over a full poll interval", root.devicePolls() - root.polls, 0)
+            root.edgeIn()
+            return true
+        },
+        function () {
+            if (!until("the reveal that polls", root.shown())) return false
+            check("the reveal lists devices at once", root.devicePolls() - root.polls >= 1, true)
+            root.edgeOut()
+            return true
+        },
+        function () { return until("the hide after the poll check", root.gone()) },
         // Re-entry mid-hide: show, leave, wait for the hide to start, come back.
         function () { root.edgeIn(); return true },
         function () {
@@ -369,7 +426,7 @@ ShellRoot {
                   root.distinct(root.samples.map(function (s) { return s.lw })) + "|" + (pane.listArea.width === root.listWidth), "1|true")
             return true
         }
-    ]
+    ].concat(root.holdSteps())
 
     Timer {
         interval: 20

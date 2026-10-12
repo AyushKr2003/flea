@@ -185,9 +185,20 @@ phase and is not in this tree yet.
    nothing and times nothing, it reads the token seam over IPC from a Flea the operator started, and
    the four direct `qs` launches in `tests/ui.sh` assert a cursor, a selection, a scene-graph error
    and the retry helper's argv rather than a duration, so each is still the right launch for its job.
-   Preview and QtMultimedia are now in the tree and the laziness held: `ui/PreviewMedia.qml`
-   is the only file that imports QtMultimedia, reached through a `Loader` built by the first
-   press of play, because QtMultimedia costs 20 MB before it plays anything.
+   Preview and QtMultimedia are in the tree and instantiated lazily: `ui/PreviewMedia.qml` is the
+   only file that imports QtMultimedia, and `ui/PreviewPdf.qml` the only one that imports
+   QtQuick.Pdf, each reached through a `Loader` built by the first press of play or the first
+   PDF open. Compiling is a separate step: `ui/QuickLookWarm.qml` calls `Qt.createComponent`
+   for the unit of the cursor's file kind (Markdown, PDF, clip or audio, image, text) after a
+   1 s rest on such a file, so a rest on a clip or audio file resolves `import QtMultimedia` and
+   a rest on a PDF resolves `QtQuick.Pdf` with Quick Look never opened, which buys a first Space
+   that compiles nothing, and a window that never rests on one of those loads neither library.
+   Headless offscreen `qs` (`tests/quicklook-firstkind.sh`, five runs, a fresh process each),
+   PSS from `/proc/self/smaps_rollup` after the rest: a text file median 121,816 kB (range
+   89,788 to 127,020), a clip median 129,359 kB (range 68,826 to 147,303), the per-run clip
+   minus text difference median +5,309 kB (-20,962 to +25,487, three of five runs within 5,000
+   to 6,100). The spread is wide because the run shares the box, so this is a headless
+   estimate and not a field number.
    Issue #160: when every Vulkan GPU is a Gen7 or Gen8 Intel GPU (Ivy Bridge to Broadwell and Cherryview, served only by
    Mesa's hasvk), the launcher starts the shell on OpenGL instead and says so once on stderr naming
    hasvk and the fallback, with no retry marker; a CPU-type device such as lavapipe is not a GPU and does
@@ -9226,3 +9237,5 @@ The IPC Trash row test moves one ceiling, re-derived with `wc -l`: `tests/sideba
 The status bar's filesystem slot stays empty until the pane's fsinfo line for its folder lands (`Pane.fsAnswered`, `StatusBar.fsPending`) and says unknown only for a pane that was answered with nothing, and `onFsInfo` takes a line for the listing out while a loading mark keeps `pane.path` behind it; this moves three ceilings, re-derived with `wc -l`: `ui/Pane.qml` 1224 to 1226, `ui/StatusBar.qml` 471 to 474 and `ui/WindowBody.qml` 810 to 811, and raises the first-frame `bytes` line in `tests/startup-units.txt` from 1,652,484 to 1,653,354 (+870, no unit added).
 
 `tests/poolpark.qml` moves 411 to 419, re-derived with `wc -l`: its landing records `renamingIndex` at the moment `Nav.forget` drops the count and fails a mid-rename landing that sees anything but -1; no code or comment was cut.
+
+The auto-hide rail keeps its Sidebar built after the first reveal but parks the `ui/DeviceMounts.qml` lsblk poll while the rail is withdrawn (`polling` threads from `ui/PaneRail.qml` through `ui/Sidebar.qml`; the first listing, a mount or a release in flight keep it running, and a reveal lists at once), pinned by `tests/railmotion.qml`; it moves `ui/Sidebar.qml` 705 to 708, `ui/DeviceMounts.qml` 528 to 530 and `tests/railmotion.qml` (an existing file, 400 to 457 lines under a new budget entry of 457, with a hold step for each of the four keep-running cases: a mount awaiting its folder, a power-off chain, no first answer yet and a release in flight, each starting and ending on a parked poll), each re-derived with `wc -l`, and the `bytes` line of `tests/startup-units.txt` from 1654071 to 1654534, the sum the probe takes over its units. The context-menu test seam reads `menu.opened`, so a menu in its close fade reads closed.

@@ -102,6 +102,8 @@ Item {
     function ejectChainState() { return devices.ejectState() }
     // A release in flight, which PaneRail holds the rail open for.
     readonly property bool releasing: devices.releasing
+    // False parks the DEVICES poll; PaneRail drops it while an auto-hide rail is withdrawn, and a reveal polls at once.
+    property bool polling: true
     function pollDevices() { devices.poll() }
     readonly property var entries: root.placesEntries.concat(root.networkEntries, root.deviceEntries)
 
@@ -253,6 +255,7 @@ Item {
 
     DeviceMounts {
         id: devices
+        polling: root.polling
         showUnmounted: root.placesState.showUnmounted !== false
         onOpened: function (path) { root.opened(path) }
         onMessage: function (text, isError) { root.message(text, isError) }
