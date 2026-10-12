@@ -147,14 +147,15 @@ ShellRoot {
         check("save form exposes its status line", !!form, true)
         if (!form) return
         var line = form.statusItem
-        check("collision line is shown", line.visible && line.text.indexOf(win.saveName) === 0, true)
+        var plain = line.text.replace(/\u200b/g, "")
+        check("collision line is shown", line.visible && plain.indexOf(win.saveName) === 0, true)
         // One pixel under the sentence's own width pushes only the last word onto a second line.
         var narrow = Math.floor(wrapped(line, Text.NoWrap, line.text, line.width).width) - 1
         var reference = wrapped(line, Text.WordWrap, line.text, narrow)
         check("collision sentence wraps onto two lines", reference.lines, 2)
         check("collision sentence breaks between words", wrapped(line, line.wrapMode, line.text, narrow), reference)
         var name = "x".repeat(Math.ceil(root.overlongNameFactor * line.width))
-        var overlong = wrapped(line, line.wrapMode, name + line.text.slice(win.saveName.length), line.width)
+        var overlong = wrapped(line, line.wrapMode, name + plain.slice(win.saveName.length), line.width)
         check("one unbroken name stays inside the card", overlong.width <= line.width, true)
         check("one unbroken name breaks inside itself", overlong.lines > 1, true)
     }

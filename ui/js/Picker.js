@@ -196,6 +196,13 @@ function validName(name) {
 
 // What both the strip and the status line say about a name validName() refuses, in ops.rs's words.
 var NAME_REFUSED = "a name cannot be empty, . or .. , or contain a separator"
+// Status lines are whole sentences with placeholders, filled by Format.fill.
+var SAVE_REFUSED = "Refused · %1 · %2"
+var SAVE_EXISTS = "%1 already exists here · review before continuing"
+// A name is one token to the wrapper, so its segment joints carry zero-width breaks; zero width keeps one-line draws identical.
+function jointName(name) {
+    return String(name).replace(/([._-])/g, "$1\u200b")
+}
 
 var DOUBLE_OPEN = "open"
 var DOUBLE_MARK = "mark"
