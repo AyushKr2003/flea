@@ -998,10 +998,11 @@ def easing(root, files):
 
 
 # Sample input: x = "a//b" // 'c...' keeps the literals and drops the tail.
-def ellipsis_code(line):
+def ellipsis_code(line, quote=None):
     # A // tail is a comment only outside a string literal, so a URI keeps its slashes.
-    out = []
-    quote = None
+    if quote != '`':
+        quote = None
+    out = ['`'] if quote == '`' else []
     i = 0
     while i < len(line):
         char = line[i]
@@ -1021,14 +1022,13 @@ def ellipsis_code(line):
         else:
             out.append(char)
         i += 1
-    return ''.join(out)
+    # A template still open at the line end closes here so the pattern sees its tail.
+    return ''.join(out) + ('`' if quote == '`' else ''), quote
 
 
 # Sample input: /* "Saving..." */ keeps code; "//" keeps tails and "'" keeps quotes.
 def ellipsis_blocks(text):
-    # Block comments span lines, so blank each one and keep newlines for diagnostics.
-    # A // tail ends at its newline outside strings, so a quote in one stays there.
-    # A '...' or "..." string ends at its newline, while `...` may span lines.
+    # Blank block comments keeping newlines; // and quotes end at newline, backticks span.
     out = []
     quote = None
     blocked = False
@@ -1087,8 +1087,10 @@ def ellipsis(root, files):
         if path.suffix not in ('.qml', '.js') or not file.startswith('ui/') or not path.is_file():
             continue
         scanned += 1
+        quote = None
         for n, line in enumerate(ellipsis_blocks(path.read_text()).splitlines(), 1):
-            for m in re.finditer(r'["\'`][^"\'`\n]*[A-Za-z]\.\.\.[^"\'`\n]*["\'`]', ellipsis_code(line)):
+            code, quote = ellipsis_code(line, quote)
+            for m in re.finditer(r'["\'`][^"\'`\n]*[A-Za-z]\.\.\.[^"\'`\n]*["\'`]', code):
                 errors.append(f'{file}:{n}: three full stops after a letter, use the ellipsis character')
     return scanned, sorted(set(errors))
 
