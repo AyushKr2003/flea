@@ -34,8 +34,7 @@ fn row_name(base: &Path, path: &Path) -> String {
     path.strip_prefix(base).unwrap_or(path).to_string_lossy().into_owned()
 }
 
-// The tag wire's two requests: a change across rows, and the read of what those rows carry.
-// Answers the files whose tags changed in time, so the loop can tell an open search session; a late write reports through SetTagsDone.
+// The tag wire's two requests (a change across rows, and the read of what those rows carry) answer the files whose tags changed in time, so the loop can tell an open search session; a late write reports through SetTagsDone.
 pub fn handle(out: &mut impl Write, ops: &mut Ops, st: &State, request: Request) -> Vec<PathBuf> {
     match request {
         Request::SetTags { rows, op, tag } => return apply_tags(out, ops, st, rows, &op, &tag),

@@ -283,7 +283,7 @@ fn a_local_scope_reads_its_tags_with_no_mount_hop() {
     let body = "1 0 8:1 / / rw - ext4 /dev/a rw\n";
     crate::backend::iomount::test_reset();
     let have = Bound::new(d.path(), body).read(&rels(&["holiday.jpg", "notes.txt"]));
-    assert_eq!(have, [vec!["Red".to_string()], Vec::<String>::new()]);
+    assert_eq!(have, [Some(vec!["Red".to_string()]), Some(Vec::<String>::new())]);
     assert_eq!(crate::backend::iomount::test_calls(), 0, "a local scope pays no bounded call per row");
 }
 
@@ -293,7 +293,7 @@ fn a_remote_scope_reads_a_chunk_of_rows_under_one_bounded_call() {
     let bound = Bound::new(d.path(), &remote_body(&d));
     crate::backend::iomount::test_reset();
     let have = bound.read(&rels(&["holiday.jpg", "notes.txt"]));
-    assert_eq!(have, [vec!["Red".to_string()], Vec::<String>::new()], "only the Red file carries its tag");
+    assert_eq!(have, [Some(vec!["Red".to_string()]), Some(Vec::<String>::new())], "only the Red file carries its tag");
     assert_eq!(crate::backend::iomount::test_calls(), 1, "two rows ride one mount bound");
 }
 
@@ -303,7 +303,40 @@ fn a_stuck_remote_scope_reads_no_tag() {
     let bound = Bound::new(d.path(), &remote_body(&d));
     let _stuck = crate::backend::iomount::test_hold_stuck(d.path().to_path_buf());
     let have = bound.read(&rels(&["holiday.jpg", "notes.txt"]));
-    assert!(have.iter().all(Vec::is_empty), "an unreadable mount matches no tag");
+    assert!(have.iter().all(Option::is_none), "an unreadable mount leaves its rows unread, never untagged");
+}
+
+#[test]
+fn a_failed_bound_chunk_is_unread_and_readable_again_later() {
+    let d = holiday("tagboundretry");
+    let body = remote_body(&d);
+    let bound = Bound::new(d.path(), &body);
+    let stuck = crate::backend::iomount::test_hold_stuck(d.path().to_path_buf());
+    assert!(bound.read(&rels(&["holiday.jpg", "notes.txt"])).iter().all(Option::is_none), "a failed chunk leaves its rows unread, not untagged");
+    drop(stuck);
+    assert_eq!(bound.read(&rels(&["holiday.jpg", "notes.txt"])), [Some(vec!["Red".to_string()]), Some(Vec::<String>::new())], "a later query reads the same rows again");
+}
+
+#[test]
+fn a_finished_pass_with_unread_rows_answers_partial_and_retries_them() {
+    let d = holiday("tagpartial");
+    let (tx, rx) = channel();
+    let mut index = Index::new();
+    index.push("holiday.jpg", false);
+    index.push("notes.txt", false);
+    let index = Arc::new(Mutex::new(index));
+    let pass = Pass::new(2, Bound::new(d.path(), ""));
+    pass.names.lock().unwrap()[0] = Some(vec!["Red".to_string()]);
+    pass.done.store(true, Ordering::Relaxed);
+    pass.unread_failed.store(true, Ordering::Relaxed);
+    pass.rewrites.lock().unwrap().busy = false;
+    let mut tags = Tags::new(tx);
+    tags.pass = Some(Arc::clone(&pass));
+    let terms = Tags::terms("tag:Red");
+    assert!(tags.prepare(&terms, &index, d.path(), "", false), "rows still unread keep the answer partial, never whole");
+    assert!(matches!(rx.recv_timeout(DEADLINE), Ok(Event::SearchWalked)), "the retry re-read lands");
+    assert_eq!(pass.names.lock().unwrap()[1].as_deref(), Some(&[][..]), "the retry read the missing row");
+    assert!(!tags.prepare(&terms, &index, d.path(), "", false), "with every row read the answer is whole");
 }
 
 // A local sandbox whose `nas` folder is a nested nfs mount; both files carry Red and the body names the mount.
@@ -323,7 +356,7 @@ fn a_row_under_a_remote_mount_inside_a_local_scope_reads_under_the_bound() {
     let (d, body) = nested_remote("tagnested");
     crate::backend::iomount::test_reset();
     let have = Bound::new(d.path(), &body).read(&rels(&["plain.jpg", "nas/held.jpg"]));
-    assert_eq!(have, [vec!["Red".to_string()], vec!["Red".to_string()]], "both Red files are read");
+    assert_eq!(have, [Some(vec!["Red".to_string()]), Some(vec!["Red".to_string()])], "both Red files are read");
     assert_eq!(crate::backend::iomount::test_calls(), 1, "only the row under the nested mount rides the bound");
 }
 
@@ -332,7 +365,7 @@ fn a_stuck_mount_inside_a_local_scope_drops_only_its_own_rows() {
     let (d, body) = nested_remote("tagnestedstuck");
     let _stuck = crate::backend::iomount::test_hold_stuck(d.join("nas"));
     let have = Bound::new(d.path(), &body).read(&rels(&["plain.jpg", "nas/held.jpg"]));
-    assert_eq!(have, [vec!["Red".to_string()], Vec::<String>::new()], "the unreadable mount matches no tag and the local file still does");
+    assert_eq!(have, [Some(vec!["Red".to_string()]), None], "the unreadable mount leaves its own row unread and the local file still reads");
 }
 
 fn entries_named(count: usize) -> Vec<(OsString, bool)> {
