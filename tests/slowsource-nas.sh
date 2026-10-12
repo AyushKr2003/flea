@@ -118,11 +118,11 @@ run_leg() {
     fi
 }
 # audit_leg LEG LOG STRACE FIXTURE: the GUI thread (the qs process itself, the only one traced) makes no read of the browsed folder between the key and the end of the leg; its path calls are listed.
-# Sample input, one strace line: "1760000000.123456 read(21</x/fixture/look/b-notes.txt>, ..., 4096) = 4096" inside the window is a FAIL; with AUDIT_ALL set so is a statx or openat on the fixture.
+# Sample input, one strace line: "1760000000.123456 read(21</x/fixture/look/b-notes.txt>, ..., 4096) = 4096" inside the window is a FAIL; with AUDIT_ALL set so is every other traced call on the fixture (statx, openat, access, readlink, ...).
 audit_leg() {
     local leg=$1 log=$2 trace=$3 fixture=$4 window out
     window=$(sed 's/\x1b\[[0-9;]*m//g' "$log" | grep -a 'NASPROBE WINDOW' | tail -1 | sed 's/.*from=\([0-9]*\) to=\([0-9]*\).*/\1 \2/')
-    [ -n "$window" ] || return 0
+    [ -n "$window" ] || { printf 'FAIL slowsource-nas: %s leg printed no NASPROBE WINDOW line, so its audit checked nothing\n' "$leg"; failures=$((failures + 1)); return; }
     [ -s "$trace" ] || { printf 'FAIL slowsource-nas: %s leg has no strace record, so a silent audit proves nothing\n' "$leg"; failures=$((failures + 1)); return; }
     out=$(python3 -I - "$trace" "$fixture" $window <<'EOP'
 import os, re, sys
