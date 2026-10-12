@@ -301,11 +301,11 @@ Item {
             bridgeLoader.active = true
         return bridgeLoader.item
     }
-    // A null bridge is a missing component, not a refused mount, so it names the file it failed to build.
+    // A null bridge is a missing component, not a refused mount, so the reason says Flea did not load.
     function bridgeMissingReason() {
         return Format.fill(Mounts.WORDS.bridgeMissing, root._pendingLabel || root._pendingUri)
     }
-    // The Loader status is the cause, so it is warned with the file named and the wait ends with no retry.
+    // The log warning names the file and the Loader status, and the wait ends with no retry.
     function failBridgeMissing() {
         console.warn("GvfsBridge.qml did not load: Loader status " + bridgeLoader.status)
         if (root._requestPassword.length > 0) root.remember(root._pendingUri, root._requestPassword)

@@ -204,7 +204,7 @@ function displayRows(state) {
         { kind: "ruler", id: "textStop", stops: TextSize.STOPS, on: !follows,
           index: TextSize.STOPS.indexOf(TextSize.nearest(state.baseSize)) }
     ]
-    // SettingsRest rule 2 keeps only the chords, and HANDOFF rule 8 keeps them to the one line the panel can draw: the board's own sentence wrapped onto two at this width.
+    // SettingsRest rule 2 keeps only the chords; the hint wraps onto two lines at this width.
     out.push({ kind: "hint", label: Format.fill(WORDS.textKeys, KeyName.keyFor("textSizeUp"), KeyName.keyFor("textSizeDown"), KeyName.keyFor("textSizeReset")) })
     // And Effective stays: it is state.baseSize, the size actually running, where the ruler marks TextSize.nearest() and a tie takes the smaller stop, so a base of 13 marks 12.
     out.push({ kind: "fact", id: "textEffective", label: "Effective", role: "live",

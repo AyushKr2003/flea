@@ -18,8 +18,7 @@
 // the kernel too, so a file under a live bridge is ready without any start (I-3) and a
 // directory costs the one check it always did.
 
-// Whole sentences with "%1" for the device or share and "%2" for the reason, filled by Format.fill. The status strip
-// learns that a Starting line stands from ui/Pane.qml's stickyStarting signal, never by reading this text.
+// Whole sentences with "%1" for the device or share and "%2" for the reason; the Starting mark follows ui/Pane.qml's stickyStarting signal, never this text.
 var WORDS = {
     starting: "Opening %1",
     failed: "%1 could not be opened because a system service did not start · %2"

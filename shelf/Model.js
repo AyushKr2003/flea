@@ -80,8 +80,7 @@ function grouped(n) {
   return out
 }
 
-// Fills %1 to %9 in one pass: a value prints as given, a dollar sign or placeholder in it included; an unfilled one stays.
-// It mirrors ui/js/Format.js fill, which this tree cannot import, as grouped mirrors count.
+// Fills %1 to %9 in one pass (a value prints as given, an unfilled one stays); mirrors ui/js/Format.js fill, which this tree cannot import.
 function fill(template) {
   var values = arguments
   return String(template).replace(/%([1-9])/g, function (token, at) {

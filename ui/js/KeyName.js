@@ -3,8 +3,7 @@
 .import "Keymap.js" as Keymap
 .import "Format.js" as Format
 
-// A key the way the running preset binds it, spelled for a sentence. Whole sentences stay in their own
-// modules with a "%1" for the key, so a preset that binds another key changes the key and nothing else.
+// A key the way the running preset binds it, spelled for a sentence; the sentences stay in their own modules with a "%1" for the key.
 
 // The names keys.toml gives a key that a person would write as a mark.
 var MARKS = { plus: "+", minus: "-", equal: "=", underscore: "-", greater: ">", less: "<", slash: "/", period: ".", comma: "," }
@@ -26,7 +25,7 @@ function spelled(keys) {
 
 // The row the running preset binds to an action in the listing, the first of the given modifier kind when one is asked for.
 function rowFor(action, mods) {
-    var rows = Keymap.bindingRows(Keymap.preset, "gui")
+    var rows = Keymap.bindingRows(Keymap.preset, "gui", Keymap.actionGroup(action))
     for (var i = 0; i < rows.length; i++) {
         if (rows[i].action === action && (mods === undefined || rows[i].mods === mods)) return rows[i]
     }

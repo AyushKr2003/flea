@@ -53,8 +53,7 @@ function canDrop(rows, index, row) {
     return rows.indexOf(index) < 0
 }
 
-// Whole sentences with "%1" for the item count and "%2" for the folder name, filled by Format.fill. The keys held at the drop decide
-// copy or move (dropHeld above, read through ui/RowDrag.qml's verbAt), so a move line names both keys.
+// Whole sentences with "%1" for the item count and "%2" for the folder name; the keys held at the drop decide copy or move (dropHeld, ui/RowDrag.qml verbAt).
 var WORDS = {
     linkTo: "Link %1 to %2",
     linkToFolder: "Link %1 to a folder",
