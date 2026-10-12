@@ -861,7 +861,7 @@ def put_back(fixture, want, typed):
         elif typed:
             for w in sorted(want):
                 wstem, wext = os.path.splitext(w)
-                if ext == wext and stem.startswith(wstem) and 0 < len(stem) - len(wstem) <= len(typed):
+                if w not in have and ext == wext and stem.startswith(wstem) and 0 < len(stem) - len(wstem) <= len(typed):
                     old = w
                     break
         if old in want and old not in have:
