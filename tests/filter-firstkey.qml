@@ -26,7 +26,7 @@ ShellRoot {
     function buildRows() {
         var rows = []
         for (var i = 0; i < 300; i++) {
-            var n = (i % 2 === 0 ? "ke-" : "ka-") + ("00" + i).slice(-3) + ".txt"
+            var n = (i % 2 === 0 ? "ke-" : "xa-") + ("00" + i).slice(-3) + ".txt"
             rows.push({ n: n, d: false, i: "text-x-generic", p: 33188, s: 100 + i, m: 1758835200, t: false, k: 0 })
         }
         return rows
@@ -298,8 +298,7 @@ ShellRoot {
         console.log("FIRSTKEY syncbuilt=" + JSON.stringify(root.cycleSync))
         console.log("FIRSTKEY madegone=" + JSON.stringify(root.cycleMade) + " " + JSON.stringify(root.cycleGone))
         console.log("FIRSTKEY missingmarks=" + JSON.stringify(root.missingMarks))
-        // RED: the first key of every cycle must build nothing synchronously, with every
-        // mark drawn in that same frame (no settled stage).
+        // RED: the first key of every cycle must build nothing synchronously, with every mark drawn in that same frame.
         var fails = []
         for (var c = 0; c < root.cycleSync.length; c++) {
             if (c % 3 === 0 && root.cycleSync[c] !== 0)

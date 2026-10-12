@@ -269,8 +269,8 @@ ShellRoot {
             var first = body.currentPane
             body.focusPane(1)
             var second = body.currentPane
+            track(second, second.path)
             if (second === first || !settled(second, second.path)) return
-            root.check("dual: the second pane built and takes focus", second !== first, true)
             root.legPane = second
             var q = second
             if (q.path !== fixture) { q.open(fixture); return }

@@ -431,9 +431,9 @@ false and `ms` the walk's time. A newer query's answer replaces the window
 whole: no blank listing stands between two queries.
 
 A query asked while the walk still runs waits for the walk to land, up to
-150 ms after the first query held, the listing swap's cap (`ui/js/Swap.js`
-`HOLD_MS`), so it is answered once from the whole index; a newer query asked
-meanwhile replaces it and answers in its place. Past the cap the held query
+150 ms after the first query held, the search hold (`ui/js/Swap.js`
+`HOLD_MS`, not the listing swap's cap `Swap.CAP_MS`, 66 ms), so it is answered once from the whole index; a newer query asked
+meanwhile replaces it and answers in its place. Past `HOLD_MS` the held query
 is answered from the partial index with `walking` true, and every later query
 of that walk is answered at once. A `searchcancel` answers a held query as
 its stop.
@@ -1923,9 +1923,9 @@ removes it; only a cancel removes its partial itself, see `transfercancel`.
 
 ### transferdone
 
-`{"t":"transferdone","id":<uint>,"ok":<uint>,"failed":<uint>,"skipped":<uint>,"cancelled":<bool>,"durable":<bool>,"note":"<string>"[,"merged":<uint>,"keptBoth":<uint>,"into":"<string>"][,"refused":[{"name":"<string>","err":"<string>"}]]}`
+`{"t":"transferdone","id":<uint>,"ok":<uint>,"failed":<uint>,"skipped":<uint>,"cancelled":<bool>,"retryPaths":[<string>,...],"durable":<bool>,"note":"<string>"[,"merged":<uint>,"keptBoth":<uint>,"into":"<string>"][,"refused":[{"name":"<string>","err":"<string>"}]]}`
 
-Example: `{"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false,"durable":false,"note":""}`
+Example: `{"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false,"retryPaths":[],"durable":false,"note":""}`
 Example: `{"t":"transferdone","id":13,"ok":0,"failed":1,"skipped":0,"cancelled":false,"retryPaths":["/home/a/thesis"],"durable":true,"note":"","refused":[{"name":"thesis/refs/paper.pdf","err":"this drive cannot hold links"}]}`
 
 The whole operation's terminal line. `skipped` counts the items the transfer did not start by design:
