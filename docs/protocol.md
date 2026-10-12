@@ -1225,11 +1225,11 @@ needs no conversion answers `ready` or `failed` at once and sends no follow-up.
 `{"t":"officepdf","id":4,"state":"failed","err":"LibreOffice is not installed on this box.","unavailable":true}`.
 A client that reads it keeps its existing preview and does not ask again; a `failed` line without
 it (a converter error, a timeout, a request replaced by a newer one, a mount that is not
-responding) may succeed on a later request, except that a converter failure is remembered for
-that file until its modification time changes.
-The path is checked and converted beside the loop, so a hung mount costs one `failed` line and
-never the window. One conversion runs at a time and a newer request replaces the one queued
-behind it.
+responding) may succeed on a later request, except that a converter error (an exit status or no
+PDF) is remembered for that file until its modification time changes; a timeout is not.
+The path is resolved and its cache entry looked up beside the loop under the mount deadline, so a
+hung mount costs one `failed` line and never the window. One conversion runs at a time and the
+newest request replaces the one queued behind it, whichever request finished its lookup first.
 
 ### settags
 

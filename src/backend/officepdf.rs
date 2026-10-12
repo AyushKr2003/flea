@@ -14,7 +14,7 @@ use crate::json::escape;
 use std::io::{Read, Write};
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::{Duration, Instant, SystemTime};
@@ -169,8 +169,10 @@ struct Waiter {
 struct Job {
     key: String,
     program: String,
-    path: PathBuf,
+    // Canonical, resolved by the probe under the mount deadline, so the conversion makes no path call of its own.
+    input: PathBuf,
     mtime: SystemTime,
+    seq: u64,
     waiters: Vec<Waiter>,
 }
 
@@ -191,6 +193,8 @@ pub struct Service {
     build: Build,
     runner: Runner,
     timeout: Duration,
+    // Request order, stamped on the loop: a worker that finishes its probe late must not replace a newer request.
+    seq: AtomicU64,
     // One flag for every request: the shutdown sets it through the quit registry and every job stops.
     quit: Arc<AtomicBool>,
     queue: Mutex<Queue>,
@@ -198,7 +202,7 @@ pub struct Service {
 
 impl Service {
     pub fn new(store: Store, resolve: Resolve, build: Build, runner: Runner, timeout: Duration) -> Service {
-        Service { store, resolve, build, runner, timeout, quit: Arc::new(AtomicBool::new(false)), queue: Mutex::new(Queue::default()) }
+        Service { store, resolve, build, runner, timeout, seq: AtomicU64::new(0), quit: Arc::new(AtomicBool::new(false)), queue: Mutex::new(Queue::default()) }
     }
 
     fn locked(&self) -> MutexGuard<'_, Queue> {
@@ -207,24 +211,26 @@ impl Service {
 
     // Off the loop: the stat, the cache lookup and the conversion wait on a worker; reg is the quit registry id claimed on the loop.
     pub fn start(self: &Arc<Self>, wire: usize, reg: usize, path: PathBuf, tx: Sender<OpMsg>) {
-        let me = Arc::clone(self);
-        std::thread::spawn(move || me.request(wire, reg, &path, &tx));
+        let (me, seq) = (Arc::clone(self), self.seq.fetch_add(1, Ordering::Relaxed));
+        std::thread::spawn(move || me.request(wire, reg, seq, &path, &tx));
     }
 
     // Every terminal line leaves as DetachedDone, which frees reg; a miss first says converting and the end line follows.
-    fn request(self: &Arc<Self>, wire: usize, reg: usize, path: &Path, tx: &Sender<OpMsg>) {
+    fn request(self: &Arc<Self>, wire: usize, reg: usize, seq: u64, path: &Path, tx: &Sender<OpMsg>) {
         let end = |line: String| drop(tx.send(OpMsg::DetachedDone { id: reg, line }));
         let Some(program) = (self.resolve)() else {
             return end(failed_line(wire, "LibreOffice is not installed on this box.", true));
         };
         let (store, source) = (self.store.clone(), path.to_path_buf());
         let probed = iomount::call(path, &iomount::mount_body(), "office", move || {
-            let mtime = std::fs::metadata(&source).and_then(|m| m.modified()).map_err(|e| crate::error::io_message(&e))?;
+            let io = |e: std::io::Error| crate::error::io_message(&e);
+            let input = std::fs::canonicalize(&source).map_err(io)?;
+            let mtime = std::fs::metadata(&input).and_then(|m| m.modified()).map_err(io)?;
             let key = Store::key(&source);
             let hit = store.lookup(&key, mtime);
-            Ok::<_, String>((mtime, key, hit))
+            Ok::<_, String>((mtime, key, hit, input))
         });
-        let (mtime, key, hit) = match probed {
+        let (mtime, key, hit, input) = match probed {
             Ok(Ok(found)) => found,
             Ok(Err(message)) => return end(failed_line(wire, &message, false)),
             Err(e) => return end(failed_line(wire, &e.msg, false)),
@@ -235,18 +241,20 @@ impl Service {
             Hit::Miss => {}
         }
         let _ = tx.send(OpMsg::Meta { line: converting_line(wire) });
-        self.enqueue(Job { key, program, path: path.to_path_buf(), mtime, waiters: vec![Waiter { wire, reg, tx: tx.clone() }] });
+        self.enqueue(Job { key, program, input, mtime, seq, waiters: vec![Waiter { wire, reg, tx: tx.clone() }] });
     }
 
-    // The running job is never replaced; a newer request replaces the one queued behind it, and an equal one is answered from the cache once the running job lands.
+    // The running job is never replaced; the higher sequence keeps the queue, the other is answered replaced, and the same file shares one job.
     fn enqueue(self: &Arc<Self>, mut job: Job) {
         let mut q = self.locked();
-        if let Some(mut old) = q.queued.take() {
-            if old.key == job.key {
-                job.waiters.append(&mut old.waiters);
+        if let Some(old) = q.queued.take() {
+            let (mut keep, lose) = if job.seq > old.seq { (job, old) } else { (old, job) };
+            if keep.key == lose.key {
+                keep.waiters.extend(lose.waiters);
             } else {
-                answer(old.waiters, Err("replaced by a newer request".to_string()));
+                answer(lose.waiters, Err("replaced by a newer request".to_string()));
             }
+            job = keep;
         }
         if q.running.is_some() {
             q.queued = Some(job);
@@ -297,10 +305,9 @@ impl Service {
 
     fn run(&self, job: &Job) -> Result<PathBuf, Fail> {
         let local = |e: std::io::Error| Fail::Local(crate::error::io_message(&e));
-        let input = std::fs::canonicalize(&job.path).map_err(local)?;
         std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&self.store.dir).map_err(local)?;
         let mut work = Work::new(&self.store.dir, "office").map_err(|e| Fail::Local(e.msg))?;
-        let argv = (self.build)(&job.program, &input, &work.dir);
+        let argv = (self.build)(&job.program, &job.input, &work.dir);
         let (stop, finished, timed_out) = (AtomicBool::new(false), AtomicBool::new(false), AtomicBool::new(false));
         let ran = std::thread::scope(|s| {
             s.spawn(|| {
@@ -315,13 +322,13 @@ impl Service {
                     std::thread::sleep(WATCH_STEP);
                 }
             });
-            let ran = (self.runner)(argv, &input, &mut work, &stop);
+            let ran = (self.runner)(argv, &job.input, &mut work, &stop);
             finished.store(true, Ordering::Relaxed);
             ran
         });
         if let Err(e) = ran {
             return Err(if timed_out.load(Ordering::Relaxed) {
-                Fail::Converter(format!("the conversion took longer than {} seconds", self.timeout.as_secs()))
+                Fail::Local(format!("the conversion took longer than {} seconds", self.timeout.as_secs()))
             } else if self.quit.load(Ordering::Relaxed) {
                 Fail::Local("cancelled".to_string())
             } else {
@@ -337,7 +344,7 @@ impl Service {
     }
 }
 
-// Only the converter's own failure is remembered for the file; a local error fails this request and leaves no marker.
+// Only the converter's own failure is remembered for the file; a timeout, a local error or a cancel fails this request and leaves no marker.
 enum Fail {
     Converter(String),
     Local(String),

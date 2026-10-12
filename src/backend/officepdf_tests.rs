@@ -64,7 +64,7 @@ impl Rig {
     // The first line the request leaves: converting on a miss, otherwise the terminal line that frees its registry id.
     fn ask(&self, wire: usize, path: &Path) -> String {
         let reg = self.claims.fetch_add(1, Ordering::SeqCst) + 1;
-        self.svc.request(wire, reg, path, &self.tx);
+        self.svc.request(wire, reg, self.svc.seq.fetch_add(1, Ordering::Relaxed), path, &self.tx);
         match self.rx.recv_timeout(BOUND).expect("a request always answers") {
             OpMsg::Meta { line } => line,
             OpMsg::DetachedDone { id, line } => {
@@ -182,17 +182,16 @@ fn a_changed_mtime_converts_again() {
 }
 
 #[test]
-fn a_timeout_records_one_failure_and_is_not_retried() {
+fn a_timeout_records_no_failure_and_the_next_request_converts_again() {
     let d = TestDir::new("officepdf-timeout");
     let r = rig(&d, HANGS, Duration::from_secs(1));
     let src = d.file("a.docx", "doc");
     r.ask(1, &src);
-    let (_, line) = r.end();
+    let line = r.end().1;
     assert!(line.contains(r#""state":"failed""#) && line.contains("longer than 1 seconds"), "{line}");
-    assert_eq!(r.fail_markers(), 1);
-    let again = r.ask(2, &src);
-    assert!(again.contains(r#""state":"failed""#) && again.contains("longer than 1 seconds"), "{again}");
-    assert_eq!((r.jobs(), r.fail_markers()), (1, 1), "the failure is recorded once and not retried");
+    assert_eq!(r.fail_markers(), 0, "a timeout may succeed later, so it leaves no marker");
+    assert_eq!(r.ask(2, &src), converting_line(2));
+    assert_eq!((r.end().0, r.jobs()), (2, 2), "the next request converts again");
 }
 
 #[test]
@@ -295,7 +294,7 @@ fn a_convert_that_finds_a_hit_runs_nothing() {
     let key = Store::key(&src);
     let pdf = r.svc.store.pdf_path(&key);
     Store::publish(&pdf, mtime_of(&src), &mut "other window".as_bytes()).unwrap();
-    let job = Job { key, program: "/usr/bin/sh".into(), path: src.clone(), mtime: mtime_of(&src), waiters: Vec::new() };
+    let job = Job { key, program: "/usr/bin/sh".into(), input: src.clone(), mtime: mtime_of(&src), seq: 0, waiters: Vec::new() };
     assert_eq!(r.svc.convert(&job), Ok(pdf));
     assert_eq!(r.jobs(), 0);
 }
@@ -398,3 +397,4 @@ fn the_cache_holds_the_figure_stores_bound_and_drops_the_oldest_conversion() {
     let kept: Vec<bool> = files.iter().map(|f| r.svc.store.pdf_path(&Store::key(f)).exists()).collect();
     assert_eq!(kept, [false, true, true], "the first conversion went, the newest stays");
 }
+#[path = "officepdf_order_tests.rs"] mod order;
