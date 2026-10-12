@@ -17,6 +17,8 @@ Item {
 
     signal opened(string path)
     signal message(string text, bool isError)
+    // A failed mount, unmount or eject: the headline plus gio's own reason for the status bar's detail line.
+    signal operationResult(string headline, string detail, bool isError)
     // An eject is about to release this mountpoint: readers on it stop first (#232).
     signal quiesce(string path)
     signal unlockRequested(string device, string label, double size, string fstype)
@@ -192,6 +194,8 @@ Item {
         }
         root.mountVolume(e)
     }
+
+    function reportFailure(headline, stderr) { root.operationResult(headline, Devices.mountDetail(stderr), true) }
 
     function mountVolume(e) {
         if (mountProcess.running) {
@@ -458,7 +462,7 @@ Item {
             }
             mountTimeout.stop()
             root._pendingOpenDevice = ""
-            root.message(sentence.length > 0 ? sentence : label + " could not be mounted.", true)
+            root.reportFailure(sentence.length > 0 ? sentence : label + " could not be mounted.", root._mountErr)
         }
     }
 
@@ -481,7 +485,7 @@ Item {
                     root._powerOffDisk = ""
                     root._powerOffQueue = []
                     root._ejectDevice = ""
-                    root.message(Devices.mountError("unmount", exitCode, root._unmountErr, root._ejectLabel), true)
+                    root.reportFailure(Devices.mountError("unmount", exitCode, root._unmountErr, root._ejectLabel), root._unmountErr)
                 } else {
                     root.powerOffNext()
                 }
@@ -489,7 +493,7 @@ Item {
                 return
             }
             if (exitCode !== 0)
-                root.message(Devices.mountError("unmount", exitCode, root._unmountErr, root._unmountLabel), true)
+                root.reportFailure(Devices.mountError("unmount", exitCode, root._unmountErr, root._unmountLabel), root._unmountErr)
             else if (root.lockCrypt(root._unmountDevice, root._unmountLabel))
                 return
             root.poll()
@@ -514,7 +518,7 @@ Item {
                 root._powerOffQueue = []
                 root._ejectDevice = ""
                 ejectVerdictTimeout.stop()
-                root.message(sentence.length > 0 ? sentence : root._ejectLabel + " could not be ejected.", true)
+                root.reportFailure(sentence.length > 0 ? sentence : root._ejectLabel + " could not be ejected.", root._ejectErr)
                 root.poll()
                 return
             }

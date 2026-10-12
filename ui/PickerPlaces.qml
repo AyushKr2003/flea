@@ -187,6 +187,8 @@ Item {
         onOpened: function (path) { root.deviceOpened(path) }
         // A message carries no device, so it cannot end a wait: only the awaited device's own open does.
         onMessage: function (text, error) { root.picker.say(text, error) }
+        // The picker's one-line message has no detail view, so the headline stands alone.
+        onOperationResult: function (headline, detail, error) { root.picker.say(headline, error) }
     }
 
     // The phone rows the window draws, read off the same gio listing; their mount is the share leg.

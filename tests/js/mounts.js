@@ -251,6 +251,22 @@ function run(check) {
     check("a refused eject names the eject", Devices.mountError("eject", 1, "Not authorized", "Disk"), "Disk was not ejected: not authorized.")
     check("exit 0 never reads stderr", Devices.mountError("mount", 0, "target is busy", "128GB"), "")
 
+    // MountFail: a corrupted volume names its damaged file system, and gio's own reason rides as the detail.
+    var damaged = "Error mounting /dev/sdb1 at /run/media/user/DATA #2: wrong fs type, bad option, bad superblock on /dev/sdb1, missing codepage or helper program, or other error"
+    var damagedLine = "DATA #2 could not be mounted: its file system is damaged or not supported."
+    check("a bad superblock names the damaged file system", Devices.mountError("mount", 1, damaged, "DATA #2"), damagedLine)
+    check("wrong fs type alone is the damaged sentence", Devices.mountError("mount", 1, "gio: Error mounting /dev/sdc1 at /run/media/g/X: wrong fs type", "X"), "X could not be mounted: its file system is damaged or not supported.")
+    check("an unknown filesystem type is the damaged sentence", Devices.mountError("mount", 1, "mount: unknown filesystem type 'zfs_member'", "Pool"), "Pool could not be mounted: its file system is damaged or not supported.")
+    check("an unreadable superblock is the damaged sentence", Devices.mountError("mount", 1, "can't read superblock on /dev/sdb1", "Disk"), "Disk could not be mounted: its file system is damaged or not supported.")
+    check("a structure that needs cleaning is the damaged sentence", Devices.mountError("mount", 1, "mount(2) system call failed: Structure needs cleaning.", "Disk"), "Disk could not be mounted: its file system is damaged or not supported.")
+    check("an unmount never takes the mount sentence", Devices.mountError("unmount", 1, damaged, "Disk"), "Disk could not be unmounted.")
+    check("the detail drops gio's lead and keeps the reason verbatim", Devices.mountDetail(damaged), "wrong fs type, bad option, bad superblock on /dev/sdb1, missing codepage or helper program, or other error")
+    check("the detail drops a gio: prefix and the lead", Devices.mountDetail("gio: " + damaged + "\n"), "wrong fs type, bad option, bad superblock on /dev/sdb1, missing codepage or helper program, or other error")
+    check("a reason with no lead keeps itself", Devices.mountDetail("gio: Error 1: target is busy"), "Error 1: target is busy")
+    check("a multi-line reason is one line", Devices.mountDetail("Not authorized\n  to perform operation\n"), "Not authorized to perform operation")
+    check("an empty stderr has no detail", Devices.mountDetail(""), "")
+    check("a missing stderr has no detail", Devices.mountDetail(undefined), "")
+
     // Defect 9: a USB disk that is not media-removable powers off instead of ejecting its media.
     check("a scsi partition powers off its disk", Devices.powerOffDisk("/dev/sda1"), "/dev/sda")
     check("an nvme namespace strip powers off its disk", Devices.powerOffDisk("/dev/nvme0n1p2"), "/dev/nvme0n1")

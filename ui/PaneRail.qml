@@ -145,6 +145,7 @@ Item {
             onRecentRequested: function (paths, requester, visits) { var target = requester || root.pane.railPane; target.openRecent(paths, visits); RailKeys.landed(target, sidebar) }
             onTrashRequested: root.pane.railPane.trash.open()
             onMessage: function(text, isError) { RailKeys.messaged(sidebar, isError); root.pane.message(text, isError) }
+            onOperationResult: function(headline, detail, isError) { RailKeys.messaged(sidebar, isError); root.pane.operationResult(headline, detail, isError) }
             onForgetMessage: function(text) { root.pane.forgetMessage(text) }
             menu: root.pane.railPane.contextMenu()
             onRenameFinished: root.pane.railPane.listArea.forceActiveFocus()
@@ -207,6 +208,7 @@ Item {
             showUnmounted: ((ViewState.state.places || {}).showUnmounted !== false)
             onOpened: function (path) { root.pane.open(path) }
             onMessage: function (text, isError) { root.pane.message(text, isError) }
+            onOperationResult: function (headline, detail, isError) { root.pane.operationResult(headline, detail, isError) }
             onReleasingChanged: root.unloadHiddenEject()
             onForgetMessage: function (text) { root.pane.forgetMessage(text) }
             onQuiesce: function (path) { root.pane.quiesceVolume(path) }

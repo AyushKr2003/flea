@@ -1,3 +1,4 @@
+.import "flea/js/Devices.js" as Devices
 .import "flea/js/TextSize.js" as TextSize
 .import "flea/js/Tap.js" as Tap
 .import "sidebar-flows-rail.js" as RailPress
@@ -127,6 +128,27 @@ function steps(root, pane, state, theme) {
             if (trash.busy) return false
             root.check("trash-sheet: destructive query opens confirmation", trash.confirming, true)
             trash.close()
+            return true
+        },
+        function () {
+            // MountFail: the rail's own DeviceMounts reports a refused mount through the real chain to the real bar.
+            var devices = null
+            for (var i = 0; i < pane.sidebar.data.length; i++)
+                if (typeof pane.sidebar.data[i].reportFailure === "function") devices = pane.sidebar.data[i]
+            root.check("mount-fail: the rail holds its DeviceMounts", devices !== null, true)
+            if (devices === null) return true
+            var bar = pane.statusBar
+            var prior = bar.errors
+            var stderr = "gio: Error mounting /dev/sdb1 at /run/media/user/DATA #2: wrong fs type, bad option, bad superblock on /dev/sdb1, missing codepage or helper program, or other error"
+            var headline = Devices.mountError("mount", 1, stderr, "DATA #2")
+            var reason = "wrong fs type, bad option, bad superblock on /dev/sdb1, missing codepage or helper program, or other error"
+            bar.errors = []
+            devices.reportFailure(headline, stderr)
+            root.check("mount-fail: the first failed click shows its headline", bar.errors.map(function (e) { return e.text }), [headline])
+            root.check("mount-fail: the first failed click carries gio's reason", bar.errorDetail, reason)
+            devices.reportFailure(headline, stderr)
+            root.check("mount-fail: a repeated click shows the error again", bar.errors.length, 2)
+            bar.errors = prior
             return true
         }
     ]
