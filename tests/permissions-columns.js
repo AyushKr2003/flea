@@ -108,7 +108,7 @@ function checkOctalFrame(shell, tag, card, theme, dialogField) {
     shell.same(tag + " octal frame returns to the accent once the line is gone", frame.border.color, theme.color.accent)
     card.stepFocus(false)
     card.modeText = "0649"
-    shell.same(tag + " an unfocused octal frame stays muted", frame.border.color, theme.color.muted)
+    shell.same(tag + " an unfocused octal frame stays muted", frame.border.color, theme.color.mutedFrame)
     // The card goes back as it was found: its own mode text, and focus on what held it or on nothing.
     card.modeText = originalMode
     var stepped = card.controls().filter(function (control) { return control.item && control.item.activeFocus })

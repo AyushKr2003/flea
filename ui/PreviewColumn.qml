@@ -143,7 +143,7 @@ Item {
             // The listing's own colour, so on glass the pane's ground under it is the fill; see ui/Glass.qml.
             color: Glass.on ? "transparent" : Theme.color.background
             border.width: Theme.spacing.hairline
-            border.color: Theme.color.muted
+            border.color: Theme.color.mutedFrame
             // Mirrors hyprland decoration:rounding, the same as every other floating chrome surface.
             radius: Style.cornerRadius
             clip: true
@@ -210,7 +210,7 @@ Item {
                     height: Theme.stateMarkSize
                     name: root.frameGlyph()
                     // A symlink takes the cyan role the row list already gives it; everything else stays muted.
-                    color: root.previewState === Facts.SYMLINK ? Theme.color.symlink : Theme.color.muted
+                    color: root.previewState === Facts.SYMLINK ? Theme.color.symlink : Theme.color.mutedFrame
                     opacity: 0.7
                 }
 
@@ -323,7 +323,7 @@ Item {
                     width: Theme.stateMarkSize
                     height: Theme.stateMarkSize
                     name: root.previewState === Facts.ERROR ? "alert" : "file"
-                    color: root.previewState === Facts.ERROR ? Theme.color.error : Theme.color.muted
+                    color: root.previewState === Facts.ERROR ? Theme.color.error : Theme.color.mutedFrame
                 }
 
                 Text {

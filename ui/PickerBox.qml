@@ -14,7 +14,7 @@ Rectangle {
     height: root.width
     color: "transparent"
     border.width: root.borderWidth
-    border.color: root.marked ? Theme.color.accent : Theme.color.muted
+    border.color: root.marked ? Theme.color.accent : Theme.color.mutedFrame
 
     Flea.Glyph {
         anchors.fill: parent

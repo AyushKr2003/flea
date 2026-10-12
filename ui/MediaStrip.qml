@@ -38,7 +38,7 @@ Item {
         anchors.fill: parent
         color: Theme.color.surface
         border.width: root.framed ? Theme.spacing.hairline : 0
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
     }
 
     // The unframed form's own divider, the same hairline ChromeBar draws under itself.

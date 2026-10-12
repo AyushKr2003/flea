@@ -38,7 +38,7 @@ Item {
         anchors.fill: parent
 
         ShapePath {
-            strokeColor: Theme.color.muted
+            strokeColor: Theme.color.mutedFrame
             strokeWidth: Theme.spacing.hairline
             fillColor: "transparent"
             strokeStyle: ShapePath.DashLine
@@ -65,7 +65,7 @@ Item {
             height: Theme.chromeMarkSize
             maxSize: Theme.chromeMarkSize
             name: Icons.glyphFor("image-x-generic")
-            color: Theme.color.muted
+            color: Theme.color.mutedFrame
         }
 
         Text {

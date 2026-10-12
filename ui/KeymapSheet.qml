@@ -313,7 +313,7 @@ Item {
         height: Theme.cardSpan(body.wanted + 2 * Theme.spacing.rowPaddingX, root.height - card.y - root.clampMargin)
         color: Theme.color.surface
         border.width: Theme.spacing.hairline
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
         // Mirrors hyprland decoration:rounding, same as ui/ConvertDialog.qml; 0 on a stock box stays square.
         radius: Style.cornerRadius
 
@@ -480,7 +480,7 @@ Item {
                                     height: root.capSize
                                     color: "transparent"
                                     border.width: Theme.spacing.hairline
-                                    border.color: Theme.color.muted
+                                    border.color: Theme.color.mutedFrame
 
                                     Text {
                                         anchors.fill: parent

@@ -52,7 +52,7 @@ Column {
                     visible: root.cursor === idx + 1
                     width: Theme.spacing.hairline * 2
                     height: parent.height
-                    color: root.focused ? Theme.color.accent : Theme.color.muted
+                    color: root.focused ? Theme.color.accent : Theme.color.mutedFrame
                 }
                 Row {
                     anchors.fill: parent
@@ -123,7 +123,7 @@ Column {
             anchors.leftMargin: Theme.spacing.rowPaddingX
             anchors.rightMargin: Theme.spacing.rowPaddingX
             spacing: Theme.spacing.gap
-            Flea.Glyph { width: Theme.markSize; height: parent.height; name: "drive"; color: Theme.color.muted }
+            Flea.Glyph { width: Theme.markSize; height: parent.height; name: "drive"; color: Theme.color.mutedFrame }
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Plug in a USB drive or SD card"

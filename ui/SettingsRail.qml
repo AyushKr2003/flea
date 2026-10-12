@@ -97,7 +97,7 @@ Flickable {
                     height: Theme.railIconSize
                     maxSize: Theme.railIconSize
                     name: railRow.modelData.glyph
-                    color: railRow.current ? Theme.color.accent : Theme.color.muted
+                    color: railRow.current ? Theme.color.accent : Theme.color.mutedFrame
                 }
 
                 Text {

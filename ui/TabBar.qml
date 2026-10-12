@@ -482,7 +482,7 @@ Item {
                         width: Theme.chromeMarkSize
                         height: Theme.chromeMarkSize
                         name: "x"
-                        color: tab.current || closeHover.hovered ? Theme.color.foreground : Theme.color.muted
+                        color: tab.current || closeHover.hovered ? Theme.color.foreground : Theme.color.mutedFrame
                     }
 
                     HoverHandler { id: closeHover }
@@ -558,7 +558,7 @@ Item {
                 width: Theme.chromeMarkSize
                 height: Theme.chromeMarkSize
                 name: "plus"
-                color: Theme.color.muted
+                color: Theme.color.mutedFrame
             }
 
             TapHandler {

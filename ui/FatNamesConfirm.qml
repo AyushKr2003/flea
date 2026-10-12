@@ -60,7 +60,7 @@ FocusScope {
         width: Theme.cardSpan(root.contentWidth + 2 * root.cardPadding + 2 * Theme.spacing.hairline, root.width - 2 * Theme.spacing.gap)
         height: Theme.cardSpan(body.wanted + root.cardPadding + root.cardBottomPadding + 2 * Theme.spacing.hairline, root.height - 2 * Theme.spacing.gap)
         color: Theme.color.surface
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
         border.width: Theme.spacing.hairline
         radius: Style.cornerRadius
         MouseArea {
@@ -84,7 +84,7 @@ FocusScope {
                     width: parent.width
                     text: root.titleText
                 }
-                Rectangle { width: parent.width; height: Theme.spacing.hairline; color: Theme.color.muted; opacity: 0.4 }
+                Rectangle { width: parent.width; height: Theme.spacing.hairline; color: Theme.color.mutedFrame; opacity: 0.4 }
                 Column {
                     width: parent.width
                     Repeater {

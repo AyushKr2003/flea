@@ -82,7 +82,7 @@ ShellRoot {
         var warm = Probe.focusRead(picked)
         shell.check(name + ": the accent carries no colour", c.accentHasHue, false)
         shell.check(name + ": a resting picked member is one foreground hairline and an unpicked one a muted hairline",
-                    [restWarm.frameColor, restWarm.frameWidth, restCold.frameColor, restCold.frameWidth], [rgba(c.foreground), h, rgba(c.muted), h])
+                    [restWarm.frameColor, restWarm.frameWidth, restCold.frameColor, restCold.frameWidth], [rgba(c.foreground), h, rgba(c.mutedFrame), h])
         shell.check(name + ": a focused unpicked member draws its own frame 2 px in the foreground and keeps its muted label, with no ring item",
                     [cold.frameColor, cold.frameWidth, cold.ink, cold.ringItem], [rgba(c.foreground), shell.thick, rgba(c.muted), false])
         shell.check(name + ": a focused picked member draws its own frame 2 px in the foreground and keeps its label, with no ring item",

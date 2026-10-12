@@ -448,7 +448,7 @@ ShellRoot {
             root.checkFieldFrame(tag + " field " + i, frames[i], Flea.Theme.color.accent, "accent", dialog)
             // The fields that do not hold the caret keep the muted frame 0.3.6 drew.
             for (var j = 0; j < list.length; j++)
-                if (j !== i && frames[j]) root.check(Qt.colorEqual(frames[j].border.color, Flea.Theme.color.muted), tag + " unfocused field " + j + " frame is " + frames[j].border.color + ", not muted")
+                if (j !== i && frames[j]) root.check(Qt.colorEqual(frames[j].border.color, Flea.Theme.color.mutedFrame), tag + " unfocused field " + j + " frame is " + frames[j].border.color + ", not muted")
         }
     }
 

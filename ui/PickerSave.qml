@@ -50,7 +50,7 @@ Item {
                     color: Theme.color.background
                     border.width: Theme.spacing.hairline
                     // Muted at rest, accent on focus: the frame DialogField, MenuActionDialog, OpenWithDialog and PermissionsDialog draw.
-                    border.color: field.activeFocus ? Theme.color.accent : Theme.color.muted
+                    border.color: field.activeFocus ? Theme.color.accent : Theme.color.mutedFrame
                     TextInput {
                         id: field
                         anchors.fill: parent

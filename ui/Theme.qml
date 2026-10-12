@@ -47,6 +47,9 @@ Singleton {
 
     // A palette role at or under this HSV saturation carries no colour (urgent falls back to the foreground, a grey accent cannot mark focus).
     readonly property real hueFloor: 0.2
+    // The least contrast text needs on its ground (WCAG AA), and the least a frame or glyph needs (a graphical object).
+    readonly property real textContrast: 4.5
+    readonly property real frameContrast: 3
     // Tag swatch colours lifted on the listing and the menu ground plus the digit fallback, filled once per theme load by Contrast.tagTheme.
     property var tag: ({ colors: {}, menuColors: {}, fallback: false })
     // The board's fixed tag slot width, once a tagged row has been seen in the folder.
@@ -57,7 +60,15 @@ Singleton {
         readonly property color foreground: Commons.Color.foreground
         // The heading ink: a brighter step of the foreground, applyColors derives it from the palette.
         property color foregroundBright: Commons.Color.foreground
+        // The text role, lifted to textContrast on the background and the surface; mutedFrame is the same palette colour for frames and glyphs.
         property color muted: Qt.darker(Commons.Color.foreground, 1.4)
+        property color mutedFrame: Qt.darker(Commons.Color.foreground, 1.4)
+        // Metadata ink at rest, the foreground darkened and lifted like muted; metadataFrame is the unlifted derivation a resting glyph draws.
+        property color metadata: Qt.darker(Commons.Color.foreground, 1.4)
+        property color metadataFrame: Qt.darker(Commons.Color.foreground, 1.4)
+        // The hint and the danger label on a lit menu row, lifted on the row's own wash.
+        property color mutedLit: Qt.darker(Commons.Color.foreground, 1.4)
+        property color errorLit: Commons.Color.urgent
         readonly property color accent: Commons.Color.accent
         property color error: Commons.Color.urgent
         // Error ink on the status bar's own surface, lifted there the way error is on the background.
@@ -336,10 +347,13 @@ Singleton {
         var surface = Palette.pick(found, Palette.SURFACE_KEYS, root.fallbackColor.surface);
         root.color.surface = surface;
         Commons.Color.loadColors(body);
-        // Measured over the 22 stock palettes in tests/js/themes.js: 20 set a muted under the 3:1 a
-        // caption needs, rose-pine's at 1.48, so it is lifted the way the two ladder colours below are.
-        root.color.muted = Contrast.ensureRatio(
-            Palette.pick(found, ["muted"], Qt.darker(Commons.Color.foreground, 1.4)), bg, 3);
+        // Frames and glyphs draw the palette's muted lifted to frameContrast; text lifts that to textContrast on the background, then the surface.
+        root.color.mutedFrame = Contrast.ensureRatio(
+            Palette.pick(found, ["muted"], Qt.darker(Commons.Color.foreground, 1.4)), bg, root.frameContrast);
+        root.color.muted = Contrast.ensureRatio(Contrast.ensureRatio(root.color.mutedFrame, bg, root.textContrast), surface, root.textContrast);
+        // Metadata ink is the foreground darkened one step, lifted the same two ways; the unlifted step stays for glyphs that read it.
+        root.color.metadataFrame = Qt.darker(Commons.Color.foreground, 1.4);
+        root.color.metadata = Contrast.ensureRatio(Contrast.ensureRatio(root.color.metadataFrame, bg, root.textContrast), surface, root.textContrast);
         // Headings take the palette's bright foreground (the ANSI ring's color15 without one) when it has more contrast than the foreground.
         var bright = Palette.pick(found, ["bright_foreground", "color15"], String(Commons.Color.foreground));
         root.color.foregroundBright = Contrast.ratio(bright, bg) > Contrast.ratio(String(Commons.Color.foreground), bg) ? bright : Commons.Color.foreground;
@@ -350,9 +364,14 @@ Singleton {
         root.color.executable = Contrast.ensureRatio(
             Palette.pick(found, ["green", "color2"], root.fallbackColor.executable), bg, 4.5);
         // Urgent is the palette's own red: seven of the 23 installed themes leave it under 4.5:1 on their own ground, so it is lifted the way symlink and executable are, and the three whose red carries no chroma at all (solitude, white, vantablack) fall back to the foreground, because a destructive row drawn in the same grey as an unavailable one reads as switched off rather than as dangerous.
-        root.color.error = Commons.Color.urgent.hsvSaturation > root.hueFloor ? Contrast.ensureRatio(Commons.Color.urgent, bg, 4.5) : String(Commons.Color.foreground);
-        // The status bar draws that same ink on the surface, where four themes land under 4.5.
-        root.color.errorOnSurface = Commons.Color.urgent.hsvSaturation > root.hueFloor ? Contrast.ensureRatio(Commons.Color.urgent, surface, 4.5) : String(Commons.Color.foreground);
+        var hued = Commons.Color.urgent.hsvSaturation > root.hueFloor;
+        root.color.error = hued ? Contrast.ensureRatio(Commons.Color.urgent, bg, Math.max(4.5, Contrast.ratio(String(root.color.muted), bg))) : String(Commons.Color.foreground);
+        // The status bar draws that same ink on the surface, where four themes land under 4.5; it is never quieter than the caption there.
+        root.color.errorOnSurface = hued ? Contrast.ensureRatio(Commons.Color.urgent, surface, Math.max(4.5, Contrast.ratio(String(root.color.muted), surface))) : String(Commons.Color.foreground);
+        // A lit menu row washes the surface with the foreground, so its hint and danger label are lifted on that ground, the danger label never below the hint.
+        var lit = Contrast.hexOf(Contrast.over(String(Commons.Color.foreground), root.washHover, String(surface)));
+        root.color.mutedLit = Contrast.ensureRatio(root.color.muted, lit, root.textContrast);
+        root.color.errorLit = Contrast.ensureRatio(root.color.error, lit, Math.max(root.textContrast, Contrast.ratio(String(root.color.mutedLit), lit)));
         root.tag = Contrast.tagTheme(found, bg, surface);
         // A body that parsed to nothing left every role on its fallback, so the flag says so rather
         // than reporting that the read happened: text() returns "" for a file that is not there.

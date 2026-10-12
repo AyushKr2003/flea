@@ -91,7 +91,7 @@ tests/js/watch.js 540
 tests/js/xwwatch.js 299
 tests/js/tabs.js 800
 tests/js/search.js 336
-tests/button-members.qml 513
+tests/button-members.qml 515
 tests/chromering.qml 413
 tests/columnrow-geom.qml 426
 tests/columnscost.qml 416
@@ -153,13 +153,13 @@ ui/PreviewMarkdown.qml 625
 ui/Row.qml 496
 ui/SettingsPanel.qml 543
 ui/SettingsRow.qml 409
-ui/Sidebar.qml 729
+ui/Sidebar.qml 699
 ui/StatusBar.qml 471
-ui/Theme.qml 446
+ui/Theme.qml 465
 ui/TrashView.qml 468
 ui/UnlockDialog.qml 441
 ui/ViewState.qml 542
-ui/WindowBody.qml 803
+ui/WindowBody.qml 810
 ui/js/Anchor.js 379
 ui/js/ColumnsCarry.js 94
 ui/js/Devices.js 380

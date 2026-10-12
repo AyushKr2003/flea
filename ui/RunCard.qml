@@ -187,7 +187,7 @@ FocusScope {
         width: Theme.cardSpan(card.contentWidth + 2 * card.cardPadding + 2 * Theme.spacing.hairline, root.width - 2 * Theme.spacing.gap)
         height: Theme.cardSpan(body.wanted + card.cardPadding + card.cardBottomPadding + 2 * Theme.spacing.hairline, root.height - 2 * Theme.spacing.gap)
         color: Theme.color.surface
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
         border.width: Theme.spacing.hairline
         radius: Style.cornerRadius
         readonly property real referenceScale: Theme.font.bodySmall / referenceBody

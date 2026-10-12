@@ -370,7 +370,7 @@ ShellRoot {
                 shell.check("strip: Back's mark is where the hand-built one drew it, foreground and opaque",
                             shell.mark(back), { size: size, x: shell.round3(left + hit / 2), y: middle, ink: shell.rgba(Flea.Theme.color.foreground), opacity: 1 })
                 shell.check("strip: Up's mark is where the hand-built one drew it, muted and at the disabled opacity",
-                            shell.mark(up), { size: size, x: shell.round3(left + onePlusGap + hit / 2), y: middle, ink: shell.rgba(Flea.Theme.color.muted),
+                            shell.mark(up), { size: size, x: shell.round3(left + onePlusGap + hit / 2), y: middle, ink: shell.rgba(Flea.Theme.color.mutedFrame),
                                               opacity: Flea.Theme.disabledOpacity })
                 shell.check("strip: Back is the pointing hand over its hit box", shell.hasHand(back), true)
                 shell.check("strip: Back is live and Up is dead by design", [back.enabled, up.enabled], [true, false])

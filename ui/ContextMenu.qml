@@ -528,7 +528,7 @@ Item {
         onHeightChanged: if (root.opened) root.clampFrame()
         color: Theme.color.surface
         border.width: Theme.spacing.hairline
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
         // Mirrors hyprland decoration:rounding, same as NetworkDialog; 0 on a stock box stays square.
         radius: Style.cornerRadius
 
@@ -607,7 +607,7 @@ Item {
                                     root.workArea.height - 2 * root.workAreaInset))
         color: Theme.color.surface
         border.width: Theme.spacing.hairline
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
         radius: Style.cornerRadius
 
         // The flyout takes its dead presses the same way.

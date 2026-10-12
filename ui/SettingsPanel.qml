@@ -290,7 +290,7 @@ Item {
                                root.height - 2 * root.clampMargin)
         color: Theme.color.surface
         border.width: Theme.spacing.hairline
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
         // Mirrors hyprland decoration:rounding, same as ui/KeymapSheet.qml; 0 on a stock box stays square.
         radius: Style.cornerRadius
         clip: true
@@ -389,7 +389,7 @@ Item {
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
                     height: Theme.spacing.hairline
-                    color: Theme.color.muted
+                    color: Theme.color.mutedFrame
                     opacity: 0.4
                 }
             }
@@ -417,7 +417,7 @@ Item {
                 anchors.top: chrome.bottom
                 anchors.bottom: parent.bottom
                 width: Theme.spacing.hairline
-                color: Theme.color.muted
+                color: Theme.color.mutedFrame
                 opacity: 0.4
             }
 

@@ -33,7 +33,7 @@ Item {
             width: Theme.stateMarkSize
             height: Theme.stateMarkSize
             name: modelData
-            color: Theme.color.muted
+            color: Theme.color.mutedFrame
             opacity: 1 - index * root.fade
         }
     }
