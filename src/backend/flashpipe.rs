@@ -52,6 +52,15 @@ pub fn wrap_stream(inner: &[String], image: Option<&std::path::Path>) -> Vec<Str
     a
 }
 
+// The producer's jail argv: a zip binds the image read-only in the stream jail, anything else streams on stdin.
+pub(crate) fn producer_jail(inner: &[String], kind: &str, image: &std::path::Path) -> Vec<String> {
+    if kind == "zip" {
+        crate::backend::sandbox::wrap_stream(inner, Some(image))
+    } else {
+        crate::backend::sandbox::wrap_stream(inner, None)
+    }
+}
+
 // Starts the sandboxed producer with the image as stdin; a zip is bound read-only instead of piped.
 pub(crate) fn spawn_producer(job: &Job) -> Result<(std::process::Child, Option<std::fs::File>), Fail> {
     let (kind, image, member) = (job.kind, job.image, job.member);
@@ -68,11 +77,7 @@ pub(crate) fn spawn_producer(job: &Job) -> Result<(std::process::Child, Option<s
         return Err(Fail::Sandbox);
     }
     let Some(inner) = decompressor_argv(kind, image, member) else { return Err(Fail::Decompress("no producer for a raw image".to_string())) };
-    let full = if kind == "zip" {
-        crate::backend::sandbox::wrap_stream(&inner, Some(image))
-    } else {
-        crate::backend::sandbox::wrap_stream(&inner, None)
-    };
+    let full = producer_jail(&inner, kind, image);
     // The parent keeps a handle on the child's description, so lseek reads the consumed input offset without moving it.
     let input = if kind == "zip" { None } else { std::fs::File::open(image).ok() };
     let stdin = match input.as_ref().and_then(|f| f.try_clone().ok()) {
