@@ -44,7 +44,9 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
 # Sample input, the receipt: "  INFO qml: COLHID DONE 21 checks, 0 failed".
 done_count=$(printf '%s\n' "$output" | grep -c 'COLHID DONE')
 noisy=$(printf '%s\n' "$output" | grep -av 'does not support setting window masks' | grep -aiE 'WARN|ERROR|Binding loop|failed to load|Unable to assign|Cannot assign|TypeError|ReferenceError|is not a function|is not defined')
-if [ "$done_count" -ne 1 ] || printf '%s\n' "$output" | grep -aq 'COLHID FAIL' || [ -n "$noisy" ]; then
+# One round runs 54 checks, so a probe that built no rounds (8 checks) is not a pass.
+checks=$(printf '%s\n' "$output" | sed -n 's/.*COLHID DONE \([0-9][0-9]*\) checks.*/\1/p')
+if [ "$done_count" -ne 1 ] || [ "${checks:-0}" -lt 40 ] || printf '%s\n' "$output" | grep -aq 'COLHID FAIL' || [ -n "$noisy" ]; then
     printf 'FAIL a hidden Columns view built rows, held them past a listing change, or its return drew a frame without them\n'
     printf '%s\n' "$output" | grep -a 'COLHID'
     [ -n "$noisy" ] && printf '%s\n' "$noisy"

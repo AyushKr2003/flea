@@ -12162,6 +12162,8 @@ dual_sort_header() {
 
 # Sample input: ipc sortMark prints "size:asc" and ipc rowAt 0 prints "y.txt|file|10 B"; the mark reads "size:asc rows=y.txt,z.txt,x.txt".
 foldersort_mark() { printf '%s rows=%s,%s,%s' "$(ipc sortMark)" "$(ipc rowAt 0 | cut -d'|' -f1)" "$(ipc rowAt 1 | cut -d'|' -f1)" "$(ipc rowAt 2 | cut -d'|' -f1)"; }
+# The remembered-sort re-sort lands within 0.7 s of the listing, so the mark is read across that window and both reads must agree.
+foldersort_settled_mark() { local a b; a=$(foldersort_mark); sleep 0.7; b=$(foldersort_mark); if [[ "$a" == "$b" ]]; then printf '%s' "$b"; else printf '%s, then %s' "$a" "$b"; fi; }
 foldersort_wait_path() {
     local want="$1" i
     for i in $(seq 1 100); do [[ "$(ipc path)" == "$want" && "$(ipc listInFlight)" == false ]] && return 0; sleep 0.05; done
@@ -12181,15 +12183,15 @@ case_foldersort() {
     key -k Return >/dev/null; foldersort_wait_path "$root/a"; wait_listing 3
     key s >/dev/null; settle; sleep 1
     key -k Left >/dev/null; foldersort_wait_path "$root"
-    key -k Down >/dev/null; key -k Return >/dev/null; foldersort_wait_path "$root/b"; wait_listing 3; sleep 0.5
-    m=$(foldersort_mark); printf 'FOLDERSORT b-open %s (want %s)\n' "$m" "$by_name"; [[ "$m" == "$by_name" ]] || bad=$((bad + 1))
+    key -k Down >/dev/null; key -k Return >/dev/null; foldersort_wait_path "$root/b"; wait_listing 3
+    m=$(foldersort_settled_mark); printf 'FOLDERSORT b-open %s (want %s)\n' "$m" "$by_name"; [[ "$m" == "$by_name" ]] || bad=$((bad + 1))
     key -k Left >/dev/null; foldersort_wait_path "$root"
-    key -k Up >/dev/null; key -k Return >/dev/null; foldersort_wait_path "$root/a"; wait_listing 3; sleep 0.5
-    m=$(foldersort_mark); printf 'FOLDERSORT a-reopen %s (want %s)\n' "$m" "$by_size"; [[ "$m" == "$by_size" ]] || bad=$((bad + 1))
-    launch "$root/b"; wait_listing 3; sleep 0.5
-    m=$(foldersort_mark); printf 'FOLDERSORT b-restart %s (want %s)\n' "$m" "$by_name"; [[ "$m" == "$by_name" ]] || bad=$((bad + 1))
-    launch "$root/a"; wait_listing 3; sleep 0.5
-    m=$(foldersort_mark); printf 'FOLDERSORT a-restart %s (want %s)\n' "$m" "$by_size"; [[ "$m" == "$by_size" ]] || bad=$((bad + 1))
+    key -k Up >/dev/null; key -k Return >/dev/null; foldersort_wait_path "$root/a"; wait_listing 3
+    m=$(foldersort_settled_mark); printf 'FOLDERSORT a-reopen %s (want %s)\n' "$m" "$by_size"; [[ "$m" == "$by_size" ]] || bad=$((bad + 1))
+    launch "$root/b"; wait_listing 3
+    m=$(foldersort_settled_mark); printf 'FOLDERSORT b-restart %s (want %s)\n' "$m" "$by_name"; [[ "$m" == "$by_name" ]] || bad=$((bad + 1))
+    launch "$root/a"; wait_listing 3
+    m=$(foldersort_settled_mark); printf 'FOLDERSORT a-restart %s (want %s)\n' "$m" "$by_size"; [[ "$m" == "$by_size" ]] || bad=$((bad + 1))
     kill_flea
     [[ $bad == 0 ]] || fail "foldersort: $bad of 4 remembered-sort expectations broke"
     printf 'FOLDERSORT ok\n'
