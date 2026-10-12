@@ -40,7 +40,7 @@ mkdir -p "$root/nav/nav500" "$root/nav/nav10k" "$root/nav/enter/big" "$root/nav/
   "$root/load/L/a_dir" "$root/load/cold-src" "$usb/enter/big" "$usb/dst" "$nas/enter/big" "$nas/stream"
 for r in "$root" "$usb" "$nas"; do : > "$r/.flea-test-sandbox"; done
 for f in b_text.txt f_0000.txt f_0001.txt zzz_big.bin; do : > "$root/load/L/$f"; done
-printf '{"root": "%s", "usb": "%s", "nas": "%s"}\n' "$root" "$usb" "$nas" > "$root/fixtures.json"
+printf '{"root": "%s", "nav": {"nav500": 500}, "usb": "%s", "nas": "%s"}\n' "$root" "$usb" "$nas" > "$root/fixtures.json"
 
 dry() { # dry PART [ARGS...]: the JSON goes to $scratch/dry-PART.json, the exit status is the function's
   local part=$1; shift
