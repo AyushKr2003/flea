@@ -14,6 +14,8 @@ ShellRoot {
     readonly property string tail: " already exists here · review before continuing"
     readonly property string zwsp: String.fromCharCode(8203)
     readonly property real epsilon: 1
+    // FontMetrics and the laid-out row round glyph advances apart, so a row end matches its width within two pixels.
+    readonly property real advanceSlack: 2
     readonly property string refusedName: "../a%2b.txt"
     property var stages: []
     property int stageIndex: -1
@@ -104,9 +106,9 @@ ShellRoot {
     function rowEnd(T, start, w) {
         for (var e = start + 1; e <= T.length; e++) {
             var piece = T.substring(start, e)
-            if (Math.abs(probeMetrics.advanceWidth(piece) - w) <= 2)
+            if (Math.abs(probeMetrics.advanceWidth(piece) - w) <= root.advanceSlack)
                 return e
-            if (piece.charAt(piece.length - 1) === " " && Math.abs(probeMetrics.advanceWidth(piece.substring(0, piece.length - 1)) - w) <= 2)
+            if (piece.charAt(piece.length - 1) === " " && Math.abs(probeMetrics.advanceWidth(piece.substring(0, piece.length - 1)) - w) <= root.advanceSlack)
                 return e
         }
         return -1
