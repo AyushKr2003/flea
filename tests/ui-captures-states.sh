@@ -52,7 +52,7 @@ heldcolumns_seam_up() {
 
 # Columns heroes for a held listing and a denied folder, at 2 to 5 columns.
 case_cap_heldcolumns() {
-    local dir listing markers real_bin n estate err_by denied
+    local dir listing markers real_bin n estate err_by denied held_at
     dir="$fixture_root/cap-heldcolumns"
     listing="$dir/listing"
     markers="$dir/markers"
@@ -72,11 +72,14 @@ case_cap_heldcolumns() {
         printf 'LAUNCH path=%q pid=%s\n' "$listing" "$(flea_pid)"
         flea_bin="$real_bin"
         wait_marker "$markers/held-$n" "heldcolumns: limit $n never held its listing"
+        held_at=$(date +%s%3N)
         # No seam yet is the loading proof: it is built on the first non-loading state, and the proxy holds the rows past the 10 s wait.
         heldcolumns_seam_up && fail "heldcolumns: limit $n left loading before its reading shot, state is $(ipc state)"
-        # Past the 150 ms hold-off, before the 10 s wait.
+        # Past the 66 ms CAP_MS hold-off (ui/js/Swap.js), before the 10 s wait.
         heldcolumns_fade_wait
         shot "heldcolumns-$n-reading"
+        # The proxy holds the rows 15 s and the pane speaks waiting at 10 s (ui/js/Startup.js LISTING_WAIT_MS), so a shot inside 5 s of the marker is a loading shot whatever the seam probe answered.
+        (( $(date +%s%3N) - held_at < 5000 )) || fail "heldcolumns: limit $n shot its reading $(( $(date +%s%3N) - held_at )) ms after the held listing began, past 5000 ms"
         heldcolumns_seam_up && fail "heldcolumns: limit $n left loading under its reading shot, state is $(ipc state)"
         wait_pane_waiting heldcolumns
         assert_window
