@@ -13309,8 +13309,7 @@ case_xwdrag() {
     trap - EXIT
 }
 
-# A peek-column drag: a file in a non-focused column drops into the second window with its exact name.
-# rowAt reads the list delegate, unbuilt in Columns, so readiness reads the drawn view (visibleRowName) as wait_listing does.
+# A peek-column drag drops a file of a non-focused column into the second window by exact name; readiness reads the drawn view (visibleRowName), since Columns builds no list delegate for rowAt.
 xwpeek_ready() {
     local id="$1" i flight total shown
     for i in $(seq 1 50); do
