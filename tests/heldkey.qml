@@ -213,11 +213,12 @@ ShellRoot {
     readonly property int repeatDelayMs: 250
     readonly property int repeatIntervalMs: 25
     readonly property int sweepMs: 2000
-    // Delivery may run late by one frame's load plus this slack, and by what a turn dearer than the interval piles up over the sweep.
+    // Where the busy frame fits the repeat interval, delivery runs late by at most the slack plus one frame; above it the queue piles up by design and only the step counts are held.
     readonly property int gapSlackMs: 40
-    readonly property int turnCostMs: 10
+    readonly property int settleMs: 200
+    readonly property bool frameFits: loadMs < repeatIntervalMs
     readonly property int repeatCount: Math.floor((sweepMs - repeatDelayMs) / repeatIntervalMs) + 1
-    readonly property int gapBoundMs: gapSlackMs + loadMs + Math.max(0, loadMs + turnCostMs - repeatIntervalMs) * repeatCount
+    readonly property int gapBoundMs: gapSlackMs + loadMs
 
     property int sent: 0
     property int steps: 0
@@ -227,8 +228,7 @@ ShellRoot {
     property int afterRows: 0
     property double sweepStart: 0
 
-    // The press, then each repeat and the release as its own event-loop turn at its due time, a busy frame before each.
-    // Focus.handleKey is the one handler the window's key item calls; offscreen has no key injection, so the Timer is the delivery.
+    // The press, then each repeat and the release as its own turn at its due time, a busy frame before each; offscreen has no key injection, so the Timer calls Focus.handleKey.
     function startSweep() {
         var p = root.stubPane
         root.stride = root.which === "grid" ? p.cursorStride : 1
@@ -258,8 +258,10 @@ ShellRoot {
         }
         root.releaseCursor = p.cursorIndex
         if (root.releaseCursor !== root.stride * (root.sent + 1)) root.failures.push("the cursor is not on its sent row")
-        if (root.worstGap > root.gapBoundMs) root.failures.push("a key arrived " + root.worstGap + " ms late, over the " + root.gapBoundMs + " ms bound")
+        if (root.steps !== root.sent) root.failures.push("only " + root.steps + " of " + root.sent + " sent keys stepped once")
+        if (root.frameFits && root.worstGap > root.gapBoundMs) root.failures.push("a key arrived " + root.worstGap + " ms late, over the " + root.gapBoundMs + " ms bound")
         root.phase = 3
+        afterRelease.start()
     }
 
     Timer {
@@ -279,7 +281,21 @@ ShellRoot {
 
     property int phase: 0
     property int settles: 0
-    // One landing, one sweep, then settled turns: deferred work lands after the release and fails.
+    // After the release, a full settle apart by its own timer: a step deferred past the release lands in time and fails.
+    Timer {
+        id: afterRelease
+        interval: root.settleMs
+        repeat: true
+        onTriggered: {
+            if (root.stubPane.cursorIndex !== root.releaseCursor) {
+                root.afterRows = (root.stubPane.cursorIndex - root.releaseCursor) / root.stride
+                root.failures.push("the cursor moved after the release")
+            }
+            root.settles += 1
+            if (root.settles >= 3) root.finish()
+        }
+    }
+    // One landing, then one sweep.
     Timer {
         interval: 200
         running: true
@@ -291,13 +307,6 @@ ShellRoot {
             } else if (root.phase === 1) {
                 root.phase = 2
                 root.startSweep()
-            } else if (root.phase === 3) {
-                if (root.stubPane.cursorIndex !== root.releaseCursor) {
-                    root.afterRows = (root.stubPane.cursorIndex - root.releaseCursor) / root.stride
-                    root.failures.push("the cursor moved after the release")
-                }
-                root.settles += 1
-                if (root.settles >= 3) root.finish()
             }
         }
     }
