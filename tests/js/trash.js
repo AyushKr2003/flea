@@ -1,5 +1,6 @@
 .import "../../ui/js/Trash.js" as Trash
 .import "../../ui/js/Ops.js" as Ops
+.import "../../ui/js/Sort.js" as Sort
 .import "sourcefixture.js" as Source
 
 // The dd pair, issue 7. A single d used to trash and sat among the letters a name is typed with, so
@@ -87,4 +88,25 @@ function run(check) {
         windowDispatch && focusSrc.indexOf("root.pathBarRequested()") >= 0, true)
     check("wire pin: host asks the size through the pane signal",
         windowDispatch && focusSrc.indexOf("root.textSizeRequested(") >= 0, true)
+
+    // 0.3.10: the list is newest deleted first and m opens on the cursor row.
+    check("an empty Trash keeps the whole-Trash menu", Trash.menuTarget(0, 0, false), "strip")
+    check("m with nothing marked opens the cursor row's menu", Trash.menuTarget(5, 0, false), "cursor")
+    check("a lone mark on the cursor row is still the cursor row's menu", Trash.menuTarget(5, 1, true), "cursor")
+    check("a lone mark off the cursor row is the marked rows' menu", Trash.menuTarget(5, 1, false), "marked")
+    check("two marked rows open the marked rows' menu", Trash.menuTarget(5, 2, true), "marked")
+    check("a bulk selection opens the marked rows' menu", Trash.menuTarget(5000, 5000, true), "marked")
+    check("one item with nothing marked is the cursor row's menu", Trash.menuTarget(1, 0, false), "cursor")
+    var rust = Source.source("src/backend/trashbrowse.rs")
+    check("wire pin: the listing sorts by deletion date, newest first, before the uri tie",
+        rust.indexOf("dated.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.uri.cmp(&b.1.uri)))") >= 0, true)
+    check("wire pin: one gio list dates every volume's items, no per-item call",
+        rust.indexOf('gio(&["list", "-u", "-a", "trash::deletion-date", "trash:///"])') >= 0 && rust.indexOf("fn deletion_date(") < 0, true)
+    check("wire pin: the backend orders every listing it reads",
+        rust.indexOf("newest_first(&mut items, |item| dates.get(&item.uri)") >= 0, true)
+    check("wire pin: the view lands on the newest row and m asks the target rule",
+        trashSrc.indexOf("if (landing && total > 0) choose(0, false)") >= 0 && trashSrc.indexOf("TrashKeys.menuTarget(total, selectedCount, isSelected(item.uri))") >= 0, true)
+    check("wire pin: the header draws the shared descending mark", trashSrc.indexOf("text: Sort.title(\"Deleted\", true)") >= 0, true)
+    check("wire pin: Header.qml draws its mark from the same function", Source.source("ui/Header.qml").indexOf("Sort.title(label, root.sortDesc)") >= 0, true)
+    check("the shared mark is the List view's pair", Sort.title("Modified", true) + "|" + Sort.title("Modified", false), "Modified \u25be|Modified \u25b4")
 }

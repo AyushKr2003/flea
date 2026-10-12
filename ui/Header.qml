@@ -3,6 +3,7 @@ import qs.Commons
 import qs.Ui
 import "." as Flea
 import "js/Columns.js" as Columns
+import "js/Sort.js" as Sort
 
 // The column header renders sort state and owns none of it, so Pane stays the one state owner.
 Item {
@@ -238,12 +239,8 @@ Item {
         opacity: root.ruleOpacity
     }
 
-    // Two geometric characters the stock monospace has, so the mark scales with the font like the label.
     function title(label, key) {
-        if (root.sortBy !== key) {
-            return label
-        }
-        return label + " " + (root.sortDesc ? "▾" : "▴")
+        return root.sortBy === key ? Sort.title(label, root.sortDesc) : label
     }
 
     // The stored width a drag or a fit wrote, or the measured one when nothing did.

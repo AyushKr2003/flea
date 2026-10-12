@@ -343,46 +343,46 @@ ui/GridTile.qml	256	root	Declared QML id; component context access is valid at r
 ui/GridTile.qml	256	root	Declared QML id; component context access is valid at runtime.
 ui/GridTile.qml	289	root	Declared QML id; component context access is valid at runtime.
 ui/GridTile.qml	289	root	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	88	anchors	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	88	parent	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	92	parent	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	102	anchors	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	104	parent	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	112	anchors	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	114	parent	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	125	anchors	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	127	parent	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	139	anchors	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	139	parent	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	142	parent	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	167	root	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	168	headerMode	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	173	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	89	anchors	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	89	parent	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	93	parent	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	103	anchors	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	105	parent	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	113	anchors	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	115	parent	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	126	anchors	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	128	parent	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	140	anchors	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	140	parent	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	143	parent	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	168	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	169	headerMode	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	174	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	175	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	176	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	177	root	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	181	root	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	182	headerSize	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	187	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	178	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	182	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	183	headerSize	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	188	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	189	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	190	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	191	root	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	195	root	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	196	headerDate	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	201	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	192	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	196	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	197	headerDate	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	202	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	203	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	204	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	205	root	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	209	root	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	210	headerKind	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	215	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	206	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	210	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	211	headerKind	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	216	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	217	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	218	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	219	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	220	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	68	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	68	root	Declared QML id; component context access is valid at runtime.
 ui/Ipc.qml	76	root	Declared QML id; component context access is valid at runtime.
@@ -2058,17 +2058,17 @@ ui/TrashMonitor.qml	84	root	Declared QML id; component context access is valid a
 ui/TrashMonitor.qml	84	root	Declared QML id; component context access is valid at runtime.
 ui/TrashMonitor.qml	84	root	Declared QML id; component context access is valid at runtime.
 ui/TrashMonitor.qml	84	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
-ui/TrashView.qml	430	root	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	431	root	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	432	listing	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	444	locationTitle	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	444	root	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	445	deletedTitle	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	451	root	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	452	root	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	453	root	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	453	root	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	453	root	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	434	root	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	435	root	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	436	listing	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	448	locationTitle	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	448	root	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	449	deletedTitle	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	455	root	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	456	root	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	457	root	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	457	root	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	457	root	Declared QML id; component context access is valid at runtime.
 ui/UnlockDialog.qml	336	root	Declared QML id; component context access is valid at runtime.
 ui/UnlockDialog.qml	336	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
 ui/UnlockDialog.qml	337	root	Declared QML id; component context access is valid at runtime.
@@ -2439,46 +2439,46 @@ ui/GridTile.qml	256	root	Declared QML id; component context access is valid at r
 ui/GridTile.qml	256	root	Declared QML id; component context access is valid at runtime.
 ui/GridTile.qml	289	root	Declared QML id; component context access is valid at runtime.
 ui/GridTile.qml	289	root	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	88	anchors	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	88	parent	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	92	parent	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	102	anchors	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	104	parent	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	112	anchors	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	114	parent	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	125	anchors	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	127	parent	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	139	anchors	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	139	parent	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	142	parent	Inherited QtQuick Item property in the enclosing item scope.
-ui/Header.qml	167	root	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	168	headerMode	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	173	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	89	anchors	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	89	parent	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	93	parent	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	103	anchors	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	105	parent	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	113	anchors	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	115	parent	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	126	anchors	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	128	parent	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	140	anchors	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	140	parent	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	143	parent	Inherited QtQuick Item property in the enclosing item scope.
+ui/Header.qml	168	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	169	headerMode	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	174	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	175	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	176	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	177	root	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	181	root	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	182	headerSize	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	187	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	178	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	182	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	183	headerSize	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	188	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	189	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	190	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	191	root	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	195	root	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	196	headerDate	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	201	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	192	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	196	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	197	headerDate	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	202	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	203	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	204	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	205	root	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	209	root	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	210	headerKind	Declared QML id; component context access is valid at runtime.
-ui/Header.qml	215	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	206	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	210	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	211	headerKind	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	216	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	217	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	218	root	Declared QML id; component context access is valid at runtime.
 ui/Header.qml	219	root	Declared QML id; component context access is valid at runtime.
+ui/Header.qml	220	root	Declared QML id; component context access is valid at runtime.
 ui/JumpPath.qml	33	root	Declared QML id; component context access is valid at runtime.
 ui/JumpPath.qml	33	root	Declared QML id; component context access is valid at runtime.
 ui/KeymapSheet.qml	423	root	Declared QML id; component context access is valid at runtime.
@@ -3459,17 +3459,17 @@ ui/TailscaleMark.qml	45	root	Declared QML id; component context access is valid 
 ui/TailscaleMark.qml	45	root	Declared QML id; component context access is valid at runtime.
 ui/TailscaleMark.qml	46	root	Declared QML id; component context access is valid at runtime.
 ui/TailscaleMark.qml	47	root	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	430	root	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	431	root	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	432	listing	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	444	locationTitle	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	444	root	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	445	deletedTitle	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	451	root	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	452	root	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	453	root	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	453	root	Declared QML id; component context access is valid at runtime.
-ui/TrashView.qml	453	root	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	434	root	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	435	root	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	436	listing	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	448	locationTitle	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	448	root	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	449	deletedTitle	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	455	root	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	456	root	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	457	root	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	457	root	Declared QML id; component context access is valid at runtime.
+ui/TrashView.qml	457	root	Declared QML id; component context access is valid at runtime.
 ui/WindowBody.qml	340	view	Declared QML id; component context access is valid at runtime.
 ui/WindowBody.qml	346	primaryPane	Declared QML id; component context access is valid at runtime.
 ui/WindowBody.qml	347	primaryPane	Declared QML id; component context access is valid at runtime.
