@@ -204,3 +204,48 @@ function railCursorAfter(before, after, index) {
     }
     return matches.length === oldCount ? matches[occurrence] : -1
 }
+
+// The rail row that holds what the pane shows: the deepest row whose folder is dir or holds it, the first in rail
+// order on a tie, "/" holding every local path. view is { kind, tag, shareKey }: kind "recent", "trash" or "tag"
+// lights that row (tag by its name), kind "dir" lights by folder. A directory under gvfs belongs to no path the rail
+// holds, so only the mounted row opened under shareKey, the normalized address of its alias, lights, never the disk.
+function heldBy(entries, dir, view) {
+    var list = entries || []
+    var at = view || ({ kind: "dir" })
+    var path = String(dir || "")
+    var gvfs = Mounts.underGvfs(path)
+    var best = -1, depth = -1
+    for (var i = 0; i < list.length; i++) {
+        var e = list[i]
+        if (at.kind !== "dir") {
+            if (e.kind === at.kind && (at.kind !== "tag" || e.tag === at.tag))
+                return i
+            continue
+        }
+        if (e.kind === "recent" || e.kind === "trash" || e.kind === "tag" || e.error || e.mounted === false)
+            continue
+        if (gvfs) {
+            var key = String(at.shareKey || "")
+            if (key.length > 0 && !e.path && (Mounts.normalize(e.uri) === key || Mounts.normalize(e.mountUri) === key))
+                return i
+            continue
+        }
+        if (typeof e.path !== "string" || e.path.length === 0)
+            continue
+        if ((e.path === "/" ? path.charAt(0) === "/" : Mounts.inside(path, e.path)) && e.path.length > depth) {
+            best = i
+            depth = e.path.length
+        }
+    }
+    return best
+}
+
+// The view heldBy reads from a pane's state: Trash, Recent and a tag walk are their own rows, anything else a folder.
+// pathAlias is the pane's remembered gvfs share for its path, or null; its key is the share's normalized address.
+function litView(trashOpened, recentMode, searchMode, answeredQuery, pathAlias) {
+    if (trashOpened) return { kind: "trash" }
+    if (String(recentMode || "").length > 0) return { kind: "recent" }
+    var query = String(answeredQuery || "")
+    if (String(searchMode || "").length > 0 && query.indexOf("tag:") === 0) return { kind: "tag", tag: query.substring(4) }
+    return { kind: "dir", shareKey: pathAlias ? String(pathAlias.key || "") : "" }
+}

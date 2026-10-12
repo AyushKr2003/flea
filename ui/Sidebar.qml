@@ -25,6 +25,32 @@ Item {
     property var menu: null
     property int cursorIndex: 0
     property var cursorEntries: []
+    // The row that holds what the rail pane shows. It is settled only once no listing is out, so it moves in the frame the listing swaps.
+    property int litIndex: -1
+    // The menu sets cursorIndex on open, so the cursor row is also the row an open rail menu is on.
+    readonly property bool cursorDrawn: RailKeys.cursorDrawn(root.focused, root.menu && root.menu.opened && root.menu.forRail)
+    function settleLit() {
+        var pane = root.navigationPane
+        if (pane === null || pane.listInFlight)
+            return
+        root.litIndex = Places.heldBy(root.entries, pane.path, Places.litView(pane.trash.opened, pane.recentMode, pane.searchMode, pane.swap.answeredQuery, pane.pathAlias))
+    }
+    onNavigationPaneChanged: root.settleLit()
+    Connections {
+        target: root.navigationPane
+        function onPathChanged() { root.settleLit() }
+        function onRecentModeChanged() { root.settleLit() }
+        function onSearchModeChanged() { root.settleLit() }
+        function onListInFlightChanged() { root.settleLit() }
+    }
+    Connections {
+        target: root.navigationPane ? root.navigationPane.trash : null
+        function onOpenedChanged() { root.settleLit() }
+    }
+    Connections {
+        target: root.navigationPane ? root.navigationPane.swap : null
+        function onAnsweredQueryChanged() { root.settleLit() }
+    }
     readonly property var placesState: ViewState.state.places || ({})
     readonly property var userFavouriteEntries: RailPlaces.favouriteEntries
     readonly property var homeEntries: RailPlaces.homeEntries
@@ -89,11 +115,15 @@ Item {
     onEntriesChanged: {
         root.reorderLine = -1
         var next = Places.railCursorAfter(root.cursorEntries, root.entries, root.cursorIndex)
+        var lit = Places.railCursorAfter(root.cursorEntries, root.entries, root.litIndex)
         if (root.renamingIndex >= 0
             && Places.railCursorAfter(root.cursorEntries, root.entries, root.renamingIndex) !== root.renamingIndex)
             root.cancelRename()
         root.cursorEntries = root.entries
         root.cursorIndex = next
+        // A listing still out keeps its row through the rebuild; an idle pane re-reads it.
+        root.litIndex = lit
+        root.settleLit()
         availability.restart()
     }
 
@@ -468,7 +498,8 @@ Item {
                 id: homeLeadRepeater
                 model: root.homeLead
                 delegate: SidebarRow {
-                    cursor: index === root.cursorIndex
+                    lit: index === root.litIndex
+                    cursor: root.cursorDrawn && index === root.cursorIndex
                     focused: root.focused
                     onActivated: function (idx) { root.activate(idx) }
                     onMenuRequested: function(idx, pos) { root.openRailMenu(idx, pos) }
@@ -479,7 +510,8 @@ Item {
                 id: recentRepeater
                 model: root.recentEntries
                 delegate: SidebarRow {
-                    cursor: index + root.homeLead.length === root.cursorIndex
+                    lit: index + root.homeLead.length === root.litIndex
+                    cursor: root.cursorDrawn && index + root.homeLead.length === root.cursorIndex
                     focused: root.focused
                     onActivated: function (idx) { root.activate(idx + root.homeLead.length) }
                     onMenuRequested: function(idx, pos) { root.openRailMenu(idx + root.homeLead.length, pos) }
@@ -489,7 +521,8 @@ Item {
                 id: homeRestRepeater
                 model: root.homeRest
                 delegate: SidebarRow {
-                    cursor: index + root.homeLead.length + root.recentEntries.length === root.cursorIndex
+                    lit: index + root.homeLead.length + root.recentEntries.length === root.litIndex
+                    cursor: root.cursorDrawn && index + root.homeLead.length + root.recentEntries.length === root.cursorIndex
                     focused: root.focused
                     onActivated: function (idx) { root.activate(idx + root.homeLead.length + root.recentEntries.length) }
                     onMenuRequested: function(idx, pos) { root.openRailMenu(idx + root.homeLead.length + root.recentEntries.length, pos) }
@@ -500,9 +533,9 @@ Item {
                 id: trashRepeater
                 model: root.trashEntries
                 delegate: SidebarRow {
-                    // The menu sets cursorIndex on open, so isCursor also means the open menu is on this row.
-                    cursor: RailKeys.trashCursor(root.trashActive, index + root.homeLead.length + root.recentEntries.length + root.homeRest.length === root.cursorIndex, root.focused, root.menu && root.menu.opened && root.menu.forRail)
-                    focused: root.focused || root.trashActive
+                    lit: index + root.homeLead.length + root.recentEntries.length + root.homeRest.length === root.litIndex
+                    cursor: root.cursorDrawn && index + root.homeLead.length + root.recentEntries.length + root.homeRest.length === root.cursorIndex
+                    focused: root.focused
                     onActivated: function (idx) { root.activate(idx + root.homeLead.length + root.recentEntries.length + root.homeRest.length) }
                     onMenuRequested: function(idx, pos) { root.openRailMenu(idx + root.homeLead.length + root.recentEntries.length + root.homeRest.length, pos) }
                 }
@@ -525,7 +558,8 @@ Item {
                 id: favRepeater
                 model: root.userFavouriteEntries
                 delegate: SidebarRow {
-                    cursor: index + root.homeLead.length + root.recentEntries.length + root.homeRest.length + root.trashEntries.length === root.cursorIndex
+                    lit: index + root.homeLead.length + root.recentEntries.length + root.homeRest.length + root.trashEntries.length === root.litIndex
+                    cursor: root.cursorDrawn && index + root.homeLead.length + root.recentEntries.length + root.homeRest.length + root.trashEntries.length === root.cursorIndex
                     focused: root.focused
                     // The rail's own reorder drag, persisted through the favourites store.
                     dragFrom: modelData.favouriteIndex
@@ -596,7 +630,8 @@ Item {
                 id: netRepeater
                 model: root.networkEntries
                 delegate: SidebarRow {
-                    cursor: (index + root.placesEntries.length) === root.cursorIndex
+                    lit: index + root.placesEntries.length === root.litIndex
+                    cursor: root.cursorDrawn && index + root.placesEntries.length === root.cursorIndex
                     focused: root.focused
                     renaming: (index + root.placesEntries.length) === root.renamingIndex
                     onActivated: function (idx) { root.activate(idx + root.placesEntries.length) }
@@ -632,7 +667,8 @@ Item {
                 id: devRepeater
                 model: root.deviceEntries
                 delegate: SidebarRow {
-                    cursor: (index + root.placesEntries.length + root.networkEntries.length) === root.cursorIndex
+                    lit: index + root.placesEntries.length + root.networkEntries.length === root.litIndex
+                    cursor: root.cursorDrawn && index + root.placesEntries.length + root.networkEntries.length === root.cursorIndex
                     focused: root.focused
                     onActivated: function (idx) { root.activate(idx + root.placesEntries.length + root.networkEntries.length) }
                     onEjectRequested: function (idx) { root.ejectRow(idx + root.placesEntries.length + root.networkEntries.length) }

@@ -149,4 +149,67 @@ function run(check) {
           Places.replace("", "", "smb://nas/plates", ""), "smb://nas/plates plates\n")
     check("and an empty new address rewrites nothing at all",
           Places.replace(saved, "smb://nas/isos", "", "NAS"), saved)
+
+    heldByCases(check)
+}
+
+// Which rail row holds the folder or view the pane shows.
+function heldByCases(check) {
+    var dir = { kind: "dir" }
+    var homeRow = { group: "home", kind: "home", path: "/home/gm" }
+    var recent = { group: "recent", kind: "recent", path: "flea:recent" }
+    var documents = { group: "home", kind: "home", path: "/home/gm/Documents" }
+    var trashRow = { group: "trash", kind: "trash", path: "trash:///" }
+    var fav = { group: "favourite", kind: "favourite", path: "/home/gm/Work", original: { label: "Work", path: "~/Work" } }
+    var favTwin = { group: "favourite", kind: "favourite", path: "/home/gm/Documents", original: { label: "Docs", path: "~/Documents" } }
+    var tagRed = { label: "Red", kind: "tag", tag: "Red" }
+    var tagBlue = { label: "Blue", kind: "tag", tag: "Blue" }
+    var share = { group: "network", kind: "share", path: "", uri: "smb://nas/data", mounted: true }
+    var sleeping = { group: "network", kind: "share", path: "", uri: "smb://nas/idle", mounted: false }
+    var kernel = { group: "network", kind: "share", path: "/mnt/nas", uri: "/mnt/nas", mounted: true }
+    var disk = { group: "device", kind: "disk", path: "/", mounted: true }
+    var usb = { group: "device", kind: "volume", path: "/run/media/gm/USB", mounted: true }
+    var ejected = { group: "device", kind: "volume", path: "", mounted: false }
+    var rail = [homeRow, recent, documents, trashRow, fav, tagRed, tagBlue, share, sleeping, kernel, disk, usb, ejected]
+    var at = function (path) { return Places.heldBy(rail, path, { kind: "dir" }) }
+    check("Documents lights while the pane stands in ~/Documents/claude", at("/home/gm/Documents/claude"), 2)
+    check("a folder that is exactly a row's folder lights that row", at("/home/gm/Documents"), 2)
+    check("Home lights in ~/Work/field when no favourite holds Work", Places.heldBy([homeRow, documents, disk], "/home/gm/Work/field", dir), 0)
+    check("the deepest row wins over Home for ~/Work/field", at("/home/gm/Work/field"), 4)
+    check("Home lights for a folder no other row holds", at("/home/gm/Pictures"), 0)
+    check("a sibling that only shares a name prefix is not held", at("/home/gm/Documents2"), 0)
+    check("slash holds every local path nothing else holds", at("/fx/v/work"), 10)
+    check("slash is the whole of the internal disk's reach, even for slash itself", at("/"), 10)
+    check("a volume wins over slash for a folder on it", at("/run/media/gm/USB/photos"), 11)
+    check("a kernel share wins over slash for its mountpoint", at("/mnt/nas"), 9)
+    check("a tie goes to the first row in rail order", Places.heldBy([favTwin, documents], "/home/gm/Documents/x", dir), 0)
+    check("an unmounted volume never lights", Places.heldBy([ejected, disk], "/", dir), 1)
+    check("a row with an invalid record never lights", Places.heldBy([{ kind: "favourite", path: "/a", error: "bad" }], "/a", dir), -1)
+    check("nothing holding the folder answers -1", Places.heldBy([homeRow, documents], "/srv/x", dir), -1)
+    check("an empty rail answers -1", Places.heldBy([], "/a", dir), -1)
+    check("no rail at all answers -1", Places.heldBy(undefined, "/a", dir), -1)
+    check("no path answers -1", Places.heldBy(rail, "", dir), -1)
+    check("Recent lights its own row and no folder", Places.heldBy(rail, "/", { kind: "recent" }), 1)
+    check("Trash lights its own row", Places.heldBy(rail, "/home/gm", { kind: "trash" }), 3)
+    check("a view whose row is absent lights nothing", Places.heldBy([homeRow, disk], "/", { kind: "recent" }), -1)
+    check("a tag view lights the tag of that name", Places.heldBy(rail, "/home/gm", { kind: "tag", tag: "Blue" }), 6)
+    check("a tag view with no row for its tag lights nothing", Places.heldBy(rail, "/home/gm", { kind: "tag", tag: "Green" }), -1)
+    var gvfs = "/run/user/1000/gvfs/smb-share:server=nas,share=data/photos"
+    check("a gvfs path lights the mounted share opened under it, never the disk",
+          Places.heldBy(rail, gvfs, { kind: "dir", shareKey: "smb://nas/data" }), 7)
+    check("a gvfs path with no remembered share lights nothing, not the disk",
+          Places.heldBy(rail, gvfs, { kind: "dir" }), -1)
+    check("a gvfs path whose share is unmounted lights nothing",
+          Places.heldBy(rail, gvfs, { kind: "dir", shareKey: "smb://nas/idle" }), -1)
+    check("a gvfs path never lights a row by folder prefix",
+          Places.heldBy([disk, homeRow], gvfs, { kind: "dir", shareKey: "smb://other/x" }), -1)
+    check("a share row also answers by the address it is mounted under",
+          Places.heldBy([{ kind: "share", path: "", uri: "smb://nas/alias", mountUri: "smb://nas/data", mounted: true }], gvfs, { kind: "dir", shareKey: "smb://nas/data" }), 0)
+
+    check("an open Trash is the Trash view, whatever else the pane holds", JSON.stringify(Places.litView(true, "results", "results", "tag:Red", null)), JSON.stringify({ kind: "trash" }))
+    check("Recent mode is the Recent view", JSON.stringify(Places.litView(false, "results", "", "", null)), JSON.stringify({ kind: "recent" }))
+    check("a walk whose landed query is a tag is that tag's view", JSON.stringify(Places.litView(false, "", "results", "tag:Red", null)), JSON.stringify({ kind: "tag", tag: "Red" }))
+    check("a tag query with no walk on screen is not a tag view", JSON.stringify(Places.litView(false, "", "", "tag:Red", null)), JSON.stringify({ kind: "dir", shareKey: "" }))
+    check("an ordinary walk is a folder view", JSON.stringify(Places.litView(false, "", "typing", "report", null)), JSON.stringify({ kind: "dir", shareKey: "" }))
+    check("a folder view carries the remembered share's key", JSON.stringify(Places.litView(false, "", "", "", { key: "smb://nas/data" })), JSON.stringify({ kind: "dir", shareKey: "smb://nas/data" }))
 }

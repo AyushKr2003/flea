@@ -81,7 +81,7 @@ Item {
         // index and modelData are required on ui/SidebarRow.qml itself, so the view fills them;
         // redeclaring them here left the delegate uninitialised and the rail drew nothing.
         delegate: Flea.SidebarRow {
-            cursor: rail.activeFocus ? index === rail.currentIndex : modelData.path === root.current
+            lit: rail.activeFocus ? index === rail.currentIndex : modelData.path === root.current
             focused: rail.activeFocus
             onActivated: function (at) { root.choose(at) }
         }

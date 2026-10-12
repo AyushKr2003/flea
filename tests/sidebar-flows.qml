@@ -26,6 +26,9 @@ ShellRoot {
     property bool trashCountWas: false
     property string cursorBeforeRail: ""
     property double clickedAt: 0
+    property int railHome: -1
+    property int railRecent: -1
+    property int railTrash: -1
 
     function check(name, actual, expected) {
         checks++
@@ -119,6 +122,28 @@ ShellRoot {
             index: 3
             modelData: ({ label: "Home", path: "/home", group: "home", kind: "home", glyph: "house" })
         }
+    }
+    // What a rail row draws: the lit fill, the lit accent edge and the keyboard cursor's own frame, read from the tree.
+    function railLook(row) {
+        var look = { fill: false, edge: false, frame: false }
+        for (var i = 0; i < row.children.length; i++) {
+            var c = row.children[i]
+            if (c.color === undefined || c.border === undefined || !c.visible) continue
+            if (c.color.a === 0) look.frame = look.frame || (c.width < row.width && c.height === row.height)
+            else if (c.width === Flea.Theme.spacing.hairline * 2) look.edge = true
+            else if (c.width === row.width && c.opacity === 1) look.fill = true
+        }
+        return look
+    }
+    // Which rail rows draw the lit look and which the cursor frame, by entry index.
+    function railLit() { return root.railIndices("fill") }
+    function railIndices(what) {
+        var out = []
+        for (var i = 0; i < pane.sidebar.entries.length; i++) {
+            var row = pane.sidebar.railItemFor(i)
+            if (row && root.railLook(row)[what]) out.push(i)
+        }
+        return out
     }
     // The gap from the label's end to what bounds it: the detail number when one stands, else the slot.
     function railLabelGap(row) {
@@ -294,6 +319,53 @@ ShellRoot {
             check("autohide-click: rail consumes its click without selecting the covered row", pane.cursorRow.n, root.cursorBeforeRail)
             Flea.ViewState.changeLeaf("places", {autoHide: false})
             pane.open(fixture)
+            return true
+        },
+        function () {
+            if (!ready(fixture) || !pane.sidebar) return false
+            var rail = pane.sidebar
+            pane.focusView = "list"
+            root.railHome = rail.entries.findIndex(function (e) { return e.kind === "home" })
+            root.railRecent = rail.entries.findIndex(function (e) { return e.kind === "recent" })
+            root.railTrash = rail.entries.findIndex(function (e) { return e.kind === "trash" })
+            check("lit-place: the rail lights Home in a folder under it", rail.litIndex, root.railHome)
+            check("lit-place: the rail rows draw the lit look on Home only", root.railLit(), [root.railHome])
+            check("lit-place: an unfocused rail draws no cursor frame", root.railIndices("frame"), [])
+            rail.activate(root.railRecent)
+            check("lit-place: the request moves the cursor and not the lit place", [rail.cursorIndex, rail.litIndex], [root.railRecent, root.railHome])
+            return true
+        },
+        function () {
+            if (pane.recentMode !== "results" || pane.listInFlight) return false
+            var rail = pane.sidebar
+            check("lit-place: the landed Recent listing lights the Recent row", rail.litIndex, root.railRecent)
+            check("lit-place: the rows follow the lit place", root.railLit(), [root.railRecent])
+            rail.cursorIndex = root.railHome
+            pane.focusView = "rail"
+            check("lit-place: a focused rail draws the cursor frame on the cursor row, apart from the lit one", [root.railIndices("frame"), root.railLit()], [[root.railHome], [root.railRecent]])
+            rail.cursorIndex = root.railRecent
+            check("lit-place: the cursor on the lit row draws both", [root.railIndices("frame"), root.railLit()], [[root.railRecent], [root.railRecent]])
+            pane.focusView = "list"
+            check("lit-place: giving the rail's focus up takes the frame away and leaves the lit place", [root.railIndices("frame"), root.railLit()], [[], [root.railRecent]])
+            pane.closeRecent()
+            return true
+        },
+        function () {
+            if (!ready(fixture)) return false
+            check("lit-place: leaving Recent lights the folder's row again", pane.sidebar.litIndex, root.railHome)
+            pane.trash.open()
+            return true
+        },
+        function () {
+            if (!pane.trash.opened) return false
+            check("lit-place: an open Trash lights the Trash row alone", [pane.sidebar.litIndex, root.railLit()], [root.railTrash, [root.railTrash]])
+            pane.trash.close()
+            return true
+        },
+        function () {
+            if (!ready(fixture)) return false
+            check("lit-place: closing Trash lights the folder's row again", pane.sidebar.litIndex, root.railHome)
+            pane.listArea.forceActiveFocus()
             return true
         },
         function () {

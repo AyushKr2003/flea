@@ -2,6 +2,7 @@
 
 import QtQuick
 import Quickshell
+import qs.Commons
 import "flea" as Flea
 
 // cursormark: in a real list, grid and columns view, the cursor row and only it draws the cursor in the turn that moves it.
@@ -223,6 +224,25 @@ ShellRoot {
         root.failures.push("binding probe: no live delegate")
     }
 
+    // The first child of a Row is its fill Rectangle; a row in a pane without focus keeps the selection in the inactive rung.
+    function fillOf(d) { return d.children.length > 0 && d.children[0].color !== undefined ? d.children[0].color : null }
+    function fillAt(index) {
+        var all = root.delegates(root.listingView())
+        for (var i = 0; i < all.length; i++)
+            if (all[i].live !== false && all[i].listingIndex === index) return root.fillOf(all[i])
+        return null
+    }
+    function fillIs(label, index, want) {
+        var got = root.fillAt(index)
+        if (got === null || !Qt.colorEqual(got, want)) root.failures.push(label + ": row " + index + " fill " + got + ", wanted " + want)
+    }
+    function hoverRow(index) {
+        var all = root.delegates(root.listingView())
+        for (var i = 0; i < all.length; i++)
+            if (all[i].live !== false && all[i].listingIndex === index) { all[i].hovered = true; return }
+        root.failures.push("no live delegate for row " + index)
+    }
+
     property int step: 0
     // The delegates drawn before the wheel scroll, so step 7 can pick one that came back out of the pool.
     property var preScroll: []
@@ -327,6 +347,28 @@ ShellRoot {
                 m.row = 6
                 if (m.lit !== root.liveCell || !root.liveCell.cursor) root.failures.push("stale entry: the live row 6 did not light after the drop")
                 console.log("CURSORMARK " + root.which + " stale entry dropped lit=" + (m.lit === root.liveCell))
+            } else if (root.step === 18 && root.which === "list") {
+                // Q11: marked rows in a pane without focus keep the inactive rung, and hover never replaces it.
+                root.land("/probe/c", 1000, root.rowsFor("c_", 343))
+                p.paneFocused = false
+                // Row 0 sits under the headless pointer, so the cursor stands on a row clear of it.
+                p.cursorIndex = 5
+                root.selectedSet = { 1: true, 2: true }
+                p.selectionVersion += 1
+                root.hoverRow(4)
+            } else if (root.step === 19 && root.which === "list") {
+                root.fillIs("unfocused marked row", 1, Style.selectedFill)
+                root.fillIs("unfocused marked row", 2, Style.selectedFill)
+                root.fillIs("unfocused unmarked row", 3, "transparent")
+                root.fillIs("unfocused unmarked cursor", 5, "transparent")
+                root.fillIs("unfocused hovered unmarked row", 4, Style.hoverFill)
+                root.hoverRow(1)
+                root.fillIs("unfocused hovered marked row", 1, Style.selectedFill)
+                p.paneFocused = true
+                root.fillIs("focused marked row", 2, Style.selectionFill)
+                root.fillIs("focused cursor", 5, Style.selectedAccentFill)
+                root.fillIs("focused hovered unmarked row", 4, Style.hoverFill)
+                console.log("CURSORMARK list inactive selection checked")
             } else {
                 root.finish()
                 return

@@ -113,9 +113,9 @@ Item {
     Rectangle {
         width: root.paintWidth > 0 ? root.paintWidth : parent.width
         height: parent.height
-        // The cursor uses accent ink; marked rows keep the OEM's distinct selection rung.
+        // The cursor uses accent ink; marked rows keep the OEM's distinct selection rung, muted to the selected rung in a pane without focus.
         color: root.cursor && root.paneFocused ? Style.selectedAccentFill
-             : root.selected && root.paneFocused ? Style.selectionFill
+             : root.selected ? (root.paneFocused ? Style.selectionFill : Style.selectedFill)
              : root.hovered ? Style.hoverFill
              : "transparent"
     }

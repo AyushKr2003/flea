@@ -11,6 +11,8 @@ Item {
 
     required property int index
     required property var modelData
+    // The place the pane stands in: the fill and the accent edge. The keyboard cursor is a separate frame and moves on its own.
+    property bool lit: false
     property bool cursor: false
     property bool focused: false
     // Network only, driven from ui/Sidebar.qml's renamingIndex; swaps the label for the editor.
@@ -67,11 +69,11 @@ Item {
     Accessible.role: Accessible.ListItem
     Accessible.name: root.modelData.label
 
-    // A rail row is a row, so its cursor is the list row's own: a square full-bleed fill and the
+    // A rail row is a row, so its lit place is the list row's cursor look: a square full-bleed fill and the
     // accent bar, per the canvas and the icon spec's "the rail rounds nothing"; see ui/Row.qml.
     Rectangle {
         anchors.fill: parent
-        color: root.cursor
+        color: root.lit
             ? (root.modelData.kind === "trash" ? Style.selectedAccentFill : root.focused ? Style.selectedFill : Style.normalFill)
             : "transparent"
     }
@@ -84,8 +86,18 @@ Item {
         opacity: Theme.washHover
     }
 
+    // The keyboard cursor's own frame: foreground, a hairline inside the row, clear of the rail's edge rule on its right.
     Rectangle {
         visible: root.cursor
+        width: parent.width - Theme.spacing.hairline - Theme.chromeControlInset
+        height: parent.height
+        color: "transparent"
+        border.width: Theme.spacing.hairline
+        border.color: Theme.color.foreground
+    }
+
+    Rectangle {
+        visible: root.lit
         width: Theme.spacing.hairline * 2
         height: parent.height
         color: Theme.color.accent
@@ -111,7 +123,7 @@ Item {
         id: glyphMark
         Glyph {
             name: root.modelData.glyph
-            color: root.cursor && root.modelData.kind === "trash" ? Theme.color.accent : Theme.color.foreground
+            color: root.lit && root.modelData.kind === "trash" ? Theme.color.accent : Theme.color.foreground
         }
     }
 
