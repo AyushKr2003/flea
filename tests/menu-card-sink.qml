@@ -304,8 +304,13 @@ ShellRoot {
         shell.check("hint:danger-key-hint-is-muted", String(dangerHint.color), String(Flea.Theme.color.muted))
         var litLabel = shell.textDrawn(litKeyRow, "Open"), litHint = shell.textDrawn(litKeyRow, "enter")
         shell.check("hint:lit-row-is-lit", litKeyRow.current, true)
-        shell.check("hint:lit-label-is-not-the-lit-hint-ink-so-the-test-can-tell", String(litLabel.color) !== String(Flea.Theme.color.mutedLit), true)
         shell.check("hint:lit-key-hint-is-muted-lifted-on-the-wash", String(litHint.color), String(Flea.Theme.color.mutedLit))
+        // The label and hint lifts can land on one grey on a fixture palette, so the hint's own role takes a sentinel ink for two checks.
+        var mutedLitWas = Flea.Theme.color.mutedLit
+        Flea.Theme.color.mutedLit = "#ff00ff"
+        shell.check("hint:lit-label-is-not-the-lit-hint-ink-so-the-test-can-tell", String(litLabel.color) !== String(Flea.Theme.color.mutedLit), true)
+        shell.check("hint:lit-key-hint-follows-the-muted-lit-role", String(litHint.color), String(Flea.Theme.color.mutedLit))
+        Flea.Theme.color.mutedLit = mutedLitWas
         var squareLabel = shell.textDrawn(squareKeyRow, "Update Flea"), squareHint = shell.textDrawn(squareKeyRow, "0.3.8")
         shell.check("hint:update-label-is-foreground-so-the-test-can-tell", String(squareLabel.color), String(Flea.Theme.color.foreground))
         shell.check("hint:update-version-keeps-the-row-ink", String(squareHint.color), String(squareLabel.color))
