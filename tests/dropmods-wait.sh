@@ -106,7 +106,7 @@ out=$(run "$(target "$copy_line")" eval "d_text='$copy_line'; abandon() { echo r
 calls=()
 while IFS= read -r line; do calls+=("${line# }"); done < <(sed -n '/^case_cap_drops()/,/^}/p' tests/ui-captures-drops.sh | grep -E '^    cap_drops_wait_' | grep -Ev '^    cap_drops_wait_(settled|rename|column) ')
 photos_line='Move 1 item to Photos · ctrl at lift copies'
-crumb_line='Copy 1 item to outer/'
+crumb_line='Move 1 item to outer/ · ctrl at lift copies'
 columns_line='Move 1 item to deep · ctrl at lift copies'
 sentences=("$photos_line" "$photos_line" "$crumb_line" "$columns_line")
 # Another target's sentence for each leg, never its own.
