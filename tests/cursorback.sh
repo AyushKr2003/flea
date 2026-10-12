@@ -19,6 +19,7 @@ trap cleanup EXIT
 # The binary the probe's shell stage shells out to for its ui-state write.
 bin=${FLEA_BIN:-$PWD/target/debug/flea}
 command -v dbus-run-session >/dev/null || { echo 'FAIL cursorback needs private D-Bus'; exit 1; }
+command -v rg >/dev/null || { echo 'FAIL cursorback needs ripgrep for its tally, count and warning gates'; exit 1; }
 [[ -x "$bin" ]] || { echo 'FAIL cursorback needs the candidate backend'; exit 1; }
 
 # One probe run in the given view; dual launches straight into dual, where both panes build at startup.
@@ -38,7 +39,7 @@ run_probe() {
     cp tests/cursorback.qml "$root/config/shell.qml" || exit 1
     if [ "$tag" = dual ]; then dual_env=CURSORBACK_DUAL=1; fi
     local log="$root/qs.log"
-    # Sample input: "CURSORBACK DONE failures=0" beside "CURSORBACK PASS checks=43".
+    # Sample input: "CURSORBACK DONE failures=0" beside "CURSORBACK PASS checks=48" (the dual run answers 8).
     env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLEA_SELECT \
         HOME="$root/home" XDG_STATE_HOME="$root/state" XDG_CONFIG_HOME="$root/config" \
         XDG_DATA_HOME="$root/data" XDG_CACHE_HOME="$root/cache" XDG_RUNTIME_DIR="$root/runtime" \
@@ -58,9 +59,9 @@ run_probe() {
 
 verdict=0
 run_probe list 48 views || verdict=1
-run_probe dual 9 dual || verdict=1
+run_probe dual 8 dual || verdict=1
 if [ "$verdict" -ne 0 ]; then
     rg 'CURSORBACK' "$test_root"/*/qs.log
     exit 1
 fi
-printf 'CURSORBACK STATUS checks=57\n'
+printf 'CURSORBACK STATUS checks=56\n'
