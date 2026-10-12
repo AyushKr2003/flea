@@ -83,7 +83,7 @@ ShellRoot {
         check("view marks do not intersect title strip", intersects(views, titleStrip), false)
         check("view marks do not intersect Open button", intersects(views, openButton), false)
     }
-    // The primary answer inside the answer row only; the save area's collision card has a primary button of its own.
+    // The primary answer inside the answer row only; the save area holds no answer of its own.
     function answerOpen() {
         var bar = descendants(win.contentItem).filter(function(item) { return item.objectName === "pickerAnswers" })[0]
         return descendants(bar).filter(function(item) { return item.primary === true && item.tabHandle === true })[0]
@@ -199,7 +199,7 @@ ShellRoot {
             initiatingFocus = win.contentItem.Window.window.activeFocusItem
             press(Qt.Key_Return)
             if (scenario === "refuse-collision") {
-                check("collision Enter focuses Cancel", win.contentItem.Window.window.activeFocusItem.label, "Cancel")
+                check("collision Enter returns focus to Filename", win.contentItem.Window.window.activeFocusItem === form.fieldItem, true)
                 check("collision does not start submission", win.submitting, false)
                 check("collision keeps request open", win.answered, false)
                 checkCollisionWrap()

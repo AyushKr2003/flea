@@ -38,6 +38,32 @@ function run(check) {
     check("the requester is one template with the caller's text kept whole", Picker.subtitle(Picker.request('{"app":"a%1b"}')), "Requested by a%1b")
 
     check("the accept label carries the count", Picker.acceptLabel(req, 3), "Send 3")
+
+    // The collision review: one template, the name kept whole, and the stem the field selects.
+    check("the collision line is one template", Picker.collisionLine("report.txt"), "report.txt already exists here.")
+    check("a name holding a placeholder is kept whole", Picker.collisionLine("a%1b.txt"), "a%1b.txt already exists here.")
+    check("the stem ends at the last dot", Picker.stemEnd("Downloading the Source.html"), 22)
+    check("a double extension keeps its first part in the stem", Picker.stemEnd("a.tar.gz"), 5)
+    check("a name with no dot is all stem", Picker.stemEnd("README"), 6)
+    check("a leading dot is part of the stem", Picker.stemEnd(".bashrc"), 7)
+    check("an empty name has an empty stem", Picker.stemEnd(""), 0)
+
+    // Callout 12: Back, Up, the rail, the list, Filename, the filter, Cancel and the answer; a hidden or disabled stop is skipped.
+    function stop(name, off) { return { name: name, visible: off !== "hidden", enabled: off !== "disabled", activeFocusOnTab: true } }
+    function walk(over) {
+        var filter = stop("Filter", over.filter)
+        var stops = { chrome: [stop("Back", over.back), stop("Up")], rail: stop("Rail"), view: stop(over.view || "List"),
+            save: over.save ? [stop("Filename")] : [], answers: [filter, stop("Cancel"), stop("Answer", over.answer)] }
+        return Picker.tabOrder(stops).map(function(item) { return item.name }).join(",")
+    }
+    check("an open walks the chrome, rail, list, filter, Cancel, answer", walk({}), "Back,Up,Rail,List,Filter,Cancel,Answer")
+    check("an open with no filters has no filter stop", walk({ filter: "hidden" }), "Back,Up,Rail,List,Cancel,Answer")
+    check("an open of several files walks the same order", walk({ answer: undefined }), "Back,Up,Rail,List,Filter,Cancel,Answer")
+    check("a save puts Filename after the list and before the filter", walk({ save: true }), "Back,Up,Rail,List,Filename,Filter,Cancel,Answer")
+    check("a save with no filters goes from Filename to Cancel", walk({ save: true, filter: "hidden" }), "Back,Up,Rail,List,Filename,Cancel,Answer")
+    check("a disabled Back is skipped", walk({ back: "disabled" }), "Up,Rail,List,Filter,Cancel,Answer")
+    check("an answer that cannot be taken is skipped", walk({ answer: "disabled" }), "Back,Up,Rail,List,Filter,Cancel")
+    check("the grid takes the list's place", walk({ view: "Grid", save: true }), "Back,Up,Rail,Grid,Filename,Filter,Cancel,Answer")
     check("and groups a four-figure one", Picker.acceptLabel(req, 1204), "Send 1,204")
     check("one file does not carry a count", Picker.acceptLabel(req, 1), "Send")
     check("a caller's label is substituted once and never re-scanned", Picker.acceptLabel(Picker.request('{"accept":"Se%2nd","multiple":true}'), 3), "Se%2nd 3")

@@ -70,10 +70,10 @@ tests/js/mounts.js 327
 tests/js/menu.js 553
 tests/js/nav.js 461
 tests/js/rail.js 429
-tests/js/picker.js 343
+tests/js/picker.js 370
 tests/picker-grid.qml 450
-tests/picker-hunt.qml 447
-tests/picker-040.qml 603
+tests/picker-hunt.qml 448
+tests/picker-040.qml 748
 tests/js/network.js 307
 tests/js/ops.js 569
 tests/js/slowclick.js 309
@@ -167,7 +167,7 @@ ui/js/Drag.js 343
 ui/js/Ops.js 480
 ui/js/Search.js 359
 ui/js/Mounts.js 298
-ui/js/Picker.js 314
+ui/js/Picker.js 332
 ui/js/Settings.js 459
 ui/js/Scroll.js 304
 ui/js/Tabs.js 717

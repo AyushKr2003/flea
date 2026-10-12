@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import Quickshell
+import qs.Commons
 import "flea" as Flea
 import "flea/js/Keymap.js" as Keymap
 
@@ -119,13 +120,13 @@ ShellRoot {
         }
         return n - 1
     }
-    // Cancel or the answer in the answer row only; the save area's collision card has buttons of its own.
+    // Cancel or the answer, in the answer row only; the answer is destructive while a collision review stands.
     function answerButtons() {
         var bar = root.typed("PickerAnswers")
         return bar ? root.descendants(bar).filter(function(item) { return item.tabHandle !== undefined && item.label !== undefined }) : []
     }
-    function cancelButton() { return root.answerButtons().filter(function(item) { return !item.primary })[0] }
-    function acceptButton() { return root.answerButtons().filter(function(item) { return item.primary })[0] }
+    function cancelButton() { return root.answerButtons().filter(function(item) { return item.label === "Cancel" })[0] }
+    function acceptButton() { return root.answerButtons().filter(function(item) { return item.label !== "Cancel" })[0] }
     function at(item, x, y) { return item.mapToItem(win.contentItem, x, y) }
     function near(a, b) { return Math.abs(a - b) <= 1 }
     function within(item, ancestor) {
@@ -159,6 +160,153 @@ ShellRoot {
         root.check("Cancel sits one gap left of the answer", root.near(root.at(cancel, cancel.width, 0).x + Flea.Theme.spacing.gap, root.at(accept, 0, 0).x), true)
         root.check("the buttons are the 30 px body control", [cancel.height, accept.height], [30, 30])
     }
+    // The 0.3.10 save area: the column under the listing, the collision review, the marked rows and the Tab walk.
+    property bool expectAnswer: false
+    readonly property var saveScenarios: ["collision", "replace", "replace-button", "cancel", "tab", "marked"]
+    property real listingBefore: 0
+    property int objectsBefore: 0
+    property var walkOrder: []
+    // The save area and the answer row, where a collision shows its line and its answer; the grid's thumbnails keep arriving elsewhere.
+    function saveObjects(form) { return root.objectsUnder(form) + root.objectsUnder(root.typed("PickerAnswers")) }
+    function saveForm() { return root.typed("PickerSave") }
+    function replaceButton() { return root.answerButtons().filter(function(item) { return item.label === "Replace" })[0] || null }
+    function visibleTexts(text) {
+        return root.descendants(win.contentItem).filter(function(item) { return item.visible && item.text === text })
+    }
+    // Focus the field and press Enter on a name that exists: the review starts.
+    function startReview(form) {
+        form.fieldItem.forceActiveFocus(Qt.TabFocusReason)
+        root.press(Qt.Key_Return)
+    }
+    function saveColumn(form) {
+        var label = root.visibleTexts("Filename")[0]
+        var frame = form.fieldItem.parent
+        root.check("Filename is 9 above the field", root.near(root.at(frame, 0, 0).y - root.at(label, 0, label.height).y, Flea.Theme.spacing.gap), true)
+        root.check("the field is the area less 14 each side", [frame.width, root.near(root.at(frame, 0, 0).x, Flea.Theme.spacing.rowPaddingX)], [form.width - 2 * Flea.Theme.spacing.rowPaddingX, true])
+        root.check("the field is the 30 px control height", frame.height, root.acceptButton().height)
+        root.check("no Output URI item exists", [form.uriItem === undefined, root.visibleTexts("Output URI").length], [true, 0])
+        root.check("a save draws no error line at rest", form.statusItem.visible, false)
+        root.check("a save answers Save in the primary role", [root.acceptButton().label, root.acceptButton().destructive], ["Save", false])
+        root.check("a save answers under the save area", root.near(root.at(root.typed("PickerAnswers"), 0, 0).y, root.at(form, 0, form.height).y), true)
+        // The board draws field, 9, the answer row in one column: no second rule, and 9 from the field to the buttons.
+        var answers = root.typed("PickerAnswers")
+        var rule = root.descendants(answers).filter(function(item) { return item.visible && item.color !== undefined && item.height === Flea.Theme.spacing.hairline && item.width === answers.width })
+        root.check("a save has no rule between the field and the answers", rule.length, 0)
+        root.check("a save puts the answers 9 under the field", root.near(root.at(root.cancelButton(), 0, 0).y - root.at(frame, 0, frame.height).y, Flea.Theme.spacing.gap), true)
+        root.check("a save answer row is 9, the buttons and 14", root.near(answers.height, Flea.Theme.spacing.gap + root.cancelButton().height + Flea.Theme.spacing.rowPaddingX), true)
+    }
+    function reviewShown(form) {
+        var field = form.fieldItem
+        var frame = field.parent
+        var line = form.statusItem
+        var replace = root.replaceButton()
+        root.check("the review keeps the picker open", [win.answered, win.submitting], [false, false])
+        root.check("focus returns to Filename", field.activeFocus, true)
+        root.check("exactly the stem is selected", [field.selectedText, field.selectionStart, field.selectionEnd, field.cursorPosition], ["a", 0, 1, 1])
+        root.check("the error line names the file", line.text, "a.txt already exists here.")
+        root.check("the error line is the error role at caption", [Qt.colorEqual(line.color, Flea.Theme.color.error), line.font.pixelSize], [true, Flea.Theme.font.caption])
+        root.check("the error line is 9 under the field", root.near(root.at(line, 0, 0).y - root.at(frame, 0, frame.height).y, Flea.Theme.spacing.gap), true)
+        root.check("the listing gave up the error line's row", root.near(root.listingBefore - win.viewItem().height, line.height + Flea.Theme.spacing.gap), true)
+        root.check("the answer relabels to Replace in the error ink", replace !== null && [replace.destructive, replace.primary, Qt.colorEqual(replace.ink, Flea.Theme.color.error)], [true, false, true])
+        root.check("Cancel stays the secondary answer", [root.cancelButton().label, root.cancelButton().destructive], ["Cancel", false])
+        root.check("the answer row holds two buttons", root.answerButtons().length, 2)
+        root.check("no second line and no Use this location", root.descendants(win.contentItem).filter(function(item) {
+            return typeof item.text === "string" && item.text.indexOf("This confirms") >= 0 || item.label === "Use this location" }).length, 0)
+        root.check("the review builds no new item", root.saveObjects(form), root.objectsBefore)
+    }
+    function saveStep() {
+        var form = root.saveForm()
+        var tabbing = scenario === "tab"
+        if (scenario === "marked") { root.markedStep(); return }
+        if (stage === 0) {
+            if (!win.saveReady || (!tabbing && !win.saveCollision)) return
+            if (tabbing) {
+                win.open(win.path + "/sub")
+                root.stage = 10
+                root.stamp = Date.now()
+                return
+            }
+            root.saveColumn(form)
+            root.listingBefore = win.viewItem().height
+            root.objectsBefore = root.saveObjects(form)
+            root.startReview(form)
+            root.stage = 1
+            root.stamp = Date.now()
+            return
+        }
+        if (stage === 1) {
+            if (!form.statusItem.visible) return
+            root.reviewShown(form)
+            if (scenario === "collision") {
+                root.press(Qt.Key_X)
+                root.stage = 2
+                root.stamp = Date.now()
+                return
+            }
+            root.expectAnswer = true
+            root.stage = 3
+            if (scenario === "replace") root.press(Qt.Key_Return)
+            else if (scenario === "replace-button") { root.replaceButton().forceActiveFocus(Qt.TabFocusReason); root.press(Qt.Key_Return) }
+            else { root.cancelButton().forceActiveFocus(Qt.TabFocusReason); root.press(Qt.Key_Return) }
+            return
+        }
+        if (stage === 2) {
+            // The area settles over a few polls, so the geometry is read after them.
+            if (win.saveName !== "x.txt" || Date.now() - root.stamp < root.pollIntervalMs * 5) return
+            root.check("typing ends the review in one frame", [form.statusItem.visible, form.statusItem.text, root.acceptButton().label, root.acceptButton().destructive], [false, "", "Save", false])
+            root.check("typing gives the row back to the listing", win.viewItem().height, root.listingBefore)
+            root.finish()
+            return
+        }
+        if (stage === 10) {
+            if (win.path.indexOf("/sub") < 0 || win.listingState !== "ready" || !win.saveReady || !root.acceptButton().available) return
+            var chrome = root.typed("PickerChrome").focusItems()
+            root.walkOrder = chrome.concat([root.typed("PickerPlaces").focusItem, win.viewItem(), form.fieldItem, root.typed("PickerFilter"), root.cancelButton(), root.acceptButton()])
+            chrome[0].forceActiveFocus(Qt.TabFocusReason)
+            if (!chrome[0].activeFocus) return
+            var names = ["Back", "Up", "Rail", "List", "Filename", "Filter", "Cancel", "Answer"]
+            // A list or a rail hands the key focus to a row or a content item inside it, so a stop is the item or what holds the focused one.
+            function stopName(item) { var at = root.walkOrder.findIndex(function(stop) { return root.within(item, stop) }); return at >= 0 ? names[at] : String(item) }
+            var seen = []
+            for (var i = 0; i < root.walkOrder.length; i++) {
+                root.press(Qt.Key_Tab)
+                seen.push(stopName(win.contentItem.Window.window.activeFocusItem))
+            }
+            root.check("Tab from Back visits Up, the rail, the list, Filename, the filter, Cancel and the answer once each, then Back", seen, names.slice(1).concat(names[0]))
+            var back = []
+            for (var j = 0; j < root.walkOrder.length; j++) {
+                root.press(Qt.Key_Backtab, Qt.ShiftModifier)
+                back.push(stopName(win.contentItem.Window.window.activeFocusItem))
+            }
+            root.check("Shift+Tab walks the same order backwards", back, names.slice().reverse().slice(0, 7).concat(names[0]))
+            root.finish()
+        }
+    }
+    // Three files marked by the picker's own toggle: a marked row takes the selection fill and no accent bar.
+    function markedStep() {
+        if (win.viewMode !== "list") { root.finish(); return }
+        if (win.markRequest) return
+        if (win.marks.length < root.markedFiles) {
+            win.toggleMark(root.rowIndex(["a.txt", "b.txt", "c.txt"][win.marks.length]))
+            return
+        }
+        var list = win.viewItem()
+        var marked = list.itemAtIndex(root.rowIndex("b.txt"))
+        var plain = list.itemAtIndex(root.rowIndex("e.txt"))
+        function fills(row, color) {
+            return Array.prototype.slice.call(row.children).filter(function(item) { return item.visible && item.color !== undefined && Qt.colorEqual(item.color, color) && item.width === list.width }).length
+        }
+        function bars(row) {
+            return Array.prototype.slice.call(row.children).filter(function(item) { return item.visible && item.color !== undefined && item.width === 2 * Flea.Theme.spacing.hairline && Qt.colorEqual(item.color, Flea.Theme.color.accent) }).length
+        }
+        root.check("a marked row's fill is the selection fill", fills(marked, Style.selectionFill), 1)
+        root.check("a marked row has no accent wash", fills(marked, Style.selectedAccentFill), 0)
+        root.check("a marked row draws no 2 px accent bar", bars(marked), 0)
+        root.check("an unmarked row draws neither", [fills(plain, Style.selectionFill), bars(plain)], [0, 0])
+        root.check("the answer reads Open 3", root.acceptButton().label, "Open 3")
+        root.finish()
+    }
+
     function answersStep() {
         var accept = root.acceptButton()
         var trigger = root.typed("PickerFilter")
@@ -339,6 +487,17 @@ ShellRoot {
         }
     }
 
+    // A save answer writes its reply and ends this process, so the verdict goes out on the flag; tests/picker-040.sh reads the reply.
+    Connections {
+        target: root.win
+        enabled: root.expectAnswer
+        function onAnsweredChanged() {
+            if (!root.win.answered) return
+            root.check("the picker answered", root.win.answered, true)
+            root.verdict()
+        }
+    }
+
     Timer {
         interval: root.pollIntervalMs
         running: true
@@ -356,6 +515,7 @@ ShellRoot {
             }
             if (!win || win.listingState !== "ready" || !win.rows.length) return
             if (scenario === "answers" || scenario === "single") { root.answersStep(); return }
+            if (root.saveScenarios.indexOf(scenario) >= 0) { root.saveStep(); return }
             if (stage === 0) {
                 if (win.saving && !win.saveReady) return
                 var rowIndex = win.rows.findIndex(function(row) { return row.n === "a.txt" })
@@ -371,8 +531,6 @@ ShellRoot {
                 if (scenario === "path") {
                     root.check("Ctrl+L maps to pathBar", Keymap.lookup(Qt.Key_L, "l", Qt.ControlModifier, "listing"), "pathBar")
                     root.press(Qt.Key_L, Qt.ControlModifier)
-                } else if (scenario === "collision") {
-                    win.accept()
                 } else {
                     root.press(Qt.Key_L, Qt.ControlModifier)
                 }
@@ -403,20 +561,7 @@ ShellRoot {
                     // A relative climb typed through the same keys the board counts.
                     root.typeText("..")
                     root.press(Qt.Key_Return)
-                } else if (scenario === "collision") {
-                    var form = root.descendants(win.contentItem).filter(function(item) {
-                        return item.fieldItem !== undefined && item.askedName !== undefined
-                    })[0]
-                    root.check("collision focuses Filename", form.fieldItem.activeFocus, true)
-                    root.check("collision selects filename stem", form.fieldItem.selectedText, "a")
-                    var labels = form.controls().filter(function(item) { return item.visible }).map(function(item) { return item.name })
-                    root.check("collision offers Replace", labels.indexOf("Replace") >= 0, true)
-                    // The answer row stands under the save area in every mode; only the buttons moved out of the title strip.
-                    root.check("a save's answer row sits under the save area", root.near(root.at(root.typed("PickerAnswers"), 0, 0).y, root.at(form, 0, form.height).y), true)
-                    root.check("a save answers Save", root.acceptButton().label, "Save")
-                    root.check("a save keeps Cancel in the answer row", root.cancelButton().label, "Cancel")
                 }
-                if (scenario === "collision") { root.finish(); return }
                 root.stage = 2
                 root.stamp = Date.now()
                 return
