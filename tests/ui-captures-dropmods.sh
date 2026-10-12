@@ -47,7 +47,7 @@ cap_dropmods_wait_file() {
     [[ "$#" -eq 1 ]] || fail "cap_dropmods: wait_file needs a path, got $#"
     local end=$((SECONDS + 15))
     while (( SECONDS < end )); do [[ -e "$1" ]] && return 0; sleep 0.1; done
-    fail "cap_dropmods: $1 never landed"
+    fail "cap_dropmods: $1 never landed (said $(ipc lastMessage 2>/dev/null); found at $(find "$fixture_root" -maxdepth 3 -name "$(basename "$1")" | tr '\n' ' '))"
 }
 cap_dropmods_wait_gone() {
     [[ "$#" -eq 1 ]] || fail "cap_dropmods: wait_gone needs a path, got $#"
@@ -149,6 +149,8 @@ case_cap_dropmods() {
     sleep 0.5
     seen=$(focused_pid)
     [[ "$seen" == "$win2" ]] || { cap_dropmods_abandon; fail "cap_dropmods: focus never followed the drag to qs pid $win2 (the active window is $seen), so no mid-drag key could reach it"; }
+    # Win2 must show the hover line before Ctrl, or the release can land on its listing floor.
+    ipc_pid="$win2"; cap_drops_wait_target "Move 1 item to sub2 · ctrl at lift copies"; ipc_pid="$win1"
     cap_dropmods_key 29 1
     cap_dropmods_release
     cap_dropmods_key 29 0
@@ -174,6 +176,7 @@ case_cap_dropmods() {
     sleep 0.5
     seen=$(focused_pid)
     [[ "$seen" == "$win2" ]] || { cap_dropmods_abandon; fail "cap_dropmods: focus never followed the drag to qs pid $win2 (the active window is $seen), so no mid-drag key could reach it"; }
+    ipc_pid="$win2"; cap_drops_wait_target "Copy 1 item to sub2"; ipc_pid="$win1"
     cap_dropmods_key 29 0
     cap_dropmods_key 42 1
     cap_dropmods_release

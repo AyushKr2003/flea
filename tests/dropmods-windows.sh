@@ -212,5 +212,30 @@ hotkey --global ctrl t flea
     && ok "a hotkey on the pinned window is sent as written" || bad "the hotkey argv must be unchanged, got: $(paste -sd'|' "$box/argv")"
 ipc_pid=""
 
+# Every glide ends with the 1 px out-and-back from inside the target, so the move
+# crossing into the other window is never the last motion its Qt surface sees.
+. tests/lib/pointer-glide.sh
+glide_pos="0, 0"
+hyprctl() {
+    case "$*" in
+        "cursorpos") printf '%s\n' "$glide_pos" ;;
+        "clients -j") printf '%s\n' "$clients" ;;
+        "activewindow -j") printf '{"class":"%s","pid":%s}\n' "$active_class" "$active" ;;
+        *) return 1 ;;
+    esac
+}
+ydotool() {
+    printf '%s\n' "$*" >> "$box/glide-argv"
+    # The first move crosses into the target, as libinput's gain does mid-drag.
+    glide_pos="100, 100"
+    return 0
+}
+glide_red() { pointer_glide 100 100; }
+: > "$box/glide-argv"
+glide_red
+[ "$(tail -n 2 "$box/glide-argv")" = "$(printf 'mousemove -x 1 -y 0\nmousemove -x -1 -y 0')" ] \
+    && ok "a glide landing on its crossing move still ends with the out-and-back" \
+    || bad "the argv log must end with the 1 px out-and-back, got: $(paste -sd'|' "$box/glide-argv")"
+
 [ "$failed" = 0 ] || exit 1
 printf 'DROPMODSWINDOWS DONE\n'

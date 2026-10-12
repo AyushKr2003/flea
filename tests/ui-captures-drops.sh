@@ -68,7 +68,7 @@ cap_drops_undo_copy() {
     [[ "$#" -eq 1 ]] || fail "cap_drops: undo_copy needs a path, got $#"
     local gone="$1" end=$((SECONDS + cap_drops_wait_s))
     while (( SECONDS < end )); do [[ -e "$gone" ]] && break; sleep 0.1; done
-    [[ -e "$gone" ]] || fail "cap_drops: the drop never landed $gone, so z has no drop to undo"
+    [[ -e "$gone" ]] || fail "cap_drops: the drop never landed $gone, so z has no drop to undo (said $(ipc lastMessage 2>/dev/null); found at $(find "$fixture_root" -maxdepth 3 -name "$(basename "$gone")" | tr '\n' ' '))"
     key z >/dev/null
     end=$((SECONDS + cap_drops_wait_s))
     while (( SECONDS < end )); do
