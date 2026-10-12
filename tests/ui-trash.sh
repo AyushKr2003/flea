@@ -197,26 +197,40 @@ print(unquote(uri.path, errors="strict"))
 PY
 }
 
+# Original paths this test trashed with gio itself; every other row is Flea's own rename.
+declare -gA trash_gio_rows=()
+
+# Judges each row by the one rule that made it, so a row in the other store is refused.
+trash_guard_rows() {
+    local listing="$1" home="$2" uri original backing row_trash
+    trash_guard_count=0
+    trash_guard_dir=""
+    [[ -n "$listing" ]] || return 0
+    # Sample list row: "trash:///a.txt<TAB>/owned/fixture/payload/a.txt".
+    while IFS=$'\t' read -r uri original; do
+        [[ "$uri" == trash:///* && -n "$original" ]] || fail "trash: malformed provider row"
+        trash_guard "$original"
+        # The rules differ when the data home is on another device than HOME; callers whose window runs under another HOME pass it as $2.
+        if [[ -n "${trash_gio_rows[$original]:-}" ]]; then
+            row_trash=$(sandbox_trash_gio_dir "$original" "$home") || fail "trash: no gio trash directory for $original"
+        else
+            row_trash=$(sandbox_trash_files_dir "$original" "$home") || fail "trash: no GLib trash directory for $original"
+        fi
+        backing=$(trash_backing "$uri") || fail "trash: unavailable backing path"
+        trash_guard_backing "$backing" "$row_trash"
+        trash_guard_dir=$row_trash
+        trash_guard_count=$((trash_guard_count + 1))
+    done <<< "$listing"
+}
+
 trash_guard_store() {
-    local expected="$1" listing uri original backing count=0 trash_files="" row_trash
+    local expected="$1" listing
     trash_private
     trash_guard "$XDG_DATA_HOME"
     listing=$(/usr/bin/gio trash --list) || fail "trash: provider listing failed"
-    if [[ -n "$listing" ]]; then
-        # Sample list row: "trash:///a.txt<TAB>/owned/fixture/payload/a.txt".
-        while IFS=$'\t' read -r uri original; do
-            [[ "$uri" == trash:///* && -n "$original" ]] || fail "trash: malformed provider row"
-            trash_guard "$original"
-            # The trash GLib used for this row follows the original's own device; callers whose window runs under another HOME pass it as $2.
-            row_trash=$(sandbox_trash_files_dir "$original" "${2:-$HOME}") || fail "trash: no GLib trash directory for $original"
-            backing=$(trash_backing "$uri") || fail "trash: unavailable backing path"
-            trash_guard_backing "$backing" "$row_trash"
-            trash_files=$row_trash
-            count=$((count + 1))
-        done <<< "$listing"
-    fi
-    [[ "$count" -eq "$expected" ]] || fail "trash: expected $expected private entries, found $count"
-    printf 'TRASH_GUARD count=%s backing=%s bus=%s\n' "$count" "$trash_files" "$trash_private_bus_id"
+    trash_guard_rows "$listing" "${2:-$HOME}"
+    [[ "$trash_guard_count" -eq "$expected" ]] || fail "trash: expected $expected private entries, found $trash_guard_count"
+    printf 'TRASH_GUARD count=%s backing=%s bus=%s\n' "$trash_guard_count" "$trash_guard_dir" "$trash_private_bus_id"
 }
 
 trash_wait() {
@@ -611,7 +625,7 @@ trash_failure_status() {
 }
 
 trash_restore_failures() {
-    local uri backing row original="$trash_box/missing-parent/leaf.txt" trash_files
+    local uri backing row original="$trash_box/missing-parent/leaf.txt" trash_files gio_files
     trash_files=$(sandbox_trash_files_dir "$payload") || fail "trash: no GLib trash directory for $payload"
     trash_guard "$payload/beta.txt"
     (set -o noclobber; printf 'existing destination\n' > "$payload/beta.txt") \
@@ -646,6 +660,10 @@ trash_restore_failures() {
     trash_guard "$original"
     mkdir "$trash_box/missing-parent" || fail "trash: missing-parent fixture creation failed"
     printf 'missing parent survivor\n' > "$original"
+    # The restore under test may fail, and a mount-top entry left behind would outlive this case; gio trashes leaf.txt below.
+    gio_files=$(sandbox_trash_gio_dir "$original") || fail "trash: no gio trash directory for $original"
+    trash_trap_own "$gio_files" "$trash_box" "trash" leaf.txt
+    trash_gio_rows[$original]=1
     trash_guard_store 0
     /usr/bin/gio trash -- "$original" || fail "trash: owned missing-parent setup failed"
     trash_wait '.opened and .total == 1 and (.busy == false)'
@@ -698,8 +716,12 @@ trash_uri() {
 }
 
 trash_stale_confirmations() {
-    local token uri backing identity replacement="$trash_box/replacement-beta" retired="$trash_box/retired-beta" trash_files
+    local token uri backing identity replacement="$trash_box/replacement-beta" retired="$trash_box/retired-beta" trash_files gio_files
     trash_files=$(sandbox_trash_files_dir "$payload") || fail "trash: no GLib trash directory for $payload"
+    gio_files=$(sandbox_trash_gio_dir "$payload") || fail "trash: no gio trash directory for $payload"
+    # arrival.txt is trashed by gio below, so an early failure must not leave it in a mount-top trash.
+    trash_trap_own "$gio_files" "$payload" "trash" arrival.txt
+    trash_gio_rows[$payload/arrival.txt]=1
     trash_empty_strip
     trash_shot trash-empty-confirm-cancel
     trash_guard_store 1
@@ -775,7 +797,7 @@ trash_stale_confirmations() {
     trash_guard_store 1
     uri=$(trash_uri "$payload/arrival.txt")
     backing=$(trash_backing "$uri") || fail "trash: unrelated arrival lost backing"
-    trash_guard_backing "$backing"
+    trash_guard_backing "$backing" "$gio_files"
     [[ "$(cat "$backing")" == 'later arrival' && "$(cat "$retired")" == beta ]] \
         || fail "trash: selected deletion changed an unrelated fixture"
     trash_empty_confirmed 1
@@ -787,10 +809,11 @@ trash_stale_confirmations() {
 # trash_guard refuses any path outside it.
 trash_sweep_case() {
     local info recent old_one old_two swept day trash_files trash_info
-    # GLib trashes to the home store or the fixture mount's top trash by device.
-    trash_files=$(sandbox_trash_files_dir "$payload") || fail "trash: no GLib trash directory for $payload"
+    # The fixture is trashed by gio, which follows HOME's device.
+    trash_files=$(sandbox_trash_gio_dir "$payload") || fail "trash: no gio trash directory for $payload"
     trash_trap_own "$trash_files" "$payload" "trash" keep.txt stale-one.txt stale-two.txt
     for name in keep.txt stale-one.txt stale-two.txt; do
+        trash_gio_rows[$payload/$name]=1
         printf '%s\n' "$name" > "$payload/$name"
         /usr/bin/gio trash -- "$payload/$name" || fail "trash: sweep fixture could not be trashed"
     done

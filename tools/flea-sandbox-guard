@@ -248,19 +248,25 @@ sandbox_cache_require() {
   return 0
 }
 
-# The files directory the trash lands in: the home Trash where the backend renames in-process or GLib keeps it home, else the item mount's top trash.
+# The files directory a direct gio trash lands in: GLib compares the item with HOME's device only, so it ignores a data home on another device.
+sandbox_trash_gio_dir() { sandbox_trash_files_dir "${1:-}" "${2:-${HOME:-}}" gio; }
+
+# The files directory the trash lands in: the home Trash where the backend renames in-process (not with rule "gio") or GLib keeps it home, else the item mount's top trash.
 sandbox_trash_files_dir() {
-  local item="${1:-}" home="${2:-${HOME:-}}" parent idev hdev data top uid globaldir candidate owner folder fdev odev ancestor tdev
+  local item="${1:-}" home="${2:-${HOME:-}}" rule="${3:-}" parent idev hdev data top uid globaldir candidate owner folder fdev odev ancestor tdev
   [ -n "$item" ] || return 1
   [ -n "$home" ] || return 1
-  if [ -d "$item" ]; then parent=$item; else parent=$(dirname -- "$item" 2>/dev/null) || return 1; fi
+  folder=$(dirname -- "$item" 2>/dev/null) || return 1
+  [ -n "$folder" ] || return 1
+  # A folder that was moved away still lies on its old device, so the nearest existing ancestor stands in for it.
+  while [ ! -e "$folder" ] && [ "$folder" != / ] && [ "$folder" != . ]; do folder=$(dirname -- "$folder" 2>/dev/null) || return 1; done
+  if [ -d "$item" ]; then parent=$item; else parent=$folder; fi
   [ -n "$parent" ] || return 1
   idev=$(stat -c %d -- "$parent" 2>/dev/null) || return 1
   hdev=$(stat -c %d -- "$home" 2>/dev/null) || return 1
   [ -n "$idev" ] && [ -n "$hdev" ] || return 1
   data=${XDG_DATA_HOME:-$home/.local/share}
   # Mirrors src/backend/hometrash.rs same_filesystem: the item's folder against the nearest existing folder at or above the home Trash.
-  folder=$(dirname -- "$item" 2>/dev/null) || return 1
   fdev=$(stat -L -c %d -- "$folder" 2>/dev/null) || fdev=""
   # The item's own device (lstat) must equal its folder's, so a nested volume goes to gio; a symlink item is judged as the link itself, which GLib trashes in place of its target, and an absent item passes.
   odev=$(stat -c %d -- "$item" 2>/dev/null) || odev=$fdev
@@ -272,7 +278,7 @@ sandbox_trash_files_dir() {
       tdev=$(stat -L -c %d -- "$ancestor" 2>/dev/null) || tdev=""
       ;;
   esac
-  if [ "$idev" = "$hdev" ] || { [ -n "$fdev" ] && [ -n "$tdev" ] && [ "$fdev" = "$tdev" ] && [ "$odev" = "$fdev" ]; }; then
+  if [ "$idev" = "$hdev" ] || { [ "$rule" != gio ] && [ -n "$fdev" ] && [ -n "$tdev" ] && [ "$fdev" = "$tdev" ] && [ "$odev" = "$fdev" ]; }; then
     case "$data" in /*) ;; *) return 1 ;; esac
     printf '%s/Trash/files\n' "$data"
     return 0
