@@ -8931,6 +8931,8 @@ The release-line join of the approved fix, bench, search, picker and Flash strip
 
 The Network Tab ring moves three ceilings, each re-derived with `wc -l`: `ui/NetworkDialog.qml` 447 to 457 for the ids, `tabHandle` and `onTabbed` lines that put Cancel, the primary and Install Dropbox in the form's walk after the TLS box, with Escape moved from the form to the card's content so a focused button closes the dialog too, and `ui/NetworkForm.qml` 406 to 413 for the `trailing` prop, the joined ring, the pass-over step and the button labels in `focusName`, and `tests/button-members.qml` 445 to 485 for the trailing-walk checks that Tab from TLS reaches each button and wraps to the first chip, Backtab returns, an unavailable button is passed over and `focusName` names the focused button.
 
+Quick Look's owed thumbnail settles through the planner: `ui/Preview.qml` asks for the row's thumbnail once a show owes one and swaps it in when the reply lands, which moves `tests/startup-units.txt`'s `bytes` line from 1596965 to 1597347, the sum the probe's tool takes over the same 170 units.
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one
