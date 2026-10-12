@@ -98,9 +98,11 @@ struct Pass {
     epoch: AtomicUsize,
     // Raised when a bounded chunk fails and leaves rows unread, so the answer stays partial until a retry reads them; a patch that only adds rows never raises it.
     unread_failed: AtomicBool,
-    // Test seam: attribute reads this pass made, so a query with no tag term can pin zero.
+    // Test seams: attribute reads this pass made, so a query with no tag term can pin zero; and a gate that holds the worker before its first chunk.
     #[cfg(test)]
     reads: AtomicUsize,
+    #[cfg(test)]
+    held: AtomicBool,
 }
 
 impl Pass {
@@ -117,6 +119,8 @@ impl Pass {
             unread_failed: AtomicBool::new(false),
             #[cfg(test)]
             reads: AtomicUsize::new(0),
+            #[cfg(test)]
+            held: AtomicBool::new(false),
         })
     }
 }
@@ -129,6 +133,9 @@ pub(crate) struct Tags {
     whole: bool,
     // The unread retry's stamp: a new query or a patch arms it, the retry spends it, so its own landing never queues another.
     armed: bool,
+    // Test seam: the next pass starts held.
+    #[cfg(test)]
+    hold: bool,
 }
 
 impl Drop for Tags {
@@ -141,7 +148,7 @@ impl Drop for Tags {
 
 impl Tags {
     pub(crate) fn new(events: Sender<Event>) -> Tags {
-        Tags { pass: None, events, whole: true, armed: true }
+        Tags { pass: None, events, whole: true, armed: true, #[cfg(test)] hold: false }
     }
 
     // A new query lets the unread retry fire once more.
@@ -213,13 +220,15 @@ impl Tags {
             None => {
                 let len = index.lock().unwrap().len();
                 let pass = Pass::new(len, Bound::new(scope, body));
+                #[cfg(test)]
+                pass.held.store(self.hold, Ordering::Relaxed);
                 let (worker, index, events) = (Arc::clone(&pass), Arc::clone(index), self.events.clone());
                 std::thread::spawn(move || read_all(&worker, &index, len, &events));
                 self.pass = Some(Arc::clone(&pass));
                 pass
             }
         };
-        // A failed bounded chunk left rows unread: the answer stays partial and the missing rows are queued for a re-read, so a later query can read them again. Rows a patch added without any failure keep the old whole answer.
+        // A failed bounded chunk left rows unread: the answer stays partial and the missing rows are queued for one re-read per query. Rows a patch added without any failure keep the old whole answer.
         if pass.done.load(Ordering::Relaxed) && pass.unread_failed.load(Ordering::Relaxed) {
             let unread: Vec<bool> = pass.names.lock().unwrap().iter().map(Option::is_none).collect();
             let missing: Vec<Vec<u8>> = {
@@ -233,7 +242,8 @@ impl Tags {
                 if std::mem::take(&mut self.armed) {
                     self.refresh(missing, index);
                 }
-                return true;
+                // Walking only while a read is in flight: a spent retry leaves the answer final and partial until a query or patch re-arms.
+                return pass.rewrites.lock().unwrap().busy;
             }
         }
         self.whole = pass.done.load(Ordering::Relaxed);
@@ -292,6 +302,10 @@ impl Session {
 // The worker: each indexed row's tags once, in chunks, then the landing event the loop answers the standing query on.
 fn read_all(pass: &Pass, index: &Mutex<Index>, len: usize, events: &Sender<Event>) {
     let mut row = 0;
+    #[cfg(test)]
+    while pass.held.load(Ordering::Acquire) && !pass.stop.load(Ordering::Relaxed) {
+        std::thread::yield_now();
+    }
     while row < len {
         if pass.stop.load(Ordering::Relaxed) {
             return;
