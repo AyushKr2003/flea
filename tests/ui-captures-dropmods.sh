@@ -39,6 +39,8 @@ cap_dropmods_release() {
 # statusActivityState prints {"activities":[{"id":3,"text":"Copy 1 item to sub","running":false,...}],...}.
 cap_dropmods_before="[]"
 cap_dropmods_wait_s=15
+# A copy or move across two windows says its message after the transfer, as ui.sh wait_message allows.
+cap_dropmods_message_s=25
 cap_dropmods_mark() {
     cap_dropmods_before=$(ipc statusActivityState | jq -ce '[.activities[].id]') || fail "cap_dropmods: statusActivityState unreadable at the mark"
 }
@@ -57,7 +59,11 @@ cap_dropmods_wait_line() {
 # A press that lands on the parked probe starts no drag, so a probe covering the source point fails the case before the press.
 cap_dropmods_probe_clear_of() {
     [[ "$#" -eq 2 ]] || fail "cap_dropmods: probe_clear_of needs x and y, got $#"
-    hyprctl clients -j 2>/dev/null | jq -e --argjson x "$1" --argjson y "$2" '[.[] | select(.title == "DropProbe")] | select(length == 1) | .[0]
+    local found
+    found=$(hyprctl clients -j 2>/dev/null | jq -er '[.[] | select(.title == "DropProbe")] | length') \
+        || fail "cap_dropmods: hyprctl clients was unreadable, so the parked probe could not be located"
+    [[ "$found" == "1" ]] || fail "cap_dropmods: expected one parked DropProbe window, found $found"
+    hyprctl clients -j 2>/dev/null | jq -e --argjson x "$1" --argjson y "$2" '[.[] | select(.title == "DropProbe")] | .[0]
         | (.at[0] <= $x and $x < .at[0] + .size[0] and .at[1] <= $y and $y < .at[1] + .size[1]) | not' >/dev/null \
         || fail "cap_dropmods: the parked probe covers the source point $1,$2, so the press would miss the row"
 }
@@ -98,14 +104,66 @@ cap_dropmods_addr_of_pid() {
         '[.[] | select(.class == "com.thisisgm.flea" and .pid == $pid)] | select(length == 1) | .[0].address' \
         || fail "cap_dropmods: no client address for qs pid $1"
 }
+# The ipc and key helpers of ui.sh answer for the newest window or refuse two, so a two-window phase reads each window through its own pid.
+# Sample input: cap_dropmods_ipc 4242 rowAt 3 prints "b1.txt|..." from the window whose qs pid is 4242.
+cap_dropmods_ipc() {
+    [[ "$#" -ge 2 ]] || fail "cap_dropmods: ipc needs a pid and a method, got $#"
+    local pid="$1"; shift
+    timeout 3 qs ipc --pid "$pid" call flea "$@" 2>/dev/null
+}
+# The compositor's focused window, the one fact the newest-window ipc cannot tell.
+cap_dropmods_active_pid() {
+    hyprctl activewindow -j 2>/dev/null | jq -er '.pid' 2>/dev/null || printf unavailable
+}
+cap_dropmods_wait_total() {
+    [[ "$#" -eq 2 ]] || fail "cap_dropmods: wait_total needs a pid and a total, got $#"
+    local total="" flight="" end=$((SECONDS + cap_dropmods_wait_s))
+    while (( SECONDS < end )); do
+        total=$(cap_dropmods_ipc "$1" total || printf unavailable)
+        flight=$(cap_dropmods_ipc "$1" listInFlight || printf unavailable)
+        [[ "$total" == "$2" && "$flight" == "false" ]] && return 0
+        sleep 0.05
+    done
+    fail "cap_dropmods: window $1 never settled at $2 rows, total=$total inFlight=$flight"
+}
+# Prints the screen centre of a named row of one window: its rowCentre plus that window's origin.
+cap_dropmods_row_centre() {
+    [[ "$#" -eq 2 ]] || fail "cap_dropmods: row_centre needs a pid and a name, got $#"
+    local total i row cx cy wx wy ww wh
+    total=$(cap_dropmods_ipc "$1" total) || fail "cap_dropmods: window $1 answers no total"
+    [[ "$total" =~ ^[0-9]+$ ]] || fail "cap_dropmods: window $1 total is '$total'"
+    for (( i = 0; i < total; i++ )); do
+        row=$(cap_dropmods_ipc "$1" rowAt "$i")
+        [[ "$row" == "$2|"* ]] || continue
+        read -r cx cy <<< "$(cap_dropmods_ipc "$1" rowCentre "$i")"
+        [[ "$cx" =~ ^-?[0-9]+$ && "$cy" =~ ^-?[0-9]+$ ]] || fail "cap_dropmods: window $1 row $2 has no centre"
+        read -r wx wy ww wh <<< "$(cap_dropmods_box "$1")"
+        printf '%s %s\n' "$((cx + wx))" "$((cy + wy))"
+        return 0
+    done
+    fail "cap_dropmods: window $1 lists no row named $2 among $total"
+}
+# lastMessage of one window, so a message is read from the window that raised it.
+cap_dropmods_wait_message() {
+    [[ "$#" -eq 2 ]] || fail "cap_dropmods: wait_message needs a pid and a text, got $#"
+    local seen="" end=$((SECONDS + cap_dropmods_message_s))
+    while (( SECONDS < end )); do
+        seen=$(cap_dropmods_ipc "$1" lastMessage || true)
+        [[ "$seen" == "$2" ]] && return 0
+        sleep 0.1
+    done
+    fail "cap_dropmods: window $1 never said: $2 (the last thing it said was: $seen)"
+}
 cap_dropmods_focus_pid() {
     [[ "$#" -eq 2 ]] || fail "cap_dropmods: focus needs a pid and a path, got $#"
     local addr seen
     addr=$(cap_dropmods_addr_of_pid "$1")
     hypr_window_focus "$addr" >/dev/null || fail "cap_dropmods: focuswindow $addr refused"
     sleep 0.4
-    seen=$(ipc path 2>/dev/null || printf unavailable)
-    [[ "$seen" == "$2" ]] || fail "cap_dropmods: focus did not land on $2 (ipc says $seen)"
+    seen=$(cap_dropmods_active_pid)
+    [[ "$seen" == "$1" ]] || fail "cap_dropmods: focus did not land on window $1 (the compositor focuses $seen)"
+    seen=$(cap_dropmods_ipc "$1" path || printf unavailable)
+    [[ "$seen" == "$2" ]] || fail "cap_dropmods: window $1 shows $seen, not $2"
 }
 case_cap_dropmods() {
     local dir="$fixture_root/cap-dropmods" dir2="$fixture_root/cap-dropmods-two"
@@ -162,52 +220,38 @@ case_cap_dropmods() {
     cap_dropmods_launch_second "$dir2"
     win2=$(flea_pids | grep -vx "$win1" | head -n 1)
     [[ -n "$win2" ]] || fail "cap_dropmods: the second window has no surviving qs pid"
-    cap_dropmods_focus_pid "$win2" "$dir2"
-    wait_listing 2
-    dst_pt=$(ipc rowCentre "$(row_index_of sub2)"); read -r tx ty <<< "$dst_pt"
-    read -r wx wy ww wh <<< "$(cap_dropmods_box "$win2")"
-    tx=$((tx + wx)); ty=$((ty + wy))
+    cap_dropmods_wait_total "$win2" 2
+    dst_pt=$(cap_dropmods_row_centre "$win2" sub2); read -r tx ty <<< "$dst_pt"
+    cap_dropmods_wait_total "$win1" 6
+    src_pt=$(cap_dropmods_row_centre "$win1" b1.txt); read -r cx cy <<< "$src_pt"
     cap_dropmods_focus_pid "$win1" "$dir"
-    wait_listing 6
-    seek_row_named "b1.txt" || fail "cap_dropmods: b1.txt never came under the cursor"
-    src_pt=$(ipc rowCentre "$(row_index_of b1.txt)"); read -r cx cy <<< "$src_pt"
-    read -r wx wy ww wh <<< "$(cap_dropmods_box "$win1")"
-    cap_dropmods_press_at "$((cx + wx))" "$((cy + wy))"
+    cap_dropmods_press_at "$cx" "$cy"
     cap_dropmods_steer_to "$tx" "$ty"
     sleep 0.5
-    seen=$(ipc path 2>/dev/null || printf unavailable)
-    [[ "$seen" == "$dir2" ]] || { cap_dropmods_abandon; fail "cap_dropmods: focus never followed the drag to $dir2 (ipc says $seen), so no mid-drag key could reach it"; }
+    seen=$(cap_dropmods_active_pid)
+    [[ "$seen" == "$win2" ]] || { cap_dropmods_abandon; fail "cap_dropmods: focus never followed the drag to window $win2 (the compositor focuses $seen), so no mid-drag key could reach it"; }
     cap_dropmods_key 29 1
     cap_dropmods_release
     cap_dropmods_key 29 0
-    cap_dropmods_focus_pid "$win2" "$dir2"
-    wait_message "Copied 1 item · z undoes"
+    cap_dropmods_wait_message "$win2" "Copied 1 item · z undoes"
     cap_dropmods_wait_file "$dir/b1.txt"
     cap_dropmods_wait_file "$dir2/sub2/b1.txt"
     printf 'CAP_DROPMODS b1: cross-window ctrl at drop copies a plain lift\n'
     rm -f "$dir2/sub2/b1.txt"
-    cap_dropmods_focus_pid "$win1" "$dir"
-    seek_row_named "b2.txt" || fail "cap_dropmods: b2.txt never came under the cursor"
-    src_pt=$(ipc rowCentre "$(row_index_of b2.txt)"); read -r cx cy <<< "$src_pt"
-    read -r wx wy ww wh <<< "$(cap_dropmods_box "$win1")"
-    cx=$((cx + wx)); cy=$((cy + wy))
-    cap_dropmods_focus_pid "$win2" "$dir2"
-    dst_pt=$(ipc rowCentre "$(row_index_of sub2)"); read -r tx ty <<< "$dst_pt"
-    read -r wx wy ww wh <<< "$(cap_dropmods_box "$win2")"
-    tx=$((tx + wx)); ty=$((ty + wy))
+    src_pt=$(cap_dropmods_row_centre "$win1" b2.txt); read -r cx cy <<< "$src_pt"
+    dst_pt=$(cap_dropmods_row_centre "$win2" sub2); read -r tx ty <<< "$dst_pt"
     cap_dropmods_focus_pid "$win1" "$dir"
     cap_dropmods_key 29 1
     cap_dropmods_press_at "$cx" "$cy"
     cap_dropmods_steer_to "$tx" "$ty"
     sleep 0.5
-    seen=$(ipc path 2>/dev/null || printf unavailable)
-    [[ "$seen" == "$dir2" ]] || { cap_dropmods_abandon; fail "cap_dropmods: focus never followed the drag to $dir2 (ipc says $seen), so no mid-drag key could reach it"; }
+    seen=$(cap_dropmods_active_pid)
+    [[ "$seen" == "$win2" ]] || { cap_dropmods_abandon; fail "cap_dropmods: focus never followed the drag to window $win2 (the compositor focuses $seen), so no mid-drag key could reach it"; }
     cap_dropmods_key 29 0
     cap_dropmods_key 42 1
     cap_dropmods_release
     cap_dropmods_key 42 0
-    cap_dropmods_focus_pid "$win2" "$dir2"
-    wait_message "Moved 1 item · z undoes"
+    cap_dropmods_wait_message "$win2" "Moved 1 item · z undoes"
     cap_dropmods_wait_file "$dir2/sub2/b2.txt"
     cap_dropmods_wait_gone "$dir/b2.txt"
     printf 'CAP_DROPMODS b2: cross-window shift at drop moves a ctrl lift\n'

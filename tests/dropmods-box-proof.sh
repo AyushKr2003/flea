@@ -16,12 +16,38 @@ cleanup() { sandbox_remove "$test_root"; }
 trap cleanup EXIT
 
 mkdir -p "$test_root/bin" || exit 1
-# The fake compositor answers clients -j with two windows, so the pid select is pinned.
+# The fake compositor answers clients -j from a file (two Flea windows and the probe), so the pid select is pinned; activewindow answers the focused pid.
+printf '%s' '[{"class":"com.thisisgm.flea","address":"0x5","pid":5,"at":[10,20],"size":[800,600]},{"class":"com.thisisgm.flea","address":"0x9","pid":9,"at":[30,40],"size":[640,480]},{"class":"qml6","title":"DropProbe","address":"0x7","pid":7,"at":[100,100],"size":[420,300]}]' > "$test_root/clients.json" || exit 1
+printf '9\n' > "$test_root/active-pid" || exit 1
 cat > "$test_root/bin/hyprctl" <<'EOF'
 #!/usr/bin/env bash
-printf '%s' '[{"class":"com.thisisgm.flea","pid":5,"at":[10,20],"size":[800,600]},{"class":"com.thisisgm.flea","pid":9,"at":[30,40],"size":[640,480]},{"class":"qml6","title":"DropProbe","pid":7,"at":[100,100],"size":[420,300]}]'
+case "$1" in
+  activewindow) [[ -s "$XDG_RUNTIME_DIR/active-fail" ]] && exit 1; printf '{"class":"com.thisisgm.flea","pid":%s}' "$(cat "$XDG_RUNTIME_DIR/active-pid")" ;;
+  *) [[ -s "$XDG_RUNTIME_DIR/clients-fail" ]] && exit 1; cat "$XDG_RUNTIME_DIR/clients.json" ;;
+esac
 EOF
 chmod +x "$test_root/bin/hyprctl" || exit 1
+# The fake qs answers per --pid, so a read that goes to the wrong window gets the wrong answer: pid 5 is the dir window, pid 9 the dir-two window.
+cat > "$test_root/bin/qs" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1" == ipc && "$2" == --pid && "$4" == call && "$5" == flea ]] || exit 2
+pid=$3; method=$6; arg=${7:-}
+case "$pid:$method" in
+  5:total) echo 3 ;;
+  9:total) echo 2 ;;
+  5:listInFlight|9:listInFlight) echo false ;;
+  5:rowAt) case $arg in 0) echo 'a.txt|f' ;; 1) echo 'b1.txt|f' ;; 2) echo 'b2.txt|f' ;; esac ;;
+  9:rowAt) case $arg in 0) echo 'pad.txt|f' ;; 1) echo 'sub2|d' ;; esac ;;
+  5:rowCentre) echo "100 $((40 + arg * 20))" ;;
+  9:rowCentre) echo "200 $((40 + arg * 20))" ;;
+  5:path) echo /fix/dir ;;
+  9:path) echo /fix/dir-two ;;
+  5:lastMessage) echo 'Copied 1 item · z undoes' ;;
+  9:lastMessage) echo 'Opened' ;;
+  *) exit 1 ;;
+esac
+EOF
+chmod +x "$test_root/bin/qs" || exit 1
 # The stub hold never touches hardware: it exits 0 and logs each call for the order checks.
 cat > "$test_root/bin/ydotool" <<'EOF'
 #!/usr/bin/env bash
@@ -46,7 +72,7 @@ window_box() { printf '0 0 800 600\n'; }
 assert_focus() { return 0; }
 pointer_glide() { return 0; }
 settle() { return 0; }
-ipc() { printf '{"opened":false}\n'; }
+ipc() { printf '{"opened":false,"activities":[]}\n'; }
 # Each case runs in a subshell of its own, so a failing case cannot swap out this script's own cleanup trap.
 ylog="$test_root/ydotool.log"
 holdlog="$test_root/hold.log"
@@ -122,6 +148,75 @@ printf 'DROPMODSBOX PASS wait_line=whole-line-and-new-only\n'
 ( fail() { exit 9; }; cap_dropmods_probe_clear_of 200 200 ) >/dev/null 2>&1
 [[ $? -eq 9 ]] || fail "a point inside the probe was accepted"
 printf 'DROPMODSBOX PASS probe_clear_of=outside-only\n'
+# A probe that is missing, doubled or unreadable is named as that, never as a probe covering the point.
+clients_ok=$(cat "$test_root/clients.json")
+printf '%s' '[{"class":"com.thisisgm.flea","pid":5,"at":[10,20],"size":[800,600]}]' > "$test_root/clients.json"
+out=$( fail() { printf '%s' "$*"; exit 9; }; cap_dropmods_probe_clear_of 50 50 )
+[[ $? -eq 9 && "$out" == "cap_dropmods: expected one parked DropProbe window, found 0" ]] || fail "a missing probe read '$out'"
+printf '%s' '[{"title":"DropProbe","pid":7,"at":[100,100],"size":[4,3]},{"title":"DropProbe","pid":8,"at":[900,900],"size":[4,3]}]' > "$test_root/clients.json"
+out=$( fail() { printf '%s' "$*"; exit 9; }; cap_dropmods_probe_clear_of 50 50 )
+[[ $? -eq 9 && "$out" == "cap_dropmods: expected one parked DropProbe window, found 2" ]] || fail "two probes read '$out'"
+printf '%s' "$clients_ok" > "$test_root/clients.json"
+printf 1 > "$test_root/clients-fail"
+out=$( fail() { printf '%s' "$*"; exit 9; }; cap_dropmods_probe_clear_of 50 50 )
+[[ $? -eq 9 && "$out" == "cap_dropmods: hyprctl clients was unreadable, so the parked probe could not be located" ]] || fail "an unreadable hyprctl read '$out'"
+: > "$test_root/clients-fail"
+out=$( fail() { printf '%s' "$*"; exit 9; }; cap_dropmods_probe_clear_of 200 200 )
+[[ $? -eq 9 && "$out" == "cap_dropmods: the parked probe covers the source point 200,200, so the press would miss the row" ]] || fail "a covered point read '$out'"
+printf 'DROPMODSBOX PASS probe_clear_of=names-missing-doubled-unreadable\n'
+# A hold marks the status activities first, and the target wait reads the line the drag names, new activities only.
+printf '%s' '{"activities":[{"id":3,"text":"Move 1 item to Photos · ctrl at lift copies","running":false}]}' > "$actstate"
+cap_dropmods_before="[]"
+cap_drops_press 1 1 || fail "stub press refused"
+[[ "$cap_dropmods_before" == "[3]" ]] || fail "the press marked '$cap_dropmods_before', want [3]"
+cap_drops_abandon
+cap_dropmods_before="[]"
+( cap_drops_wait_target Photos ) || fail "a move line was not matched to its row"
+( fail() { exit 9; }; cap_drops_wait_target Docs ) >/dev/null 2>&1
+[[ $? -eq 9 ]] || fail "a line naming another row was accepted"
+cap_dropmods_before="[3]"
+( fail() { exit 9; }; cap_drops_wait_target Photos ) >/dev/null 2>&1
+[[ $? -eq 9 ]] || fail "a line already present at the mark was taken for a new drag"
+printf '%s' '{"activities":[{"id":4,"text":"Copy 1 item to outer/","running":false}]}' > "$actstate"
+cap_dropmods_before="[3]"
+( cap_drops_wait_target outer/ ) || fail "a crumb copy line was not matched"
+( fail() { exit 9; }; cap_drops_wait_target outer ) >/dev/null 2>&1
+[[ $? -eq 9 ]] || fail "a crumb name without its slash was accepted"
+! grep -n 'listingDropActive' "$repo/tests/ui-captures-drops.sh" || fail "ui-captures-drops.sh still reads the listing floor, which a row, crumb or column row leaves dark"
+printf 'DROPMODSBOX PASS wait_target=row-crumb-new-only-no-floor\n'
+# Two windows are read through their own pids: the fake qs gives pid 5 the dir window and pid 9 the dir-two window.
+cap_dropmods_wait_s=1
+cap_dropmods_message_s=1
+[[ "$(cap_dropmods_row_centre 5 b1.txt)" == "110 80" ]] || fail "b1.txt of window 5 centred at '$(cap_dropmods_row_centre 5 b1.txt)', want 110 80"
+[[ "$(cap_dropmods_row_centre 9 sub2)" == "230 100" ]] || fail "sub2 of window 9 centred at '$(cap_dropmods_row_centre 9 sub2)', want 230 100"
+( fail() { exit 9; }; cap_dropmods_row_centre 9 b1.txt ) >/dev/null 2>&1
+[[ $? -eq 9 ]] || fail "a row of the other window was found through this window's pid"
+( cap_dropmods_wait_total 5 3 && cap_dropmods_wait_total 9 2 ) || fail "a window did not settle at its own total"
+( fail() { exit 9; }; cap_dropmods_wait_total 9 3 ) >/dev/null 2>&1
+[[ $? -eq 9 ]] || fail "window 9 settled at the total of window 5"
+( cap_dropmods_wait_message 5 "Copied 1 item · z undoes" ) || fail "window 5 did not read its own message"
+( fail() { exit 9; }; cap_dropmods_wait_message 9 "Copied 1 item · z undoes" ) >/dev/null 2>&1
+[[ $? -eq 9 ]] || fail "window 9 was credited with the message of window 5"
+printf 'DROPMODSBOX PASS two_windows=read-by-own-pid\n'
+# Focus is the compositor's: the focused pid and the window's own path must both match; ipc alone never says which window has focus.
+hypr_window_focus() { return 0; }
+( cap_dropmods_focus_pid 9 /fix/dir-two ) || fail "the focused window was refused"
+out=$( fail() { printf '%s' "$*"; exit 9; }; cap_dropmods_focus_pid 5 /fix/dir )
+[[ $? -eq 9 && "$out" == "cap_dropmods: focus did not land on window 5 (the compositor focuses 9)" ]] || fail "a window the compositor does not focus read '$out'"
+printf '5\n' > "$test_root/active-pid"
+( cap_dropmods_focus_pid 5 /fix/dir ) || fail "window 5 was refused once the compositor focused it"
+out=$( fail() { printf '%s' "$*"; exit 9; }; cap_dropmods_focus_pid 5 /fix/dir-two )
+[[ $? -eq 9 && "$out" == "cap_dropmods: window 5 shows /fix/dir, not /fix/dir-two" ]] || fail "a window with another path read '$out'"
+[[ "$(cap_dropmods_active_pid)" == "5" ]] || fail "the active pid read '$(cap_dropmods_active_pid)', want 5"
+printf 1 > "$test_root/active-fail"
+[[ "$(cap_dropmods_active_pid)" == "unavailable" ]] || fail "an unreadable compositor focus was not reported"
+: > "$test_root/active-fail"
+printf '9\n' > "$test_root/active-pid"
+# The two-window phase of the case holds no call that reads the newest window or refuses two (ipc, key, seek_row_named, row_index_of, wait_listing, wait_message, window_box).
+phase=$(sed -n '/^    win1=\$(flea_pid)$/,/^    kill_flea$/p' "$repo/tests/ui-captures-dropmods.sh")
+[[ "$(printf '%s\n' "$phase" | wc -l)" -gt 20 ]] || fail "the two-window phase of cap_dropmods was not found"
+! printf '%s\n' "$phase" | grep -nE '(^[[:space:]]*|[(;&|{][[:space:]]*)(ipc|key|seek_row_named|row_index_of|wait_listing|wait_message|window_box)[ )]' || fail "the two-window phase reads a window the newest-window way"
+printf 'DROPMODSBOX PASS focus=compositor-pid-and-own-path\n'
 # The pasted image's trash follows HOME's device: stat is stubbed, so each branch runs on its own tree under the marked root.
 case_dir="$test_root/case"
 mkdir -p "$case_dir" "$test_root/home" || exit 1
@@ -156,6 +251,32 @@ printf '[Trash Info]\nPath=case/Pasted%%20image%%202026-10-12%%20at%%2010.14.32.
 [[ $? -eq 5 ]] || fail "the trash exit trap lost the exit status"
 [[ ! -e "$mount_trash/files/$name" ]] || fail "the exit trap left the pasted image in the mount-top trash"
 printf 'DROPMODSBOX PASS trash_exit=removes-own-and-keeps-status\n'
+# The runner's own EXIT trap survives the case: armed over it and disarmed, the trap is back as it was; a fail runs the trash removal and then the runner's trap with the status.
+reset_logs
+runner_trap() { local st=$?; printf 'runner\n' >> "$orderlog"; printf '%s\n' "$st" >> "$trapstatus"; }
+( trap runner_trap EXIT
+  cap_drops_dir=$case_dir; cap_drops_pasted=""
+  cap_drops_trash_arm
+  [[ "$(trap -p EXIT)" == *cap_drops_trash_exit* ]] || fail "the case armed no trash trap: $(trap -p EXIT)"
+  cap_drops_trash_disarm
+  [[ "$(trap -p EXIT)" == "trap -- 'runner_trap' EXIT" ]] || fail "the case end did not put the runner's trap back: $(trap -p EXIT)"
+) || exit 1
+[[ "$(cat "$orderlog")" == "runner" ]] || fail "the runner trap ran '$(tr '\n' ' ' < "$orderlog")' at a clean exit, want once"
+reset_logs
+printf 'png\n' > "$mount_trash/files/$name"
+printf '[Trash Info]\nPath=case/Pasted%%20image%%202026-10-12%%20at%%2010.14.32.png\n' > "$mount_trash/info/$name.trashinfo"
+( trap runner_trap EXIT
+  cap_drops_dir=$case_dir; cap_drops_pasted=$name
+  cap_drops_trash_arm
+  cap_drops_press 1 1 || fail "stub press refused"
+  exit 6
+)
+[[ $? -eq 6 ]] || fail "the chained exits lost the status"
+[[ "$(tr '\n' ' ' < "$orderlog")" == "release runner " ]] || fail "a failing case ran '$(tr '\n' ' ' < "$orderlog")', want the release then the runner's trap once"
+[[ "$(cat "$trapstatus")" == "6" ]] || fail "the runner trap was entered with status '$(cat "$trapstatus")', want 6"
+[[ ! -e "$mount_trash/files/$name" ]] || fail "the failing case left its pasted image in the mount-top trash"
+! sed -n '/^case_cap_drops() {/,/^}/p' "$repo/tests/ui-captures-drops.sh" | grep -nE '^ *trap ' || fail "case_cap_drops sets or clears an EXIT trap directly, which replaces the runner's"
+printf 'DROPMODSBOX PASS trash_chain=runner-trap-survives\n'
 HOME=$real_home
 unset -f stat
-printf 'DROPMODSBOX DONE checks=9 failed=0\n'
+printf 'DROPMODSBOX DONE checks=14 failed=0\n'
