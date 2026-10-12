@@ -22,7 +22,7 @@ mod tests {
     }
 
     #[test]
-    fn a_gvfs_start_prepares_and_spawns_one_helper() {
+    fn a_gvfs_start_prepares_and_spawns_a_helper() {
         let (_lock, _env) = crate::gvfsprefetch::hold_env();
         let d = TestDir::new("tui-warm-gvfs");
         std::env::set_var("XDG_RUNTIME_DIR", d.path());

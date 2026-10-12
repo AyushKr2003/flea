@@ -255,6 +255,7 @@ def pointer_to(keys, x, y):
     time.sleep(0.02)
     rel(keys, REL_X, -1)
     time.sleep(0.05)
+    # Sample input, hyprctl cursorpos: "1280, 720"
     pos = S.hypr("cursorpos").strip()
     px, py = (int(float(v)) for v in pos.split(","))
     if abs(px - x) > 3 or abs(py - y) > 3:
@@ -328,6 +329,7 @@ def drop_touchpad(T, fd):
 class EvRecorder(S.Recorder):
     armed_ns = None
 
+    # Sample input, one recorder line: "F 660389861257350 660389874933379 32 95 126 300 2400 61" (see tools/flea-framecap.c).
     def _read(self):
         for line in self.proc.stdout:
             f = line.split()
@@ -671,6 +673,7 @@ class Session:
         text = self.ipc("chromeButtonCentre" if kind == "chrome" else "rowCentre", arg)
         if not text:
             raise RuntimeError("IPC gave no centre for %s %s" % target)
+        # Sample input, the IPC centre text: "412 96"
         x, y = (int(v) for v in text.split())
         return self.win[0] + x, self.win[1] + y
 
@@ -3133,6 +3136,19 @@ def selftest():
     rows = run_series(sess, {"type": "cycle", "steps": [{"journey": "nav.dual.enter", "in": ("key", ("enter",))}]}, 20)
     check("series_keeps_samples_before_oserror", (len(rows), sum("error" not in r for r in rows), rows[-1].get("error")),
           (4, 3, "OSError: uinput gone"))
+    # A qs ipc call that outlives its timeout is an error row after the samples before it, in a series and in a session start.
+    ipc_timeout = subprocess.TimeoutExpired(["qs", "ipc"], 10)
+    seen.clear()
+
+    def column_or_time_out(*a):
+        if len(seen) == 3:
+            raise ipc_timeout
+        seen.append(a[0])
+        return {"journey": a[0], "first_ms": 1.0}
+    sess.columns = column_or_time_out
+    rows = run_series(sess, {"type": "cycle", "steps": [{"journey": "nav.dual.enter", "in": ("key", ("enter",))}]}, 20)
+    check("series_keeps_samples_before_timeout", (len(rows), sum("error" not in r for r in rows), rows[-1].get("error", "")[:16]),
+          (4, 3, "TimeoutExpired: "))
     # A wheel series builds 2 rows per sample, none through sample(): an error on its 5th of 6 inputs keeps the 4 rows built.
     from unittest import mock
     sent_wheel = []
@@ -3153,6 +3169,13 @@ def selftest():
     check("series_keeps_wheel_rows_before_error",
           (len(rows), {(r.get("journey"), r.get("first_ms")) for r in rows[:-1]}, rows[-1].get("error")),
           (5, {("nav.dual.wheel", 2.0)}, "OSError: uinput gone"))
+
+    def session_times_out(*a):
+        raise ipc_timeout
+    session_rows = io.StringIO()
+    with mock.patch.dict(globals(), Session=session_times_out):
+        run_session({"fixture": "/none", "view": "dual", "region": "r", "series": [], "n": 1}, {"out_dir": "/none", "tag": "t"}, session_rows)
+    check("session_start_timeout_is_an_error_row", json.loads(session_rows.getvalue())["error"][:16], "TimeoutExpired: ")
     # An op series keeps its own error rows too: an outside window on the 2nd sample follows the 1st sample's error row.
     calls = []
 
