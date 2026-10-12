@@ -37,5 +37,10 @@ function run(check) {
     check("an untagged link ends with its Link target", JSON.stringify(untaggedLink[untaggedLink.length - 1]),
         JSON.stringify(["Link target", "/fixture/real.txt"]))
     var taggedLink = pairsOf(linkFacts(["Red"]), Format)
-    check("a tagged link shows Tags, then Link target", names(taggedLink.slice(-2)), "Tags,Link target")
+    check("a tagged link ends with Link target and draws Tags after Size", names(taggedLink.slice(-2)) + "|" + names(taggedLink.slice(2, 4)), "Group,Link target|Size,Tags")
+    // The board's Tagged file draws Tags right after Size, and after Contains for a folder.
+    check("a tagged file orders its pairs as the board does", names(tagged), "Path,Type,Size,Tags,Modified,Permissions,Owner,Group")
+    var folderFacts = propertiesFacts(["Red"])
+    folderFacts.facts.directory = true
+    check("a tagged folder puts Tags after Contains", names(pairsOf(folderFacts, Format)), "Path,Type,Size,Contains,Tags,Modified,Permissions,Owner,Group")
 }

@@ -50,7 +50,7 @@ Column {
             spacing: Theme.spacing.gap
             Flea.Glyph { width: Theme.markSize; height: parent.height; name: root.image ? "file" : "folder-open"; color: Theme.color.foreground }
             Text {
-                width: Math.max(0, parent.width - Theme.markSize - imageDetail.width - imageSize.width - 2 * parent.spacing)
+                width: Math.max(0, parent.width - Theme.markSize - imageDetail.width - imageSize.width - 3 * parent.spacing)
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.image ? Flash.leaf(root.image.path) : "Choose an image…"
                 textFormat: Text.PlainText

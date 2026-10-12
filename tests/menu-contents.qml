@@ -46,7 +46,7 @@ ShellRoot {
         while (queue.length > 0) {
             var o = queue.shift()
             var kids = (o && o.children !== undefined) ? o.children : []
-            if (kids.length === 2 && shell.isText(kids[0]) && shell.isText(kids[1]) && shell.labels.indexOf(kids[0].text) >= 0) out.push({label: kids[0], value: kids[1]})
+            if ((kids.length === 2 || kids.length === 3) && shell.isText(kids[0]) && shell.isText(kids[1]) && shell.labels.indexOf(kids[0].text) >= 0) out.push({label: kids[0], value: kids[1]})
             for (var i = 0; i < kids.length; i++) queue.push(kids[i])
         }
         return out
@@ -59,6 +59,17 @@ ShellRoot {
     function shown(t) {
         return t.textFormat === Text.StyledText
             ? t.text.replace(/<[^>]*>/g, "").replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&") : t.text
+    }
+    // Every item under a root that the test accepts, in tree order.
+    function under(root, accept) {
+        var out = [], queue = [root]
+        while (queue.length > 0) {
+            var o = queue.shift()
+            if (accept(o)) out.push(o)
+            var kids = (o && o.children !== undefined) ? o.children : []
+            for (var i = 0; i < kids.length; i++) queue.push(kids[i])
+        }
+        return out
     }
     function names() { return shell.pairs().map(function (p) { return p.label.text }) }
     function pair(label) {
@@ -194,6 +205,31 @@ ShellRoot {
                 shell.check("a link to a folder is the link, with its own size and no Contains", [shell.line("Type"), shell.line("Size"), shell.names().indexOf("Contains")], ["Symbolic link", "14 B (14 bytes)", -1])
                 shell.check("and its link target is a pair", shell.line("Link target"), "/fixture/Music")
                 shell.check("and no count is asked for", shell.sent.filter(function (m) { return m.op === "contents" && m.id === 11 }).length, 0)
+                dialog.close()
+            },
+            function () {
+                // The harness fills no theme tags, so the menu colours are set here and told apart from the listing's.
+                Flea.Theme.tag = {colors: {Red: "#ff0000", Blue: "#0000ff"}, menuColors: {Red: "#aa0000", Blue: "#0000aa"}, fallback: false}
+                dialog.open("properties", 12, "/fixture", parking)
+                shell.feed(shell.reply({id: 12, path: "/fixture/notes.md", kind: "File", directory: false, bytes: 4096, tags: ["Red", "Blue", "work"]}))
+            },
+            function () {
+                var colors = Flea.Theme.tag.menuColors
+                var marks = shell.under(dialog.cardItem, function (o) { return o.tagColors !== undefined && o.visible })
+                var words = shell.under(dialog.cardItem, function (o) { return shell.isText(o) && o.visible && ["Red", "Blue", "work"].indexOf(o.text) >= 0 })
+                shell.check("a tagged file draws Tags right after Size, as the board's Tagged file does", shell.drawn(), ["Path", "Type", "Size", "Tags", "Modified", "Permissions", "Owner", "Group"])
+                shell.check("the Tags value is not drawn as one plain string", shell.pair("Tags").visible, false)
+                shell.check("each own tag draws one swatch in the menu colour, a foreign word draws none", marks.map(function (o) { return [o.swatch, String(o.color)] }),
+                    [["Red", String(colors.Red)], ["Blue", String(colors.Blue)]])
+                shell.check("every name is foreground at the body size, in the tag's order", words.map(function (o) { return [o.text, String(o.color), o.font.pixelSize] }),
+                    [["Red", String(Flea.Theme.color.foreground), Flea.Theme.font.body], ["Blue", String(Flea.Theme.color.foreground), Flea.Theme.font.body], ["work", String(Flea.Theme.color.foreground), Flea.Theme.font.body]])
+                shell.check("the tags run left to right on one line", words.map(function (o) { return o.mapToItem(null, 0, 0).x }).every(function (x, i, all) { return i === 0 || x > all[i - 1] }), true)
+                if (marks.length === 2 && words.length === 3) shell.check("a swatch sits one gap left of its name and the next tag starts two gaps on",
+                    [words[0].mapToItem(null, 0, 0).x - marks[0].mapToItem(null, 0, 0).x - marks[0].width,
+                     marks[1].mapToItem(null, 0, 0).x - words[0].mapToItem(null, 0, 0).x - words[0].contentWidth,
+                     words[2].mapToItem(null, 0, 0).x - words[1].mapToItem(null, 0, 0).x - words[1].contentWidth],
+                    [Flea.Theme.spacing.gap, 2 * Flea.Theme.spacing.gap, 2 * Flea.Theme.spacing.gap])
+                if (marks.length > 0) shell.check("the Tags value starts at the label's left edge", Math.round(marks[0].mapToItem(null, 0, 0).x - shell.labelOf("Tags").mapToItem(null, 0, 0).x), 0)
                 dialog.close()
             }
         ]

@@ -67,6 +67,18 @@ ShellRoot {
         onTriggered: shell.advance()
     }
 
+    // The right-aligned Size Texts the flasher's rows draw, found by their column width.
+    function sizeCells(root) {
+        var out = [], queue = [root]
+        while (queue.length > 0) {
+            var o = queue.shift()
+            if (o.visible && o.horizontalAlignment === Text.AlignRight && o.width === Flea.Theme.column.size && o.parent && o.parent.parent) out.push(o)
+            var kids = o.children !== undefined ? o.children : []
+            for (var i = 0; i < kids.length; i++) queue.push(kids[i])
+        }
+        return out
+    }
+
     function drive() {
         return { dev: "sdb", seq: 7, serial: "S1", bytes: 8000000000,
             label: "Stick", model: "Ultra", refused: "" }
@@ -84,6 +96,11 @@ ShellRoot {
                 "live=" + view.live + " chosen=" + JSON.stringify(view.chosenDrive))
             shell.phase = 1
         } else if (shell.phase === 1) {
+            // The image row and the drive row each end their Size cell one rowPaddingX inside the row, the flasher board's rule.
+            var cells = shell.sizeCells(view)
+            var gaps = cells.map(function (c) { return Math.round(c.parent.parent.width - c.mapToItem(c.parent.parent, c.width, 0).x) })
+            shell.check("flash-size-cells-end-one-padding-in", cells.length === 2 && gaps.every(function (g) { return g === Flea.Theme.spacing.rowPaddingX }),
+                "cells=" + cells.length + " gaps=" + JSON.stringify(gaps) + " want=" + Flea.Theme.spacing.rowPaddingX)
             view.pressFlash()
             shell.flashId = stubBackend.flashed.length === 1 ? stubBackend.flashed[0].id : 0
             if (shell.flashId > 0)

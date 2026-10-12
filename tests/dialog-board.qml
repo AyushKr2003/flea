@@ -485,6 +485,15 @@ ShellRoot {
                 shell.check("openwith: the header draws the esc hint", shell.findAll(openWith.cardItem, function (o) { return shell.isType(o, "EscapeHint") && o.visible }).length, 1)
                 var fades = shell.findAll(openWith.cardItem, function (o) { return shell.isType(o, "Rectangle") && o.gradient })
                 shell.check("openwith: every fade stays inside the card frame", fades.filter(function (o) { var x = o.mapToItem(openWith.cardItem, 0, 0).x; return x < Flea.Theme.spacing.hairline || x + o.width > openWith.cardItem.width - Flea.Theme.spacing.hairline }).length + "/" + (fades.length > 0), "0/true")
+                // One frame reads as focused: the cursor row draws only while the search or the list holds focus.
+                var drawnCursor = function () {
+                    return shell.findAll(openWith.cardItem, function (o) { return shell.isType(o, "MenuRow") && o.visible })
+                        .filter(function (o) { return o.current }).map(function (o) { return o.entry.label }).join()
+                }
+                var cursorByFocus = [0, 1, 2, 3, 4].map(function (part) { openWith.focusPart = part; return drawnCursor() })
+                openWith.focusPart = 0
+                shell.check("openwith: the cursor row draws on the search and the list, not on the box, Cancel or Open",
+                    cursorByFocus, ["Alpha", "Alpha", "", "", ""])
                 openWith.close()
             } },
             { name: "open-convert", act: function () { convert.open("photo.png", holder) }, record: function () {

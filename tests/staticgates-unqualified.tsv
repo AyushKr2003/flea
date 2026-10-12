@@ -1203,7 +1203,8 @@ ui/MatchText.qml	72	root	Declared QML id; component context access is valid at r
 ui/MatchText.qml	83	root	Declared QML id; component context access is valid at runtime.
 ui/MatchText.qml	84	root	Declared QML id; component context access is valid at runtime.
 ui/MatchText.qml	86	root	Declared QML id; component context access is valid at runtime.
-ui/MenuActionDialog.qml	315	root	Declared QML id; component context access is valid at runtime.
+ui/MenuActionDialog.qml	320	root	Declared QML id; component context access is valid at runtime.
+ui/MenuActionDialog.qml	334	root	Declared QML id; component context access is valid at runtime.
 ui/MountListing.qml	83	listOut	Quickshell type unresolved when its module is missing.
 ui/MountListing.qml	83	root	Declared QML id; component context access is valid at runtime.
 ui/MountListing.qml	83	root	Declared QML id; component context access is valid at runtime.
@@ -1225,6 +1226,7 @@ ui/NetworkMounts.qml	879	text	Enclosing Quickshell StdioCollector, Process or Fi
 ui/NetworkMounts.qml	885	listSharesOut	Quickshell type unresolved when its module is missing.
 ui/OpenWithDialog.qml	369	list	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	370	root	Declared QML id; component context access is valid at runtime.
+ui/OpenWithDialog.qml	404	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	404	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	405	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	406	root	Declared QML id; component context access is valid at runtime.
@@ -2143,13 +2145,14 @@ ui/ConvertDialog.qml	313	root	Declared QML id; component context access is valid
 ui/ConvertDialog.qml	314	root	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	314	root	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	315	root	Declared QML id; component context access is valid at runtime.
-ui/MenuActionDialog.qml	312	body	Declared QML id; component context access is valid at runtime.
+ui/MenuActionDialog.qml	317	body	Declared QML id; component context access is valid at runtime.
 ui/NetworkDialog.qml	303	contentBottomInset	BorderSurface from qs.Ui declares this inherited inset.
 ui/NetworkDialog.qml	303	contentTopInset	BorderSurface from qs.Ui declares this inherited inset.
 ui/NetworkDialog.qml	304	width	BorderSurface from qs.Ui declares this inherited size.
 ui/NetworkDialog.qml	305	height	BorderSurface from qs.Ui declares this inherited size.
 ui/OpenWithDialog.qml	369	list	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	370	root	Declared QML id; component context access is valid at runtime.
+ui/OpenWithDialog.qml	404	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	404	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	405	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	406	root	Declared QML id; component context access is valid at runtime.
@@ -2770,7 +2773,8 @@ ui/MatchText.qml	72	root	Declared QML id; component context access is valid at r
 ui/MatchText.qml	83	root	Declared QML id; component context access is valid at runtime.
 ui/MatchText.qml	84	root	Declared QML id; component context access is valid at runtime.
 ui/MatchText.qml	86	root	Declared QML id; component context access is valid at runtime.
-ui/MenuActionDialog.qml	315	root	Declared QML id; component context access is valid at runtime.
+ui/MenuActionDialog.qml	320	root	Declared QML id; component context access is valid at runtime.
+ui/MenuActionDialog.qml	334	root	Declared QML id; component context access is valid at runtime.
 ui/NetworkForm.qml	208	root	Declared QML id; component context access is valid at runtime.
 ui/NetworkForm.qml	206	root	Declared QML id; component context access is valid at runtime.
 ui/NetworkForm.qml	207	root	Declared QML id; component context access is valid at runtime.
@@ -3576,13 +3580,14 @@ ui/ConvertDialog.qml	313	root	Declared QML id; component context access is valid
 ui/ConvertDialog.qml	314	root	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	314	root	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	315	root	Declared QML id; component context access is valid at runtime.
-ui/MenuActionDialog.qml	312	body	Declared QML id; component context access is valid at runtime.
+ui/MenuActionDialog.qml	317	body	Declared QML id; component context access is valid at runtime.
 ui/NetworkDialog.qml	303	contentBottomInset	BorderSurface from qs.Ui declares this inherited inset.
 ui/NetworkDialog.qml	303	contentTopInset	BorderSurface from qs.Ui declares this inherited inset.
 ui/NetworkDialog.qml	304	width	BorderSurface from qs.Ui declares this inherited size.
 ui/NetworkDialog.qml	305	height	BorderSurface from qs.Ui declares this inherited size.
 ui/OpenWithDialog.qml	369	list	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	370	root	Declared QML id; component context access is valid at runtime.
+ui/OpenWithDialog.qml	404	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	404	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	405	root	Declared QML id; component context access is valid at runtime.
 ui/OpenWithDialog.qml	406	root	Declared QML id; component context access is valid at runtime.
