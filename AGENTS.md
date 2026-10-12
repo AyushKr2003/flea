@@ -2694,6 +2694,10 @@ The FAT card's Rename reaching the names inside a copied folder records `src/bac
 the policy, 289, and the one that journals it on the copy steps, 493), each re-derived with `wc -l`; `Durability` is the one per-operation object every copy
 already carries down to `copy_dir_entries`, so the flag rides it rather than a new `Progress` field at 29 literals.
 
+`tests/js/rail.js` is 446: the auto-hidden rail's slide checks (dwell token, durations, curve, reduced-motion gate,
+the x and visible bindings, the build-once Loader) join the Mounts and cursor-follow checks already there.
+`ui/Pane.qml` is 1182: `railRevealed` and `railX` pass the sliding rail's state to `railState` in `ui/Ipc.qml`.
+
 `src/vulkan.rs` is 0.3.2's own exception, recorded rather than split. PR119's display-GPU pin took
 it from 472 to 604 lines, the growth being `icd_for_displays`, `display_pin` and the tests that
 drive a hybrid tree this box cannot produce. The file has one subject, which is what Vulkan can be
@@ -9032,6 +9036,8 @@ The Contents walk's mount charge moves one ceiling, re-derived with `wc -l`: `sr
 The minor-fix pass adds `a_frame_held_for_the_preview_body_swallows_a_trash_key` to `src/tui/hold_tests.rs`, the case where the hold comes from the first preview body with the parent peek already landed, so `src/tui/hold_tests.rs` goes from 393 to 426 lines (`wc -l`) and its recorded ceiling in `tools/flea-file-budget` is 426.
 
 The Tags flyout that stays open through a choice and redraws from the re-asked answer, and the queue that keeps a second tag choice made before the menu snapshot answers, add bytes to `ui/ContextMenu.qml`, `ui/Pane.qml` and `ui/PaneMenuActions.qml`, which moves `tests/startup-units.txt`'s `bytes` line from 1596965 to 1598119, the sum the probe's tool takes over the same 170 units. The same change takes `ui/PaneMenuActions.qml`'s recorded ceiling from 491 to 507, `wc -l` on the file, for the queue, the one-shot gate that now lets a tag toggle repeat, and the queue's resets wherever a pending action is cleared. The queue then drains one choice per activate reply, because the backend's menu slot holds one job and a second activate sent at once was refused as busy and lost: `tagInFlight`, `sendNextTag` and the resets take the `bytes` line to 1598752 and the ceiling from 507 to 519, each re-derived (the probe's tool sum, `wc -l`).
+
+The auto-hidden rail slides on x: `ui/PaneRail.qml` keeps the Sidebar built after its first reveal, eases a `slide` property and waits a dwell at the edge, and `ui/Pane.qml` passes `railRevealed` and `railX` to `railState`, which moves `tests/startup-units.txt`'s `bytes` line from 1596965 to 1599516, the sum the probe's tool takes over the same 170 units.
 
 ## The image flasher
 

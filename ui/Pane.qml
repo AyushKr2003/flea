@@ -172,6 +172,8 @@ FocusScope {
     readonly property bool railHidden: railHost.hidden
     // What the rail takes from the pane, which an overlay never does; the sidebar case reads it.
     readonly property real railInset: railHost.inset
+    readonly property bool railRevealed: railHost.revealed
+    readonly property real railX: railHost.railX
     // Directive 77: a withdrawn rail is still a place Tab can go, because arriving there reveals it.
     readonly property bool railAvailable: root.sidebar !== null || railHost.overlay
     function toggleRail() { ViewState.toggleRail() }
