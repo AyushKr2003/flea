@@ -105,7 +105,7 @@ GridView {
     onCursorViewChanged: { root.prebuild.kick(); root.askLanding(); root.currentIndex = root.cursorView }
     // Hidden holds no delegates; an edit in flight keeps its own per RenameField.qml.
     model: Flea.StableModel { view: root; total: (root.visible || root.pane.renamingIndex >= 0) ? root.pane.shownTotal : 0; onResized: root.modelResized(); holdCurrent: root.pane.renamingIndex >= 0
-                              warm: root.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: root.columns * (Math.floor(Math.max(0, root.height - root.topMargin + root.cacheBuffer) / root.cellHeight) + 2) }
+                              warm: root.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: root.columns * (Math.floor(Math.max(0, root.height - root.topMargin + root.fullBuffer) / root.cellHeight) + 2) }
     clip: true
     // Qt's own tracking scrolls a flush-parked end to the footer's end on a cursor move; revealCursor's Contain leaves a whole tile alone.
     highlightFollowsCurrentItem: false
@@ -124,7 +124,15 @@ GridView {
     bottomMargin: Theme.spacing.gap
     cellWidth: GridGeometry.cellWidthFor(root.width, root.columns, Theme.spacing.gap, Theme.spacing.rowPaddingX)
     cellHeight: root.cellHeightPx
-    cacheBuffer: root.cellHeightPx * GridGeometry.cacheRows
+    // The cache rows wait for the frame that draws a landing: a switch builds the viewport's tiles, the turn after that frame the rows past it.
+    readonly property int fullBuffer: root.cellHeightPx * GridGeometry.cacheRows
+    property bool buffered: false
+    cacheBuffer: root.buffered ? root.fullBuffer : 0
+    Connections {
+        target: root.Window.window
+        enabled: root.visible && !root.buffered && !root.hiddenHeld && root.count > 0
+        function onFrameSwapped() { Qt.callLater(function () { root.buffered = true }) }
+    }
     boundsBehavior: Flickable.StopAtBounds
     reuseItems: true
     // Parked tiles for the next landing: a tile parks unparented and the landing's layout parents it again.
@@ -140,7 +148,7 @@ GridView {
     }
     // The tiles a full landing from the top lays out; the partial row warmRows bounds stays out (Qt 6.11.2 qquickgridview.cpp:507).
     readonly property int landingTiles: {
-        var c = root.columns, h = root.cellHeight, end = root.height - root.topMargin + root.cacheBuffer, n = 0
+        var c = root.columns, h = root.cellHeight, end = root.height - root.topMargin + root.fullBuffer, n = 0
         while (c > 0 && h > 0 && n < root.model.warmRows && Math.floor(n / c) * h <= end + h * (c - n % c) / (c + 1)) n++
         return n
     }
@@ -358,6 +366,7 @@ GridView {
             coalesce.stop()
             settle.stop()
             root.hiddenHeld = true
+            root.buffered = false
             root.restoreY = -1
             root.restoreTicks = 0
             return
