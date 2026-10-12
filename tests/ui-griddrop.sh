@@ -74,14 +74,16 @@ case_griddrop() {
     [[ "$(ipc collideState | jq -r .opened)" == "false" ]] || fail "griddrop: the empty-space drop opened a collide card"
 
     echo "-- ctrl held from the lift copies --"
-    # A fail while Ctrl is down exits the run, so the release rides an exit trap until the key is up.
-    trap '( YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key 29:0 ) >/dev/null 2>&1 || true' EXIT
+    # Chain the Ctrl release ahead of the EXIT command in force, as cap_drops_arm does, and put that command back after the drop.
+    eval "set -- $(trap -p EXIT)"
+    griddrop_saved_exit=${3-}
+    trap 'griddrop_status=$?; ( YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key 29:0 ) >/dev/null 2>&1 || true; set +e; (exit "$griddrop_status"); '"$griddrop_saved_exit" EXIT
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key 29:1 >/dev/null 2>&1 || fail "griddrop: ctrl down refused"
     sleep 0.3
     griddrop_hold f.txt box "Copy 1 item to box"
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key 29:0 >/dev/null 2>&1 || true
-    trap - EXIT
     cap_drops_release
+    if [[ -n "$griddrop_saved_exit" ]]; then trap -- "$griddrop_saved_exit" EXIT; else trap - EXIT; fi
     wait_message "Copied 1 item · z undoes"
     [[ -f "$dir/f.txt" && -f "$dir/box/f.txt" ]] || fail "griddrop: ctrl at the lift did not copy f.txt"
     printf 'GRIDDROP move=box follow=side empty=refused copy=ctrl\n'
