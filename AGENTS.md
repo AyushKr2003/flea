@@ -9203,3 +9203,5 @@ The Grid caption IPC (`gridCaptionState` in `ui/Ipc.qml`) now answers `wrapAt`, 
 
 The tag-write reach moves two ceilings, each re-derived with `wc -l`: `src/backend/undo.rs` 661 to 675 for `Reached`, which carries the files a reversal changed only in tags apart from the directories it touched, and `src/backend/run.rs` 1091 to 1105 for the calls that hand an own tag write to the open search session.
 Joining the tag place into the 0.3.10 stage moves `ui/js/Search.js` 383 to 391, re-derived with `wc -l`, for `openScope`, the one opener `f` and a tag place share, and the branch in `openQuery` that opens a fresh Home session when the tag walk was cancelled.
+
+The LocalSend lifecycle test moves one ceiling, re-derived with `wc -l`: `src/backend/localsend.rs` 406 to 430, for the token check that stops a reused pid reading as the surviving CLI and the pin that holds it.

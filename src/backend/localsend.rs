@@ -353,6 +353,30 @@ mod tests {
         }).unwrap_or(false)
     }
 
+    // A reused pid keeps running without the fixture token, so only a pid with the token is the child.
+    fn has_token(pid: i32, token: &[u8]) -> bool {
+        std::fs::read(format!("/proc/{pid}/environ")).map(|env| env.split(|b| *b == 0).any(|v| v == token)).unwrap_or(false)
+    }
+
+    // A live pid without the token is a reuse after the child died, not a child that survived.
+    fn child_running(pid: i32, token: &[u8]) -> bool {
+        running(pid) && has_token(pid, token)
+    }
+
+    // A live pid without the token stands for a reused pid: the wait must end at once, not run out its 5 s.
+    #[test]
+    fn a_live_pid_without_the_token_is_not_the_child() {
+        let token = format!("{}=/lifecycle-predicate", LIFECYCLE_TOKEN);
+        let mut bare = std::process::Command::new("sleep").arg("5").env_remove(LIFECYCLE_TOKEN).spawn().expect("a sleep without the token");
+        let mut marked = std::process::Command::new("sleep").arg("5").env(LIFECYCLE_TOKEN, "/lifecycle-predicate").spawn().expect("a sleep with the token");
+        let (bare_live, bare_child, marked_child) = (running(bare.id() as i32), child_running(bare.id() as i32, token.as_bytes()), child_running(marked.id() as i32, token.as_bytes()));
+        let _ = (bare.kill(), marked.kill());
+        let _ = (bare.wait(), marked.wait());
+        assert!(bare_live, "the sleep without the token is a live pid");
+        assert!(!bare_child, "a live pid without the token was read as the child");
+        assert!(marked_child, "a live pid with the token was not read as the child");
+    }
+
     // The probe ends with a stand-in behind, like a killed backend; only PDEATHSIG can end the HUP-ignoring child.
     #[test]
     fn a_child_cli_does_not_outlive_its_parent() {
@@ -389,10 +413,10 @@ mod tests {
         let pid: i32 = std::fs::read_to_string(&marker).expect("the probe wrote its child's pid")
             .trim().parse().expect("a pid");
         let deadline = Instant::now() + Duration::from_secs(5);
-        while running(pid) && Instant::now() < deadline {
+        while child_running(pid, token.as_bytes()) && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(25));
         }
-        if running(pid) {
+        if child_running(pid, token.as_bytes()) {
             let environ = std::fs::read(format!("/proc/{pid}/environ")).unwrap_or_default();
             assert!(environ.split(|b| *b == 0).any(|v| v == token.as_bytes()), "refusing to kill a pid without this fixture's marker");
             let _ = std::process::Command::new("kill").arg("-9").arg(pid.to_string()).status();
