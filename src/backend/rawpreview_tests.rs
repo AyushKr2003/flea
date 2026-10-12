@@ -247,7 +247,7 @@ fn a_camera_raw_is_thumbnailed_under_its_own_key() {
     assert!(!d.join("cache").join("thumbnails").join("fail").exists(), "a RAW with no preview was recorded as broken");
 }
 
-// A RAW whose embedded JPEG is jpeg(w, 100), with its mtime set, so the copy's mtime orders the eviction.
+// A RAW whose embedded JPEG is jpeg(w, 100), with its mtime set, which the eviction order must not follow.
 fn aged(d: &TestDir, name: &str, w: u16, secs: u64) -> PathBuf {
     let src = raw_with(d, name, &jpeg(w, 100), None);
     set_mtime(&src, secs);
@@ -294,6 +294,37 @@ fn the_cache_holds_its_count_by_dropping_the_copy_written_longest_ago_not_the_ol
     assert!(got.file.exists() && copy_path(&cache, &second).exists(), "a newer copy went");
     assert!(!copy_path(&cache, &first).exists(), "the copy written longest ago stayed over the bound");
     assert_eq!(std::fs::read_dir(&cache).unwrap().count(), 2);
+}
+
+#[test]
+fn an_old_copy_served_from_the_cache_just_now_survives_a_scan_that_evicts_an_unused_newer_copy() {
+    let d = TestDir::new("rawprev-evict-served");
+    let cache = d.join("cache");
+    let (a, b, c) = (aged(&d, "a.cr2", 100, 3_000), aged(&d, "b.cr2", 200, 2_000), aged(&d, "c.cr2", 300, 1_000));
+    for src in [&a, &b] {
+        ensure_with(&cache, src, usize::MAX, u64::MAX, later()).expect("a preview");
+        tick();
+    }
+    // A is the older copy, and a hit serves it without a publish.
+    ensure_with(&cache, &a, usize::MAX, u64::MAX, later()).expect("a preview");
+    tick();
+    ensure_with(&cache, &c, 2, u64::MAX, later()).expect("a preview");
+    assert!(copy_path(&cache, &a).exists(), "a copy served just now was evicted first");
+    assert!(!copy_path(&cache, &b).exists(), "the unused copy stayed over the bound");
+}
+
+#[test]
+fn a_copy_served_under_a_minute_ago_is_spared_though_it_was_published_over_a_minute_ago() {
+    let d = TestDir::new("rawprev-evict-served-young");
+    let cache = d.join("cache");
+    let (a, b) = (aged(&d, "a.cr2", 100, 2_000), aged(&d, "b.cr2", 200, 1_000));
+    ensure_with(&cache, &a, usize::MAX, u64::MAX, SystemTime::now()).expect("a preview");
+    std::thread::sleep(Duration::from_millis(500));
+    ensure_with(&cache, &a, usize::MAX, u64::MAX, SystemTime::now()).expect("a preview");
+    // The clock reads 59.8 s after that hit: 59.8 s on the serve and over 60 s on the publish.
+    let now = SystemTime::now() + Duration::from_millis(59_800);
+    ensure_with(&cache, &b, 0, 0, now).expect("a preview");
+    assert!(copy_path(&cache, &a).exists(), "a copy served under a minute ago was evicted by its publish time");
 }
 
 #[test]

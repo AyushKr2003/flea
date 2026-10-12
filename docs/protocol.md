@@ -1761,10 +1761,11 @@ column's mark can follow the target the way a listing row's does.
 other file and for a RAW holding none. `file` is the copy under `$XDG_CACHE_HOME/flea/raw/`, named by the md5
 of the RAW's file URI and carrying the RAW's mtime, so a changed RAW is copied again and an unchanged one is
 neither walked nor written twice.
-The directory is held to 4096 copies and 512 MiB, oldest written first (by ctime, since a copy's mtime is its RAW's),
-and sweeps temps a minute old. A copy written less than a minute ago is never evicted, because the thread that made it
-is still reading it, and a scan runs on a process's first new copy and then on one in 32, so the directory can stand
-over its caps briefly: by the copies of the last minute and by fewer than 32 more. `w`, `h` and `orient` read like
+The directory is held to 4096 copies and 512 MiB, least recently used first (by ctime, since a copy's mtime is its RAW's:
+a cache hit sets the copy's atime to now, which moves the ctime), and sweeps temps a minute old. A copy made or served less
+than a minute ago is never evicted, because the thread that has it is still reading it. Each process scans on its own first
+new copy and then on one in 32 of its own, and the directory is shared, so it can stand over its caps: by the copies of the
+last minute, which stay until the first scan after they age, and by fewer than 32 more per process. `w`, `h` and `orient` read like
 the top-level fields, taken from the copy: stored
 pixels and the EXIF turn, which the copy carries even when the camera put it only in the RAW's IFD0. The top-level
 `w` and `h` stay 0 for a RAW, because they name the file's own pixels and the preview is smaller.
