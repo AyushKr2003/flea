@@ -40,9 +40,10 @@ function run(check) {
         } }
     var opened = []
     var pwCards = { openCompressDialog: function (source, leaf, holder) { opened.push(source); pwSent.push("dialog:" + source.paths.length + ":" + leaf) } }
+    var paneKeys = Object.keys(pwPane).join(",")
     Ops.extract(pwPane, 0)
     check("AB4: an extract sends its paths and keeps no stash on the pane",
-          pwSent.join(",") + "|" + ("extractPwSource" in pwPane || "extractPasswordSource" in pwPane), "extract:/d/backup.7z|/d/backup|false")
+          pwSent.join(",") + "|" + (Object.keys(pwPane).join(",") === paneKeys), "extract:/d/backup.7z|/d/backup|true")
     ArchiveOps.compressPasswordResolved(pwCards, pwPane, ["/d/a", "/d/b"], 3)
     check("AB1: the cards host opens over the resolved paths and the menu id",
           pwSent[pwSent.length - 1] + "|" + opened[0].menuId, "dialog:2:d|3")
