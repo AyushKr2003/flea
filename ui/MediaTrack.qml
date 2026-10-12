@@ -1,7 +1,6 @@
 import QtQuick
 
-// The hairline track of the media strip, drawn twice there: the seek and, under Quick Look, the volume.
-// Two hairlines, the played part in the accent frame ink and a square handle; the host adds its MouseArea.
+// The hairline track of the media strip, drawn for the seek and, under Quick Look, the volume: the played part and a square handle in the accent frame ink, the host adds its MouseArea.
 Item {
     id: root
 

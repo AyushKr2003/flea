@@ -1,9 +1,7 @@
 pragma Singleton
 import QtQuick
 
-// MediaMute rule 3: mute is one session flag both media surfaces read, the preview column's strip
-// and Quick Look's, kept across previews and never written to ui.json. The level beside it is
-// Flea's own and is remembered as preview.volume.
+// MediaMute rule 3: mute is one session flag both media surfaces read, never written to ui.json; the level beside it is stored as preview.volume.
 QtObject {
     id: root
 

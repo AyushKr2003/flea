@@ -3,9 +3,7 @@ import qs.Commons
 import "." as Flea
 import "js/Format.js" as Format
 
-// The transport the canvas draws under a media frame: a play/pause mark, a hairline seek with a
-// square handle (the accent frame ink's one use here), and a tabular clock. Under Quick Look it also
-// carries Media040's volume, a second hairline track at the right edge. No filled chrome anywhere.
+// The transport the canvas draws under a media frame: a play/pause mark, a hairline seek with a square handle, a tabular clock and, under Quick Look, Media040's volume track. No filled chrome anywhere.
 Item {
     id: root
 
@@ -54,9 +52,7 @@ Item {
         opacity: 0.12
     }
 
-    // A test clicks the mark itself rather than guessing at an offset inside the strip; seekItem is
-    // the same seam for the track, which ui/shell.qml's previewSliderCentre reads through, and
-    // volumeItem is the level's, null in the framed strip because Media040 draws it under Quick Look only.
+    // A test clicks each part itself rather than guess an offset; ui/shell.qml's previewSliderCentre reads seekItem, and volumeItem is null in the framed strip.
     readonly property var playItem: playSlot
     readonly property var seekItem: track
     readonly property var muteItem: muteSlot
@@ -134,9 +130,7 @@ Item {
         }
     }
 
-    // MediaMute rule 1: one mark at the strip's right end after the clock, in the chrome ink, drawn
-    // by the same Glyph as the play mark; the track gives up its width and nothing else moves.
-    // Under Quick Look the volume track takes the right edge and the mark sits one gap left of it.
+    // MediaMute rule 1: one mark after the clock in the chrome ink, drawn by the play mark's Glyph; the track gives up its width, and under Quick Look the mark sits one gap left of the volume track.
     Item {
         id: muteSlot
         anchors.right: root.framed ? parent.right : volumeSlot.left

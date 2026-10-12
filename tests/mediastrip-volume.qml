@@ -5,8 +5,7 @@ import Quickshell.Io
 import QtTest
 import "flea" as Flea
 
-// tests/mediastrip-volume.sh's harness: the real ui/MediaStrip.qml, unframed and framed, over the real
-// MediaSound and ViewState; the writer is a stub that logs each patch it is asked to store.
+// tests/mediastrip-volume.sh's harness: the real ui/MediaStrip.qml, unframed and framed, over the real MediaSound and ViewState and a stub writer that logs each patch.
 ShellRoot {
     id: shell
 
@@ -200,9 +199,44 @@ ShellRoot {
         shell.check("mute: the mark unmutes", [Flea.MediaSound.muted, Flea.MediaSound.volume, shell.saves().length], [false, level, 2])
     }
 
+    // A grab stolen mid-drag (the track disabled under the button) ends the press like a release: the level heard is stored.
+    function stepCancel() {
+        var track = shell.bare.volumeItem
+        var y = track.height / 2
+        driver.mousePress(track, shell.xFor(40, track.width), y, Qt.LeftButton, Qt.NoModifier, 0)
+        driver.mouseMove(track, shell.xFor(35, track.width), y, 0, Qt.LeftButton, Qt.NoModifier)
+        shell.check("cancel: the drag is at 35 and nothing new is stored", [Flea.MediaSound.volume, shell.saves().length], [35, 2])
+        track.enabled = false
+        shell.check("cancel: the stolen grab keeps the level it named", [Flea.MediaSound.volume, Flea.ViewState.mediaVolume], [35, 35])
+        shell.check("cancel: the press is over", Flea.MediaSound.held, -1)
+        track.enabled = true
+        driver.mouseRelease(track, shell.xFor(35, track.width), y, Qt.LeftButton, Qt.NoModifier, 0)
+    }
+
+    function stepCancelStored() {
+        shell.check("cancel: one patch stored, the level alone", shell.saves().slice(2), ['{"preview":{"volume":35}}'])
+    }
+
+    // Quick Look closing by key with the button still down destroys the strip mid-press: the dragged level is dropped, not kept.
+    function stepDestroy() {
+        var track = shell.bare.volumeItem
+        var y = track.height / 2
+        driver.mousePress(track, shell.xFor(10, track.width), y, Qt.LeftButton, Qt.NoModifier, 0)
+        driver.mouseMove(track, shell.xFor(5, track.width), y, 0, Qt.LeftButton, Qt.NoModifier)
+        shell.check("destroy: the drag is at 5", Flea.MediaSound.volume, 5)
+        shell.bare.destroy()
+    }
+
+    function stepDestroyed() {
+        shell.check("destroy: no press is held", Flea.MediaSound.held, -1)
+        shell.check("destroy: the stored level is still the old one", [Flea.MediaSound.volume, Flea.ViewState.mediaVolume, shell.saves().length], [35, 35, 3])
+        driver.mouseRelease(holder, 5, 5, Qt.LeftButton, Qt.NoModifier, 0)
+    }
+
     readonly property var script: [
         shell.stepCreate, shell.stepLayout, shell.stepGain, shell.stepDrag, shell.stepStored,
-        shell.stepHover, shell.stepClick, shell.stepClickStored, shell.stepMute
+        shell.stepHover, shell.stepClick, shell.stepClickStored, shell.stepMute,
+        shell.stepCancel, shell.stepCancelStored, shell.stepDestroy, shell.stepDestroyed
     ]
 
     function finish() {
