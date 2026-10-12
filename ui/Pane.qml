@@ -467,6 +467,8 @@ FocusScope {
     property int selectionVersion: 0
     property int selectionAnchor: 0
     property var selectionBand: null
+    // A button is down over the header or the view; ui/PaneStates.qml writes it, and ui/js/Anchor.js busy holds a watched re-read while it is true.
+    property bool pointerHeld: false
     function isSelected(index) { return root.selectionVersion >= 0 && root.selection.has(index) }
     function selectionCount() { return root.selectionVersion >= 0 ? root.selection.count() : 0 }
     function selectedIndices() { return root.selectionVersion >= 0 ? root.selection.indices() : [] }

@@ -63,6 +63,11 @@ Item {
             if (mouse.accepted) root.pane.message(Swap.LOADING, false)
         }
         onWheel: function (wheel) { wheel.accepted = root.pane.listInFlight }
+        // Passive, and above the rows, so it sees a press a row grabs and always sees its release, even when the row was rebuilt meanwhile.
+        PointHandler {
+            acceptedButtons: Qt.AllButtons
+            onActiveChanged: root.pane.pointerHeld = active
+        }
     }
 
     Flea.StateMessage {

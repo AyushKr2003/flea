@@ -134,6 +134,13 @@ function run(check) {
     busy.wire.reread()
     land(busy, ["a", "b", "c", "d", "e"])
     check("deferred permissions reread keeps marks", busy.selectedIndices().join(","), MARKS.join(","))
+    var pressed = pane("list", false, false)
+    pressed.pointerHeld = true
+    apply(pressed, "batch")
+    check("a held button holds permissions reread", pressed.sent.length, 0)
+    pressed.pointerHeld = false
+    pressed.wire.reread()
+    check("the released button pays the reread", pressed.sent.length > 0, true)
     var deep = pane("list", true, true)
     deep.held = DEEP_START
     deep.total = DEEP_START + deep.rows.length
