@@ -112,6 +112,15 @@ function run(check) {
     check("a transfer failure reads back as the backend's own sentence",
           Errors.sentence("transfer", "the destination is not a directory"),
           "The destination is not a directory.")
+    check("an archive that died with the backend names the archive, not the backend",
+          Errors.sentence("archive", "the backend is not running", "doc.zip"),
+          "doc.zip could not be opened because the Flea backend stopped; reopen Flea and try again.")
+    check("and with no archive name it still says what stopped",
+          Errors.sentence("archive", "the backend is not running"),
+          "This archive could not be opened because the Flea backend stopped; reopen Flea and try again.")
+    check("any other archive failure reads back as the backend's own sentence",
+          Errors.sentence("archive", "that archive is encrypted"),
+          "That archive is encrypted.")
     check("a link failure on a linkless drive names the capability",
           Errors.sentence("link", "this drive cannot hold links"),
           "This drive cannot hold links.")

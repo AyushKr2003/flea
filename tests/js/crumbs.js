@@ -1,4 +1,5 @@
 .import "../../ui/js/Crumbs.js" as Crumbs
+.import "../../ui/js/Drag.js" as Drag
 
 // The chrome's breadcrumb, issue 45 and Chrome rule 2: the pieces a click can land on, and what
 // fits when the strip is narrower than the path. Split out of tests/js/nav.js with the module.
@@ -127,4 +128,10 @@ function run(check) {
     // The floor's own case: a leaf shorter than it gives up more to the ellipsis than that saves.
     check("and a budget too small for even that keeps the leaf whole rather than cutting it to an ellipsis",
           drawn(Crumbs.fitCrumbs(Crumbs.crumbs("/home/gm/one/two/three/four", "/home/gm"), 6)), "~/\u2026/four")
+
+    // Drops040 specimen e: a crumb takes the folder row's verb, a move within one drive.
+    check("a plain drop on a same-device crumb moves",
+          Drag.verbFor(true, false, false, 56, 56, true), "move")
+    check("and on another device's crumb it copies",
+          Drag.verbFor(true, false, false, 56, 32, true), "copy")
 }
