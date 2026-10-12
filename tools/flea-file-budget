@@ -24,7 +24,7 @@ src/backend/renamecompat.rs 706
 src/backend/gvfslist.rs 513
 src/backend/imagesize.rs 473
 src/backend/iomount.rs 629
-src/backend/localsend.rs 406
+src/backend/localsend.rs 426
 src/backend/menu_actions.rs 647
 src/backend/menu_registry.rs 564
 src/backend/meta.rs 551
