@@ -247,3 +247,163 @@ sandbox_cache_require() {
   [ "$p" = "$cache" ] && sandbox_refuse "is the cache root itself, which is never a target: '$1'"
   return 0
 }
+
+# The files directory g_local_file_trash uses for an item: home Trash on the home device, else the item mount's top trash.
+sandbox_trash_files_dir() {
+  local item="${1:-}" home="${2:-${HOME:-}}" parent idev hdev data top uid globaldir candidate owner
+  [ -n "$item" ] || return 1
+  [ -n "$home" ] || return 1
+  if [ -d "$item" ]; then parent=$item; else parent=$(dirname -- "$item" 2>/dev/null) || return 1; fi
+  [ -n "$parent" ] || return 1
+  idev=$(stat -c %d -- "$parent" 2>/dev/null) || return 1
+  hdev=$(stat -c %d -- "$home" 2>/dev/null) || return 1
+  [ -n "$idev" ] && [ -n "$hdev" ] || return 1
+  if [ "$idev" = "$hdev" ]; then
+    data=${XDG_DATA_HOME:-$home/.local/share}
+    case "$data" in /*) ;; *) return 1 ;; esac
+    printf '%s/Trash/files\n' "$data"
+    return 0
+  fi
+  top=$(stat -c %m -- "$parent" 2>/dev/null) || return 1
+  case "$top" in /*) ;; *) return 1 ;; esac
+  # The root mount's top is "/", so its trash is /.Trash-$UID, never //.Trash-$UID.
+  top=${top%/}
+  uid=$(id -u 2>/dev/null) || return 1
+  [ -n "$uid" ] || return 1
+  globaldir=$top/.Trash
+  candidate=$top/.Trash/$uid
+  # The sticky bit lives on the global dir; lstat keeps a symlinked global dir from passing as one.
+  if [ -d "$globaldir" ] && [ ! -L "$globaldir" ] && [ -k "$globaldir" ]; then
+    # An absent per-user dir is usable only where its create would succeed; an existing one must be a user-owned directory.
+    if [ ! -e "$candidate" ] && [ ! -L "$candidate" ]; then
+      if [ -w "$globaldir" ] && [ -x "$globaldir" ]; then
+        printf '%s/files\n' "$candidate"
+      else
+        printf '%s/.Trash-%s/files\n' "$top" "$uid"
+      fi
+    else
+      owner=$(stat -c %u -- "$candidate" 2>/dev/null) || owner=""
+      if [ -d "$candidate" ] && [ ! -L "$candidate" ] && [ "$owner" = "$uid" ]; then
+        printf '%s/files\n' "$candidate"
+      else
+        printf '%s/.Trash-%s/files\n' "$top" "$uid"
+      fi
+    fi
+  else
+    printf '%s/.Trash-%s/files\n' "$top" "$uid"
+  fi
+  return 0
+}
+
+# Decodes the %XX escapes GLib writes in a trashinfo Path; a % outside an escape stays literal.
+sandbox_trash_unescape() {
+  local s=${1:-} pre hex ch
+  _SANDBOX_TRASH_UNESCAPED=
+  while :; do
+    case "$s" in *%*) ;; *) _SANDBOX_TRASH_UNESCAPED=$_SANDBOX_TRASH_UNESCAPED$s; return 0 ;; esac
+    pre=${s%%\%*}
+    s=${s#*\%}
+    case "$s" in [0-9abcdefABCDEF][0-9abcdefABCDEF]*) hex=${s%"${s#??}"}; s=${s#??} ;; *) _SANDBOX_TRASH_UNESCAPED=$_SANDBOX_TRASH_UNESCAPED$pre%; continue ;; esac
+    printf -v ch '%b' "\\0$(printf '%03o' "$((16#$hex))")"
+    _SANDBOX_TRASH_UNESCAPED=$_SANDBOX_TRASH_UNESCAPED$pre$ch
+  done
+}
+
+# Records owned mount-top trash names so an EXIT trap removes them even when the case fails.
+if [ -z "${_SANDBOX_TRASH_TRAP_INIT:-}" ]; then
+  _SANDBOX_TRASH_TRAP_INIT=1
+  _SANDBOX_TRASH_TRAP_JOBS=()
+  _SANDBOX_TRASH_TRAPPED=
+  _SANDBOX_TRASH_PREV_EXIT=
+fi
+sandbox_trash_trap_own() {
+  local trash=${1:-} root=${2:-} name live cmd prev= fresh=0
+  [ -n "$trash" ] && [ -n "$root" ] && [ $# -ge 3 ] || return 1
+  case "$trash" in /*) ;; *) return 1 ;; esac
+  case "$root" in /*) ;; *) return 1 ;; esac
+  shift 2
+  # The first registration in a shell drops the jobs it inherited from a parent shell, which runs them itself.
+  [ "$_SANDBOX_TRASH_TRAPPED" = "$BASHPID" ] || { fresh=1; _SANDBOX_TRASH_TRAP_JOBS=(); }
+  for name in "$@"; do
+    case "$name" in ""|*/*|*$'\t'*|*$'\n'*) return 1 ;; esac
+    _SANDBOX_TRASH_TRAP_JOBS+=("$trash"$'\t'"$root"$'\t'"$name")
+  done
+  # A subshell prints its parent's traps until it runs a trap command, so this reset of an unused signal leaves trap -p showing only this shell's own.
+  trap - URG
+  # trap -p quotes the command for eval, so set -- unquotes one with quotes inside it too.
+  live=$(trap -p EXIT 2>/dev/null) || live=
+  case "$live" in "trap -- "*) eval "set -- $live"; cmd=${3:-} ;; *) cmd= ;; esac
+  # Install when this shell has not yet, or when a later trap replaced ours, and chain the trap this shell set.
+  if [ "$fresh" = 1 ] || [ "$cmd" != sandbox_trash_trap_run ]; then
+    [ "$cmd" = sandbox_trash_trap_run ] || prev=$cmd
+    _SANDBOX_TRASH_PREV_EXIT=$prev
+    _SANDBOX_TRASH_TRAPPED=$BASHPID
+    trap sandbox_trash_trap_run EXIT
+  fi
+  return 0
+}
+
+# Runs every recorded owned removal, then the previously chained trap with the entering status.
+sandbox_trash_trap_run() {
+  local st=$? job trash rest root name
+  for job in ${_SANDBOX_TRASH_TRAP_JOBS[@]+"${_SANDBOX_TRASH_TRAP_JOBS[@]}"}; do
+    trash=${job%%$'\t'*}; rest=${job#*$'\t'}; root=${rest%%$'\t'*}; name=${rest#*$'\t'}
+    sandbox_trash_remove_own "$trash" "$root" "$name" 2>/dev/null || printf 'TRASH TRAP %s in %s was not removed\n' "$name" "$trash" >&2
+  done
+  # The subshell hands the chained trap the status this trap was entered with; errexit, on in every ui.sh case, would end the trap there.
+  set +e
+  (exit "$st")
+  eval "${_SANDBOX_TRASH_PREV_EXIT:-return $st}"
+  return "$st"
+}
+
+# Removes only owned trash entries: each named files/info pair whose .trashinfo Path resolves under the root.
+sandbox_trash_remove_own() {
+  local trash=${1:-} root=${2:-} name files info infodir path base mtop canon canonroot qdir rc=0
+  [ -n "$trash" ] && [ -n "$root" ] || return 1
+  case "$trash" in /*) ;; *) return 1 ;; esac
+  case "$root" in /*) ;; *) return 1 ;; esac
+  case "$trash" in */files) infodir=${trash%/files}/info ;; *) return 1 ;; esac
+  base=${trash%/files}
+  # The mount top behind a mount-top trash; a home trash has none, so a relative entry there stays foreign.
+  case "$base" in
+    */.Trash/*) mtop=${base%/.Trash/*}/ ;;
+    */.Trash-*) mtop=${base%/.Trash-*}/ ;;
+    *) mtop= ;;
+  esac
+  canonroot=$(sandbox_canon "$root") || return 1
+  [ -n "$canonroot" ] || return 1
+  shift 2
+  for name in "$@"; do
+    case "$name" in ""|*/*) return 1 ;; esac
+    files=$trash/$name
+    info=$infodir/$name.trashinfo
+    case "$files" in "$trash/"*) ;; *) return 1 ;; esac
+    case "$info" in "$infodir/"*) ;; *) return 1 ;; esac
+    # A name with no .trashinfo is already gone, so it stays a no-op.
+    [ -f "$info" ] || continue
+    # Sample .trashinfo line: "Path=/home/u/a%20b.txt".
+    path=$(sed -n 's/^Path=//p' -- "$info" 2>/dev/null | head -n 1) || { rc=2; continue; }
+    [ -n "$path" ] || { rc=2; continue; }
+    # GLib percent-escapes Path, so %XX decodes before the compare.
+    sandbox_trash_unescape "$path"
+    path=$_SANDBOX_TRASH_UNESCAPED
+    # GLib writes a mount-top Path relative to the mount top; a home trash has none, so a relative one stays foreign.
+    case "$path" in /*) canon=$path ;; *) [ -n "$mtop" ] || { rc=2; continue; }; canon=$mtop$path ;; esac
+    canon=$(sandbox_canon "$canon") || { rc=2; continue; }
+    # A trashed entry whose Path misses the root stays in place and turns the return to 2.
+    case "$canon/" in "$canonroot/"*) ;; *) rc=2; continue ;; esac
+    case "$files" in /*) ;; *) return 1 ;; esac
+    case "$info" in /*) ;; *) return 1 ;; esac
+    [ -n "$files" ] && [ -n "$info" ] || return 1
+    if [ -d "$files" ] && [ ! -L "$files" ]; then
+      # A trashed directory is moved into the case's own marked root, never deleted in the shared trash.
+      qdir=$root/.flea-trash-quarantine
+      mkdir -p -- "$qdir" || return 1
+      chmod u+w -- "$files" || return 1
+      mv -- "$files" "$qdir/" || return 1
+    elif [ -e "$files" ] || [ -L "$files" ]; then rm -f -- "$files" || return 1; fi
+    rm -f -- "$info" || return 1
+  done
+  return "$rc"
+}

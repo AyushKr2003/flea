@@ -559,8 +559,10 @@ transferlive_batch() {
 
 # Leg three: one big file onto a name that exists, with Replace; the old item lands in this case's own Trash.
 transferlive_replace() {
-    local dir="$transferlive_root/replace" want
+    local dir="$transferlive_root/replace" want replace_trash
     sandbox_scratch "$dir"
+    # GLib trashes to the home store or the fixture mount's top trash by device.
+    replace_trash=$(sandbox_trash_files_dir "$dir") || fail "transferlive: replace: no GLib trash directory for $dir"
     mkdir "$dir/to" || fail "transferlive: replace: no destination folder"
     ln "$transferlive_root/payload/full.bin" "$dir/big.bin" || fail "transferlive: replace: the source could not be linked in"
     printf 'there\n' > "$dir/to/big.bin" || fail "transferlive: replace: the item to replace could not be written"
@@ -577,15 +579,21 @@ transferlive_replace() {
         and .focus == "keep" and ([.buttons[].visible] | all)' "replace: the paste asks about big.bin, on Keep both, with every button up"
     key l >/dev/null
     menus_expect collideState '.opened and .focus == "replace"' "replace: l moves the focus to Replace"
+    trash_trap_own "$replace_trash" "$dir" "transferlive: replace" big.bin
     key -k Return >/dev/null
     transferlive_watch replace "$want" 1 'big\.bin'
     transferlive_settled replace "Copied 1 item · z undoes"
     transferlive_sample_replace="[$transferlive_seen_first] [$transferlive_seen_last]"
     kill_flea
-    [[ "$(cat "$XDG_DATA_HOME/Trash/files/big.bin" 2>/dev/null)" == there ]] \
-        || fail "transferlive: replace: the replaced big.bin is not in this case's Trash: $(ls -A "$XDG_DATA_HOME/Trash/files" 2>&1)"
+    [[ "$(cat "$replace_trash/big.bin" 2>/dev/null)" == there ]] \
+        || fail "transferlive: replace: the replaced big.bin is not in $replace_trash: $(ls -A "$replace_trash" 2>&1)"
     transferlive_holds "$dir/to" "big.bin"
     menus_same_file "replace: the incoming big.bin is byte-identical to its source" "$dir/big.bin" "$dir/to/big.bin"
+    # A mount-top trash is shared, so only this run's own entry goes, each pair checked in the command.
+    if [[ "$replace_trash" != "$XDG_DATA_HOME/Trash/files" ]]; then
+        sandbox_trash_remove_own "$replace_trash" "$dir" big.bin \
+            || fail "transferlive: replace: owned entries could not be removed from $replace_trash"
+    fi
     sandbox_remove "$dir"
 }
 
