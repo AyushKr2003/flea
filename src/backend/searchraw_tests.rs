@@ -35,6 +35,13 @@ fn hits(s: &mut Session, gen: usize, query: &str) -> Vec<String> {
     answer.rows.iter().map(|(path, _)| path.clone()).collect()
 }
 
+// A tag query on a session with no event receiver: the first ask starts the read, the second finds the names in.
+fn tag_hits(s: &mut Session, gen: usize, query: &str) -> Vec<String> {
+    hits(s, gen, query);
+    s.tags.wait_read();
+    hits(s, gen + 1, query)
+}
+
 // Every row's path on disk, the way a consumer joins it to the scope.
 fn on_disk(scope: &Path, index: &Index) -> Vec<(String, bool)> {
     (0..index.len()).map(|row| (index.path(row).to_string(), scope.join(OsStr::from_bytes(index.raw(row))).exists())).collect()
@@ -55,7 +62,7 @@ fn every_row_of_the_index_names_a_file_the_walk_found() {
 fn a_tag_term_finds_a_tagged_file_whose_name_is_not_utf8() {
     let d = fixture("rawtag");
     let mut s = open(&d);
-    assert_eq!(hits(&mut s, 1, "tag:Red"), [LOSSY_FILE], "the tag is read at the file's own path");
+    assert_eq!(tag_hits(&mut s, 1, "tag:Red"), [LOSSY_FILE], "the tag is read at the file's own path");
 }
 
 #[test]
@@ -70,7 +77,7 @@ fn a_tag_term_reaches_a_file_under_a_directory_that_is_not_utf8() {
     let d = fixture("rawdirtag");
     crate::backend::tags::write_names(&raw(&d, RAW_DIR).join("needle.txt"), &["Blue".to_string()]).unwrap();
     let mut s = open(&d);
-    assert_eq!(hits(&mut s, 1, "tag:Blue"), ["d\u{fffd}/needle.txt"]);
+    assert_eq!(tag_hits(&mut s, 1, "tag:Blue"), ["d\u{fffd}/needle.txt"]);
 }
 
 #[test]
@@ -81,7 +88,7 @@ fn a_patch_after_a_write_indexes_a_new_name_that_is_not_utf8() {
     std::fs::write(&added, "").unwrap();
     crate::backend::tags::write_names(&added, &["Green".to_string()]).unwrap();
     assert!(s.patch_after_write(&added), "the own write under the scope patches the index");
-    assert_eq!(hits(&mut s, 1, "tag:Green"), ["new\u{fffd}.jpg"]);
+    assert_eq!(tag_hits(&mut s, 1, "tag:Green"), ["new\u{fffd}.jpg"]);
 }
 
 #[test]

@@ -1,6 +1,7 @@
 // The session's snapshot: every relative path walked once, folded once, scored per query.
-use crate::backend::fuzzy::{fold_packed, Hay, Packed};
+use crate::backend::fuzzy::{fold_packed, rank_order, Hay, Packed};
 use std::borrow::Cow;
+use std::cmp::Ordering as CmpOrdering;
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
@@ -36,6 +37,9 @@ pub(crate) struct Index {
     wide: Vec<u32>,
     rows: Vec<Row>,
     pub capped: bool,
+    // How the last patch moved rows: the old row ids it kept in order (None when it kept all) and how many old rows survived; every row past that count is new.
+    kept: Option<Vec<usize>>,
+    survivors: usize,
     // Test seams: arena repacks and rows a patch reads, so its cost is counted, never timed.
     #[cfg(test)]
     pub(crate) compactions: usize,
@@ -77,6 +81,8 @@ impl Index {
             wide: Vec::new(),
             rows: Vec::new(),
             capped: false,
+            kept: None,
+            survivors: 0,
             #[cfg(test)]
             compactions: 0,
             #[cfg(test)]
@@ -197,11 +203,17 @@ impl Index {
         self.rows = rows;
     }
 
+    // The last patch's row moves: the old ids kept in order (None: all kept) and the count of surviving old rows.
+    pub(crate) fn last_patch(&self) -> (Option<&[usize]>, usize) {
+        (self.kept.as_deref(), self.survivors)
+    }
+
     // Reconciles one scope-relative directory in one pass and one repack; false when its mount does not answer.
     pub(crate) fn patch_dir(&mut self, root: &Path, rel: &Path, hidden: bool, body: &str) -> bool {
         let rel = rel.as_os_str();
         let dir = if rel.is_empty() { root.to_path_buf() } else { root.join(rel) };
         let Ok(listing) = read_bounded(&dir, body) else { return false };
+        (self.kept, self.survivors) = (None, self.rows.len());
         let prefix: Vec<u8> = if rel.is_empty() { Vec::new() } else { [rel.as_bytes(), b"/"].concat() };
         // A directory that is gone drops itself and its subtree; the scope itself drops every row.
         let Some(listing) = listing else {
@@ -209,6 +221,7 @@ impl Index {
                 .filter(|&row| !rel.is_empty() && self.raw(row) != rel.as_bytes() && !self.raw(row).starts_with(&prefix))
                 .collect();
             self.compact(&kept);
+            (self.survivors, self.kept) = (kept.len(), Some(kept));
             return true;
         };
         let seen: Vec<(Vec<u8>, bool)> = listing
@@ -235,8 +248,10 @@ impl Index {
                 }
             }
         }
+        self.survivors = kept.len();
         if kept.len() < self.rows.len() {
             self.compact(&kept);
+            self.kept = Some(kept);
         }
         let mut added_dirs = Vec::new();
         for (child, is_dir) in seen {
@@ -334,6 +349,41 @@ pub(crate) fn score_all(fuzzy: &crate::backend::fuzzy::Fuzzy, rows: &[usize], in
         }
         out
     })
+}
+
+// The one rank comparator for answers and rest chunks, so a scrolled window only extends the head's order.
+pub(crate) fn rank_cmp(index: &Index, a: &(i32, usize), b: &(i32, usize)) -> CmpOrdering {
+    rank_order(a.0, index.path(a.1), b.0, index.path(b.1))
+}
+
+// The best `window` hits in rank order, the rest unranked; the path comparator runs only on the window and its edge ties.
+pub(crate) fn select_head<K, F, C>(hits: &mut Vec<(i32, usize)>, window: usize, key: F, cmp: C) -> Vec<(i32, usize)>
+where
+    K: Ord,
+    F: Fn(&(i32, usize)) -> K,
+    C: Fn(&(i32, usize), &(i32, usize)) -> CmpOrdering,
+{
+    if window > 0 && window < hits.len() {
+        hits.select_nth_unstable_by_key(window - 1, &key);
+        let edge = key(&hits[window - 1]);
+        // Hits tied with the edge on the integer key can sit on either side of the cut, so the comparator picks among them.
+        if hits[window..].iter().any(|hit| key(hit) == edge) {
+            let (mut sure, mut tied, mut past) = (Vec::with_capacity(window), Vec::new(), Vec::new());
+            for &hit in hits.iter() {
+                match key(&hit).cmp(&edge) {
+                    CmpOrdering::Less => sure.push(hit),
+                    CmpOrdering::Equal => tied.push(hit),
+                    CmpOrdering::Greater => past.push(hit),
+                }
+            }
+            // The edge hit is tied and inside the window, so at least one tied hit joins the head.
+            tied.select_nth_unstable_by(window - sure.len() - 1, &cmp);
+            *hits = [sure, tied, past].concat();
+        }
+    }
+    let rest = hits.split_off(window.min(hits.len()));
+    hits.sort_by(&cmp);
+    rest
 }
 
 #[cfg(test)]

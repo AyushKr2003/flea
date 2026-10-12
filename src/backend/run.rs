@@ -22,7 +22,7 @@ use crate::backend::search::Search;
 use crate::backend::searchsession::{Session, FIRST_WINDOW_DEFAULT};
 use crate::backend::state::{Held, State, Tables};
 use crate::backend::searchreq::{collapse_query_burst, emit_session_answer, finish_search, is_search_query_line,
-    op_write_paths, searchclosed_line, searchopened_line, step_search};
+    op_tag_paths, op_write_paths, searchclosed_line, searchopened_line, step_search};
 use crate::backend::thumbcache::{default_root, Cache};
 use crate::backend::thumbreq::{cancel_row, forget_one, report_done, thumb_rows};
 use crate::backend::thumbs::{Done, Pool};
@@ -210,6 +210,8 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
                 for path in op_write_paths(&m) {
                     patched |= session.patch_after_write(&path);
                 }
+                // A late or redone tag write changes names only: the cache swaps them, and the landing re-runs the query.
+                session.note_tags_written(&op_tag_paths(&m));
                 if patched && session.batch_due() {
                     if let Some(answer) = session.re_answer_now() {
                         emit_session_answer(out, st, tb, pool, &answer);
@@ -570,7 +572,9 @@ fn handle_line(
         Request::Duplicate { path, menu_id } => start_duplicate(out, ops, &path, menu_id),
         Request::Undo => {
             // An undo is an own write: its reversal patches the index with no walk.
-            patch_session_paths(st, do_undo(out, ops));
+            let reached = do_undo(out, ops);
+            patch_session_paths(st, reached.dirs);
+            note_tag_writes(st, &reached.tags);
         }
         Request::Redo => start_redo(out, ops),
         // Never touches st.listing, which is the whole point: a column is not the pane's own listing.
@@ -616,7 +620,10 @@ fn handle_line(
         Request::Shebang { path, id } => {
             super::shebang::spawn(PathBuf::from(&path), id, ops.tx.clone())
         }
-        tags @ (Request::SetTags { .. } | Request::TagStates { .. }) => super::tagsreq::handle(out, ops, st, tags),
+        tags @ (Request::SetTags { .. } | Request::TagStates { .. }) => {
+            let written = super::tagsreq::handle(out, ops, st, tags);
+            note_tag_writes(st, &written);
+        }
         Request::Paths { rows } =>
             say(out, &paths_line(&resolve_rows(Vec::new(), &rows, &st.base, &st.listing))),
         Request::Locate { path } => {
@@ -655,6 +662,13 @@ fn patch_session_paths(st: &mut State, touched: Vec<PathBuf>) {
         for path in touched {
             session.patch_after_write(&path);
         }
+    }
+}
+
+// An own tag write's files: an open tag pass re-reads exactly their names and the standing query is re-run once they are in.
+fn note_tag_writes(st: &mut State, written: &[PathBuf]) {
+    if let Some(session) = st.search_session.as_mut() {
+        session.note_tags_written(written);
     }
 }
 

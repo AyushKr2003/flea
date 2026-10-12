@@ -35,12 +35,14 @@ fn row_name(base: &Path, path: &Path) -> String {
 }
 
 // The tag wire's two requests: a change across rows, and the read of what those rows carry.
-pub fn handle(out: &mut impl Write, ops: &mut Ops, st: &State, request: Request) {
+// Answers the files whose tags changed in time, so the loop can tell an open search session; a late write reports through SetTagsDone.
+pub fn handle(out: &mut impl Write, ops: &mut Ops, st: &State, request: Request) -> Vec<PathBuf> {
     match request {
-        Request::SetTags { rows, op, tag } => apply_tags(out, ops, st, rows, &op, &tag),
+        Request::SetTags { rows, op, tag } => return apply_tags(out, ops, st, rows, &op, &tag),
         Request::TagStates { rows, id } => ask_states(st, &rows, id, ops.tx.clone()),
         _ => {}
     }
+    Vec::new()
 }
 
 fn carries(names: &[String], tag: &str) -> bool {
@@ -109,21 +111,21 @@ fn refuse(out: &mut impl Write, e: &FleaError) {
 }
 
 // Refused while the transfer slot runs, unlike a local rename; the write itself runs where rename's would.
-pub fn apply_tags(out: &mut impl Write, ops: &mut Ops, st: &State, rows: Vec<usize>, op: &str, tag: &str) {
+pub fn apply_tags(out: &mut impl Write, ops: &mut Ops, st: &State, rows: Vec<usize>, op: &str, tag: &str) -> Vec<PathBuf> {
     if ops.live.running().is_some() {
         refuse(out, &FleaError { where_: "settags".into(), path: String::new(), msg: "an operation is already running".into() });
-        return;
+        return Vec::new();
     }
     // Validated before the filesystem is touched, so a bad op refuses with nothing read.
     if let Err(e) = super::tags::apply(&[], op, tag) {
         refuse(out, &e);
-        return;
+        return Vec::new();
     }
     let targets = resolve_rows(Vec::new(), &rows, &st.base, &st.listing);
     if targets.is_empty() {
         writeln!(out, "{}", settagged_line(0, resolved(op, tag, &[]))).ok();
         out.flush().ok();
-        return;
+        return Vec::new();
     }
     let paths: Vec<PathBuf> = targets.iter().map(PathBuf::from).collect();
     let (base, work_paths, op, tag) = (st.base.clone(), paths.clone(), op.to_string(), tag.to_string());
@@ -131,20 +133,20 @@ pub fn apply_tags(out: &mut impl Write, ops: &mut Ops, st: &State, rows: Vec<usi
 }
 
 // A local change answers inline; a remote one past the deadline answers slow and journals when its worker lands.
-pub(crate) fn apply_tags_with<F>(out: &mut impl Write, ops: &mut Ops, paths: Vec<PathBuf>, deadline: Duration, work: F)
+pub(crate) fn apply_tags_with<F>(out: &mut impl Write, ops: &mut Ops, paths: Vec<PathBuf>, deadline: Duration, work: F) -> Vec<PathBuf>
 where
     F: FnOnce() -> Written + Send + 'static,
 {
     // A target on a pending mount waits; writes elsewhere run beside the held write.
     if pending_busy_for(out, ops, "settags", &paths, &[]) {
-        return;
+        return Vec::new();
     }
     let body = mount_body();
     // The first target on a remote mount decides, so a search row on a share never runs inline beside local ones.
     let first = paths.iter().find(|path| is_remote(path, &body)).unwrap_or(&paths[0]);
     // The row's own mount decides: a row that is itself a remote mount root is remote even where its parent is local.
     match slow_write_with(first, &body, "settags", deadline, work) {
-        SlowWrite::Ready(result) => land(out, ops, result),
+        SlowWrite::Ready(result) => return land(out, ops, result),
         SlowWrite::Slow { mount, rx } => {
             // The slow line names the row's own directory, as the parent key did.
             let path = first.parent().unwrap_or(Path::new("/")).to_string_lossy().into_owned();
@@ -161,12 +163,15 @@ where
             });
         }
     }
+    Vec::new()
 }
 
-// One journal entry per request, so one undo reverses the in-time answer and the late one alike.
-pub(crate) fn land(out: &mut impl Write, ops: &mut Ops, result: Written) {
+// One journal entry per request, so one undo reverses the in-time answer and the late one alike; answers the files it changed.
+pub(crate) fn land(out: &mut impl Write, ops: &mut Ops, result: Written) -> Vec<PathBuf> {
+    let mut changed = Vec::new();
     match result {
         Ok((written, steps, op, skipped)) => {
+            changed = super::undo::Reached::of(&steps).tags;
             ops.journal.push(Entry { op: "settags".into(), steps });
             writeln!(out, "{}", settagged_skipped(written, op, &skipped)).ok();
         }
@@ -175,6 +180,7 @@ pub(crate) fn land(out: &mut impl Write, ops: &mut Ops, result: Written) {
         }
     }
     out.flush().ok();
+    changed
 }
 
 // Every file or none: each filesystem is probed and every attribute read before the first write, and a failed write puts back exactly the files written.
