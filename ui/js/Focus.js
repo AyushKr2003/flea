@@ -264,7 +264,7 @@ function act(action, root, menuId, paths) {
     if (action.indexOf("compress:") === 0) {
         var picked = action.substring("compress:".length)
         // The submenu's last row opens the password dialog, routed by the pane: this file takes no new first-frame import.
-        if (picked === "compressPw") { root.compressPwRequested(paths || null, menuId || 0); return }
+        if (picked === "compressPassword") { root.compressPasswordRequested(paths || null, menuId || 0); return }
         if (paths) Ops.compressResolved(root, paths, picked, menuId)
         else Ops.compress(root, picked)
         return

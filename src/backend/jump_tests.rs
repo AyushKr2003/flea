@@ -479,7 +479,7 @@ fn a_remote_filesystem_is_keyed_by_its_mount_and_a_local_one_by_its_path() {
     assert_eq!(key_for("/mnt/proton/a/b", &mounts), "mount /mnt/proton");
     assert_eq!(key_for("/mnt/merge/a/b", &mounts), "mount /mnt/merge");
     assert_eq!(key_for("/mnt/plain/a/b", &mounts), "mount /mnt/plain");
-    assert_eq!(key_for("/mnt/win/a/b", &mounts), "/mnt/win/a/b");
+    assert_eq!(key_for("/mnt/win/a/b", &mounts), "mount /mnt/win");
     assert_eq!(key_for("/run/user/1000/gvfs/smb-share:server=nas,share=x/y", &mounts), "mount /run/user/1000/gvfs");
     assert_eq!(key_for("/home/gm/Work", &mounts), "/home/gm/Work");
     assert_eq!(key_for("/mnt/nasty", &mounts), "/mnt/nasty");

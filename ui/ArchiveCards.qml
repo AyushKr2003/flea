@@ -11,9 +11,9 @@ Item {
     readonly property var compressItem: compressDialog.item
     readonly property var extractItem: extractDialog.item
 
-    function askCompressPw(pane, paths, menuId) {
-        if (paths) ArchiveOps.compressPwResolved(root, pane, paths, menuId)
-        else ArchiveOps.openCompressPw(pane, menuId, root)
+    function askCompressPassword(pane, paths, menuId) {
+        if (paths) ArchiveOps.compressPasswordResolved(root, pane, paths, menuId)
+        else ArchiveOps.openCompressPassword(pane, menuId, root)
     }
 
     // One card at a time: a second request is answered with a sentence and never dropped silently.
@@ -31,7 +31,7 @@ Item {
         compressDialog.item.open(source, parentLeaf, holder)
     }
 
-    function openExtractPw(source, holder, err) {
+    function openExtractPassword(source, holder, err) {
         if (cardBusy(holder)) return
         extractOwner = holder
         extractDialog.active = true
@@ -50,7 +50,7 @@ Item {
     Connections {
         target: compressDialog.item
         function onAccepted(source, format, name, password, encryptNames) {
-            ArchiveOps.submitCompressPw(root.compressOwner, source, format, name, password, encryptNames)
+            ArchiveOps.submitCompressPassword(root.compressOwner, source, format, name, password, encryptNames)
         }
     }
 
@@ -63,6 +63,6 @@ Item {
     }
     Connections {
         target: extractDialog.item
-        function onAccepted(source, password) { ArchiveOps.submitExtractPw(root.extractOwner, source, password) }
+        function onAccepted(source, password) { ArchiveOps.submitExtractPassword(root.extractOwner, source, password) }
     }
 }

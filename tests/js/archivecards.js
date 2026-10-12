@@ -33,8 +33,8 @@ function run(check) {
     var paneB = Fixture.pane("b", sent, said)
     var cards = Fixture.cards(parent)
 
-    // B F20: the Extract button's accepted(source, password) reaches ArchiveOps.submitExtractPw through the host.
-    cards.openExtractPw({ path: "/a/backup.7z", dest: "/a/backup" }, paneA, "")
+    // B F20: the Extract button's accepted(source, password) reaches ArchiveOps.submitExtractPassword through the host.
+    cards.openExtractPassword({ path: "/a/backup.7z", dest: "/a/backup" }, paneA, "")
     cards.extractItem.takeSecretForTest("s3cret")
     cards.extractItem.submitItem.activated()
     check("F20: Extract sends the archive, destination and password the card was opened over",
@@ -44,8 +44,8 @@ function run(check) {
 
     // B F22: one card at a time; a second pane's open is refused and the first card's submit stays with the first pane.
     sent.length = 0
-    cards.askCompressPw(paneA, ["/a/x", "/a/y"], 4)
-    cards.askCompressPw(paneB, ["/b/z"], 9)
+    cards.askCompressPassword(paneA, ["/a/x", "/a/y"], 4)
+    cards.askCompressPassword(paneB, ["/b/z"], 9)
     check("F22: a second pane's compress is refused with the busy sentence",
           said.join(","), "b:" + ArchiveCard.CARD_BUSY)
     check("F22: and the open card stays the first pane's",
@@ -56,7 +56,7 @@ function run(check) {
           sent.join(","), "a|compress|/a/x,/a/y|/a/a.7z|7z|s3cret|true|4")
     // B F22: an empty pair never compresses; Compress names the missing password and the card stays open.
     sent.length = 0
-    cards.askCompressPw(paneA, ["/a/x"], 5)
+    cards.askCompressPassword(paneA, ["/a/x"], 5)
     cards.compressItem.submitItem.activated()
     check("F22: Compress with no password sends nothing and asks for one",
           [sent.length, cards.compressItem.canCompress, cards.compressItem.errorText, cards.compressItem.opened].join("|"),
@@ -66,7 +66,7 @@ function run(check) {
     said.length = 0
     var emptyPane = Fixture.pane("e", sent, said)
     emptyPane.cursorIndex = -1
-    ArchiveOps.compressPwResolved(cards, emptyPane, [], 3)
+    ArchiveOps.compressPasswordResolved(cards, emptyPane, [], 3)
     check("F22: an empty resolved selection says there is nothing to act on and opens no card",
           said.join(",") + "|" + cards.compressItem.opened, "e:There is nothing to act on.|false")
 
@@ -74,14 +74,14 @@ function run(check) {
     var ipcText = Source.source("ui/Ipc.qml")
     var stateBody = Source.block(ipcText, "function archiveCardsState()", "ui/Ipc.qml")
     var cardsState = eval("(function (root) {" + stateBody + "})")
-    cards.askCompressPw(paneA, ["/a/x"], 0)
+    cards.askCompressPassword(paneA, ["/a/x"], 0)
     cards.compressItem.takeSecretForTest(CANARY)
     var compressState = attempt(function () { return cardsState({ archiveCards: cards }) })
     check("F23: the cards state names exactly its keys", attempt(function () { return Object.keys(JSON.parse(compressState)).join("|") }),
           CARDS_STATE_KEYS)
     check("F23: and no value holds the compress card's typed secret", attempt(function () { return leaks(compressState).join("|") }), "")
     cards.compressItem.close()
-    cards.openExtractPw({ path: "/a/backup.7z", dest: "/a/backup" }, paneA, "")
+    cards.openExtractPassword({ path: "/a/backup.7z", dest: "/a/backup" }, paneA, "")
     cards.extractItem.takeSecretForTest(CANARY)
     check("F23: nor the extract card's", attempt(function () { return leaks(cardsState({ archiveCards: cards })).join("|") }), "")
     cards.extractItem.close()
@@ -108,7 +108,7 @@ function run(check) {
         attempt(function () { wired.call(null, where, input, message, mode) })
     })
     backend.dirsizecancel()
-    backend.extractPw("/a/backup.7z", "/a/backup", CANARY, 0)
+    backend.extractPassword("/a/backup.7z", "/a/backup", CANARY, 0)
     check("F21: a password request before the child starts fails as an archive operation, never as a dead backend",
           failed.join(","), "archive:the backend is not running")
     check("F21: and PaneWire.onFailed shows that sentence as the pane's error message",
@@ -124,10 +124,10 @@ function run(check) {
     // contracts F1: the encrypted done line, as src/backend/archivepass.rs writes it, opens the extract card for its archive.
     var done = []
     backend.archiveDone.connect(function (id, ok, verified, err, path, dest) { done.push([id, ok, err, path, dest].join("|")) })
-    var routeBody = Source.block(Source.source("ui/WindowBody.qml"), "onExtractPwRequested: function (path, dest, err)", "ui/WindowBody.qml")
+    var routeBody = Source.block(Source.source("ui/WindowBody.qml"), "onExtractPasswordRequested: function (path, dest, err)", "ui/WindowBody.qml")
     var route = eval("(function (view, primaryPane) { return function (path, dest, err) {" + routeBody + "} })")
     var wirePane = { transfer: Ops.emptyTransfer(), sticky: function () {}, refresh: function () {}, message: function (text) { said.push(text) },
-        extractPwRequested: route({ openArchiveCards: function () { return cards } }, paneA) }
+        extractPasswordRequested: route({ openArchiveCards: function () { return cards } }, paneA) }
     var wireBody = Source.block(Source.source("ui/PaneWire.qml"), "function onArchiveDone(id, ok, verified, err, path, dest)", "ui/PaneWire.qml")
     backend.archiveDone.connect(eval("(function (pane) { return function (id, ok, verified, err, path, dest) {" + wireBody + "} })")(wirePane))
     backend.receive('{"t":"archivedone","id":7,"ok":false,"verified":true,"err":"encrypted","path":"/a/backup.7z","dest":"/a/backup"}')

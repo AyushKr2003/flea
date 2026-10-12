@@ -132,7 +132,7 @@ function run(check) {
           Archive.passwordEntry(["7z"]).map(function (e) {
               return (e.separator === true ? "sep" : e.id + "=" + e.label + "=" + e.glyph)
           }).join("|"),
-          "sep|compressPw=With password…=key")
+          "sep|compressPassword=With password…=key")
 
     // Archives040: the wrong-password and encrypted markers are backend codes, never sentences.
     check("a wrong password is told from any other failure",

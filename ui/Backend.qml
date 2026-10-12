@@ -373,7 +373,7 @@ Item {
     }
 
     // The With-password compress: the secret rides this wire and leaves it only on 7z's stdin pipe.
-    function compressPw(paths, dest, format, password, encryptNames, menuId) {
+    function compressPassword(paths, dest, format, password, encryptNames, menuId) {
         root.send({ c: "archive", op: "compress", paths: paths, dest: dest, format: format,
                     password: password, encryptNames: encryptNames === true, menuId: menuId || 0 })
     }
@@ -383,7 +383,7 @@ Item {
     }
 
     // The extract card's retry with a password, over the same destination the first attempt named.
-    function extractPw(path, dest, password, menuId) {
+    function extractPassword(path, dest, password, menuId) {
         root.send({ c: "archive", op: "extract", path: path, dest: dest, password: password, menuId: menuId || 0 })
     }
 

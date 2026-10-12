@@ -55,16 +55,16 @@ Item {
     }
     // A card the user has started on never takes a name, so its poller never starts.
     function cardTouched() {
-        var dlg = loader.item
-        return !!dlg && (dlg.phase !== "typing" || dlg.noteText.length > 0 || dlg.masked)
+        var unlockDialog = loader.item
+        return !!unlockDialog && (unlockDialog.phase !== "typing" || unlockDialog.noteText.length > 0 || unlockDialog.masked)
     }
     // The first touch latches the one-shot shut, so erasing never restarts the poller.
     readonly property bool _touched: root.cardTouched()
     on_TouchedChanged: if (root._touched) root._namePollDone = true
     // Only an untouched card takes the name, so nothing the user has started on changes the drive it names.
     function nameDevice() {
-        var dlg = loader.item
-        if (root.unnamedDevice.length === 0 || !dlg || !dlg.opened || dlg.device !== root.unnamedDevice) {
+        var unlockDialog = loader.item
+        if (root.unnamedDevice.length === 0 || !unlockDialog || !unlockDialog.opened || unlockDialog.device !== root.unnamedDevice) {
             root.unnamedDevice = ""
             return
         }
@@ -82,7 +82,7 @@ Item {
             return
         }
         root.unnamedDevice = ""
-        dlg.describe(row.label, row.size, row.fstype, row.fsver)
+        unlockDialog.describe(row.label, row.size, row.fstype, row.fsver)
     }
 
     // After an unlock the locked row is a crypt row in the same place; put the cursor on it,

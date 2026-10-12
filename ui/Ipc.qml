@@ -949,14 +949,14 @@ QtObject {
         }
         // The Unlock card flea --unlock opens, so a capture waits on its phase instead of sleeping.
         function unlockState(): string {
-            var dlg = root.unlockHost ? root.unlockHost.dialog : null
-            if (!dlg || !dlg.opened) return JSON.stringify({opened: false})
-            return JSON.stringify({opened: true, phase: String(dlg.phase), note: String(dlg.noteText),
-                noteIsError: dlg.noteIsError === true, device: String(dlg.device), label: String(dlg.driveLabel),
-                subtitle: String(dlg.subtitleText), focus: dlg.focusPart(), masked: dlg.masked === true,
-                rect: root.cardRectOf(dlg.cardItem),
-                controls: ["cancel", "unlock"].map(function (b) { return root.controlState(b, dlg.buttonItem(b)) }),
-                revealed: dlg.fieldItem.revealed, eye: dlg.fieldItem.eyeCentre()})
+            var unlockDialog = root.unlockHost ? root.unlockHost.dialog : null
+            if (!unlockDialog || !unlockDialog.opened) return JSON.stringify({opened: false})
+            return JSON.stringify({opened: true, phase: String(unlockDialog.phase), note: String(unlockDialog.noteText),
+                noteIsError: unlockDialog.noteIsError === true, device: String(unlockDialog.device), label: String(unlockDialog.driveLabel),
+                subtitle: String(unlockDialog.subtitleText), focus: unlockDialog.focusPart(), masked: unlockDialog.masked === true,
+                rect: root.cardRectOf(unlockDialog.cardItem),
+                controls: ["cancel", "unlock"].map(function (b) { return root.controlState(b, unlockDialog.buttonItem(b)) }),
+                revealed: unlockDialog.fieldItem.revealed, eye: unlockDialog.fieldItem.eyeCentre()})
         }
         function trashFocusEmpty(): bool { var view = root.pane.trash.item; if (!view) return false; view.emptyItem.forceActiveFocus(Qt.TabFocusReason); return view.emptyItem.activeFocus }
         // open() leaves the keyboard on the view itself; forcing a focus scope alone returns it to its last child, so the button lets go first.

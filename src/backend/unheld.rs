@@ -19,6 +19,8 @@ const ENAMETOOLONG: i32 = 36;
 const ENOSYS: i32 = 38;
 const EILSEQ: i32 = 84;
 const EOPNOTSUPP: i32 = 95;
+// Linux refuses a path of this many bytes with ENAMETOOLONG whatever drive holds it, so the error then says nothing about the drive.
+const PATH_MAX: usize = 4096;
 // Linux statfs magic for vfat and exfat, the two drives with no link and no mknod operation; see linux/magic.h.
 const VFAT_MAGIC: i64 = 0x4D44;
 const EXFAT_MAGIC: i64 = 0x2011BAB0;
@@ -84,7 +86,7 @@ fn reason(kind: Kind, e: &std::io::Error, named: &Path, inside: Option<&Path>) -
             let windows = crate::backend::fsname::has_windows_names(parent);
             Some(crate::backend::fsname::refuse_name(&leaf, &fs, windows).unwrap_or_else(|| NAME.to_string()))
         }
-        (_, ENAMETOOLONG) => Some(LONG.to_string()),
+        (_, ENAMETOOLONG) if named.as_os_str().len() < PATH_MAX => Some(LONG.to_string()),
         // Inside a folder this copy created, a taken name is a fold only on vfat or exfat beside a source sibling; else another writer's.
         (_, EEXIST) if fat_drive(parent) && inside.is_some_and(folds_in) => Some(TAKEN.to_string()),
         _ => None,
@@ -188,3 +190,7 @@ pub fn test_refuse(faults: &[(&str, i32)]) {
 #[cfg(test)]
 #[path = "unheld_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "unheld_path_tests.rs"]
+mod path_tests;

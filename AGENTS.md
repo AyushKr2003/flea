@@ -8905,6 +8905,7 @@ answered after it, if and only if its descriptor is the one that became current:
 directory just left answers nothing, as it did when the loop was inside the scan. An `Unmounted` event waits the
 same way (`Gate::note_unmount`) and replays after `land`, in arrival order, through `unmount::leave_mount`: judged
 at once it met the old descriptor and was dropped for the new folder or applied to the folder being left.
+A network poll's `PollChanged` and a probe's `FsInfo` wait the same way (`Gate::hold`) and run through `dispatch` after `land`, or once a let-go list has replayed the requests that waited, so each is judged against the folder that is current by then.
 
 **What is still synchronous, honestly.** `peek` scans a preview directory inline, `listpaths`
 `lstat`s each named path, and `window`'s `stat_range` and a size/mtime `sort`'s `stat_all` run on the
@@ -9243,3 +9244,5 @@ The auto-hide rail keeps its Sidebar built after the first reveal but parks the 
 The batch Apply native round in `tests/ui-permissions.sh` no longer waits on an owed re-read, because the re-read keeps a click made before it runs (`tests/permissions-focus.qml` emits a watched `changed`, clicks an unmarked row and expects that one mark and cursor after the re-read, in all five views, 200 to 220 checks in `tests/permissions-focus.sh`, 406 to 417 lines in `tools/flea-file-budget`) and refuses one made while it is out as Loading, so the round repeats its click until one lands; `ui/Ipc.qml` drops `rereadOwed` again and `tests/startup-units.txt` returns its `bytes` line to 1654071.
 
 The stage4 join settles `tests/startup-units.txt` at 1656568, the sum the probe takes over its 175 units once every branch is in (over the 1654071 pin: nattrash +129, statusfs +814, presskeep +571, s4ci -8, qmlfix4 +158, s4vis +833), and drops the seven `tests/staticgates-unqualified.tsv` rows per profile that qmlfix4 and s4ci cleared.
+
+The R4 minors move two ceilings, each re-derived with `wc -l`: `src/backend/run.rs` 1105 to 1110 for the held poll and probe arms and their two replays, and `src/tui/hold_tests.rs` 426 to 427 for the zero-trash assertion on the held frame. The same round spells `Pw` out as `Password` in the archive password identifiers and `dlg` as `unlockDialog` in `ui/UnlockHost.qml` and `ui/Ipc.qml`, which takes `tests/startup-units.txt` from 1656568 to 1656799 (+231, identifier length only).
