@@ -214,11 +214,14 @@ def require_seeded_view(arm, extra):
         raise RuntimeError("arm %s wants view %s, the launch state names %s" % (arm.get("id"), want, got))
 
 
-def launch(arm, fixture, ctx):
-    """Start one entrant on fixture; (Popen, window dict) once its window maps, else raise."""
+def launch(arm, fixture, ctx, env_extra=None):
+    """Start one entrant on fixture; (Popen, window dict) once its window maps, else raise.
+
+    env_extra is laid over the entrant's own environment, which is how a pane walk starts the
+    entrant with a config and state home that hold no saved panel layout."""
     spec = S.ENTRANTS[arm["entrant"]]
     argv, extra = S.entrant_argv(arm, fixture, ctx)
-    env = dict(S.ENV, **extra)
+    env = dict(S.ENV, **extra, **(env_extra or {}))
     proc = subprocess.Popen(argv, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             start_new_session=True)
     t0 = time.monotonic()
@@ -444,11 +447,34 @@ def launch_columns(detail, t_exec, win_rect, content_rect, end_ns, ink_min=INK_R
             "changes_after_exec": len([t for t in changes if t > t_exec])}
 
 
-def ensure_pane_panel(keys, rec, entrant):
-    """Send the entrant's panel key and refuse the run when the pane region shows no panel change."""
+def shut_panel_env(entrant, root):
+    """Environment that starts entrant with its panel shut: fresh, empty config and state homes under root.
+
+    The panel key toggles, so a layout the entrant restored from the operator's saved state could
+    already show the panel and the key would close it. An entrant with no panel key needs none."""
+    if not NAV[entrant].get("preview_pane"):
+        return {}
+    home = tempfile.mkdtemp(prefix="panel-shut-", dir=root)
+    env = {"XDG_CONFIG_HOME": os.path.join(home, "config"), "XDG_STATE_HOME": os.path.join(home, "state")}
+    for path in env.values():
+        os.mkdir(path)
+    return env
+
+
+def ensure_pane_panel(keys, rec, entrant, shut_env):
+    """Send the entrant's panel key once and refuse the run unless the panel went from shut to open.
+
+    The key toggles, so a change in the pane region proves a panel opened only when the walk
+    started from a shut panel. shut_env is the shut_panel_env the entrant was launched with: the
+    run is refused when it holds no config and state homes, before any key is sent."""
     panel_keys = NAV[entrant].get("preview_pane") or []
     if not panel_keys:
         raise RuntimeError("no panel key for %s, so the pane preview cannot open its panel" % entrant)
+    for var in ("XDG_CONFIG_HOME", "XDG_STATE_HOME"):
+        home = (shut_env or {}).get(var)
+        if not home or not os.path.isdir(home):
+            raise RuntimeError("the %s pane started without a shut-panel %s, so its panel may already be open "
+                               "and the pane walk is refused" % (entrant, var))
     t_panel = keys.chord(*panel_keys)
     rec.wait_quiet(NAV_QUIET_NS, t_panel, NAV_CAP_NS)
     shown = S.result_changes_of(rec.snapshot())
@@ -466,7 +492,8 @@ def run_preview(arm, fixture, ctx, keys, view, mode, kinds, opts):
     files = sorted(os.listdir(fixture))
     proc, rec = None, None
     try:
-        proc, win = launch(arm, fixture, ctx)
+        shut_env = shut_panel_env(arm["entrant"], ctx["out_dir"]) if mode == "pane" else {}
+        proc, win = launch(arm, fixture, ctx, shut_env)
         S.focus_window(win["address"])
         S.park_cursor()
         time.sleep(FOCUS_IDLE_S)
@@ -486,7 +513,7 @@ def run_preview(arm, fixture, ctx, keys, view, mode, kinds, opts):
             rec = S.Recorder(ctx["rec_bin"], region, masks, os.path.join(dump_dir, "d"), whole)
             rec.wait_quiet(MAP_QUIET_NS, time.monotonic_ns(), MAP_QUIET_CAP_NS)
             if pane and not pane_ready:
-                ensure_pane_panel(keys, rec, arm["entrant"])
+                ensure_pane_panel(keys, rec, arm["entrant"], shut_env)
                 pane_ready = True
             keys.chord("home")
             time.sleep(PREVIEW_STEP_S)
@@ -1150,21 +1177,52 @@ def selftest():
         def snapshot(self):
             return list(self.frames)
     stub = ChordKeys()
-    panel_at = stub.now + 100 * ms
-    shown = PanelRec([(panel_at, 5, 40)])
-    t_panel = ensure_pane_panel(stub, shown, "dolphin")
-    check("pane_chord", stub.chords, [["f11"]])
-    check("pane_panel_after_key", t_panel < panel_at, True)
+    panel_root = tempfile.mkdtemp(prefix="flea-nav-selftest-")
+    open(os.path.join(panel_root, ".selftest-root"), "w").close()
     try:
-        ensure_pane_panel(ChordKeys(), PanelRec([(100 * ms, 0, -1)]), "dolphin")
-        fail.append("pane_shut: no refusal when the panel shows no change")
-    except RuntimeError as e:
-        check("pane_shut_names", "pane" in str(e), True)
-    try:
-        ensure_pane_panel(ChordKeys(), PanelRec([]), "thunar")
-        fail.append("pane_nokey: no refusal without a panel key")
-    except RuntimeError as e:
-        check("pane_nokey_names", "no panel key" in str(e), True)
+        shut = shut_panel_env("dolphin", panel_root)
+        check("shut_env_vars", sorted(shut), ["XDG_CONFIG_HOME", "XDG_STATE_HOME"])
+        check("shut_env_fresh", [os.listdir(v) for v in shut.values()], [[], []])
+        check("shut_env_under_root", all(v.startswith(panel_root + os.sep) for v in shut.values()), True)
+        check("shut_env_distinct", len(set(shut.values())), 2)
+        check("shut_env_no_panel_entrant", shut_panel_env("nautilus", panel_root), {})
+        panel_at = stub.now + 100 * ms
+        shown = PanelRec([(panel_at, 5, 40)])
+        t_panel = ensure_pane_panel(stub, shown, "dolphin", shut)
+        check("pane_chord", stub.chords, [["f11"]])
+        check("pane_panel_after_key", t_panel < panel_at, True)
+        # A walk launched without the shut-panel homes could start with the panel open, so the key
+        # would close it and the region would still change: refused before any key is sent.
+        for tag, env in (("none", None), ("empty", {}), ("one", {"XDG_CONFIG_HOME": shut["XDG_CONFIG_HOME"]}),
+                         ("missing", {"XDG_CONFIG_HOME": os.path.join(panel_root, "no"),
+                                      "XDG_STATE_HOME": os.path.join(panel_root, "no")})):
+            toggled = ChordKeys()
+            try:
+                ensure_pane_panel(toggled, PanelRec([(toggled.now + 100 * ms, 5, 40)]), "dolphin", env)
+                fail.append("pane_open_unproven_%s: a region change passed without a shut start" % tag)
+            except RuntimeError as e:
+                check("pane_open_unproven_%s" % tag, ("shut-panel" in str(e), toggled.chords), (True, []))
+        # The refusal comes from the frame content: frames after the key that are no change at all, or
+        # a flat frame with no ink, are refused; one that shows rows is not.
+        for tag, frames in (("nochange", [(1200 * ms, 0, -1)]), ("flat", [(1200 * ms, 5, 0)]), ("none", [])):
+            try:
+                ensure_pane_panel(ChordKeys(), PanelRec(frames), "dolphin", shut)
+                fail.append("pane_shut_%s: no refusal when the panel shows no change" % tag)
+            except RuntimeError as e:
+                check("pane_shut_%s" % tag, "showed no panel change" in str(e), True)
+        # A change stamped before the key does not count either.
+        try:
+            ensure_pane_panel(ChordKeys(), PanelRec([(100 * ms, 5, 40)]), "dolphin", shut)
+            fail.append("pane_shut_early: a change before the key passed")
+        except RuntimeError as e:
+            check("pane_shut_early", "showed no panel change" in str(e), True)
+        try:
+            ensure_pane_panel(ChordKeys(), PanelRec([]), "thunar", {})
+            fail.append("pane_nokey: no refusal without a panel key")
+        except RuntimeError as e:
+            check("pane_nokey_names", "no panel key" in str(e), True)
+    finally:
+        shutil.rmtree(panel_root)
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1

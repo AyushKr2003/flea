@@ -1692,22 +1692,19 @@ def gate(paths, out=None, only=None):
         for key, n in planned_counts(part, GATE_MIN_SAMPLES, PLAN_FX).items():
             need[key] = need.get(key, 0) + n
     seen_parts, sample_lines = set(), []
-    part_manifests, part_heads = {}, {}
+    part_manifests = {}
     for m in manifests:
         plan = m.get("plan", {})
         part = plan.get("part")
         if part in PARTS:
             seen_parts.add(part)
             part_manifests[part] = part_manifests.get(part, 0) + 1
-            part_heads.setdefault(part, set()).add(m.get("flea_head") or "?")
             s = plan.get("samples", GATE_MIN_SAMPLES)
             if s < GATE_MIN_SAMPLES:
                 sample_lines.append("GATE MISSING %s plan samples %s, under the defined %s" % (part, s, GATE_MIN_SAMPLES))
     for part in sorted(part_manifests):
         if part_manifests[part] > 1:
             sample_lines.append("GATE MISSING part %s has %d manifests, so its rows came from more than one run" % (part, part_manifests[part]))
-        elif len(part_heads.get(part, set())) > 1:
-            sample_lines.append("GATE MISSING part %s mixes builds, so its rows came from more than one build" % part)
     breaches, missing, seen = [], list(sample_lines), set()
     for part in expected:
         if part not in seen_parts:

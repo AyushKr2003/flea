@@ -444,7 +444,7 @@ def mem_block(ids, by_id, versions, first_head):
     return lines
 
 
-# Search arms at the plan longest length, a/b self-pairs merged; sample row: {"arm": "flea-038-a", "length": 6, "query": "scroll", "first_ms": 6.3}.
+# The search jsonl's manifest line; sample: {"manifest": {"date": "2026-09-30T18:50:14-04:00"}}. Its first 10 characters are the date.
 def search_manifest_date(jsonl_path):
     for line in open(jsonl_path, encoding="utf-8"):
         line = line.strip()

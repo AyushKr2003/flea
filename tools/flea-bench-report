@@ -29,8 +29,13 @@ fi
 selftest() {
   local tmp fail=0
   tmp=$(mktemp -d) || { echo "flea-bench-report selftest: no temp directory" >&2; return 1; }
-  [ -n "$tmp" ] && [ -d "$tmp" ] && [ "${tmp#/tmp/}" != "$tmp" ] || { echo "flea-bench-report selftest: bad temp path" >&2; return 1; }
-  printf 'selftest' > "$tmp/.bench-report-selftest" || { rm -rf "$tmp"; return 1; }
+  # Hard rule 9: the root is absolute, non-empty, under mktemp's own base (TMPDIR or /tmp) and holds its marker.
+  local base=${TMPDIR:-/tmp}
+  base=${base%/}
+  [ -n "$tmp" ] && [ -d "$tmp" ] && [ "${tmp#/}" != "$tmp" ] && [ "${tmp#"$base"/}" != "$tmp" ] \
+    || { echo "flea-bench-report selftest: bad temp path" >&2; return 1; }
+  printf 'selftest' > "$tmp/.bench-report-selftest" && [ -f "$tmp/.bench-report-selftest" ] \
+    || { echo "flea-bench-report selftest: temp root holds no marker" >&2; rm -rf "$tmp"; return 1; }
   trap 'rm -rf "$tmp"' EXIT
   local head="id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun,first_rows_ms"
   local man="flea gui source abc1234 (clean), release binary built 2026-09-23, 100 bytes
@@ -67,10 +72,26 @@ dolphin gui dolphin 1.2.3-4"
   } > "$old"
   cp "$tmp/run.manifest.md" "$tmp/old.manifest.md"
   "$0" "$old" > /dev/null 2>"$tmp/olderr" || { echo "flea-bench-report selftest FAILED: legacy file without write_clean refused:" >&2; cat "$tmp/olderr" >&2; fail=1; }
+  # An entrant whose every row is write_clean 0 dies naming that, not a verdict disagreement.
+  local dirty="$tmp/dirty.csv"
+  {
+    printf '%s\n' "$head"
+    printf '%s\n' "flea,1,424,900,73628,0.41,6936,0,1,1,1,-,0.41,-,yes,-,0.59,0.10,0,0,0,1,0,-"
+    printf '%s\n' "dolphin,1,1735,5394,207868,9.25,0,500,1,1,1,-,9.26,-,unranked: writes in flight,-,9.25,0.10,20480,3,9000,0,0,-"
+  } > "$dirty"
+  cp "$tmp/run.manifest.md" "$tmp/dirty.manifest.md"
+  if "$0" "$dirty" > /dev/null 2>"$tmp/dirtyerr"; then
+    echo "flea-bench-report selftest FAILED: all-dirty-entrant-refused: the report printed with dolphin counting no run" >&2; fail=1
+  else
+    case "$(cat "$tmp/dirtyerr")" in
+      *"dolphin has no counted run"*"write_clean 0"*) ;;
+      *) echo "flea-bench-report selftest FAILED: all-dirty-entrant-names: wrong refusal:" >&2; cat "$tmp/dirtyerr" >&2; fail=1 ;;
+    esac
+  fi
   trap - EXIT
   rm -rf "$tmp"
   if [ "$fail" -ne 0 ]; then return 1; fi
-  echo "flea-bench-report selftest: write-guard-report, write-guard-median, legacy-no-write-clean, all cells match"
+  echo "flea-bench-report selftest: write-guard-report, write-guard-median, legacy-no-write-clean, all-dirty-entrant, all cells match"
   return 0
 }
 
@@ -193,6 +214,13 @@ for id in "${ids[@]}"; do
   esac
   # Every entrant's version parses before a single line of the report is printed.
   short_version "$id" > /dev/null
+  # An entrant the write guard dropped in full has nothing to rank or average, which is not a disagreement.
+  if [ -z "$(id_rows "$id")" ]; then
+    if [ -n "$write_clean_col" ]; then
+      die "$id has no counted run: every one of its rows carries write_clean 0, so the report has nothing to say about it"
+    fi
+    die "$id has no row in $CSV, so the report has nothing to say about it"
+  fi
   n=$(id_rows "$id" | cut -d, -f"$ranked_col" | sort -u | grep -c .)
   [ "$n" -eq 1 ] || die "$id carries $n different 'ranked' verdicts across its counted runs"
   # Every column here is cut on a comma, so one inside a verdict shifts every column to its right
