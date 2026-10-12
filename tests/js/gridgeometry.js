@@ -61,4 +61,49 @@ function run(check) {
     check("an unnamed lane sizes nothing down",
           GridGeometry.cellWidthFor(800, 5, GAP),
           GridGeometry.cellWidthFor(800, 5, GAP, 0))
+
+    // The window a grid holds is the list's context rebuilt in tile rows: 150 rows of 26 px each side is 32 tiles of 124 px, 18 across.
+    // Sample input: (18, 11, 150, 26, 124, 25) is 576 items of buffer, a 1350 window and a margin of two tile rows.
+    var plan = GridGeometry.windowFor(18, 11, 150, 26, 124, 25)
+    check("the grid window keeps the list's context in tile rows",
+          JSON.stringify(plan), JSON.stringify({ columns: 18, visible: 11, buffer: 576, size: 1350, margin: 36 }))
+    check("a window is whole tile rows", plan.size % 18 + "|" + plan.buffer % 18, "0|0")
+    check("a narrow grid keeps the list's own refetch margin", GridGeometry.windowFor(2, 3, 150, 26, 124, 25).margin, 25)
+    check("a grid with no columns yet still holds a row each side", GridGeometry.windowFor(0, 0, 0, 26, 0, 25).size, 3)
+
+    // The drift ask fires near the edge the held rows have more beyond, and never at an edge that is the listing's own.
+    var drift = function (first, last, held, length) { return JSON.stringify(GridGeometry.driftAsk(plan, first, last, held, length, 2000)) }
+    check("rows well inside the held window ask nothing", drift(1000, 1200, 0, 1350), "null")
+    check("rows near the held end ask a window around the view", drift(1000, 1330, 0, 1350), JSON.stringify({ start: 424, count: 1350 }))
+    check("rows near the held start ask a window around the view", drift(620, 700, 600, 1350), JSON.stringify({ start: 44, count: 1350 }))
+    check("the top of the listing is not an edge to refetch", drift(5, 100, 0, 1350), "null")
+    check("the end of the listing is not an edge to refetch", drift(1700, 1990, 650, 1350), "null")
+    check("no rows held asks the window around the view", drift(0, 50, 0, 0), JSON.stringify({ start: 0, count: 1350 }))
+
+    // A landing far from the view asks the tiles the move will draw before the move, and a step or a covered landing asks nothing.
+    // Sample input: (plan, 1999, 0, 2000, 0, 352) is the tail of the listing, 254 items from 1746.
+    var landing = function (cursor, first, held, length) { return JSON.stringify(GridGeometry.landingAsk(plan, cursor, first, 2000, held, length)) }
+    check("a jump to the last item asks the tail of the listing", landing(1999, 0, 0, 352), JSON.stringify({ start: 1746, count: 254 }))
+    check("a jump the held rows already reach asks nothing", landing(1999, 0, 700, 1500), "null")
+    check("a jump to the first item asks the head once the held rows left it", landing(0, 1980, 1000, 1000), JSON.stringify({ start: 0, count: 252 }))
+    check("a step of a few tile rows asks nothing", landing(90, 0, 0, 0), "null")
+    check("a page of twelve tile rows the held rows reach asks nothing", landing(216, 0, 0, 352), "null")
+
+    // A reply that repeats a row hands its tile nothing to redraw.
+    check("equal rows draw the same tile", GridGeometry.sameRow({ n: "a", tg: [2] }, { n: "a", tg: [2] }), true)
+    check("a changed list field draws a different tile", GridGeometry.sameRow({ n: "a", tg: [2] }, { n: "a", tg: [3] }), false)
+    check("a row with another set of fields draws a different tile", GridGeometry.sameRow({ n: "a" }, { n: "a", d: true }), false)
+    check("a row is never the same as no row", GridGeometry.sameRow({ n: "a" }, null) + "|" + GridGeometry.sameRow(undefined, { n: "a" }), "false|false")
+    check("no row is the same as no row", GridGeometry.sameRow(null, null), true)
+
+    // The row a tile draws: the held one, kept as the same object when a reply repeats it, kept past the window on the same listing, dropped on a new one.
+    var a = { n: "a" }, b = { n: "b" }, memo = { row: null, index: -1, listing: 0 }
+    check("a tile reads the held row at its index", GridGeometry.heldRow(memo, { start: 10, rows: [a, b], listing: 1 }, 11), b)
+    check("a reply that repeats the row leaves the tile the object it has",
+          GridGeometry.heldRow(memo, { start: 10, rows: [{ n: "a" }, { n: "b" }], listing: 1 }, 11), b)
+    check("the window leaving the index keeps the row on the same listing", GridGeometry.heldRow(memo, { start: 100, rows: [a], listing: 1 }, 11), b)
+    check("a tile moved to an index no window holds reads nothing", GridGeometry.heldRow(memo, { start: 100, rows: [a], listing: 1 }, 12), null)
+    // A stale row sits in the memo at the same index, so only the listing compare can drop it.
+    memo.row = a
+    check("a new listing leaves no row behind", GridGeometry.heldRow(memo, { start: 100, rows: [a], listing: 2 }, 12), null)
 }
