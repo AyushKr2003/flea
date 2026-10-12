@@ -6,8 +6,7 @@ import Quickshell
 import "flea/js/ExtThumbs.js" as ExtThumbs
 import "flea/js/MarkdownPrepared.js" as Prepared
 
-// The real WindowBody under a network storage class, behind a backend proxy that rewrites the fsinfo class and holds replies (tests/slowsource-load.sh writes it).
-// Leg "enter" presses Return on a folder whose listing is held; a "look-*" leg presses Space on a file whose read is held or plain.
+// The real WindowBody under a network storage class, behind the request-holding proxy tests/slowsource-nas.sh writes: leg "enter" presses Return on a folder whose listing is held, a "look-*" leg Space on a file.
 // Sample output: "NASPROBE ENTER cap=1 capFrame=4 markFrame=5 markDelta=1 timer=swap-cap keyToCapMs=70 keyToMarkMs=82 landMs=401 shownMs=332" is one held listing judged.
 ShellRoot {
     id: root

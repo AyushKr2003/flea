@@ -18,8 +18,7 @@ Item {
     // The unit the rested file's kind opens its content from, "" for a folder or a kind with none (ui/js/QuickLookKinds.js).
     readonly property string kindUnit: LookKinds.unitOf(root.pane ? root.pane.cursorRow : null)
     onKindUnitChanged: if (unitTimer.running) unitTimer.restart()
-    // The kind units the cursor has rested on, held by file name as the two above are: the Markdown pane, PdfViewer (QtQuick.Pdf), PreviewMedia (QtMultimedia), PreviewImage, PreviewText.
-    // A kind the window never rested on is never compiled, so a folder without a PDF or a clip never imports QtQuick.Pdf or QtMultimedia.
+    // The kind units the cursor has rested on, held by file name as the two above are, so a kind the window never rested on (PdfViewer, PreviewMedia) is never compiled.
     property var kindUnits: ({})
     readonly property var markdownUnit: root.kindUnits[LookKinds.MARKDOWN] || null
     readonly property int unitWarmMs: 1000

@@ -9,9 +9,8 @@ var MEDIA = "PreviewMedia.qml"
 var IMAGE = "PreviewImage.qml"
 var TEXT = "PreviewText.qml"
 
-// Sample input: { n: "a.pdf", i: "x-office-document" } answers "PdfViewer.qml", { n: "a.mp4", i: "video-x-generic" } "PreviewMedia.qml", { n: "a.mp3", i: "audio-x-generic" } "PreviewMedia.qml",
-// { n: "a.png", i: "image-x-generic" } "PreviewImage.qml", { n: "a.txt", i: "text-x-generic" } and { n: "a.rs", i: "text-x-script" } "PreviewText.qml", { n: "a.md", i: "text-x-generic" } "MarkdownPane.qml";
-// a folder, an archive, an unsupported file and null answer "" because no unit of their own is compiled for them.
+// Sample input: { n: "a.pdf", i: "x-office-document" } answers "PdfViewer.qml", { n: "a.mp4", i: "video-x-generic" } "PreviewMedia.qml", { n: "a.png", i: "image-x-generic" } "PreviewImage.qml", { n: "a.md", i: "text-x-generic" } "MarkdownPane.qml".
+// A folder, an archive, an unsupported file and null answer "" because no unit of their own is compiled for them.
 function unitOf(row) {
     if (row === null || row === undefined || row.d === true)
         return ""
