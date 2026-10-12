@@ -254,10 +254,15 @@ function holding(entries, dir) {
         var e = list[i]
         if (!e.path || (e.group !== "device" && e.group !== "network") || railMenu(e).length === 0)
             continue
-        if (path === e.path || path.indexOf(e.path + "/") === 0)
+        if (inside(path, e.path))
             return e
     }
     return null
+}
+
+// Whether dir is root itself or lies under it; ui/js/Places.js heldBy asks the rail the same question.
+function inside(dir, root) {
+    return dir === root || dir.indexOf(root + "/") === 0
 }
 
 // The keyboard's route into the rail menu, and where a rail row without one is answered: the sheet

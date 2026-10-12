@@ -4036,6 +4036,8 @@ The variadic `prctl` declarations move two ceilings, each re-derived with `wc -l
 
 The Columns prebuild moves one ceiling, re-derived with `wc -l`: `ui/ColumnPane.qml` 423 to 518 for the active column's parked-row driver, whose quiet 16 ms ticks build the rows the next landing adopts: the pool counters and the first-landing hold, the 16 ms Timer with its quiet test, start, tick, adoption and drop, the count, height and visibility hooks, and the delegate's parked branch. The new `tests/columnsprebuild.qml` is 317 lines, over the soft budget and under the hard cap, with `tests/columnsprebuild.sh` at 43.
 
+The unfocused Dual selection and the rail's lit place move three ceilings, each re-derived with `wc -l`: `ui/Sidebar.qml` 693 to 729 for `litIndex`, `settleLit` with the pane signals it settles on, and a `lit` and a `cursor` binding on each row group in place of the one cursor binding; `tests/sidebar-flows.qml` 473 to 545 for the leg that navigates the real pane and reads which row draws the lit look and which the cursor frame; and `ui/js/Mounts.js` 298 to 303 for `inside`, the one prefix test `holding` and `Places.heldBy` both ask. `tests/startup-units.txt` keeps its units while its `bytes` line moves from 1596965 to 1602134, the sum the probe's tool takes over them with the new lines in `ui/Row.qml`, `ui/Sidebar.qml`, `ui/SidebarRow.qml`, `ui/js/Mounts.js`, `ui/js/Places.js` and `ui/js/RailKeys.js`.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
