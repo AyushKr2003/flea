@@ -86,7 +86,7 @@ tests/permissions-adv.qml 402
 tests/js/network.js 307
 tests/js/ops.js 574
 tests/js/slowclick.js 309
-tests/js/settings.js 368
+tests/js/settings.js 394
 tests/js/tap.js 401
 tests/js/uistate.js 370
 tests/js/watch.js 541

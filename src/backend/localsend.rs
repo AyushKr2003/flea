@@ -54,7 +54,7 @@ extern "C" {
     fn prctl(option: i32, ...) -> i32;
 }
 
-// The person reads the cause; the log names the step that met it, since four calls can refuse in the same way.
+// The person reads the cause; the log names the step that met it, since several calls can refuse in the same way.
 fn setup_fault(step: &str, cause: &std::io::Error) -> String { eprintln!("flea: LocalSend terminal setup, {}: {}", step, cause); format!("LocalSend could not start: {}.", crate::error::io_message(cause)) }
 
 fn open_pty() -> Result<(OwnedFd, std::fs::File), String> {

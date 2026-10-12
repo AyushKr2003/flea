@@ -9,13 +9,16 @@ var WORDS = {
     trash: "Press %1 again to move it to Trash, or %2 on its own.",
     review: "Press %1 again to review permanent deletion, or %2 on its own.",
     trashAlone: "Press %1 again to move it to Trash.",
+    trashMany: "Press %1 again to move them to Trash, or %2 on its own.",
+    trashManyAlone: "Press %1 again to move them to Trash.",
     reviewAlone: "Press %1 again to review permanent deletion."
 }
 
-// The keys come from the running preset: the arming key, and the key that acts at once when the preset binds one.
-function trashPrompt() {
-    var alone = KeyName.keyOf("trash", "none")
-    return alone.length > 0 ? Format.fill(WORDS.trash, KeyName.keyFor("trash"), alone) : Format.fill(WORDS.trashAlone, KeyName.keyFor("trash"))
+// The keys come from the running preset: the arming key, and the key that acts at once when the preset binds one; the count of rows the pair would trash picks it or them.
+function trashPrompt(count) {
+    var alone = KeyName.keyOf("trash", "none"), many = count > 1
+    if (alone.length > 0) return Format.fill(many ? WORDS.trashMany : WORDS.trash, KeyName.keyFor("trash"), alone)
+    return Format.fill(many ? WORDS.trashManyAlone : WORDS.trashAlone, KeyName.keyFor("trash"))
 }
 function reviewPrompt() {
     var alone = KeyName.keyOf("trash", "none")
@@ -39,7 +42,7 @@ function arm(pane) {
         return
     }
     pane.trashArmedAt = Date.now()
-    pane.armPrompted(trashPrompt())
+    pane.armPrompted(trashPrompt(Ops.targetIndices(pane).length))
 }
 
 // Window-level keys the Trash view borrows: "direct" skips pane.act as Focus.handleKey does, "act" goes through it, "trash" stays here.

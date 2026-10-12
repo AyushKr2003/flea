@@ -69,8 +69,7 @@ function label(copy, link) {
     return copy ? "copy here" : "move here"
 }
 
-// The status bar's half of the board. The hint names the keys held at the drop: a key pressed after the lift
-// counts when DragOut.keys saw it, and dropHeld reads that before it falls back to the lift.
+// The hint names the keys held at the drop, so a key pressed after the lift counts once DragOut.keys saw it.
 function line(n, name, copy, link) {
     var named = name.length > 0
     var template = link === true ? (named ? WORDS.linkTo : WORDS.linkToFolder)

@@ -71,7 +71,7 @@ function keyPane(inFlight, rows) {
     p.selectedIndices = function () { return [] }
     p.renameEditor = function () { return null }
     p.message = function (text, isError) { p.said.push(text) }
-    p.armPrompted = function () {}
+    p.armPrompted = function (text) { p.sent.push("armed " + text) }
     p.clearSelection = function () {}
     p.listArea = { primeSettle: function () {} }
     p.backend = {
@@ -220,7 +220,8 @@ function run(check) {
     check("and an unbound key is left to the route that names the filter", Swap.swallows(true, ""), false)
 
     // The control: at rest the same keys over a row really reach the backend through the real route.
-    check("at rest dd trashes the cursor row, and its first d says nothing by message", pressed(false, FILE, DD).sent.join(",") + "|" + pressed(false, FILE, DD).said.join(""), "trash 0|")
+    check("at rest dd trashes the cursor row, and its first d reaches armPrompted with the arm sentence, not message",
+          pressed(false, FILE, DD).sent.join("/") + "|" + pressed(false, FILE, DD).said.join(""), "armed Press d again to move it to Trash, or Delete on its own./trash 0|")
     check("and Delete does too", pressed(false, FILE, DELETE).sent.join(","), "trash 0")
     check("and F2 opens the rename", pressed(false, FILE, F2).sent.join(","), "rename")
     check("and Return opens the row", pressed(false, FILE, RETURN).sent.join(","), "open /home/gm/Work/a.txt")

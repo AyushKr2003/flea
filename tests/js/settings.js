@@ -17,6 +17,23 @@ function displayState(textSize, baseSize, monitorScale) {
              monitorScale: monitorScale === undefined ? 1 : monitorScale, cornerRadius: 8 }
 }
 
+// Runs body with the rows for the given actions taken out of the generated tables, then puts them back where they were.
+function withoutKeys(actions, body) {
+    var tables = [Keymap.PRESET_KEYS, Keymap.SHARED_KEYS], held = []
+    for (var t = 0; t < tables.length; t++) {
+        for (var i = tables[t].length - 1; i >= 0; i--) {
+            if (actions.indexOf(tables[t][i].action) >= 0) held.push({ table: tables[t], at: i, row: tables[t].splice(i, 1)[0] })
+        }
+    }
+    Keymap.setPreset(Keymap.preset)
+    try {
+        body()
+    } finally {
+        for (var h = held.length - 1; h >= 0; h--) held[h].table.splice(held[h].at, 0, held[h].row)
+        Keymap.setPreset(Keymap.preset)
+    }
+}
+
 function kinds(rows) {
     return rows.map(function (row) { return row.kind }).join("|")
 }
@@ -197,6 +214,15 @@ function runPresets(check) {
         Keymap.setPreset(running)
     }
     check("no preset draws an empty hint row or a sentence with a key missing from it", hollow.join(","), "")
+    // Every shipped preset binds the four actions, so the omitting branches only run on a table that leaves them unbound.
+    withoutKeys(["textSizeUp", "textSizeDown", "textSizeReset", "loadPreview"], function () {
+        var drawn = Settings.rows("display", displayState(TextSize.follow(), 14)).concat(Settings.rows("preview", { data: { preview: { loadOn: "manual" } } }))
+        var hints = drawn.filter(function (r) { return r.kind === "hint" }).map(function (r) { return String(r.label) })
+        check("an unbound text size key leaves its hint out of Display", hints.filter(function (l) { return l.indexOf("step through them") >= 0 }).length, 0)
+        check("an unbound load key leaves its hint out of Preview", hints.filter(function (l) { return l.indexOf("loads the current selection") >= 0 }).length, 0)
+        check("no hint left on those panes is empty or holed", hints.filter(function (l) { return l.trim().length === 0 || /^ | {2}| [.,;]/.test(l) }).length, 0)
+        check("an override with no reset key announces the size alone", TextSize.announce({ mode: 16 }, 14), "Text size 16px")
+    })
     var menuRows = Settings.menuRows([], true)
     check("SettingsMenus contains exactly 34 action switches", menuRows.filter(function (r) { return r.kind === "check" && r.id !== "keyHints" }).length, 34)
     // The board's Tags row is one of those switches.

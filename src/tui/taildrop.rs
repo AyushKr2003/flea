@@ -6,6 +6,27 @@ use std::time::{Duration, Instant};
 
 const UNREAD: &str = "Taildrop status could not be read";
 const TOO_LARGE: &str = "Taildrop status was too large to read";
+const MAX_STATUS_BYTES: u64 = 4 * 1024 * 1024;
+
+// The reader thread: the status call's whole answer, or InvalidData once it passes its limit.
+fn read_status(output: impl Read + Send + 'static) -> mpsc::Receiver<io::Result<Vec<u8>>> {
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let result = output
+            .take(MAX_STATUS_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .and_then(|_| {
+                if bytes.len() as u64 > MAX_STATUS_BYTES {
+                    Err(io::Error::new(io::ErrorKind::InvalidData, TOO_LARGE))
+                } else {
+                    Ok(bytes)
+                }
+            });
+        let _ = tx.send(result);
+    });
+    rx
+}
 
 #[derive(Clone)]
 pub struct Peer {
@@ -59,24 +80,8 @@ impl Taildrop {
                     self.error = UNREAD.into();
                     return;
                 };
-                let (tx, rx) = mpsc::channel();
-                std::thread::spawn(move || {
-                    const MAX_STATUS_BYTES: u64 = 4 * 1024 * 1024;
-                    let mut bytes = Vec::new();
-                    let result = output
-                        .take(MAX_STATUS_BYTES + 1)
-                        .read_to_end(&mut bytes)
-                        .and_then(|_| {
-                            if bytes.len() as u64 > MAX_STATUS_BYTES {
-                                Err(io::Error::new(io::ErrorKind::InvalidData, TOO_LARGE))
-                            } else {
-                                Ok(bytes)
-                            }
-                        });
-                    let _ = tx.send(result);
-                });
                 self.child = Some(child);
-                self.output = Some(rx);
+                self.output = Some(read_status(output));
                 self.started = Instant::now();
             }
             Err(_) => self.error = "Taildrop unavailable: tailscale could not start".into(),
@@ -332,6 +337,23 @@ mod tests {
         assert_eq!(status_after(0, Ok(Vec::new())), "Taildrop status could not be read", "an empty answer is not a status");
         assert_eq!(status_after(0, Err(io::Error::new(io::ErrorKind::InvalidData, TOO_LARGE))), "Taildrop status was too large to read");
         assert_eq!(status_after(7, Err(io::Error::from(io::ErrorKind::UnexpectedEof))), "Taildrop status could not be read");
+    }
+    // The limit is the reader thread's own, so a reply past it ends as the too-large sentence and one at it still parses.
+    #[test]
+    fn a_reply_past_the_limit_is_cut_by_the_reader_thread_and_reads_as_too_large() {
+        let after = |output: Box<dyn Read + Send>| {
+            let mut taildrop = Taildrop::new();
+            taildrop.output = Some(read_status(output));
+            taildrop.child = Some(finished(0));
+            for _ in 0..200 {
+                taildrop.poll();
+                if taildrop.child.is_none() { break; }
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+            taildrop.error.clone()
+        };
+        assert_eq!(after(Box::new(io::repeat(b'x'))), TOO_LARGE);
+        assert_eq!(after(Box::new(io::repeat(b'x').take(MAX_STATUS_BYTES))), "Taildrop status could not be read", "a reply at the limit is read, and is not JSON");
     }
     #[test]
     fn provider_state_overrides_stale_peer_eligibility() {

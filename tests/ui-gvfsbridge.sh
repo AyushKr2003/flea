@@ -97,6 +97,7 @@ EOS
     done
     [[ "$seen_sticky" == "Opening Bridge slow" ]] \
         || fail "gvfsbridge: the Starting line never stood, sticky says $seen_sticky"
+    # Live this shows the mark walks with the line; tests/js/status.js tells the call from the sentence.
     [[ "$(ipc statusBusy)" == "true" ]] || fail "gvfsbridge: the busy mark did not walk while the Starting line stood"
     shot gvfsbridge-starting
     wait_path "$runtime/gvfs/$leaf_slow"

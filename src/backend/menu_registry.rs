@@ -34,7 +34,7 @@ impl Registry {
         let running = self.running.lock().map_err(|_| "The application list stopped answering.")?;
         if let Some(child) = running.as_ref() {
             // Reaping also holds this lock, so cancellation cannot target a reused PID or process group.
-            terminate(child.pid, child.work.group()).map_err(|e| child.work.unobserved(&e))?;
+            terminate(child.pid, child.work.group()).map_err(|e| { eprintln!("flea: application cancel, kill: {}", e); child.work.unstopped(&e) })?;
         }
         Ok(())
     }

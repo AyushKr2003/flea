@@ -1,5 +1,4 @@
-// The work a registry child serves, named in the one place the shared start, wait and stop code reads its sentences from.
-// What a child serves, so a fault in the shared start, wait and stop code names the list read or the launch that met it.
+// What a registry child serves, so a fault in the shared start, wait and stop code names the list read or the launch that met it.
 #[derive(Clone, Copy)]
 pub(super) enum Work { List, Launch }
 
@@ -18,6 +17,13 @@ impl Work {
         match self {
             Work::List => format!("The application list could not be read: {}.", cause),
             Work::Launch => format!("Flea could not tell whether the application started: {}.", cause),
+        }
+    }
+    pub(super) fn unstopped(self, cause: &std::io::Error) -> String {
+        let cause = crate::error::io_message(cause);
+        match self {
+            Work::List => format!("Could not stop the application list: {}.", cause),
+            Work::Launch => format!("The application could not be stopped: {}.", cause),
         }
     }
     pub(super) fn check(self, cancel: &super::trashmanifest::Cancellation) -> Result<(), String> {
