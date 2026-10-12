@@ -1,17 +1,43 @@
 #!/usr/bin/env bash
 # Sourced by ui.sh, runs only by name: Tab walks the ring through the chrome bar and the tab strip, Ctrl+4 is Dual, Ctrl+Shift+Z is redo.
 # shellcheck disable=SC2154 # ui.sh supplies the fixture root and the native driver helpers.
+# One omarchy-drive ipc round trip costs 190 to 565 ms on minipc, so a call that outlives ten seconds is a hang and says so.
+keyreach_ipc() {
+    timeout 10 omarchy-drive ipc -p "$flea_ui/boot" flea "$@" || fail "keyreach: ipc $1 gave no answer in ten seconds"
+}
+# keyreach_until <seconds> <what> <command...>: polls on the wall clock and fails naming what it waited for.
+keyreach_until() {
+    local limit="$1" what="$2" deadline=$((SECONDS + $1))
+    shift 2
+    until "$@"; do
+        (( SECONDS < deadline )) || fail "keyreach: waited $limit s for $what"
+        sleep 0.25
+    done
+}
+keyreach_has_path() { [[ -e "$1" ]]; }
+keyreach_has_tabs() { [[ "$(keyreach_ipc tabCount)" == "$1" ]]; }
+# Looks the row up among the fixture's three, so a listing that left the fixture fails at once instead of walking its rows.
+keyreach_row_of() {
+    local want="$1" total row i
+    total=$(keyreach_ipc total)
+    [[ "$total" == 3 ]] || fail "keyreach: the listing holds '$total' rows at '$(keyreach_ipc path)', not the fixture's 3, so $want is not looked up"
+    for i in 0 1 2; do
+        row=$(keyreach_ipc rowAt "$i")
+        [[ "$row" == "$want|"* ]] && { printf '%s' "$i"; return; }
+    done
+    fail "keyreach: no row named $want among the fixture's 3"
+}
 keyreach_tab() {
     key -k Tab >/dev/null
     settle
 }
 keyreach_expect() {
     local want="$1" why="$2" got
-    got=$(ipc focusStop)
+    got=$(keyreach_ipc focusStop)
     [[ "$got" == "$want" ]] || fail "keyreach: $why: the keyboard is on '$got', not '$want'"
 }
 case_keyreach() {
-    local dir="$fixture_root/keyreach" tabs
+    local dir="$fixture_root/keyreach" tabs note_row
     sandbox_scratch "$dir"
     mkdir "$dir/sub"
     printf 'one\n' > "$dir/note.txt"
@@ -29,12 +55,12 @@ case_keyreach() {
     click_row 0 left
     settle
     key -M ctrl -k Return -m ctrl >/dev/null
-    for _attempt in $(seq 1 40); do [[ "$(ipc tabCount)" == "2" ]] && break; sleep 0.25; done
-    tabs=$(ipc tabCount)
+    keyreach_until 10 "Ctrl+Return to open the second tab" keyreach_has_tabs 2
+    tabs=$(keyreach_ipc tabCount)
     [[ "$tabs" == "2" ]] || fail "keyreach: Ctrl+Return opened $tabs tabs, not 2"
     settle
     keyreach_tab; keyreach_tab; keyreach_tab
-    keyreach_expect "strip:$(ipc tabIndex)" "Tab from the bar"
+    keyreach_expect "strip:$(keyreach_ipc tabIndex)" "Tab from the bar"
     shot keyreach-tab
     keyreach_tab; keyreach_expect list "Tab from the strip"
     key -M shift -k Tab -m shift >/dev/null
@@ -54,26 +80,27 @@ case_keyreach() {
     key -k Escape >/dev/null
     key -M ctrl -k 4 -m ctrl >/dev/null
     settle
-    [[ "$(ipc dualState | jq -r .active)" == "true" ]] || fail "keyreach: Ctrl+4 did not open the dual view"
+    [[ "$(keyreach_ipc dualState | jq -r .active)" == "true" ]] || fail "keyreach: Ctrl+4 did not open the dual view"
     keyreach_tab
     keyreach_tab
     shot keyreach-chrome-dual
     key -M ctrl -k 1 -m ctrl >/dev/null
     settle
     echo "-- Ctrl+Shift+Z redoes an undone rename --"
-    click_row "$(row_index_of note.txt)" left
+    note_row=$(keyreach_row_of note.txt) || fail "keyreach: note.txt has no row to click"
+    click_row "$note_row" left
     settle
     key r >/dev/null
     settle
     printf '%s' "renamed" | omarchy-drive key --window flea - >/dev/null || fail "keyreach: typing the new name failed"
     key -k Return >/dev/null
-    for _attempt in $(seq 1 40); do [[ -e "$dir/renamed" || -e "$dir/renamed.txt" ]] && break; sleep 0.25; done
+    keyreach_until 10 "the rename to land as renamed.txt" keyreach_has_path "$dir/renamed.txt"
     [[ -e "$dir/renamed.txt" ]] || fail "keyreach: the rename never landed"
     key z >/dev/null
-    for _attempt in $(seq 1 40); do [[ -e "$dir/note.txt" ]] && break; sleep 0.25; done
+    keyreach_until 10 "z to put note.txt back" keyreach_has_path "$dir/note.txt"
     [[ -e "$dir/note.txt" && ! -e "$dir/renamed.txt" ]] || fail "keyreach: z did not undo the rename"
     key -M ctrl -M shift -k z -m shift -m ctrl >/dev/null
-    for _attempt in $(seq 1 40); do [[ -e "$dir/renamed.txt" ]] && break; sleep 0.25; done
+    keyreach_until 10 "Ctrl+Shift+Z to redo the rename" keyreach_has_path "$dir/renamed.txt"
     [[ -e "$dir/renamed.txt" && ! -e "$dir/note.txt" ]] || fail "keyreach: Ctrl+Shift+Z did not redo the rename"
     printf 'KEYREACH ok\n'
     kill_flea
