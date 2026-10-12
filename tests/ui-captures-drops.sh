@@ -254,7 +254,7 @@ case_cap_drops() {
     read -r cx cy <<< "$src_pt"
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_drops_wait_target "Copy 1 item to outer/"
+    cap_drops_wait_target "Move 1 item to outer/ · ctrl at lift copies"
     shot drops-crumb
     read -r ax ay aw ah <<< "$(ipc listAreaRect)"
     cap_drops_steer "$((ax + aw / 2))" "$((ay + ah - 20))"

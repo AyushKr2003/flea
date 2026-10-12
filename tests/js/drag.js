@@ -348,15 +348,15 @@ function run(check) {
     check("a foreign move offer still moves with no marker", Drag.dropVerb("", Qt.MoveAction, 0), "move")
     check("a foreign copy offer still copies with no marker", Drag.dropVerb("", Qt.CopyAction, 0), "copy")
 
-    // The four sentences ui:cap_drops waits on, from the real functions: a plain own lift on device 56 over the Photos row, over the parent crumb whose device the backend has not answered (CrumbDrop destDev is DropDev.devFor, 0 unanswered, pinned by tests/js/dropsflow.js), and over the Columns parent row.
+    // The four sentences ui:cap_drops waits on, from the real functions: a plain own lift on device 56 over the Photos row, over the parent crumb whose device the backend has answered on the lift's own device (CrumbDrop destDev is DropDev.devFor, pinned by tests/js/dropsflow.js), and over the Columns parent row.
     var capRow = Drag.feedbackFor(Drag.markerPayload([2], false, "/cap-drops", 56), ["file:///cap-drops/a.txt"])
     check("cap_drops Photos row reads a move, as the hover-open leg waits too", Drag.feedbackLine(capRow, "Photos", 56),
         "Move 1 item to Photos · ctrl at lift copies")
     var capCrumbs = Crumbs.crumbs("/home/gm/cap-drops/deep/outer/inner", "/home/gm", null)
     check("cap_drops names the crumb above the leaf by its own text, slash included", capCrumbs[capCrumbs.length - 2].text, "outer/")
     var capCrumb = Drag.feedbackFor(Drag.markerPayload([0], false, "/cap-drops/deep/outer/inner", 56), ["file:///cap-drops/deep/outer/inner/note.txt"])
-    check("cap_drops crumb reads a copy, because its device is unanswered", Drag.feedbackLine(capCrumb, capCrumbs[capCrumbs.length - 2].text, 0),
-        "Copy 1 item to outer/")
+    check("cap_drops crumb reads a move, because its device is the lift's", Drag.feedbackLine(capCrumb, capCrumbs[capCrumbs.length - 2].text, 56),
+        "Move 1 item to outer/ · ctrl at lift copies")
     var capColumn = Drag.feedbackFor(Drag.markerPayload([0], false, "/cap-drops/Photos", 56), ["file:///cap-drops/Photos/p1.txt"])
     check("cap_drops Columns parent row reads a move", Drag.feedbackLine(capColumn, "deep", 56),
         "Move 1 item to deep · ctrl at lift copies")
