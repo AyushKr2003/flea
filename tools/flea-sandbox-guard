@@ -248,9 +248,9 @@ sandbox_cache_require() {
   return 0
 }
 
-# The files directory g_local_file_trash uses for an item: home Trash on the home device, else the item mount's top trash.
+# The files directory the trash lands in: the home Trash where the backend renames in-process or GLib keeps it home, else the item mount's top trash.
 sandbox_trash_files_dir() {
-  local item="${1:-}" home="${2:-${HOME:-}}" parent idev hdev data top uid globaldir candidate owner
+  local item="${1:-}" home="${2:-${HOME:-}}" parent idev hdev data top uid globaldir candidate owner folder fdev odev ancestor tdev
   [ -n "$item" ] || return 1
   [ -n "$home" ] || return 1
   if [ -d "$item" ]; then parent=$item; else parent=$(dirname -- "$item" 2>/dev/null) || return 1; fi
@@ -258,8 +258,21 @@ sandbox_trash_files_dir() {
   idev=$(stat -c %d -- "$parent" 2>/dev/null) || return 1
   hdev=$(stat -c %d -- "$home" 2>/dev/null) || return 1
   [ -n "$idev" ] && [ -n "$hdev" ] || return 1
-  if [ "$idev" = "$hdev" ]; then
-    data=${XDG_DATA_HOME:-$home/.local/share}
+  data=${XDG_DATA_HOME:-$home/.local/share}
+  # Mirrors src/backend/hometrash.rs same_filesystem: the item's folder against the nearest existing folder at or above the home Trash.
+  folder=$(dirname -- "$item" 2>/dev/null) || return 1
+  fdev=$(stat -L -c %d -- "$folder" 2>/dev/null) || fdev=""
+  # The item's own device (lstat) must equal its folder's, so a nested volume goes to gio; a symlink item is judged as the link itself, which GLib trashes in place of its target, and an absent item passes.
+  odev=$(stat -c %d -- "$item" 2>/dev/null) || odev=$fdev
+  tdev=""
+  case "$data" in
+    /*)
+      ancestor=$data/Trash
+      while [ ! -e "$ancestor" ] && [ "$ancestor" != / ]; do ancestor=$(dirname -- "$ancestor") || break; done
+      tdev=$(stat -L -c %d -- "$ancestor" 2>/dev/null) || tdev=""
+      ;;
+  esac
+  if [ "$idev" = "$hdev" ] || { [ -n "$fdev" ] && [ -n "$tdev" ] && [ "$fdev" = "$tdev" ] && [ "$odev" = "$fdev" ]; }; then
     case "$data" in /*) ;; *) return 1 ;; esac
     printf '%s/Trash/files\n' "$data"
     return 0
