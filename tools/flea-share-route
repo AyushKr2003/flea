@@ -1,22 +1,33 @@
 #!/usr/bin/env bash
 # Times one share opened through two routes, the kernel mount and the GVFS FUSE path, each in a fresh Flea, interleaved so drift hits both.
-# Usage: flea-share-route KERNEL_PATH GVFS_PATH [RUNS]   (RUNS defaults to 9); flea-share-route --dry-run [RUNS] proves the script on stubs.
-# Env: FLEA_BIN (default target/release/flea), FLEA_UI (default ui), PRE_RUN (a shell line run before every launch, for dropping caches),
-#      LISTED_TIMEOUT_MS (default 60000, a launch deadline and never a retry), OUT (CSV path, default under the run's sandbox).
-# Output, the field bench's shape: a CSV header then one row per run, then "median [min..max]" per route and the ratio.
-# Sample row: "kernel,1,412,305,260" is route, run, listed_ms (exec to a settled listing), first_rows_ms (exec to the first row), rows.
-# The clock is polled over ipc, so listed_ms resolves to one call (tens of ms) and both routes carry the same cost.
-# On minipc, with the kernel mount at /mnt/nas and the same share at /run/user/1000/gvfs/smb-share:server=nas,share=isos:
-#   tools/flea-share-route /mnt/nas/isos "/run/user/1000/gvfs/smb-share:server=nas,share=isos" 9
 set -uo pipefail
 . "$(dirname "$0")/flea-sandbox-guard"
 repo=$(cd "$(dirname "$0")/.." && pwd)
-. "$repo/tools/flea-ipc-pid"
 
+# Prints the usage, env, output and sample row; a bad argument sends it to stderr.
+usage() {
+  cat <<'EOU'
+Usage: flea-share-route KERNEL_PATH GVFS_PATH [RUNS]   (RUNS defaults to 9)
+       flea-share-route --dry-run [RUNS]               (proves the script on stubs, RUNS defaults to 3)
+Env: FLEA_BIN (default target/release/flea), FLEA_UI (default ui), PRE_RUN (a shell line run before every launch, for dropping caches),
+     LISTED_TIMEOUT_MS (default 60000, a launch deadline and never a retry), OUT (CSV path, default under the run's sandbox).
+Output, the field bench's shape: a CSV header then one row per run, then "median [min..max]" per route and the ratio.
+Sample row: "kernel,1,412,305,260" is route, run, listed_ms (exec to a settled listing), first_rows_ms (exec to the first row), rows.
+The clock is polled over ipc, so listed_ms resolves to one call (tens of ms) and both routes carry the same cost.
+On minipc, with the kernel mount at /mnt/nas and the same share at /run/user/1000/gvfs/smb-share:server=nas,share=isos:
+  tools/flea-share-route /mnt/nas/isos "/run/user/1000/gvfs/smb-share:server=nas,share=isos" 9
+EOU
+}
+case ${1:-} in -h|--help) usage; exit 0 ;; esac
 dry=no
 if [ "${1:-}" = --dry-run ]; then dry=yes; shift; fi
-runs=${3:-9}
-[ "$dry" = yes ] && runs=${1:-3}
+if [ "$dry" = yes ]; then
+  [ $# -le 1 ] || { usage >&2; exit 2; }
+  runs=${1:-3}
+else
+  [ $# -ge 2 ] && [ $# -le 3 ] || { usage >&2; exit 2; }
+  runs=${3:-9}
+fi
 [[ "$runs" =~ ^[1-9][0-9]*$ ]] || { echo "flea-share-route: RUNS must be a positive integer" >&2; exit 2; }
 FLEA_BIN=${FLEA_BIN:-$repo/target/release/flea}
 FLEA_UI=${FLEA_UI:-$repo/ui}
@@ -28,16 +39,15 @@ case $root in /*/*) ;; *) echo "flea-share-route: mktemp gave '$root'" >&2; exit
 sandbox_require "$root" || exit 1
 : > "$root/$SANDBOX_MARKER" || exit 1
 flea_pid=""
+# Stops the process one_run launched, whose pid is the qs pid because flea execs qs; a pid read from qs list could be the operator's own instance.
 stop_flea() {
-  local qpid
-  qpid=$(flea_ipc_pid "$FLEA_UI" 2>/dev/null) || qpid=""
-  [ -n "$flea_pid" ] && kill "$flea_pid" 2>/dev/null
-  [ -n "$qpid" ] && kill "$qpid" 2>/dev/null
-  [ -n "$qpid" ] && timeout 10 tail --pid="$qpid" -f /dev/null
-  [ -n "$flea_pid" ] && wait "$flea_pid" 2>/dev/null
-  flea_pid=""
+  [ -n "$1" ] || return 0
+  kill "$1" 2>/dev/null
+  timeout 10 tail --pid="$1" -f /dev/null
+  wait "$1" 2>/dev/null
+  return 0
 }
-cleanup() { stop_flea; sandbox_remove "$root"; }
+cleanup() { stop_flea "$flea_pid"; sandbox_remove "$root"; }
 trap cleanup EXIT
 
 if [ "$dry" = yes ]; then
@@ -46,15 +56,10 @@ if [ "$dry" = yes ]; then
   mkdir "$root/kernel" "$root/gvfs" "$root/stub" "$root/ui" "$root/ui/boot" || exit 1
   echo 120 > "$root/kernel/.delay"; echo 340 > "$root/gvfs/.delay"
   for i in 1 2 3 4 5; do : > "$root/kernel/f$i.txt"; : > "$root/gvfs/f$i.txt"; done
-  printf '#!/bin/bash\necho "$2" > %q/cur.path; date +%%s%%3N > %q/cur.t0; echo $$ > %q/cur.pid; exec sleep 600\n' "$root/stub" "$root/stub" "$root/stub" > "$root/stub/flea"
+  printf '#!/bin/bash\necho "$2" > %q/cur.path; date +%%s%%3N > %q/cur.t0; exec sleep 600\n' "$root/stub" "$root/stub" > "$root/stub/flea"
   cat > "$root/stub/qs" <<EOS
 #!/bin/bash
 d=$root/stub
-pid=\$(cat \$d/cur.pid 2>/dev/null)
-if [ "\$1" = list ]; then
-  [ -n "\$pid" ] && kill -0 "\$pid" 2>/dev/null && printf 'Instance x:\n  Process ID: %s\n  Shell ID: flea\n  Config path: $root/ui/boot/shell.qml\n' "\$pid"
-  exit 0
-fi
 path=\$(cat \$d/cur.path); t0=\$(cat \$d/cur.t0); delay=\$(cat "\$path/.delay"); up=\$(( \$(date +%s%3N) - t0 >= delay ))
 case \$6 in
   path) echo "\$path" ;;
@@ -83,15 +88,15 @@ echo "route,run,listed_ms,first_rows_ms,rows" | tee "$out"
 
 # One launch: the pane opens $2 in a fresh state dir, and listed_ms is the first poll that reads a settled listing at that path.
 one_run() {
-  local route=$1 path=$2 run=$3 t0 qpid="" listed=-1 first=-1 rows=-1 state flight where fr
+  local route=$1 path=$2 run=$3 t0 qpid listed=-1 first=-1 rows=-1 state flight where fr
   mkdir "$root/state-$route-$run" || return 1
   [ -z "${PRE_RUN:-}" ] || bash -c "$PRE_RUN" > /dev/null 2>&1 || { echo "flea-share-route: PRE_RUN failed" >&2; return 1; }
   t0=$(now_ms)
   XDG_STATE_HOME="$root/state-$route-$run" FLEA_UI="$FLEA_UI" FLEA_BIN="$FLEA_BIN" \
     setsid nohup "$FLEA_BIN" --gui "$path" > /dev/null 2>&1 < /dev/null &
   flea_pid=$!
+  qpid=$flea_pid
   while [ $(( $(now_ms) - t0 )) -lt "$LISTED_TIMEOUT_MS" ]; do
-    [ -n "$qpid" ] || { qpid=$(flea_ipc_pid "$FLEA_UI" 2>/dev/null) || { qpid=""; continue; }; }
     where=$(ipc path) || continue
     [ "$where" = "$path" ] || continue
     state=$(ipc state) || continue
@@ -99,12 +104,13 @@ one_run() {
     if [ "$flight" = false ] && { [ "$state" = ready ] || [ "$state" = empty ]; }; then
       listed=$(( $(now_ms) - t0 ))
       rows=$(ipc total) || rows=-1
-      fr=$(ipc firstRowsAt) && [ "$fr" -gt 0 ] 2>/dev/null && first=$(( ${fr%.*} - t0 ))
+      fr=$(ipc firstRowsAt) && [ "$fr" -gt 0 ] 2>/dev/null && first=$(( fr - t0 ))
       break
     fi
   done
   printf '%s,%s,%s,%s,%s\n' "$route" "$run" "$listed" "$first" "$rows" | tee -a "$out"
-  stop_flea
+  stop_flea "$flea_pid"
+  flea_pid=""
 }
 
 for run in $(seq 1 "$runs"); do
@@ -114,15 +120,15 @@ done
 
 # Median and range of the settled listed_ms values per route, as "route median min max settled failed"; a -1 row never settled and is counted apart.
 summary() {
-  awk -F, -v r="$1" '
-    $1 == r && $3 > 0 { v[n++] = $3 }
-    $1 == r && $3 <= 0 { bad++ }
-    END {
-      if (n == 0) { printf "%s 0 0 0 0 %d\n", r, bad; exit }
-      for (i = 1; i < n; i++) { x = v[i]; j = i - 1; while (j >= 0 && v[j] > x) { v[j + 1] = v[j]; j-- } v[j + 1] = x }
-      m = (n % 2) ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2
-      printf "%s %.0f %d %d %d %d\n", r, m, v[0], v[n - 1], n, bad
-    }' "$out"
+  local route ms vals=() bad=0 sorted n
+  while IFS=, read -r route _ ms _; do
+    [ "$route" = "$1" ] || continue
+    if [ "$ms" -gt 0 ] 2>/dev/null; then vals+=("$ms"); else bad=$((bad + 1)); fi
+  done < "$out"
+  n=${#vals[@]}
+  if [ "$n" -eq 0 ]; then echo "$1 0 0 0 0 $bad"; return; fi
+  mapfile -t sorted < <(printf '%s\n' "${vals[@]}" | sort -n)
+  echo "$1 $(( (sorted[(n - 1) / 2] + sorted[n / 2] + 1) / 2 )) ${sorted[0]} ${sorted[n - 1]} $n $bad"
 }
 read -r _ km kmin kmax kn kbad <<< "$(summary kernel)"
 read -r _ gm gmin gmax gn gbad <<< "$(summary gvfs)"
