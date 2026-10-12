@@ -87,12 +87,13 @@ function ratio(pair) {
 
 // Sample input: [1, 250] reads "1/250 s", [10, 600] "1/60 s", [6, 10] "0.6 s", [13, 10] "1.3 s"; a fraction whose numerator divides its denominator stays a 1/n.
 function shutterText(pair, seconds) {
-    var num = pair[0], den = pair[1]
-    if (seconds >= 1)
-        return String(Math.round(seconds * 10) / 10) + " s"
+    var num = pair[0], den = pair[1], tenths = Math.round(seconds * 10)
+    // A shutter that rounds to a whole second reads like one, so 0.96 s and 1 s both read "1 s".
+    if (tenths >= 10)
+        return String(tenths / 10) + " s"
     if (den % num === 0 || num === 1)
         return "1/" + (num === 1 ? den : den / num) + " s"
-    return Math.round(seconds * 10) > 0 ? (Math.round(seconds * 10) / 10).toFixed(1) + " s" : "1/" + Math.round(1 / seconds) + " s"
+    return tenths > 0 ? (tenths / 10).toFixed(1) + " s" : "1/" + Math.round(1 / seconds) + " s"
 }
 
 // Sample input: ([1, 250], [28, 10], 400) reads "1/250 s · f/2.8 · ISO 400"; a part the file lacks is left out.

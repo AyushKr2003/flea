@@ -172,6 +172,10 @@ fn a_hostile_ifd_ends_the_read_and_never_panics() {
         block[pointer_at..pointer_at + 4].copy_from_slice(&target.to_le_bytes());
         assert_eq!(read_bytes("exifhostile1", "a.jpg", &jpeg_with(&block)), only_the_camera, "an Exif pointer {name} the block keeps IFD0 and drops the rest");
     }
+    // exif() follows no pointer, so an Exif pointer back at IFD0 reads that directory once and the read ends.
+    let mut looped = tiff(true, camera_tags(), exif_tags(true));
+    looped[pointer_at..pointer_at + 4].copy_from_slice(&8u32.to_le_bytes());
+    assert_eq!(read_bytes("exifhostile3", "c.jpg", &jpeg_with(&looped)), only_the_camera, "an Exif pointer back at IFD0 ends the read");
     let mut counted = tiff(true, camera_tags(), vec![]);
     counted[8..10].copy_from_slice(&0xFFFFu16.to_le_bytes());
     let _ = read_bytes("exifhostile2", "b.jpg", &jpeg_with(&counted));

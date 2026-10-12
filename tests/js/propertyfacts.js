@@ -65,6 +65,8 @@ function run(check) {
     same("a make alone and a model alone each stand", [PropertyFacts.camera("Canon", ""), PropertyFacts.camera("", "X100V")], ["Canon", "X100V"])
     check("the exposure is shutter, aperture and ISO as the board writes it", PropertyFacts.exposure([1, 250], [28, 10], 400), "1/250 s · f/2.8 · ISO 400")
     check("a shutter that is not one over a whole number reads as the nearest 1/n", PropertyFacts.exposure([10, 600], [0, 0], 0), "1/60 s")
+    check("a fast shutter no whole n divides reads as the nearest 1/n", PropertyFacts.exposure([3, 1000], [0, 0], 0), "1/333 s")
+    same("a shutter that rounds to a second reads as one", [PropertyFacts.exposure([96, 100], [0, 0], 0), PropertyFacts.exposure([99, 100], [0, 0], 0)], ["1 s", "1 s"])
     same("a shutter of a second or more is seconds", [PropertyFacts.exposure([2, 1], [0, 0], 0), PropertyFacts.exposure([13, 10], [0, 0], 0)], ["2 s", "1.3 s"])
     same("a shutter under a second keeps its stored rational", [0.4, 0.5, 0.6, 0.8].map(function (s) { return PropertyFacts.exposure([Math.round(s * 10), 10], [0, 0], 0) }), ["0.4 s", "1/2 s", "0.6 s", "0.8 s"])
     same("a numerator of one reads 1/den and a numerator that divides den reads 1/n", [PropertyFacts.exposure([1, 3], [0, 0], 0), PropertyFacts.exposure([1, 250], [0, 0], 0), PropertyFacts.exposure([2, 500], [0, 0], 0)], ["1/3 s", "1/250 s", "1/250 s"])
