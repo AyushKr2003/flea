@@ -80,11 +80,11 @@ fn a_walk_that_keeps_counting_past_its_deadline_answers_partial_and_marks_no_mou
     let _body = crate::backend::iomount::test_hold_body(remote_root_body(&root));
     let _pace = test_hold_pace(Duration::from_millis(20));
     let (first, _) = contents_run(&root, Duration::from_millis(300));
-    assert!(field_bool(&first.last().unwrap(), "done") && field_bool(&first.last().unwrap(), "partial"), "{}", first.last().unwrap());
+    assert!(field_bool(first.last().unwrap(), "done") && field_bool(first.last().unwrap(), "partial"), "{}", first.last().unwrap());
     assert!(crate::backend::walkmounts::stuck_among(&mounts).is_none(), "a walk still counting marks a mount stuck");
     let (again, took) = contents_run(&root, Duration::from_millis(300));
     assert!(took >= Duration::from_millis(250), "the repeat answers a cached zero instead of walking: {:?}", took);
-    assert!(field_bool(&again.last().unwrap(), "done") && field_bool(&again.last().unwrap(), "partial"), "{}", again.last().unwrap());
+    assert!(field_bool(again.last().unwrap(), "done") && field_bool(again.last().unwrap(), "partial"), "{}", again.last().unwrap());
 }
 
 // The watcher marks off the menu thread, so a test polls for a mark that may land after the reply.
@@ -107,7 +107,7 @@ fn a_walk_silent_past_the_call_bound_marks_the_mount_it_sits_in_so_a_repeat_skip
     let (first, took) = contents_run(&root, Duration::from_millis(300));
     assert!(took < Duration::from_millis(1000), "the deadline ends the wait, not the stalled walk: {:?}", took);
     assert!(field_bool(&first[0], "done") && field_bool(&first[0], "partial"), "{}", first[0]);
-    assert_eq!(marked_within(&[root.clone()], Duration::from_secs(1)), Some(root.clone()), "the stalled walk's mount is marked");
+    assert_eq!(marked_within(std::slice::from_ref(&root), Duration::from_secs(1)), Some(root.clone()), "the stalled walk's mount is marked");
     assert_eq!(crate::backend::walkmounts::stuck_among(&[root.join("mnt")]), None, "only the mount holding the walk is marked");
     let (again, took) = contents_run(&root, Duration::from_secs(5));
     assert!(took < Duration::from_millis(200), "a repeat on a marked mount starts no walk: {:?}", took);
@@ -138,7 +138,7 @@ fn a_stall_inside_a_nested_remote_mount_marks_that_mount_and_not_the_one_holding
     let _silence = test_hold_silence(Duration::from_millis(100));
     contents_run(&root, Duration::from_secs(2));
     assert_eq!(marked_within(&[root.join("mnt")], Duration::from_secs(1)), Some(root.join("mnt")), "the nested mount holds the hung stat");
-    assert_eq!(crate::backend::walkmounts::stuck_among(&[root.clone()]), None, "the healthy outer mount stays unmarked");
+    assert_eq!(crate::backend::walkmounts::stuck_among(std::slice::from_ref(&root)), None, "the healthy outer mount stays unmarked");
 }
 
 #[test]
