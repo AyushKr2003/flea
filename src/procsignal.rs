@@ -1,6 +1,4 @@
-// The one place Flea signals a process by pid. kill(2) reads pid 0 as the caller's own group, -1 as every process the
-// user may signal, and pid 1 as init, so a computed pid that ever reaches one of them is a disaster. Both functions
-// here refuse any pid <= 1 before the syscall; ESRCH and the other errno values still come back to each caller.
+// The one place Flea signals a process by pid, refusing any pid <= 1 before the syscall.
 use std::io;
 
 extern "C" {
