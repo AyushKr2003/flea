@@ -35,6 +35,7 @@ pub mod jump;
 pub mod search;
 pub mod searchindex;
 pub mod searchsession;
+pub mod searchtags;
 pub mod searchwalk;
 pub mod searchreq;
 pub mod searchhold;

@@ -128,7 +128,11 @@ pub fn split_query(query: &str) -> (Vec<String>, String) {
 
 // Every named tag must be present, compared case-insensitively; an unreadable file matches nothing.
 fn carries(path: &std::path::Path, tags: &[String]) -> bool {
-    let have = super::tags::read(path).unwrap_or_default();
+    names_carry(&super::tags::read(path).unwrap_or_default(), tags)
+}
+
+// The one rule for both searches: the names a file has hold every wanted tag, compared case-insensitively.
+pub(crate) fn names_carry(have: &[String], tags: &[String]) -> bool {
     tags.iter().all(|want| have.iter().any(|got| got.eq_ignore_ascii_case(want)))
 }
 

@@ -1,6 +1,6 @@
 // One live search session: the scope's snapshot index plus the standing query and its generation.
-use crate::backend::fuzzy::{rank_order, Fuzzy};
-use crate::backend::searchindex::{self, Index};
+use crate::backend::fuzzy::Fuzzy;
+use crate::backend::searchindex::{self, rank_cmp, select_head, Index};
 use crate::backend::searchreq::Answer;
 use crate::backend::searchwalk::WalkProbes;
 use std::cmp::{Ordering as CmpOrdering, Reverse};
@@ -24,41 +24,6 @@ pub(crate) struct Counters {
 }
 
 // The wire lines live in searchreq.rs and the walk thread that fills the index in searchwalk.rs.
-
-// The one rank comparator for answers and rest chunks, so a scrolled window only extends the head's order.
-fn rank_cmp(index: &Index, a: &(i32, usize), b: &(i32, usize)) -> CmpOrdering {
-    rank_order(a.0, index.path(a.1), b.0, index.path(b.1))
-}
-
-// The best `window` hits in rank order, the rest unranked; the path comparator runs only on the window and its edge ties.
-fn select_head<K, F, C>(hits: &mut Vec<(i32, usize)>, window: usize, key: F, cmp: C) -> Vec<(i32, usize)>
-where
-    K: Ord,
-    F: Fn(&(i32, usize)) -> K,
-    C: Fn(&(i32, usize), &(i32, usize)) -> CmpOrdering,
-{
-    if window > 0 && window < hits.len() {
-        hits.select_nth_unstable_by_key(window - 1, &key);
-        let edge = key(&hits[window - 1]);
-        // Hits tied with the edge on the integer key can sit on either side of the cut, so the comparator picks among them.
-        if hits[window..].iter().any(|hit| key(hit) == edge) {
-            let (mut sure, mut tied, mut past) = (Vec::with_capacity(window), Vec::new(), Vec::new());
-            for &hit in hits.iter() {
-                match key(&hit).cmp(&edge) {
-                    CmpOrdering::Less => sure.push(hit),
-                    CmpOrdering::Equal => tied.push(hit),
-                    CmpOrdering::Greater => past.push(hit),
-                }
-            }
-            // The edge hit is tied and inside the window, so at least one tied hit joins the head.
-            tied.select_nth_unstable_by(window - sure.len() - 1, &cmp);
-            *hits = [sure, tied, past].concat();
-        }
-    }
-    let rest = hits.split_off(window.min(hits.len()));
-    hits.sort_by(&cmp);
-    rest
-}
 
 pub(crate) struct Session {
     pub scope: PathBuf,
@@ -91,6 +56,8 @@ pub(crate) struct Session {
     pub(crate) last_batch: Instant,
     // Folder sizes this session's answers carry inline; see src/backend/answersizes.rs.
     pub(crate) sizes: crate::backend::answersizes::AnswerSizes,
+    // The tag terms' names, read once per row off the loop thread; see src/backend/searchtags.rs.
+    pub(crate) tags: crate::backend::searchtags::Tags,
     #[cfg(test)]
     pub counters: Counters,
 }
@@ -209,6 +176,8 @@ impl Session {
         let mut answer = self.answer(&query, count);
         answer.gen = gen;
         answer.ms = self.walk_ms;
+        // A tagged query whose names are still being read stands for one more re-run.
+        self.standing_while_walking = answer.walking;
         self.last_query = query;
         self.last_matches = answer.all.clone();
         self.last_batch = Instant::now();
@@ -248,10 +217,13 @@ impl Session {
     // Scores the index and ranks only the first window; the callers own the generations.
     pub(crate) fn answer(&mut self, query: &str, count: usize) -> Answer {
         let started = Instant::now();
-        let fuzzy = Fuzzy::new(query);
+        let terms = crate::backend::searchtags::Tags::terms(query);
+        let narrow = self.tags.narrows(&self.last_query, query);
+        let unread = self.tags.prepare(&terms, &self.index, &self.scope, self.walking());
+        let fuzzy = Fuzzy::new(&terms.text);
         let index = self.index.lock().unwrap();
         // Incremental narrowing: an extension scores only the previous matches, any other change scores the index.
-        let candidates: Vec<usize> = if !self.last_query.is_empty() && query.starts_with(&self.last_query) {
+        let candidates: Vec<usize> = if narrow {
             self.last_matches.clone()
         } else {
             (0..index.len()).collect()
@@ -259,6 +231,7 @@ impl Session {
         #[cfg(test)]
         let scored = candidates.len();
         let mut hits = searchindex::score_all(&fuzzy, &candidates, &index);
+        self.tags.keep(&mut hits, &terms);
         #[cfg(test)]
         {
             self.counters.rows_scored = scored;
@@ -292,7 +265,7 @@ impl Session {
             rows,
             total,
             indexed,
-            walking: self.walking(),
+            walking: self.walking() || unread,
             ms: started.elapsed().as_secs_f64() * 1000.0,
             count,
             scope: self.scope.clone(),
@@ -378,6 +351,7 @@ impl Session {
         }
         self.last_query.clear();
         self.pending_rest = None;
+        self.tags.reset();
         true
     }
 

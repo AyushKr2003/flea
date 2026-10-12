@@ -96,8 +96,7 @@ Item {
         if (pane.searchLeaving === true) return
         pane.searchHere = false
         if ((pane.searchMode || "").length === 0) Search.start(pane)
-        else pane.backend.searchOpen(Search.scopeRoot(pane.path, pane.home || "", false), pane.path, pane.showHidden)
-        pane.searchQuery = ""
+        else Search.openScope(pane)
         Search.extend(pane, "tag:" + name)
         pane.searchMode = Search.RESULTS
     }

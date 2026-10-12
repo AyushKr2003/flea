@@ -260,6 +260,7 @@ impl Session {
         let thread_scope = scope_buf.clone();
         let thread_body = body.clone();
         let opened_at = Instant::now();
+        let tags = crate::backend::searchtags::Tags::new(walked.clone());
         let handle = std::thread::spawn(move || {
             let dirs = fill(&thread_index, &thread_scope, hidden, remote, &thread_body, &thread_probes);
             thread_done.store(true, Ordering::Relaxed);
@@ -294,6 +295,7 @@ impl Session {
             announced: false,
             last_batch: Instant::now(),
             sizes: crate::backend::answersizes::AnswerSizes::new(remote),
+            tags,
             #[cfg(test)]
             counters,
         }
@@ -312,6 +314,10 @@ impl Session {
 
     // True once after the walk lands, so the loop re-runs the standing query exactly once.
     pub(crate) fn poll_walked(&mut self) -> bool {
+        // The tag worker lands through the same event, so the standing tagged query is re-run once its names are in.
+        if self.tags.poll_read() {
+            return true;
+        }
         if self.announced || !self.walk_done.load(Ordering::Relaxed) {
             return false;
         }

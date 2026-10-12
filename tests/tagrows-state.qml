@@ -18,7 +18,7 @@ Item {
         function send(object) { stubBackend.sent.push(object) }
         function window(start, count) { stubBackend.windowAsks += 1 }
         property var searchSent: []
-        function searchOpen(scope, folder, hidden) { stubBackend.searchSent.push("open " + scope + "|" + folder) }
+        function searchOpen(scope, folder, hidden) { stubBackend.searchSent.push("open " + scope + "|" + folder + "|" + hidden) }
         function searchQuery(query, gen, count, wish) { stubBackend.searchSent.push("query " + gen + ":" + query) }
     }
     QtObject {
@@ -130,12 +130,23 @@ Item {
         var state = Qt.createComponent("flea/TagState.qml").createObject(probe, { pane: stubPane })
         probe.check(state !== null, "walk: TagState did not build")
         if (state === null) return
+        stubPane.showHidden = true
         state.openTag("Red")
         probe.check(stubPane.searchQuery === "tag:Red" && stubPane.searchMode === "results", "walk: the Red place left " + stubPane.searchMode + " on " + stubPane.searchQuery)
-        probe.check(stubPane.searchHere === false && stubBackend.searchSent.join(",") === "open /home/u|/home/u/docs,query 1:tag:Red", "walk: the backend heard " + stubBackend.searchSent.join(","))
+        probe.check(stubPane.searchHere === false && stubBackend.searchSent.join(",") === "open /home/u|/home/u/docs|true,query 1:tag:Red", "walk: the backend heard " + stubBackend.searchSent.join(","))
+        // A place pressed while the exit holds is held like a key: nothing is sent and the walk on screen stays.
         stubBackend.searchSent = []
+        stubPane.searchLeaving = true
+        state.openTag("Green")
+        probe.check(stubBackend.searchSent.length === 0 && stubPane.searchQuery === "tag:Red" && stubPane.searchMode === "results", "walk: a place during the exit sent " + stubBackend.searchSent.join(",") + " and left " + stubPane.searchQuery)
+        stubPane.searchLeaving = false
+        // The place after a cancelled walk is a new session: the drawn state of the old one is reset with the open.
+        stubPane.searchCancelled = true
+        stubPane.searchScanned = 7
+        stubPane.searchRunning = false
         state.openTag("Blue")
-        probe.check(stubPane.searchQuery === "tag:Blue" && stubPane.searchMode === "results" && stubBackend.searchSent.join(",") === "open /home/u|/home/u/docs,query 2:tag:Blue", "walk: a second place sent " + stubBackend.searchSent.join(",") + " in " + stubPane.searchMode)
+        probe.check(stubPane.searchQuery === "tag:Blue" && stubPane.searchMode === "results" && stubBackend.searchSent.join(",") === "open /home/u|/home/u/docs|true,query 2:tag:Blue", "walk: a second place sent " + stubBackend.searchSent.join(",") + " in " + stubPane.searchMode)
+        probe.check(stubPane.searchCancelled === false && stubPane.searchScanned === 0 && stubPane.searchRunning === true && stubPane.searchOpenedGen === 1, "walk: the second place kept the old walk's state: cancelled " + stubPane.searchCancelled + ", scanned " + stubPane.searchScanned + ", running " + stubPane.searchRunning + ", opened gen " + stubPane.searchOpenedGen)
     }
 
     property var answersState: null

@@ -1,5 +1,6 @@
 // The session's snapshot: every relative path walked once, folded once, scored per query.
-use crate::backend::fuzzy::{fold_packed, Hay, Packed};
+use crate::backend::fuzzy::{fold_packed, rank_order, Hay, Packed};
+use std::cmp::{Ordering as CmpOrdering, Reverse};
 use std::collections::HashSet;
 use std::path::Path;
 
@@ -291,6 +292,41 @@ pub(crate) fn score_all(fuzzy: &crate::backend::fuzzy::Fuzzy, rows: &[usize], in
         }
         out
     })
+}
+
+// The one rank comparator for answers and rest chunks, so a scrolled window only extends the head's order.
+pub(crate) fn rank_cmp(index: &Index, a: &(i32, usize), b: &(i32, usize)) -> CmpOrdering {
+    rank_order(a.0, index.path(a.1), b.0, index.path(b.1))
+}
+
+// The best `window` hits in rank order, the rest unranked; the path comparator runs only on the window and its edge ties.
+pub(crate) fn select_head<K, F, C>(hits: &mut Vec<(i32, usize)>, window: usize, key: F, cmp: C) -> Vec<(i32, usize)>
+where
+    K: Ord,
+    F: Fn(&(i32, usize)) -> K,
+    C: Fn(&(i32, usize), &(i32, usize)) -> CmpOrdering,
+{
+    if window > 0 && window < hits.len() {
+        hits.select_nth_unstable_by_key(window - 1, &key);
+        let edge = key(&hits[window - 1]);
+        // Hits tied with the edge on the integer key can sit on either side of the cut, so the comparator picks among them.
+        if hits[window..].iter().any(|hit| key(hit) == edge) {
+            let (mut sure, mut tied, mut past) = (Vec::with_capacity(window), Vec::new(), Vec::new());
+            for &hit in hits.iter() {
+                match key(&hit).cmp(&edge) {
+                    CmpOrdering::Less => sure.push(hit),
+                    CmpOrdering::Equal => tied.push(hit),
+                    CmpOrdering::Greater => past.push(hit),
+                }
+            }
+            // The edge hit is tied and inside the window, so at least one tied hit joins the head.
+            tied.select_nth_unstable_by(window - sure.len() - 1, &cmp);
+            *hits = [sure, tied, past].concat();
+        }
+    }
+    let rest = hits.split_off(window.min(hits.len()));
+    hits.sort_by(&cmp);
+    rest
 }
 
 #[cfg(test)]
