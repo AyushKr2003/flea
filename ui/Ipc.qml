@@ -52,6 +52,14 @@ QtObject {
         edges[1] = String(Number(edges[1]) - Math.round(rise))
         return edges.join(" ")
     }
+    // The Trash row as the rail draws it: current is the lit place, not the keyboard cursor.
+    function trashRail() {
+        for (var index = 0; index < root.pane.railCount; index++) {
+            var row = root.pane.sidebar.railItemFor(index)
+            if (row && row.modelData.kind === "trash") return {current: row.lit, countText: row.detail}
+        }
+        return null
+    }
     function confirmationState(item) {
         return item ? {opened: item.opened, token: item.snapshot.token || 0, count: item.snapshot.count || 0,
             all: item.snapshot.all === true, destructiveFocus: item.destructiveFocus, title: item.titleText, body: item.bodyText,
@@ -279,11 +287,7 @@ QtObject {
         }
         function trashState(): string {
             var view = root.pane.trash.item
-            var rail = null
-            for (var index = 0; index < root.pane.railCount; index++) {
-                var row = root.pane.sidebar.railItemFor(index)
-                if (row && row.modelData.kind === "trash") { rail = {current: row.cursor, countText: row.detail}; break }
-            }
+            var rail = root.trashRail()
             if (!view) return JSON.stringify({opened: false, count: root.pane.sidebar.trashCount, rail: rail})
             return JSON.stringify({opened: view.opened, total: view.total, count: root.pane.sidebar.trashCount, countText: view.countText, busy: view.busy,
                 operationActive: view.operationActive, cursor: view.cursor, first: view.first,
