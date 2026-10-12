@@ -273,6 +273,8 @@ ShellRoot {
         return true
     }
 
+    function cursorOutside() { return root.clampKinds.indexOf(root.kind) >= 0 && root.trial % 2 === 0 }
+
     function wheelStroke(v) {
         var hand = null, kids = v.children
         for (var w = 0; w < kids.length; w++) if (kids[w].objectName === "fleaScroll") hand = kids[w]
@@ -292,6 +294,7 @@ ShellRoot {
         // The stroke is the frame: a mid start has a full pool, and the rows it may reveal are those the pixels it moved cross.
         var per = (Math.ceil(Math.abs(v.contentY - y0) / root.rowH()) + 1) * root.columnsOf()
         measure.judge(tag, measure.flat(moved), per, true, root.wheelUpdates).forEach(root.fail)
+        if (root.cursorOutside() && moved.tally.cursor < 1) root.fail(tag + "the cursor started above the view and the stroke never pulled it, so the clamp write is not exercised")
         return true
     }
 
@@ -358,6 +361,8 @@ ShellRoot {
             } else if (root.phase === "wheelrewind") {
                 // A fresh stroke from rest in the middle: its Begin and first two updates through the real wheel handler, then the layout.
                 v.contentY = root.midY(v)
+                // Even trials leave the cursor above the view, so the stroke's clamps each pull it down.
+                if (root.cursorOutside()) root.stubPane.cursorIndex = 0
                 if (root.elapsed() < root.wheelRewindWaitMs) return
                 root.wheelBefore = root.snap()
                 if (!root.wheelStroke(v)) { root.go("done"); return }

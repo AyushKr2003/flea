@@ -4,8 +4,6 @@ import QtQuick
 QtObject {
     // A mean of whole counts is judged within this much of a whole number.
     readonly property real slack: 0.5
-    // A cursor write counts once a frame; a hair over one is a mean of one write a frame.
-    readonly property real cursorCap: 1.01
     // A mean of whole counts is held to its cap within this much.
     readonly property real capHair: 0.01
     readonly property var askKeys: ["thumb", "thumbcancel", "dirsize", "dirsizecancel", "window", "askMeta"]
@@ -55,7 +53,7 @@ QtObject {
         return out
     }
 
-    // A frame does the work of the rows entering and nothing else: no backend ask, no build once the pool is full, no read or rebind of a row that stayed. per is the most rows that may enter and clamps the most clamp signals (one per scroll write) the frame may raise.
+    // A frame does the work of the rows entering and nothing else: no backend ask, no build once the pool is full, no read or rebind of a row that stayed. per is the most rows that may enter and clamps the most clamp signals (one per scroll write) the frame may raise. The product's clamp handler writes the cursor on each clamp it raises, in the same call, so the cursor moves at most once per clamp.
     function judge(tag, m, per, poolFull, clamps) {
         var out = [], asks = 0
         for (var a = 0; a < askKeys.length; a++) asks += m[askKeys[a]]
@@ -67,7 +65,7 @@ QtObject {
         if (m.texts > entering + slack) out.push(tag + m.texts.toFixed(2) + " rows changed text a frame, entering " + entering.toFixed(2))
         if (m.rowFor > 2 * entering + slack) out.push(tag + m.rowFor.toFixed(2) + " row reads a frame, entering " + entering.toFixed(2))
         if (m.isSelected > entering + slack) out.push(tag + m.isSelected.toFixed(2) + " selection reads a frame, entering " + entering.toFixed(2))
-        if (m.cursor > cursorCap || m.clamped > clamps + capHair) out.push(tag + "cursor moved " + m.cursor.toFixed(2) + " and clamped " + m.clamped.toFixed(2) + " a frame, want at most 1 and " + clamps)
+        if (m.cursor > clamps + capHair || m.clamped > clamps + capHair) out.push(tag + "cursor moved " + m.cursor.toFixed(2) + " and clamped " + m.clamped.toFixed(2) + " a frame, want at most " + clamps + " of each")
         return out
     }
 }
