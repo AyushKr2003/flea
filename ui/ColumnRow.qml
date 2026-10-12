@@ -304,11 +304,14 @@ Item {
         width: root.dropTarget && dropClipLoader.item && dropClipLoader.item.label ? dropClipLoader.item.label.implicitWidth : root.showChevron ? Theme.font.caption : 0
         height: root.dropTarget && dropClipLoader.item && dropClipLoader.item.label ? dropClipLoader.item.label.implicitHeight : Theme.font.caption
 
-        Flea.Glyph {
+        // Built only on the row that draws it, so a row at rest holds no Shape for it.
+        Loader {
             anchors.fill: parent
-            visible: root.showChevron && !root.dropTarget
-            name: "chevron-right"
-            color: root.cursor ? Theme.color.accent : Theme.color.mutedFrame
+            active: root.showChevron && !root.dropTarget
+            sourceComponent: Flea.Glyph {
+                name: "chevron-right"
+                color: root.cursor ? Theme.color.accent : Theme.color.mutedFrame
+            }
         }
     }
 

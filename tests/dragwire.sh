@@ -53,13 +53,13 @@ else
     bad "the offer must read $expected_seq, got: $offer_seq"
 fi
 
-# FileDrag and Drag.js offer uri-list; DropInto and RowDrag consume it, with no other ui users.
+# FileDrag and Drag.js offer uri-list; DropInto, RowDrag and the grid's one shared area consume it, with no other ui users.
 uri_files=$(while IFS= read -r f; do
     code_of "$f" | grep -H --label="$f" 'text/uri-list'
 done < <(find ui -type f \( -name '*.qml' -o -name '*.js' \)) | cut -d: -f1 | sort -u)
-expected_uri_files=$(printf '%s\n' ui/DropInto.qml ui/FileDrag.qml ui/RowDrag.qml ui/js/Drag.js | sort -u)
+expected_uri_files=$(printf '%s\n' ui/DropInto.qml ui/FileDrag.qml ui/GridArea.qml ui/RowDrag.qml ui/js/Drag.js | sort -u)
 if [[ "$uri_files" == "$expected_uri_files" ]]; then
-    ok "uri-list is confined to the file payload producers and their two receivers"
+    ok "uri-list is confined to the file payload producers and their three receivers"
 else
     bad "unexpected text/uri-list files: $uri_files"
 fi

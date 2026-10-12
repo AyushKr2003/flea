@@ -4,7 +4,8 @@ import Quickshell
 
 ShellRoot {
     id: root
-    readonly property int startupObjectLimit: 627
+    // The 627 head plus the Loader each list row now holds for its DropArea (ui/RowDrag.qml), which a grid tile leaves unbuilt.
+    readonly property int startupObjectLimit: 630
     readonly property int sectorsWrittenField: 6
     readonly property int deadlineProbeMs: 1200
     readonly property int sectorChangeDelayMs: 600

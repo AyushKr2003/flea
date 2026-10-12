@@ -3,6 +3,8 @@ import "." as Flea
 import "js/ClipMarks.js" as ClipMarks
 import "js/Density.js" as Density
 import "js/DirSizes.js" as DirSizes
+import "js/Drag.js" as DragOps
+import "js/DragOut.js" as DragOut
 import "js/ExtThumbs.js" as ExtThumbs
 import "js/Filter.js" as Filter
 import "js/Focus.js" as Focus
@@ -99,18 +101,22 @@ GridView {
 
     focus: true
     // Whichever view is up owns the keyboard, and Focus.handleKey is the one route all three take.
-    Keys.onPressed: function (event) { root.prebuild.kick(); event.accepted = Focus.handleKey(event, root.pane, root.pane.sidebar) }
+    Keys.onPressed: function (event) {
+        root.prebuild.kick()
+        root.holdCache()
+        event.accepted = Focus.handleKey(event, root.pane, root.pane.sidebar)
+    }
     // Written, not bound: a count change puts the view on row 0 as a reset does, which would drop a binding.
     readonly property int cursorView: Filter.viewOf(root.pane.shown, root.pane.renamingIndex >= 0 ? root.pane.renamingIndex : root.pane.cursorIndex)
     onCursorViewChanged: { root.prebuild.kick(); root.askLanding(); root.currentIndex = root.cursorView }
     // Hidden holds no delegates; an edit in flight keeps its own per RenameField.qml.
     model: Flea.StableModel { view: root; total: (root.visible || root.pane.renamingIndex >= 0) ? root.pane.shownTotal : 0; onResized: root.modelResized(); holdCurrent: root.pane.renamingIndex >= 0
-                              warm: root.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: root.columns * (Math.floor(Math.max(0, root.height - root.topMargin + root.cacheBuffer) / root.cellHeight) + 2) }
+                              warm: root.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: root.columns * (Math.floor(Math.max(0, root.height - root.topMargin + root.cacheFull) / root.cellHeight) + 2) }
     clip: true
     // Qt's own tracking scrolls a flush-parked end to the footer's end on a cursor move; revealCursor's Contain leaves a whole tile alone.
     highlightFollowsCurrentItem: false
     // Qt emits currentIndexChanged before it frees the old current item; positioning inside it leaves that item behind as a second delegate for its row.
-    onCurrentIndexChanged: { root.prebuild.kick(); Qt.callLater(root.revealCursor) }
+    onCurrentIndexChanged: { root.prebuild.kick(); root.holdCache(); Qt.callLater(root.revealCursor) }
     function revealCursor() {
         // StableModel.resize parks currentIndex on row 0 mid-change and a reveal queued then can run inside it; onResized places the view.
         // A far landing waits for its window, so the tiles bind once, onto real rows; onRowsChanged lands it.
@@ -125,7 +131,36 @@ GridView {
     bottomMargin: Theme.spacing.gap
     cellWidth: GridGeometry.cellWidthFor(root.width, root.columns, Theme.spacing.gap, Theme.spacing.rowPaddingX)
     cellHeight: root.cellHeightPx
-    cacheBuffer: root.cellHeightPx * GridGeometry.cacheRows
+    // Qt builds a landing's inserted tiles out to the cache edge in that turn, so an emptied view drops its cache rows.
+    // They come back in cacheStepsMargin steps, each built in its frame's own turn, never as an asynchronous
+    // incubation that an emptied view would cancel; once every row is in, the margin becomes the cache again.
+    readonly property int cacheFull: root.cellHeightPx * GridGeometry.cacheRows
+    property int cacheSteps: 0
+    readonly property int cacheStepsMargin: 4
+    property int cacheQuiet: 0
+    cacheBuffer: root.cacheSteps > root.cacheStepsMargin ? root.cacheFull : 0
+    displayMarginEnd: root.cacheSteps > root.cacheStepsMargin ? 0 : root.cacheFull * root.cacheSteps / root.cacheStepsMargin
+    function regrowCache() {
+        if (root.model.count === 0)
+            root.cacheSteps = 0
+        cacheGrow.stop()
+        if (root.model.count > 0 && root.cacheSteps <= root.cacheStepsMargin)
+            cacheGrow.start()
+    }
+    function holdCache() {
+        if (cacheGrow.running) root.cacheQuiet = 2
+    }
+    FrameAnimation {
+        id: cacheGrow
+        running: false
+        onTriggered: {
+            if (root.cacheQuiet > 0) root.cacheQuiet -= 1
+            if (root.cacheQuiet > 0 || root.pane.listInFlight || root.moving) return
+            root.cacheSteps += 1
+            root.forceLayout()
+            if (root.cacheSteps > root.cacheStepsMargin) cacheGrow.stop()
+        }
+    }
     boundsBehavior: Flickable.StopAtBounds
     reuseItems: true
     // Parked tiles for the next landing: a tile parks unparented and the landing's layout parents it again.
@@ -141,7 +176,7 @@ GridView {
     }
     // The tiles a full landing from the top lays out; the partial row warmRows bounds stays out (Qt 6.11.2 qquickgridview.cpp:507).
     readonly property int landingTiles: {
-        var c = root.columns, h = root.cellHeight, end = root.height - root.topMargin + root.cacheBuffer, n = 0
+        var c = root.columns, h = root.cellHeight, end = root.height - root.topMargin + root.cacheFull, n = 0
         while (c > 0 && h > 0 && n < root.model.warmRows && Math.floor(n / c) * h <= end + h * (c - n % c) / (c + 1)) n++
         return n
     }
@@ -190,6 +225,7 @@ GridView {
         property bool prebuilt: false
         // Where a press, tap or drag reaches this tile; hover keeps the whole cell.
         readonly property QtObject pressMask: QtObject { function contains(point: point): bool { return root.hitsTile(cell, point) } }
+        readonly property Item rowDrag: rowDragItem
         Component.onCompleted: if (!root.prebuild.built(cell)) cursorMark.place(cell)
         Component.onDestruction: root.prebuild.gone(cell)
         onParentChanged: if (cell.prebuilt && cell.parent === root.contentItem) root.prebuild.adoptCell(cell)
@@ -197,7 +233,9 @@ GridView {
         width: root.cellWidth
         height: root.cellHeight
         row: cell.live ? GridGeometry.heldRow(cell.rowMemo, root.heldRows, listingIndex) : cell.row
-        hovered: hover.hovered
+        // One shared hover index for every tile, so no tile builds its own handler.
+        hovered: cell.live && root.hoveredIndex === cell.index
+        hoverShown: root.pane.selectionBand === null
         selected: cell.live && root.pane.isSelected(listingIndex)
         dropTarget: dragSession.dropIndex >= 0 && listingIndex === dragSession.dropIndex
         dropCopying: dragSession.dragCopy
@@ -212,12 +250,6 @@ GridView {
         clipMark: cell.live ? ClipMarks.markForRow(root.pane, cell.row ? cell.row.n : "", root.pane.clipboard) : cell.clipMark
         onRenameCommitted: function(newName) { root.pane.commitRename(newName) }
         onRenameAbandoned: root.pane.renamingIndex = -1
-
-        HoverHandler {
-            id: hover
-            // Disabled while pooled, so a reused tile starts unhovered as a new one does.
-            enabled: cell.live && root.pane.selectionBand === null
-        }
 
         Item {
             anchors.fill: parent
@@ -248,10 +280,97 @@ GridView {
         }
 
         Flea.RowDrag {
+            id: rowDragItem
             containmentMask: cell.pressMask
             session: dragSession
             listingIndex: cell.listingIndex
             row: cell.row
+            // Drops answer from the one shared area below, so no tile builds its own.
+            dropsLocal: false
+        }
+    }
+
+    // One hover index for every tile: a per-tile handler costs a HoverHandler per delegate
+    // in the landing turn, while the highlight and the tip read the hovered tile alone.
+    property int hoveredIndex: -1
+    // The view index under a view point, or -1 past the tiles; content offsets keep it exact.
+    function hoverAt(x, y) {
+        root.hoveredIndex = root.indexAt(x + root.contentX, y + root.contentY)
+    }
+    HoverHandler {
+        id: hoverProbe
+        enabled: root.visible && !root.hiddenHeld
+        onHoveredChanged: { if (!hovered) root.hoveredIndex = -1; else root.hoverAt(point.position.x, point.position.y) }
+        onPointChanged: if (hovered) root.hoverAt(point.position.x, point.position.y)
+    }
+    // One drop area for every tile: a per-tile area costs a DropArea per delegate in the landing
+    // turn, while a tile answers a drop from its row alone, so the grid resolves the tile instead.
+    property var dropTile: null
+    property int dropListingIndex: -1
+    // What the tile under the drag answered; one refusal on entry must not end the area's events, so the area itself stays accepted and each move re-says this.
+    property bool dropAccepted: false
+    // The tile's drop row under a view point, or null past its icon and caption; the map keeps the content offset exact, and a pooled or stale tile never answers.
+    function tileDropAt(x, y) {
+        var p = root.mapToItem(root.contentItem, x, y)
+        var tile = root.contentItem.childAt(p.x, p.y)
+        if (!tile || tile.visible === false || !tile.live || tile.listingIndex === undefined
+                || tile.listingIndex < 0 || !tile.row || !root.hitsTile(tile, tile.mapFromItem(root, x, y)))
+            return null
+        return tile.rowDrag
+    }
+    // The hovered tile's own exit, or its record on the session when a re-list destroyed it already.
+    function dropLeft() {
+        var tile = root.dropTile
+        root.dropTile = null
+        root.dropListingIndex = -1
+        if (tile) {
+            tile.leaveAt()
+            return
+        }
+        dragSession.dropIndex = -1
+        dragSession.dropDest = ""
+        dragSession.dropDestDev = 0
+        dragSession.leaveTarget()
+        if (dragSession.dragRows.length === 0) {
+            dragSession.dragCopy = false
+            dragSession.dragLink = false
+        }
+        dragSession.hoverEnded()
+        DragOut.keys.leave()
+    }
+    function dropEnter(next, drag) {
+        root.dropTile = next
+        root.dropListingIndex = next ? next.listingIndex : -1
+        if (next) next.enterAt(drag, next.mapFromItem(root, drag.x, drag.y))
+        else drag.accepted = false
+        root.dropAccepted = drag.accepted
+    }
+    DropArea {
+        parent: root
+        anchors.fill: parent
+        enabled: root.pane !== null && !root.pane.listInFlight
+        keys: [DragOps.ROWS_MIME, "text/uri-list", "text/plain"]
+        onEntered: function (drag) {
+            root.dropEnter(root.tileDropAt(drag.x, drag.y), drag)
+            drag.accepted = true
+        }
+        onPositionChanged: function (drag) {
+            var next = root.tileDropAt(drag.x, drag.y)
+            if (next !== root.dropTile || (next && next.listingIndex !== root.dropListingIndex)) {
+                if (root.dropTile || root.dropListingIndex >= 0) root.dropLeft()
+                root.dropEnter(next, drag)
+            } else {
+                if (next) next.moveAt(next.mapFromItem(root, drag.x, drag.y))
+                drag.accepted = root.dropAccepted
+            }
+        }
+        onExited: root.dropLeft()
+        onDropped: function (drop) {
+            var target = root.tileDropAt(drop.x, drop.y)
+            if (target !== root.dropTile) root.dropLeft()
+            root.dropTile = null
+            root.dropListingIndex = -1
+            if (target) target.dropAt(drop)
         }
     }
 
@@ -288,6 +407,8 @@ GridView {
         // Hidden geometry and a restore in flight move no shared state.
         if (!root.visible || root.hiddenHeld)
             return
+        // A scroll under a resting pointer moves the hovered tile without a point change.
+        if (hoverProbe.hovered) root.hoverAt(hoverProbe.point.position.x, hoverProbe.point.position.y)
         root.menu.close()
         if (DirSizes.hasPending(root.pane.dirSizeState)) {
             root.pane.backend.dirsizecancel()
@@ -391,7 +512,7 @@ GridView {
             root.restoreCursorView()
     }
     // Count changes inside StableModel's layout, where a move refills every tile between the top and the cursor; resized follows it.
-    function modelResized() { root.landingWait = false; root.placeCursor(); root.prebuild.landed() }
+    function modelResized() { root.landingWait = false; root.placeCursor(); root.prebuild.landed(); root.regrowCache() }
     function placeCursor() {
         root.currentIndex = root.cursorView
         if (root.hiddenHeld && root.visible && root.count > 0)
