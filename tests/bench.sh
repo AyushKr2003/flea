@@ -147,6 +147,8 @@ bench_header=$(sed -n 's/^echo "\(id,run,[^"]*\)".*/\1/p' "$repo/tools/flea-fiel
 declare -A CELL
 emit_row() {
   local out="" name
+  # The report counts only write_clean 1 rows, so a fixture row is a counted run unless it says otherwise.
+  CELL[write_clean]=${CELL[write_clean]:-1}
   while IFS= read -r name; do
     out="${out:+$out,}${CELL[$name]:--}"
   done < <(printf '%s\n' "$bench_header" | tr ',' '\n')
