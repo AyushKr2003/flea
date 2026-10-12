@@ -6,6 +6,7 @@ import Quickshell
 import "flea" as Flea
 import "flea/js/Buttons.js" as Buttons
 import "flea/js/Focus.js" as Focus
+import "flea/js/Icons.js" as Icons
 import "markdown-render.js" as Checks
 import "markdown-centre.js" as Centre
 import "markdown-board.js" as Board
@@ -418,7 +419,7 @@ ShellRoot {
         return { chromeMark: Flea.Theme.chromeMarkSize, padX: Flea.Theme.spacing.rowPaddingX, gap: Flea.Theme.spacing.gap,
             chromeHeight: Flea.Theme.chromeHeight, controlHeight: Flea.Theme.chromeControlHeight, hairline: Flea.Theme.spacing.hairline,
             segmentGap: Flea.Theme.spacing.hairline * Buttons.SEGMENT_GAP, caption: Flea.Theme.font.caption,
-            foreground: String(Flea.Theme.color.foreground), muted: String(Flea.Theme.color.muted) }
+            markdownPath: Icons.pathFor("markdown"), foreground: String(Flea.Theme.color.foreground), muted: String(Flea.Theme.color.muted) }
     }
 
     // A long name in a narrower bar: at 480 px the name elides and the whole segment still draws, and below that the count hides before the segment moves.

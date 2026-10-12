@@ -1,3 +1,5 @@
+.import "markdown-mark.js" as Mark
+
 // Geometry assertions for the Markdown Quick Look bar against RenderedPreviews, read off MarkdownPane.barGeometry().
 
 // ql_bar: the mark, the name, the muted count right after it, the Rendered | Source segment, then close.
@@ -6,8 +8,9 @@ function barError(g, tokens) {
         return "the pane exposes no bar geometry";
     if (!g.segment || !g.rendered || !g.source)
         return "the bar exposes no Rendered | Source segment";
-    if (g.markName !== "markdown")
-        return "the bar mark is " + g.markName + ", want markdown";
+    var drawn = Mark.markError(g, tokens);
+    if (drawn)
+        return drawn;
     if (g.mark.width !== tokens.chromeMark || g.mark.x !== tokens.padX)
         return "the mark is " + g.mark.width + " px at " + g.mark.x + ", want " + tokens.chromeMark + " at " + tokens.padX;
     if (g.height !== tokens.chromeHeight)
@@ -146,8 +149,9 @@ function plainBarError(g, tokens) {
         return "the plain bar still exposes a segment";
     if (g.rendered.visible || g.source.visible)
         return "the plain bar still draws a word of the segment";
-    if (g.markName !== "markdown")
-        return "the plain bar mark is " + g.markName + ", want markdown";
+    var drawn = Mark.markError(g, tokens);
+    if (drawn)
+        return drawn;
     if (!(g.name.width < g.name.implicitWidth))
         return "the plain bar's name did not elide (" + g.name.width + "/" + g.name.implicitWidth + ")";
     if (!g.countShown)
