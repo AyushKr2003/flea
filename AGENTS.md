@@ -431,7 +431,8 @@ exactly the guess that would drop a real outside change, so it is paid rather th
 Path syscalls leave the loop for mount-keyed workers, which is what keeps one hung server from
 wedging the window. `src/backend/iomount.rs` owns the mechanism. `mount_key` names the mount a
 path sits under lexically, never by stat, so a dead server costs no syscall there, and `is_remote`
-says whether its syscalls can wedge: gvfs, network fstypes and any FUSE daemon. A local mount runs
+says whether its syscalls can wedge: gvfs, network fstypes and any `fuse` or `fuse.*` mount (a block-backed
+`fuseblk` stays local). A local mount runs
 inline with no hop. A remote one runs on a worker with a deadline, `CALL_DEADLINE` of 5 s for a
 single call and `BULK_DEADLINE` of 15 s for a bulk pass, and past it the loop answers
 "<mount> is not responding." A mount past its deadline is marked stuck for `STUCK_TTL` of 30 s, and
@@ -8850,7 +8851,7 @@ the loop is doing. This change is the other half, the loop that keeps writing pr
 
 `src/backend/listwork.rs` owns it. `listwork::start` ends the walk on the loop, reads the watch fd
 and the mount table there, and classifies the path once with `iomount::is_remote` (gvfs, a network
-filesystem or any FUSE daemon). A local path runs `iomount::list_dir` inline on the loop, as v0.3.8
+filesystem or a `fuse` or `fuse.*` mount, never `fuseblk`). A local path runs `iomount::list_dir` inline on the loop, as v0.3.8
 did: it returns `Started::Inline`, lands through `finish` before the next request is read, never
 holds the gate, and a panic in it ends the process, also as before. A remote path runs `list_dir`
 on `Gate`'s one kept thread, started by the first remote list, and the gate holds the `Job` it will

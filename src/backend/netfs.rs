@@ -12,7 +12,7 @@ pub fn is_network_fstype(fstype: &str) -> bool {
     NETWORK_FSTYPES.iter().any(|kind| kind.eq_ignore_ascii_case(fstype))
 }
 
-// A filesystem whose stat can wedge: the shared network list plus any FUSE mount.
+// A filesystem whose stat can wedge: the shared network list plus fuse and fuse.*; block-backed fuseblk stays local.
 pub fn can_wedge(kind: &str) -> bool {
     is_network_fstype(kind) || kind == "fuse" || kind.starts_with("fuse.")
 }
