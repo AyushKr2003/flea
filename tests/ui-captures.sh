@@ -216,20 +216,14 @@ case_cap_rename() {
     kill_flea
 }
 
-# The cursor on a named row; the grid steps tiles with l, since j moves a whole tile row and a one-row grid never reaches the second tile.
+# The cursor on a named row; the grid goes by its own rows (j) and columns (l), since l clamps at a row's end and never wraps to the next row.
 cap_seek_named() {
-    local want="$1" n
+    local want="$1" idx got
     [[ "$(ipc viewMode)" == grid ]] || { seek_row_named "$want"; return; }
-    n=$(ipc total)
-    [[ "$n" =~ ^[0-9]+$ ]] || fail "cap_seek_named: the grid reported no row total, got [$n]"
-    key g >/dev/null
-    settle
-    for _ in $(seq 0 "$n"); do
-        [[ "$(ipc renameState | jq -r .cursorName)" == "$want" ]] && return 0
-        key l >/dev/null
-        settle
-    done
-    fail "cap_seek_named: could not put the grid cursor on $want"
+    idx=$(row_index_of "$want") || exit 1
+    goto_row "$idx"
+    got=$(ipc renameState | jq -r .cursorName)
+    [[ "$got" == "$want" ]] || fail "cap_seek_named: the grid cursor is on [$got] at index $(ipc cursor), not $want at index $idx"
 }
 
 # The cursor on a named row, F2, and a shot once the editor holds the caret; Escape closes it unless the caller goes on to type.
