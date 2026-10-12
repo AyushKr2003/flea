@@ -2,8 +2,7 @@ import QtQuick
 import Quickshell.Io
 import qs.Commons
 
-// The first lines of a text file, in the preview column's frame: coloured by the backend's code engine for code, plain for text,
-// with a muted number gutter for code. A file on network or phone storage is read here, under the size gate, and its text sent.
+// The first lines of a text file in the preview column's frame, coloured by the backend for code; a network or phone file is read here, under the size gate.
 Item {
     id: root
 
@@ -41,8 +40,7 @@ Item {
     readonly property bool readFailed: root.fileFailed || root.answer === "failed"
     // The sentence under the kind's mark when the file has nothing to draw, "" otherwise; the column adds it to the mark it already draws.
     readonly property string note: root.answer === "binary" ? "binary file" : ""
-    // True when the reader has settled with nothing to put in the frame, so the column stands the
-    // kind's mark in rather than draw a bordered empty box: refused for size, binary, or a file with no bytes.
+    // True when the reader has settled with nothing to draw (too large, binary or empty), so the column stands the kind's mark in.
     readonly property bool blank: root.tooLarge || root.answer === "binary"
         || (root.active && !root.readFailed && root.code !== null && root.code.settled && root.code.total === 0)
     readonly property bool loading: root.active && !root.readFailed && !root.tooLarge && root.answer === ""

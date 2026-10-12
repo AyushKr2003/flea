@@ -10,8 +10,7 @@ var FALLBACK = { red: "#f38ba8", green: "#a6e3a1", yellow: "#f9e2af", blue: "#89
 // A tab fills to the next multiple of this many columns.
 var TAB = 8
 
-// The foreground, then red, green, yellow, blue, magenta and cyan (bat's SGR 31 to 36): each the palette's colour of that name, its ANSI slot when unnamed,
-// lifted to 4.5:1 on whichever of the background and the surface it contrasts less with.
+// The foreground, then bat's six colours, each the palette's own (its ANSI slot when unnamed) lifted to 4.5:1 on the background or surface it contrasts less with.
 function inks(found, fallback, foreground) {
     var bg = Palette.pick(found, ["background"], fallback.background)
     var surface = Palette.pick(found, Palette.SURFACE_KEYS, fallback.surface)

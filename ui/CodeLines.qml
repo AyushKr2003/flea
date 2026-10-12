@@ -2,9 +2,7 @@ import QtQuick
 import qs.Commons
 import "js/CodeRuns.js" as CodeRuns
 
-// The lines of one file or text, coloured by the backend's code engine and drawn from the lines it answered. The view asks for the
-// lines in it plus `margin` screens each side, asks again when it moves past them and keeps what it was given. A file on network or
-// phone storage is never named to the backend: the caller reads it and passes `text`, so the backend opens nothing on a mount that can hang.
+// The lines of one file or text, coloured by the backend's code engine, asked a screen-and-margin at a time; a network file's `text` is the caller's.
 Item {
     id: root
 
@@ -25,6 +23,7 @@ Item {
     property int limit: 0
     // Screens asked past the view on each side.
     property int margin: 1
+    readonly property int lineCap: 400 // The most lines one ask names (docs/protocol.md "code"); a longer window is asked in parts.
 
     // A backend that cannot ask (a bare stub) leaves the caller's own text to be drawn plain.
     readonly property bool engine: root.backend !== null && typeof root.backend.askCode === "function"
@@ -131,9 +130,10 @@ Item {
         if (root.token !== 0 && root.asking.from === want.from && root.asking.to === want.to)
             return
         root.asking = want
-        var count = Math.min(400, want.to - want.from + 1)
+        var from = want.from
+        while (from < want.to && root.rowAt(from)) from++
         var source = root.fromText ? { text: root.text, name: root.path.split("/").pop(), lang: "" } : { path: root.path }
-        root.token = root.backend.askCode(root.slot, source, want.from, count)
+        root.token = root.backend.askCode(root.slot, source, from, Math.min(root.lineCap, want.to - from + 1))
     }
 
     function answered(message) {

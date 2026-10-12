@@ -4,8 +4,7 @@ import QtQuick
 import Quickshell
 import "flea" as Flea
 
-// tests/code-column.sh's harness: the Columns preview over the real backend draws code in the theme's inks, the binary, too large
-// and long-line frames, and never a plain frame before the coloured one.
+// tests/code-column.sh's harness: the Columns preview over the real backend draws code in the theme's inks, never plain first.
 ShellRoot {
     id: root
 
@@ -28,9 +27,12 @@ ShellRoot {
     property double calmFrom: 0
     property bool ticking: false
     property bool finished: false
-    // Asks counted at each move's start, the largest line any reply reached, and asks made while the listing loaded.
+    // Asks counted at each move's start, the largest line any reply reached, and the asks made while a reload's listing was out.
     property int askBase: 0
     property int farthest: 0
+    property bool watchLoad: false
+    property int loadsSeen: 0
+    property int loadBase: 0
     property int askedLoading: 0
     // The frames sampled while a walk runs: drawn live (not under the swap's picture) and what was wrong with them.
     property bool sampling: false
@@ -50,7 +52,7 @@ ShellRoot {
            { burst: ["j", "k", "j", "k", "j", "k"], file: "01-icons.rs" },
            { move: "j", show: "02-more.rs", coloured: true }, { move: "j", show: "03-nul.txt", binary: true },
            { move: "j", show: "04-over.log", large: true }, { move: "j", show: "05-long.rs", long: true },
-           { move: "j", show: "06-img.html", literal: true }, { done: true }]
+           { move: "j", show: "06-img.html", literal: true }, { reload: true }, { wide: true }, { done: true }]
 
     function log(line) { console.log("CODECOL " + line) }
     function check(label, actual, expected) {
@@ -180,10 +182,50 @@ ShellRoot {
             }
         } else if (op.stale) {
             var code = root.codeOf(root.column()), before = code.lines.join("|")
-            code.answered({ token: code.token + 99, state: "plain", total: 1, first: 1, lines: [[0, "STALE"]] })
-            root.check("a reply for a token that is not current is dropped", [code.answer, code.lines.join("|")], ["styled", before])
             code.answered({ token: 0, state: "plain", total: 1, first: 1, lines: [[0, "STALE"]] })
             root.check("a reply with no ask in flight is dropped", [code.answer, code.lines.join("|")], ["styled", before])
+            // An ask in flight holds a token: a reply naming another is dropped and the answer to the real ask still lands.
+            var staleName = root.nameShown(root.column())
+            code.reset()
+            code.ask()
+            var pending = code.token
+            code.answered({ token: pending + 99, state: "plain", total: 1, first: 1, lines: [[0, "STALE"]] })
+            root.check("a reply for a token that is not the one in flight is dropped", [pending > 0, code.token === pending, code.answer, code.total], [true, true, "", 0])
+            root.awaiting = function () {
+                if (!root.calm(root.drawn(staleName, "styled"))) return false
+                root.check("the real reply lands after the stale one", [code.answer, code.lines.join("|") === before], ["styled", true])
+                return true
+            }
+        } else if (op.reload) {
+            root.check("a CodeLines is live and active for the reload", [root.codeCount(), root.codeOf(root.column()).active], [1, true])
+            root.loadsSeen = 0
+            root.askedLoading = 0
+            root.watchLoad = true
+            root.pane.refresh(root.fixture + "/06-img.html", false)
+            root.awaiting = function () {
+                if (!root.calm(!root.pane.listInFlight && root.loadsSeen > 0 && root.drawn("06-img.html", "styled"))) return false
+                root.watchLoad = false
+                root.check("the listing loaded under a live CodeLines", root.loadsSeen > 0, true)
+                root.check("no code ask while the listing loads", root.askedLoading, 0)
+                return true
+            }
+        } else if (op.wide !== undefined) {
+            // A window over the line cap: asked in cap-sized parts, so it settles.
+            var wide = wideComponent.createObject(win.contentItem, { backend: realBackend, slot: "wide", fromText: true, path: "wide.rs" })
+            var wideLines = []
+            for (var n = 1; n <= 1500; n++) wideLines.push("fn w" + n + "() {}")
+            wide.text = wideLines.join("\n")
+            wide.height = (wide.lineCap + 100) * wide.rowHeight
+            var wideBase = root.backend().codeToken
+            wide.active = true
+            root.awaiting = function () {
+                if (!root.calm(wide.settled && wide.covered(1, wide.needed().to))) return false
+                var reach = wide.needed().to
+                root.check("a window over the cap is wider than the cap", reach > wide.lineCap, true)
+                root.check("a window over the cap is asked in cap-sized parts", root.backend().codeToken - wideBase, Math.ceil(reach / wide.lineCap))
+                wide.destroy()
+                return true
+            }
         } else if (op.walk !== undefined) {
             root.beginWalk()
             var step = 0, waiting = false
@@ -282,6 +324,22 @@ ShellRoot {
             if (reach > root.farthest) root.farthest = reach
         }
     }
+    Connections {
+        target: root.pane
+        function onListInFlightChanged() {
+            if (!root.watchLoad) return
+            if (root.pane.listInFlight) {
+                root.loadsSeen += 1
+                root.loadBase = realBackend.codeToken
+            } else if (root.loadsSeen > 0) {
+                root.askedLoading += realBackend.codeToken - root.loadBase
+            }
+        }
+    }
+    Component {
+        id: wideComponent
+        Flea.CodeLines { width: 600 }
+    }
     Timer { id: quitter; interval: 100; onTriggered: Qt.exit(root.failures > 0 ? 1 : 0) }
 
     Component {
@@ -311,7 +369,6 @@ ShellRoot {
             root.finish()
             return
         }
-        if (root.pane !== null && root.pane.listInFlight && realBackend.codeToken > 0) root.askedLoading += 1
         if (root.awaiting === null) {
             if (root.at >= root.ops.length) { root.finish(); return }
             root.run(root.ops[root.at])
@@ -319,7 +376,6 @@ ShellRoot {
             return
         }
         if (root.awaiting()) {
-            if (root.at === 0) root.check("no code ask while the listing loads", root.askedLoading, 0)
             root.awaiting = null
             root.at += 1
             root.stamp = Date.now()

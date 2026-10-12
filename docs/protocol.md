@@ -1203,8 +1203,8 @@ The syntax-coloured lines `first` to `first + count - 1` of **one file or one te
 actually asked for**, never a sweep. A request holding `text` sends the bytes the client already
 holds, with `name` picking the language when `lang` is empty (a Markdown info string names it in
 its first word); without `text` the backend opens `path`, which a client never sends for a file on
-a network or phone mount. `first` counts from 1 and `count` is capped at 400, absent meaning the
-cap. `raw` true skips the colouring and answers the lines plain. Answers one `code` line on a
+a network or phone mount. `first` counts from 1 and `count` is capped at 400 lines (the line cap,
+`lineCap` in `ui/CodeLines.qml`, which asks a longer window in parts), absent meaning the cap. `raw` true skips the colouring and answers the lines plain. Answers one `code` line on a
 thread. A newer request on the same `slot` ends the older job and the older reply is never sent,
 so a client matches the `token` of what it last sent and drops any other. At most 1,048,576 bytes
 of a file are ever read, and `bat` runs in the same read-only jail as the other helpers, on the
