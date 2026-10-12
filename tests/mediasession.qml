@@ -59,11 +59,15 @@ ShellRoot {
         implicitWidth: 400
         implicitHeight: 300
         color: "#303030"
-        // What ui/WindowBody.qml is to the real player: the ancestor that holds the window as host.
-        Item { id: holder; anchors.fill: parent; property var host: win }
-        Flea.Preview {
-            id: quick
+        // What ui/WindowBody.qml is to the real player: the ancestor that holds the window as host, and Quick Look's Preview sits under it as it does there.
+        Item {
+            id: holder
             anchors.fill: parent
+            property var host: win
+            Flea.Preview {
+                id: quick
+                anchors.fill: parent
+            }
         }
     }
 
@@ -83,7 +87,7 @@ ShellRoot {
         shell.media = shell.make(shell.clip, "video")
         shell.check("built, not playing: the inhibitor is off", shell.media.keepsAwake, false)
         shell.check("built, not playing: still no helper process", shell.lines("starts.log").length, 0)
-        shell.check("built: the inhibitor's window is the FloatingWindow the host names", shell.media.hostWindow === win, true)
+        shell.check("built: the inhibitor's window is the FloatingWindow the host names", shell.media.inhibitedWindow === win, true)
         shell.media.togglePlay()
         shell.waitFor("the video plays", function () { return shell.media.status === "playing" })
     }
@@ -137,6 +141,15 @@ ShellRoot {
         var last = all[all.length - 1]
         shell.check("SetPosition: the player seeks to it and says so once", [all.length, last.seeked, last.position], [shell.baseline + 1, true, 700])
         shell.baseline = all.length
+        shell.command("Seek 300")
+        shell.waitFor("Seek seeks", function () { return shell.states().length > shell.baseline })
+    }
+
+    function stepRelativeSeek() {
+        var all = shell.states()
+        var last = all[all.length - 1]
+        shell.check("Seek: the player moves by it from where it was and says so once", [all.length, last.seeked, last.position], [shell.baseline + 1, true, 1000])
+        shell.baseline = all.length
         shell.command("Play")
         shell.waitFor("Play resumes", function () { return shell.media.status === "playing" })
     }
@@ -184,14 +197,16 @@ ShellRoot {
     function stepQuickLookPlaying() {
         var item = quick.surfaceItem()
         shell.check("Quick Look playing: the inhibitor is on", item.keepsAwake, true)
+        shell.check("Quick Look playing: the inhibitor's window is the FloatingWindow the host names", item.inhibitedWindow === win, true)
         quick.close()
         shell.waitFor("closing Quick Look ends the helper", function () { return shell.stubGone(3) })
     }
 
     readonly property var script: [
         shell.stepBefore, shell.stepPlaying, shell.stepFirstLine, shell.stepNoTickLines, shell.stepPaused,
-        shell.stepPausedLine, shell.stepSeekLine, shell.stepSetPosition, shell.stepResumed, shell.stepStopped,
-        shell.stepClosed, shell.stepAudio, shell.stepAudioLine, shell.stepQuickLook, shell.stepQuickLookPlaying
+        shell.stepPausedLine, shell.stepSeekLine, shell.stepSetPosition, shell.stepRelativeSeek, shell.stepResumed,
+        shell.stepStopped, shell.stepClosed, shell.stepAudio, shell.stepAudioLine, shell.stepQuickLook,
+        shell.stepQuickLookPlaying
     ]
 
     function finish() {

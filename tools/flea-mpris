@@ -1,17 +1,12 @@
 #!/usr/bin/python3
 
 # Flea's MPRIS player: the name a desktop's media keys and media widgets find while a preview plays.
-#
-# The UI starts one of these when a preview first plays and writes one JSON state line to its stdin
-# on every status, track or seek change; this process answers the bus from the last line and prints
-# one command per line on stdout (Play, Pause, PlayPause, Stop, Seek <ms>, SetPosition <ms>) for the
-# UI to carry out. It exits at EOF, so a UI that died leaves no player behind. The name is taken on
-# the first state line, so a helper that was started and never fed owns nothing.
-#
+
+# Fed one JSON state line per status, track or seek change on stdin, it answers the bus and prints one command per line on stdout (Play, Pause, PlayPause, Stop, Seek <ms>, SetPosition <ms>); EOF ends it, and the name is taken on the first line.
+
 # Python and gi, alongside tools/flea-filemanager1: python-gobject is already a Flea dependency.
-#
-# State line, times in milliseconds:
-#   {"status":"Playing","title":"a.mp4","url":"file:///a.mp4","length":6000,"position":0,"seeked":false}
+
+# State line, times in milliseconds: {"status":"Playing","title":"a.mp4","url":"file:///a.mp4","length":6000,"position":0,"seeked":false}
 
 import json
 import os

@@ -57,6 +57,7 @@ Item {
 
     readonly property alias position: player.position
     readonly property alias keepsAwake: inhibitor.enabled
+    readonly property alias inhibitedWindow: inhibitor.window
     readonly property alias duration: player.duration
 
     // Preview.qml's own strip drives these two; kept here, not there, so Preview.qml never has to
@@ -86,7 +87,7 @@ Item {
         })
     }
 
-    // The helper's commands, in milliseconds: Seek is relative, SetPosition absolute.
+    // The helper's commands, in milliseconds: Seek is relative, SetPosition absolute. Sample lines: "PlayPause", "Seek -2500", "SetPosition 700".
     function remote(line) {
         var word = line.split(" ")
         if (word[0] === "Play") player.play()

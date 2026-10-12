@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# tools/flea-mpris on a private session bus: fed state lines on stdin it owns an MPRIS name and answers
-# for it, and the calls a media key makes arrive on stdout as one command line each.
-#
-# The bus is this suite's own, listening inside its fixture, so nothing here registers on the real
-# session bus. The first case is the negative control: a helper that was started and never fed owns no name.
+# tools/flea-mpris on a private session bus: fed state lines it owns an MPRIS name, and a media key's calls reach stdout as command lines.
 set -u
 set -o pipefail
 # Hard rule 9's guard, which owns FIXTURE_ROOT and every create and delete this suite makes.
@@ -46,6 +42,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# The bus listens inside the fixture, so nothing registers on the real session bus; the first case is the negative control, a helper never fed owns no name.
 sandbox_make "$fixture"
 cat > "$fixture/bus.conf" <<CONF
 <!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
