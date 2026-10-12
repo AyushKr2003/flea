@@ -44,6 +44,7 @@ src/backend/undoshare.rs 414
 src/backend/undoshare_tests.rs 550
 src/backend/collide_replace_tests.rs 492
 src/backend/proto.rs 442
+src/backend/rawpreview_tests.rs 410
 src/backend/thumbworker.rs 962
 src/backend/trashbrowse.rs 778
 src/backend/trashdelete.rs 938

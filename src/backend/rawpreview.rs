@@ -114,8 +114,19 @@ fn last_used(meta: &std::fs::Metadata) -> SystemTime {
     SystemTime::UNIX_EPOCH + Duration::new(secs, u32::try_from(meta.ctime_nsec()).unwrap_or(0))
 }
 
-// Stale temps go, then the least recently used copies down to the bound; a copy made or served within STALE_TEMP waits for the first scan after it ages.
+// Stale temps go, then the least recently used copies down to the bound; a copy made or served within STALE_TEMP waits for the first scan after it ages, and each is re-read just before its unlink, so a serve in the one syscall after that re-read can still lose it.
 fn evict(dir: &Path, bound: &Bound) {
+    evict_between(dir, bound, || {});
+}
+
+// Used since the scan read it, or no longer a regular file: either way the scan's verdict on the copy is out of date.
+fn removed_if_unused(path: &Path, seen: SystemTime) -> bool {
+    let Ok(meta) = std::fs::symlink_metadata(path) else { return false };
+    meta.file_type().is_file() && last_used(&meta) <= seen && std::fs::remove_file(path).is_ok()
+}
+
+// The hook runs between the scan and the first removal, which is where a serve or a re-publish lands in a test.
+fn evict_between(dir: &Path, bound: &Bound, between: impl FnOnce()) {
     let Ok(listing) = std::fs::read_dir(dir) else { return };
     let mut old: Vec<(SystemTime, PathBuf, u64)> = Vec::new();
     let (mut count, mut total) = (0usize, 0u64);
@@ -140,13 +151,15 @@ fn evict(dir: &Path, bound: &Bound) {
         }
     }
     old.sort();
-    for (_, path, size) in old {
+    between();
+    for (seen, path, size) in old {
         if count <= bound.copies && total <= bound.bytes {
             break;
         }
-        let _ = std::fs::remove_file(&path);
-        count -= 1;
-        total -= size;
+        if removed_if_unused(&path, seen) {
+            count -= 1;
+            total -= size;
+        }
     }
 }
 

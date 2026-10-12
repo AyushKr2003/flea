@@ -328,6 +328,22 @@ fn a_copy_served_under_a_minute_ago_is_spared_though_it_was_published_over_a_min
 }
 
 #[test]
+fn a_copy_served_between_the_scan_and_its_removal_survives_the_pass() {
+    let d = TestDir::new("rawprev-evict-race");
+    let cache = d.join("cache");
+    let (a, b) = (aged(&d, "a.cr2", 100, 2_000), aged(&d, "b.cr2", 200, 1_000));
+    for src in [&a, &b] {
+        ensure_with(&cache, src, usize::MAX, u64::MAX, later()).expect("a preview");
+        tick();
+    }
+    let publishes = AtomicU32::new(0);
+    let bound = Bound { copies: 0, bytes: 0, now: later(), publishes: &publishes };
+    evict_between(&cache, &bound, || mark_used(&copy_path(&cache, &a)));
+    assert!(copy_path(&cache, &a).exists(), "a copy served after the scan read it was removed by the scan's old verdict");
+    assert!(!copy_path(&cache, &b).exists(), "the unused copy stayed over the bound");
+}
+
+#[test]
 fn the_cache_holds_its_bytes_by_the_same_order() {
     let d = TestDir::new("rawprev-evict-bytes");
     let cache = d.join("cache");
