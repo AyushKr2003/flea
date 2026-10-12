@@ -5,7 +5,7 @@ import Quickshell
 import "flea" as Flea
 import "qml-probe.js" as QmlProbe
 
-// tests/trash-view.sh's harness: the real ui/TrashHost.qml and ui/TrashView.qml over fixture replies, with the real ui/ContextMenu.qml. Rows arrive newest deleted first, the way the backend orders them.
+// tests/trash-view.sh's harness: the real ui/TrashHost.qml and ui/TrashView.qml over fixture replies, with the real ui/ContextMenu.qml. Rows keep the order the backend gives; the harness hands them in newest deleted first, and the backend's own order is tested in src/backend/trashbrowse.rs.
 ShellRoot {
     id: shell
 
@@ -127,7 +127,7 @@ ShellRoot {
             shell.step = 1
         } else if (shell.step === 1 && shell.ready(3)) {
             var view = host.item
-            shell.check("rows read newest deleted first", shell.names(), ["photo.png", "notes.txt", "old-folder"])
+            shell.check("rows keep the order the backend gives", shell.names(), ["photo.png", "notes.txt", "old-folder"])
             shell.check("the Deleted header draws the descending mark", shell.titleText(view, "Deleted"), "Deleted ▾")
             shell.check("the ipc header labels stay bare", view.headerLabels, ["Name", "Original location", "Deleted"])
             shell.check("the cursor opens on the newest row", view.cursor, 0)

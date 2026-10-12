@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The Trash view lists newest deleted first, opens with the cursor on the newest row, and m opens the cursor row's menu under that row; offscreen, no display or lock.
+# The Trash view keeps the order the backend gives its rows, opens with the cursor on the first row, and m opens the cursor row's menu under that row; offscreen, no display or lock. The backend's own order is tested in src/backend/trashbrowse.rs, and nothing here reads a Trash.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -24,29 +24,19 @@ trap cleanup EXIT
 mkdir -p "$test_root/config" "$test_root/home" "$test_root/state" "$test_root/cache" "$test_root/runtime" || exit 1
 chmod 700 "$test_root/runtime" || exit 1
 
-# The fixture Trash lives under this run's own XDG_DATA_HOME: an image, a text file and a folder, deleted at three times.
+# The rows as the backend answers them, newest deleted first: name, deleted, directory flag, icon. No Trash is read here; the harness fakes every reply.
 data="$test_root/data"
-trash="$data/Trash"
-mkdir -p "$trash/files" "$trash/info" "$test_root/orig" || exit 1
-printf 'png' > "$trash/files/photo.png"
-printf 'text' > "$trash/files/notes.txt"
-mkdir "$trash/files/old-folder" || exit 1
-add_trashed() { printf '[Trash Info]\nPath=%s\nDeletionDate=%s\n' "$test_root/orig/$1" "$2" > "$trash/info/$1.trashinfo"; }
-add_trashed notes.txt 2026-10-03T09:00:00
-add_trashed old-folder 2026-10-01T09:00:00
-add_trashed photo.png 2026-10-05T09:00:00
-
-# The rows as the backend answers them: the info files read back, newest deletion first.
+mkdir -p "$data" || exit 1
 rows=""
-while IFS=$'\t' read -r date file; do
-    name=$(basename "$file" .trashinfo)
-    dir=false; icon=text-x-generic
-    [ -d "$trash/files/$name" ] && { dir=true; icon=folder; }
-    case $name in *.png) icon=image-png ;; esac
+while IFS=$'\t' read -r name date dir icon; do
     row=$(printf '{"uri":"trash:///%s","original":"%s","size":1,"deleted":"%s","directory":%s,"icon":"%s","identity":"id-%s","bulkSelected":false}' \
-        "$name" "$(sed -n 's/^Path=//p' "$file")" "$date" "$dir" "$icon" "$name")
+        "$name" "$test_root/orig/$name" "$date" "$dir" "$icon" "$name")
     rows="${rows:+$rows,}$row"
-done < <(for f in "$trash"/info/*.trashinfo; do printf '%s\t%s\n' "$(sed -n 's/^DeletionDate=//p' "$f")" "$f"; done | sort -r)
+done <<TABLE
+photo.png	2026-10-05T09:00:00	false	image-png
+notes.txt	2026-10-03T09:00:00	false	text-x-generic
+old-folder	2026-10-01T09:00:00	true	folder
+TABLE
 
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1

@@ -131,14 +131,30 @@ fn parse_list(text: &str) -> Result<Vec<Item>, String> {
     Ok(items)
 }
 fn list() -> Result<Vec<Item>, String> {
-    let mut items = parse_list(&gio(&["trash", "--list"])?)?;
+    list_with(gio)
+}
+// The listing over any reader of gio's text, so a test can feed the two outputs through the real join.
+fn list_with(read: impl Fn(&[&str]) -> Result<String, String>) -> Result<Vec<Item>, String> {
+    let mut items = parse_list(&read(&["trash", "--list"])?)?;
     // One gio call dates every volume's items; a failed call leaves the order by uri.
-    let dates = parse_dates(&gio(&["list", "-u", "-a", "trash::deletion-date", "trash:///"]).unwrap_or_default());
+    let dates = parse_dates(&read(&["list", "-u", "-a", "trash::deletion-date", "trash:///"]).unwrap_or_default());
     newest_first(&mut items, |item| dates.get(&item.uri).cloned().unwrap_or_default());
     Ok(items)
 }
+// Two reads of one Trash hold the same items whatever order each came in: a dates call that failed in one read orders it by uri.
+fn same_items(a: &[Item], b: &[Item]) -> bool {
+    let mut a = a.to_vec();
+    let mut b = b.to_vec();
+    a.sort_by(|x, y| x.uri.cmp(&y.uri));
+    b.sort_by(|x, y| x.uri.cmp(&y.uri));
+    a == b
+}
+// Membership by uri, not by position: the listing is in date order, so a uri search over it would miss items.
+fn listed_uris(items: &[Item]) -> HashSet<&str> {
+    items.iter().map(|item| item.uri.as_str()).collect()
+}
 
-// Sample input, gio list -u -a trash::deletion-date trash:///: "trash:///a.txt\t0\t(regular)\ttrash::deletion-date=2026-09-08T10:00:00\n"; local time, so the text sorts as the instant does.
+// Sample input, gio list -u -a trash::deletion-date trash:///: "trash:///a.txt\t0\t(regular)\ttrash::deletion-date=2026-09-08T10:00:00\n"; local clock time with no offset, so the repeated fall-back hour can order two items wrongly, accepted because gio gives no offset.
 fn parse_dates(text: &str) -> HashMap<String, String> {
     text.lines()
         .filter_map(|line| {
@@ -370,7 +386,7 @@ impl Session {
         let mut stale = false;
         let token = self.selection.as_ref().map(|selection| selection.token).unwrap_or(0);
         if let Some(selection) = &self.selection {
-            let listed: HashSet<&str> = self.items.iter().map(|item| item.uri.as_str()).collect();
+            let listed = listed_uris(&self.items);
             let mut offset = 0;
             while let Some(bytes) = selection.items.records().next(&mut offset)? {
                 self.cancellation.check()?;
@@ -408,7 +424,7 @@ impl Session {
             }
             records.append(row(&current).as_bytes())?;
         }
-        if list()? != self.items { return Err("Trash changed while selecting its contents; select again.".into()); }
+        if !same_items(&list()?, &self.items) { return Err("Trash changed while selecting its contents; select again.".into()); }
         let mut offset = 0;
         while let Some(bytes) = records.records().next(&mut offset)? {
             self.cancellation.check()?;
@@ -557,7 +573,7 @@ impl Session {
             Some(c) if c.token == token => c,
             _ => return Ok(false),
         };
-        if list()? != confirmation.listing { return Ok(false); }
+        if !same_items(&list()?, &confirmation.listing) { return Ok(false); }
         let mut cursor = 0;
         while let Some(bytes) = confirmation.items.records().next(&mut cursor)? {
             self.cancellation.check()?;
@@ -656,6 +672,54 @@ mod tests {
         newest_first(&mut items, |item| if item.uri.ends_with('b') { "2026-10-01T00:00:00".into() } else { String::new() });
         let order: Vec<_> = items.iter().map(|item| item.uri.as_str()).collect();
         assert_eq!(order, ["trash:///b", "trash:///a", "trash:///c"]);
+    }
+    // gio's two outputs for one Trash, one escaped name in both: the listing in uri order, the dates by uri.
+    const TRASH_LIST: &str = "trash:///a%20b.txt\t/home/u/a b.txt\ntrash:///c.txt\t/home/u/c.txt\ntrash:///z.txt\t/home/u/z.txt\n";
+    const TRASH_DATES: &str = "trash:///a%20b.txt\t0\t(regular)\ttrash::deletion-date=2026-10-05T09:00:00\ntrash:///c.txt\t0\t(regular)\ttrash::deletion-date=2026-10-01T09:00:00\ntrash:///z.txt\t0\t(regular)\ttrash::deletion-date=2026-10-03T09:00:00\n";
+    fn read_gio(dates: Result<&'static str, &'static str>) -> impl Fn(&[&str]) -> Result<String, String> {
+        move |args: &[&str]| match args[0] {
+            "trash" => Ok(TRASH_LIST.to_string()),
+            _ => dates.map(String::from).map_err(String::from),
+        }
+    }
+    fn uris(items: &[Item]) -> Vec<&str> {
+        items.iter().map(|item| item.uri.as_str()).collect()
+    }
+    #[test]
+    fn the_real_listing_joins_dates_to_uris_newest_first() {
+        let items = list_with(read_gio(Ok(TRASH_DATES))).unwrap();
+        assert_eq!(uris(&items), ["trash:///a%20b.txt", "trash:///z.txt", "trash:///c.txt"]);
+        assert_eq!(items[0].original, "/home/u/a b.txt");
+    }
+    #[test]
+    fn a_failed_dates_call_keeps_the_uri_order() {
+        let items = list_with(read_gio(Err("gio failed"))).unwrap();
+        assert_eq!(uris(&items), ["trash:///a%20b.txt", "trash:///c.txt", "trash:///z.txt"]);
+    }
+    #[test]
+    fn a_failed_trash_list_is_an_error() {
+        assert!(list_with(|_: &[&str]| Err("gio failed".to_string())).is_err());
+    }
+    #[test]
+    fn two_reads_of_one_trash_are_unchanged_whatever_their_order() {
+        let dated = list_with(read_gio(Ok(TRASH_DATES))).unwrap();
+        let by_uri = list_with(read_gio(Err("timed out"))).unwrap();
+        assert_ne!(dated, by_uri);
+        assert!(same_items(&dated, &by_uri));
+        assert!(same_items(&by_uri, &dated));
+        // A different item or a different original is a change.
+        let mut other = by_uri.clone();
+        other[1].original = "/home/u/elsewhere".into();
+        assert!(!same_items(&dated, &other));
+        assert!(!same_items(&dated, &by_uri[1..]));
+    }
+    #[test]
+    fn membership_finds_every_item_of_a_date_ordered_listing() {
+        let items = list_with(read_gio(Ok(TRASH_DATES))).unwrap();
+        assert_ne!(uris(&items), { let mut sorted = uris(&items); sorted.sort(); sorted });
+        let listed = listed_uris(&items);
+        for item in &items { assert!(listed.contains(item.uri.as_str()), "{} missed", item.uri); }
+        assert!(!listed.contains("trash:///absent"));
     }
     #[test]
     fn selected_targets_require_known_paths_and_original_identities() {
