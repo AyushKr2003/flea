@@ -90,6 +90,8 @@ ShellRoot {
     property var fileA: ({ n: "p1.txt", d: false, k: 0, p: 420, s: 13, m: 7, t: false, i: "text-x-generic" })
     property var fileB: ({ n: "p2.txt", d: false, k: 0, p: 420, s: 15, m: 8, t: false, i: "text-x-generic" })
     property var folderOuter: ({ n: "outer", d: true, k: 0, p: 493, s: 0, m: 9, t: false, i: "folder" })
+    property var innerA: ({ n: "in1.txt", d: false, k: 0, p: 420, s: 11, m: 10, t: false, i: "text-x-generic" })
+    property var innerB: ({ n: "in2.txt", d: false, k: 0, p: 420, s: 12, m: 11, t: false, i: "text-x-generic" })
     function fail(text) { root.failures.push(text) }
     function names(rows) { return rows.map(function (row) { return row.n }).join("|") }
 
@@ -111,13 +113,13 @@ ShellRoot {
         // The cursor folder lists its peeked rows: the contents of outer are the child column, not the shown folder's own files.
         root.stubPane.rows = [root.folderOuter, root.fileA, root.fileB]
         root.stubPane.cursorIndex = 0
-        root.stubBackend.peeked(root.stubPane.join(root.stubPane.path, "outer"), false, 2, [root.fileA, root.fileB], false, 0, false, root.stubPane.windowSize)
+        root.stubBackend.peeked(root.stubPane.join(root.stubPane.path, "outer"), false, 2, [root.innerA, root.innerB], false, 0, false, root.stubPane.windowSize)
         folderTimer.start()
     }
 
     function phaseFolder() {
-        if (area.drawnNames("child") !== "p1.txt|p2.txt")
-            root.fail("a cursor on a folder draws child names '" + area.drawnNames("child") + "', want p1.txt|p2.txt")
+        if (area.drawnNames("child") !== "in1.txt|in2.txt")
+            root.fail("a cursor on a folder draws child names '" + area.drawnNames("child") + "', want its peeked in1.txt|in2.txt")
         if (root.failures.length === 0)
             console.log("COLUMNSDRAWN PASS file-cursor=no-child folder-cursor=its-rows")
         root.report()
