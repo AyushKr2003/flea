@@ -15,7 +15,6 @@ import "js/Search.js" as Search
 import "js/SlowOp.js" as SlowOp
 import "js/Swap.js" as Swap
 import "js/Tabs.js" as Tabs
-import "js/Thumbs.js" as Thumbs
 import "js/ExtThumbs.js" as ExtThumbs
 import "js/Transfer.js" as Transfer
 
