@@ -20,6 +20,13 @@ QtObject {
         }
     }
 
+    // What each main-frame row laid out for itself (ui/MenuRow.qml parts), null for a row not built; never widestRow's answer.
+    function menuRows(menu) {
+        var rows = []
+        for (var i = 0; i < menu.entries.length; i++) { var it = menu.itemFor(i); rows.push(it ? it.parts() : null) }
+        return rows
+    }
+
     function state() {
         var menu = root.pane.contextMenu()
         return JSON.stringify({pane: String(root.pane), opened: menu.visible, entries: menu.entries, cursor: menu.cursor,
@@ -28,6 +35,7 @@ QtObject {
             shebangId: root.pane.shebangId, shebangReply: root.shebangReply, shebangLastReply: root.shebangLastReply,
             submenu: menu.submenuOpen, submenuCursor: menu.submenuCursor, submenuEntries: menu.submenuEntries,
             frame: root.fleaWindow.rectOf(menu.frameItem), flyout: root.fleaWindow.rectOf(menu.submenuFrameItem),
-            workArea: menu.workArea, forHeader: menu.forHeader, forRail: menu.forRail, hasRow: menu.hasRow})
+            workArea: menu.workArea, forHeader: menu.forHeader, forRail: menu.forRail, hasRow: menu.hasRow,
+            rows: root.menuRows(menu)})
     }
 }
