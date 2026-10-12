@@ -57,7 +57,7 @@ if [ "$dry" = yes ]; then
   echo 120 > "$root/kernel/.delay"; echo 340 > "$root/gvfs/.delay"
   for i in 1 2 3 4 5; do : > "$root/kernel/f$i.txt"; : > "$root/gvfs/f$i.txt"; done
   # The stub starts a child that outlives it, and records its own pid (exec keeps it) after the child's, so a settled listing means both files exist.
-  printf '#!/bin/bash\nd=%q\necho "$2" > $d/cur.path; date +%%s%%3N > $d/cur.t0\nsleep 600 < /dev/null > /dev/null 2>&1 &\necho $! > $d/child.pid; echo $$ > $d/flea.pid; exec sleep 600\n' "$root/stub" > "$root/stub/flea"
+  printf '#!/bin/bash\nd=%q\necho "$2" > "$d/cur.path"; date +%%s%%3N > "$d/cur.t0"\nsleep 600 < /dev/null > /dev/null 2>&1 &\necho $! > "$d/child.pid"; echo $$ > "$d/flea.pid"; exec sleep 600\n' "$root/stub" > "$root/stub/flea"
   cat > "$root/stub/qs" <<EOS
 #!/bin/bash
 d=$root/stub
@@ -95,12 +95,12 @@ one_run() {
   local route=$1 path=$2 run=$3 t0 qpid listed=-1 first=-1 rows=-1 state flight where fr
   mkdir "$root/state-$route-$run" || return 1
   [ -z "${PRE_RUN:-}" ] || bash -c "$PRE_RUN" > /dev/null 2>&1 || { echo "flea-share-route: PRE_RUN failed" >&2; return 1; }
+  if [ "$dry" = yes ]; then : > "$root/stub/child.pid"; fi
   t0=$(now_ms)
   XDG_STATE_HOME="$root/state-$route-$run" FLEA_UI="$FLEA_UI" FLEA_BIN="$FLEA_BIN" \
     setsid nohup "$FLEA_BIN" --gui "$path" > /dev/null 2>&1 < /dev/null &
   flea_pid=$!
   qpid=$flea_pid
-  if [ "$dry" = yes ]; then : > "$root/stub/child.pid"; fi
   while [ $(( $(now_ms) - t0 )) -lt "$LISTED_TIMEOUT_MS" ]; do
     kill -0 "$qpid" 2>/dev/null || { echo "flea-share-route: the launched shell (pid $qpid) exited before $route run $run settled" >&2; break; }
     where=$(ipc path) || continue
