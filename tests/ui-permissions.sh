@@ -44,7 +44,7 @@ permissions_point() {
     read -r cx cy <<< "$centre"
     [[ "$cx" =~ ^[0-9]+$ && "$cy" =~ ^[0-9]+$ ]] || fail "permissions: native control has no centre"
     read -r wx wy ww wh < <(window_box) || fail "native window coordinates unavailable"
-    (( cx < ww && cy < wh )) || fail "permissions: control is outside the actual viewport"
+    (( cx < ww && cy < wh )) || fail "permissions: control centre $cx,$cy is outside the actual viewport ${ww}x${wh} (window at $wx,$wy)"
     assert_focus
     omarchy-drive click "$((wx + cx))" "$((wy + cy))" "$button" >/dev/null \
         || fail "permissions: native pointer activation failed"
@@ -519,8 +519,8 @@ permissions_eligibility() {
     permissions_expect selectionCount "$batch_count"
     click_row "$first" right
     permissions_expect contextMenuVisible true
-    ipc contextMenuModel | jq -e 'any(.[]; .action == "permissions" and .disabled and .errored and .hint == null)' >/dev/null \
-        || fail "permissions: file-plus-symlink selection does not read red with no sentence"
+    ipc contextMenuModel | jq -e 'any(.[]; .action == "permissions" and .disabled and .errored and .hint == "symlink")' >/dev/null \
+        || fail "permissions: file-plus-symlink selection does not read red with the word symlink"
     index=$(menu_row_index Permissions) || fail "permissions: no refused batch Permissions row"
     permissions_point "$(ipc contextMenuRowCentre "$index")"
     permissions_wait '(.opened == false)' 'file-plus-symlink pointer activation cannot open Permissions'
@@ -532,8 +532,8 @@ permissions_eligibility() {
     before=$(stat -c '%d:%i:%u:%g:%a:%s' "$permissions_listing/notes.md")
     click_row "$(row_index_of link)" right
     permissions_expect contextMenuVisible true
-    ipc contextMenuModel | jq -e 'any(.[]; .action == "permissions" and .disabled and .errored and .hint == null)' >/dev/null \
-        || fail "permissions: symlink entry does not read red with no sentence"
+    ipc contextMenuModel | jq -e 'any(.[]; .action == "permissions" and .disabled and .errored and .hint == "symlink")' >/dev/null \
+        || fail "permissions: symlink entry does not read red with the word symlink"
     shot "permissions-$permissions_group-symlink"
     index=$(menu_row_index Permissions)
     permissions_point "$(ipc contextMenuRowCentre "$index")"

@@ -82,6 +82,20 @@ ShellRoot {
         check("success focuses catcher", menu.keyboardFocused, true)
         check("open adds no refusal", root.refused.length, 1)
         menu.close()
+        // Q13: the Locked tile's Permissions row says why it is red in the hint slot the row already has.
+        Flea.ViewState.state = ({ menu: ({ hidden: ["openTerminal"] }) })
+        menu.openLocked("/locked", 0o040755, Qt.point(60, 60))
+        var stranger = menu.entries.filter(function (row) { return row.action === "permissions" })[0] || {}
+        check("a locked folder owned by somebody else is red", stranger.errored, true)
+        check("and its entry says not yours", stranger.hint, "not yours")
+        var strangerRow = menu.itemFor(menu.entries.indexOf(stranger))
+        check("and the row draws that word in its hint slot", strangerRow ? strangerRow.hint : "", "not yours")
+        check("and the word wants no more than a default menu is wide", strangerRow ? strangerRow.wantedWidth <= Flea.Theme.menuWidth : false, true)
+        menu.close()
+        menu.openLocked("/locked", 0o040000, Qt.point(60, 60))
+        var owner = menu.entries.filter(function (row) { return row.action === "permissions" })[0] || {}
+        check("the way back in stays plain, with no word", String(owner.errored) + "|" + String(owner.hint), "undefined|undefined")
+        menu.close()
         Flea.ViewState.state = {}
         probe.forceActiveFocus()
         menu.openForRail("k1", [{ action: "open", label: "Open" }], Qt.point(10, 10))

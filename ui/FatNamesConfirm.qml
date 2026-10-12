@@ -8,7 +8,10 @@ import "js/Icons.js" as Icons
 FocusScope {
     id: root
     anchors.fill: parent
-    visible: opened
+    visible: opened || opacity > 0
+    // Closed means no input, even while the fade-out is still drawn.
+    enabled: opened
+    opacity: 0
     property bool opened: false
     property string titleText: ""
     property var renames: []
@@ -37,6 +40,7 @@ FocusScope {
         opened = false
         chosen(choice)
     }
+    Flea.Reveal { target: root; shown: root.opened; lift: card }
     // A press lands on its own button first, so the accent never shows one choice while another is taken.
     function press(choice) {
         focusName = choice
@@ -69,7 +73,7 @@ FocusScope {
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             onWheel: function(wheel) { wheel.accepted = true }
         }
-        Flea.CardScroll {
+        Flea.CardFrame {
             id: body
             bleed: Theme.focusClearance
             anchors.fill: parent
@@ -77,14 +81,26 @@ FocusScope {
             anchors.rightMargin: root.cardPadding + Theme.spacing.hairline - Theme.focusClearance
             anchors.topMargin: root.cardPadding + Theme.spacing.hairline - Theme.focusClearance
             anchors.bottomMargin: root.cardBottomPadding + Theme.spacing.hairline - Theme.focusClearance
-            Column {
-                width: body.holderWidth
+            title: Column {
+                width: parent.width
                 spacing: Theme.spacing.gap
                 Flea.DialogTitle {
                     width: parent.width
                     text: root.titleText
                 }
                 Rectangle { width: parent.width; height: Theme.spacing.hairline; color: Theme.color.mutedFrame; opacity: 0.4 }
+            }
+            buttons: Row {
+                id: buttons
+                anchors.right: parent.right
+                spacing: Theme.spacing.gap
+                Flea.DialogButton { id: cancelButton; label: Collide.FAT_BUTTONS.cancel; focused: root.focusName === "cancel"; onActivated: root.press("cancel") }
+                Flea.DialogButton { id: skipButton; label: Collide.FAT_BUTTONS.skip; focused: root.focusName === "skip"; onActivated: root.press("skip") }
+                Flea.DialogButton { id: renameButton; label: Collide.FAT_BUTTONS.rename; primary: true; focused: root.focusName === "rename"; onActivated: root.press("rename") }
+            }
+            Column {
+                width: parent.width
+                spacing: Theme.spacing.gap
                 Column {
                     width: parent.width
                     Repeater {
@@ -134,14 +150,6 @@ FocusScope {
                     wrapMode: Text.Wrap
                     color: Theme.color.foreground
                     font { family: Theme.font.family; pixelSize: Theme.font.caption }
-                }
-                Row {
-                    id: buttons
-                    anchors.right: parent.right
-                    spacing: Theme.spacing.gap
-                    Flea.DialogButton { id: cancelButton; label: Collide.FAT_BUTTONS.cancel; focused: root.focusName === "cancel"; onActivated: root.press("cancel") }
-                    Flea.DialogButton { id: skipButton; label: Collide.FAT_BUTTONS.skip; focused: root.focusName === "skip"; onActivated: root.press("skip") }
-                    Flea.DialogButton { id: renameButton; label: Collide.FAT_BUTTONS.rename; primary: true; focused: root.focusName === "rename"; onActivated: root.press("rename") }
                 }
             }
         }

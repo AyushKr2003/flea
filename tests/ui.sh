@@ -11832,7 +11832,7 @@ EOS
     launch "$menu_dir"
     wait_listing 3
     providers_open adir pointer
-    providers_disabled taildrop 'Taildrop sends files only'
+    providers_disabled taildrop 'Taildrop sends files only' 'files only'
     menus_expect menuState 'any(.entries[]; .action == "taildrop" and .disabled and .submenu == [])' 'directory keeps its installed provider but offers no file targets'
     providers_close
 
@@ -11857,7 +11857,7 @@ EOS
 
     providers_mode tailscale ready '{"BackendState":"NeedsLogin","Peer":{}}'
     providers_open b-cursor.txt pointer
-    providers_disabled taildrop 'signed out'
+    providers_disabled taildrop 'signed out' 'signed out'
     menus_expect menuState 'any(.entries[]; .action == "taildrop" and .disabled and .submenu == [])' 'signed-out installation offers no cached peer'
     menus_shot taildrop-signed-out
     providers_close

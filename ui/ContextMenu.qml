@@ -25,6 +25,7 @@ Item {
     property bool taildropInstalled: false
     property var localSend: ({ installed: false, peers: [], checking: false })
     property string taildropReason: ""
+    property string taildropCode: ""
     property bool providersRefreshing: false
     property bool refreshOwed: false
     property var lastProviderAnswer: null
@@ -60,6 +61,7 @@ Item {
     property string dropboxPath: ""
     property bool dropboxInstalled: false
     property string dropboxReason: ""
+    property string dropboxCode: ""
     // A row already inside the account directory offers a share link instead of another move.
     property bool rowInDropbox: false
     // False on a listing's empty space, where Menus.html's background column is what opens instead.
@@ -119,13 +121,26 @@ Item {
     // A hidden row still opens its flyout from the action.
     property string loneFlyoutAction: ""
     readonly property bool submenuOpen: root.openSubmenuRow >= 0 || root.loneFlyoutAction.length > 0
-    onSubmenuOpenChanged: if (!root.submenuOpen) MenuRefresh.pressChanged(root, false)
+    // What a closing flyout keeps drawing while it fades out; ui/FlyoutFade.qml holds them at their last open values.
+    property var heldRows: []
+    property real heldOffset: 0
+    property string heldAction: ""
+    property var flyoutFade: null
+    function submenuAction() {
+        return root.loneFlyoutAction.length > 0 ? root.loneFlyoutAction
+             : root.entries[root.openSubmenuRow] ? root.entries[root.openSubmenuRow].action : ""
+    }
+    onSubmenuOpenChanged: if (!root.submenuOpen) MenuRefresh.pressChanged(root, false); else root.buildFlyoutFade()
+    // Built by the first flyout, so a menu that never opens one holds neither the fade nor the held values.
+    function buildFlyoutFade() {
+        if (root.flyoutFade === null)
+            root.flyoutFade = Qt.createComponent("FlyoutFade.qml").createObject(root, { menu: root })
+    }
     // The glyph every open flyout row draws, read back so a test can name it without OCR.
     function submenuGlyphs() {
         if (!root.submenuOpen)
             return ""
-        var mark = Menu.submenuGlyph(root.loneFlyoutAction.length > 0
-            ? root.loneFlyoutAction : root.entries[root.openSubmenuRow].action)
+        var mark = Menu.submenuGlyph(root.submenuAction())
         var out = []
         for (var i = 0; i < root.submenuEntries.length; i++) {
             // What the row draws, not what the flyout defaults to: an Open with row carries its own
@@ -179,12 +194,13 @@ Item {
             rowInDropbox: root.rowInDropbox,
             dropboxPath: view.dropboxPath,
             dropboxInstalled: root.dropboxInstalled,
-            dropboxReason: root.dropboxReason,
+            dropboxReason: root.dropboxReason, dropboxCode: root.dropboxCode,
             taildropPeers: root.rowIsFile ? view.taildropPeers : [],
             taildropInstalled: root.taildropInstalled,
-            taildropReason: root.taildropReason,
+            taildropReason: root.taildropReason, taildropCode: root.taildropCode,
             taildropRefreshing: view.taildropRefreshing, dropboxRefreshing: view.dropboxRefreshing,
             archiveFormats: root.archiveFormats,
+            rowIsFile: root.rowIsFile,
             rowIsArchive: root.rowIsArchive,
             archiveName: root.archiveName,
             rowIsImage: root.rowIsImage,
@@ -234,8 +250,17 @@ Item {
     }
 
     anchors.fill: parent
-    visible: root.opened
+    // The frames fade out after opened flips (ui/Reveal.qml), so the menu stays drawn until both are gone and takes no input meanwhile.
+    visible: root.opened || frame.opacity > 0 || flyout.opacity > 0
+    enabled: root.opened
     z: 1
+
+    // Built by the first open, so a pane that never opens a menu holds no animation (the first frame's cost).
+    property var fade: null
+    onOpenedChanged: {
+        if (root.opened && root.fade === null)
+            root.fade = Qt.createComponent("Reveal.qml").createObject(root, { target: frame, shown: Qt.binding(function () { return root.opened }) })
+    }
 
     // Takes a point in scene coordinates and keeps the whole menu inside the pane it belongs to.
     function openAt(scenePoint) {
@@ -518,6 +543,7 @@ Item {
 
     Rectangle {
         id: frame
+        opacity: 0
         // Theme.menuWidth, or the widest row's own width when a label and its hint need more, never past the work area.
         width: Math.max(0, Math.min(root.workArea.width, root.rowsBuilding ? Theme.menuWidth : Math.max(Theme.menuWidth, root.widestRow(rows))))
         onWidthChanged: if (root.opened) root.clampFrame()
@@ -596,12 +622,14 @@ Item {
     // The flyout: a second frame beside whichever row opened it, only while one has.
     Rectangle {
         id: flyout
-        visible: root.submenuOpen
+        visible: root.submenuOpen || flyout.opacity > 0
+        enabled: root.submenuOpen
+        opacity: 0
         x: frame.x + frame.width + width <= root.workArea.x + root.workArea.width
            ? frame.x + frame.width : Math.max(root.workArea.x, frame.x - width)
         // peers.y already carries the inset, so the flyout frame itself stays on the row grid.
         y: Math.max(root.workArea.y + root.workAreaInset,
-                    Math.min(frame.y + root.submenuOffset(), root.workArea.y + root.workArea.height - root.workAreaInset - height))
+                    Math.min(frame.y + root.heldOffset, root.workArea.y + root.workArea.height - root.workAreaInset - height))
         width: Math.max(0, Math.min(root.submenuBuilding ? Theme.menuWidth : Math.max(Theme.menuWidth, root.widestRow(peers)), root.workArea.width))
         height: Math.max(0, Math.min(peers.implicitHeight + 2 * Theme.spacing.rowPaddingY,
                                     root.workArea.height - 2 * root.workAreaInset))
@@ -628,7 +656,7 @@ Item {
 
             Repeater {
                 id: subRows
-                model: root.submenuEntries
+                model: root.heldRows
                 delegate: Flea.MenuRow {
                     id: subRow
                     required property var modelData
@@ -649,8 +677,7 @@ Item {
                               icon: subRow.modelData.icon,
                               tagRow: subRow.modelData.tagRow,
                               glyph: subRow.modelData.glyph !== undefined ? subRow.modelData.glyph
-                                   : Menu.submenuGlyph(root.loneFlyoutAction.length > 0
-                                       ? root.loneFlyoutAction : root.entries[root.openSubmenuRow].action) })
+                                   : Menu.submenuGlyph(root.heldAction) })
                     current: root.submenuCursor === subRow.index
                     onPressedChanged: MenuRefresh.pressChanged(root, subRow.pressed)
                     // A flyout opened by key can land under the resting pointer too, so it reads the same point.

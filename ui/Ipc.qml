@@ -42,10 +42,20 @@ QtObject {
     function roleOf(color) {
         return Qt.colorEqual(color, Theme.color.error) ? "error" : Qt.colorEqual(color, Theme.color.accent) ? "accent" : Qt.colorEqual(color, Theme.color.mutedFrame) ? "mutedFrame" : Qt.colorEqual(color, Theme.color.muted) ? "muted" : "other"
     }
+    // A dialog's rect at rest: the open fade lifts its card by a Translate for 180 ms, so a read in that window adds the rise back out.
+    function cardRectOf(item) {
+        var rect = root.fleaWindow.rectOf(item), rise = 0
+        for (var up = item; up; up = up.parent)
+            if (up.transform.length > 0) rise += up.transform[0].y
+        if (rect === "" || rise === 0) return rect
+        var edges = rect.split(" ")
+        edges[1] = String(Number(edges[1]) - Math.round(rise))
+        return edges.join(" ")
+    }
     function confirmationState(item) {
         return item ? {opened: item.opened, token: item.snapshot.token || 0, count: item.snapshot.count || 0,
             all: item.snapshot.all === true, destructiveFocus: item.destructiveFocus, title: item.titleText, body: item.bodyText,
-            rect: root.fleaWindow.rectOf(item.cardItem), cancel: root.controlState("Cancel", item.cancelItem),
+            rect: root.cardRectOf(item.cardItem), cancel: root.controlState("Cancel", item.cancelItem),
             danger: root.controlState("Delete", item.dangerItem)} : {opened: false}
     }
     function firstVisibleText(item) {
@@ -147,7 +157,7 @@ QtObject {
             }), errors: root.bar.errors.length, notice: root.bar.notice,
                 undoAvailable: root.bar.hasUndo,
                 transferCard: {visible: !!card && card.visible, cancelling: !!card && card.cancelling, byteLine: card ? card.byteText : "", headline: card ? card.headlineText : "", writing: !!card && !!card.shown && card.shown.writing === true,
-                    rect: root.fleaWindow.rectOf(card), cancel: root.controlState("Cancel", card ? card.cancelItem : null), undo: root.controlState("z undoes", root.bar.undoItem)}})
+                    rect: root.cardRectOf(card), cancel: root.controlState("Cancel", card ? card.cancelItem : null), undo: root.controlState("z undoes", root.bar.undoItem)}})
         }
         function statusFooterState(): string {
             // Every zone's x in the strip's own coordinates: the centre pair sits in a Row inside the middle slot, so its own x is relative to that Row and says nothing about zone order.
@@ -204,7 +214,7 @@ QtObject {
             var cursor = dialog.cursor !== undefined ? dialog.cursor : 0
             return JSON.stringify({opened: dialog.opened, action: dialog.action, busy: dialog.busy,
                 committing: dialog.committing, error: dialog.errorText, facts: dialog.facts,
-                applications: applications, cursor: cursor, rect: root.fleaWindow.rectOf(dialog.cardItem),
+                applications: applications, cursor: cursor, rect: root.cardRectOf(dialog.cardItem),
                 controls: [root.controlState("Cancel", dialog.closeItem),
                     Object.assign(root.controlState("Submit", dialog.submitItem), {enabled: dialog.canSubmit}),
                     root.controlState("Field", dialog.fieldItem), root.controlState("Applications", dialog.applicationsItem)],
@@ -215,7 +225,7 @@ QtObject {
             var card = root.pane.collide ? root.pane.collide.item : null
             return JSON.stringify(card ? {opened: card.opened, title: card.titleText, titleTruncated: card.titleTruncated,
                 names: card.names.map(function (n) { return n.n }), more: card.moreText, explain: card.explainText, focus: card.focusName,
-                buttonsFit: card.buttonsFit, explainLines: card.explainLines, rect: root.fleaWindow.rectOf(card.cardItem),
+                buttonsFit: card.buttonsFit, explainLines: card.explainLines, rect: root.cardRectOf(card.cardItem),
                 buttons: ["cancel", "skip", "keep", "merge", "replace"].map(function (b) { return root.controlState(b, card.buttonItem(b)) })} : {opened: false})
         }
         // The run card: whether it asks, what it names, which buttons it draws and where the ring sits.
@@ -223,7 +233,7 @@ QtObject {
             var card = root.pane && root.pane.overlayParent ? root.pane.overlayParent.runCard : null
             if (!card || !card.opened) return JSON.stringify({opened: false})
             return JSON.stringify({opened: true, title: card.titleText, kind: card.kind, buttons: card.buttons, focus: card.focusName, default: card.defaultName,
-                rect: root.fleaWindow.rectOf(card.cardItem),
+                rect: root.cardRectOf(card.cardItem),
                 controls: card.buttons.map(function (b) { var it = card.buttonItem(b); return {name: b, label: it.label, primary: !!it.primary, focused: !!it.focused, hovered: !!it.hovered, pressed: !!it.pressed, centre: root.fleaWindow.centreOf(it)} })})
         }
         // OpenWith.html's own card: the two groups it draws, the seat the cursor holds, and the
@@ -238,7 +248,7 @@ QtObject {
                     return row.eyebrow !== undefined ? {eyebrow: row.eyebrow, rule: row.rule === true}
                          : {id: row.id, label: row.label, icon: row.icon, isDefault: row.default === true}
                 }),
-                rect: root.fleaWindow.rectOf(dialog.cardItem),
+                rect: root.cardRectOf(dialog.cardItem),
                 rowHeight: Theme.rowHeight, eyebrowHeight: dialog.eyebrowHeight,
                 titleRuleRect: root.fleaWindow.rectOf(dialog.titleRuleItem), searchRect: root.fleaWindow.rectOf(dialog.searchItem),
                 gap: Theme.spacing.gap, searchTrail: dialog.searchTrail,
@@ -254,8 +264,8 @@ QtObject {
             return JSON.stringify({opened: dialog.opened, inputReady: !dialog.opened && !dialog.visible && inputReady, facts: dialog.facts, path: dialog.path, mode: dialog.modeText,
                 title: root.firstVisibleText(dialog.cardItem), paths: dialog.multiPaths,
                 displayedError: dialog.displayedError, displayedSummary: dialog.displayedSummary,
-                bodyRect: root.fleaWindow.rectOf(dialog.bodyItem), octalFrame: root.roleOf(dialog.octalFrame.border.color),
-                editable: dialog.editable, busy: dialog.busy, error: dialog.errorText, rect: root.fleaWindow.rectOf(dialog.cardItem),
+                bodyRect: root.cardRectOf(dialog.bodyItem), octalFrame: root.roleOf(dialog.octalFrame.border.color),
+                editable: dialog.editable, busy: dialog.busy, error: dialog.errorText, rect: root.cardRectOf(dialog.cardItem),
                 controls: dialog.controls().map(function(control) {
                     var box = control.item.children.find(function(child) { return typeof child.value === "string" }), point = typeof control.item.hovered === "boolean" ? control.item : control.item.children.find(function(child) { return typeof child.hovered === "boolean" })
                     return Object.assign(root.controlState(control.name, control.item), {checked: control.checked, bit: control.bit,
@@ -406,13 +416,13 @@ QtObject {
         function settingsScroll(): string { return root.settingsPanel ? root.settingsPanel.paneScroll() : "" }
         function settingsScrollState(): string { return root.settingsPanel ? root.settingsPanel.scrollState() : "{}" }
         // Each card's rectangle, so the window-size battery asserts every overlay stays on screen.
-        function settingsCardRect(): string { return root.settingsPanel ? root.fleaWindow.rectOf(root.settingsPanel.cardItem) : "" }
-        function networkCardRect(): string { return root.networkDialog ? root.fleaWindow.rectOf(root.networkDialog.cardItem) : "" }
+        function settingsCardRect(): string { return root.settingsPanel ? root.cardRectOf(root.settingsPanel.cardItem) : "" }
+        function networkCardRect(): string { return root.networkDialog ? root.cardRectOf(root.networkDialog.cardItem) : "" }
         function networkScroll(): string { return root.networkDialog ? root.networkDialog.bodyScroll() : "" }
         // The clipping viewport inside the card, so a field's on-screen check is against what the body shows.
-        function networkBodyRect(): string { return root.networkDialog ? root.fleaWindow.rectOf(root.networkDialog.bodyItem) : "" }
-        function keymapCardRect(): string { return root.keymapSheet ? root.fleaWindow.rectOf(root.keymapSheet.cardItem) : "" }
-        function convertCardRect(): string { return root.convertDialog ? root.fleaWindow.rectOf(root.convertDialog.cardItem) : "" }
+        function networkBodyRect(): string { return root.networkDialog ? root.cardRectOf(root.networkDialog.bodyItem) : "" }
+        function keymapCardRect(): string { return root.keymapSheet ? root.cardRectOf(root.keymapSheet.cardItem) : "" }
+        function convertCardRect(): string { return root.convertDialog ? root.cardRectOf(root.convertDialog.cardItem) : "" }
         // A menu row's own centre, so a driven click lands on the row a test named rather than on a
         // pixel derived from a row count the Menus settings section can change under it.
         function contextMenuRowCentre(i: int): string { return root.fleaWindow.centreOf(root.pane.contextMenu().itemFor(i)) }
@@ -726,9 +736,9 @@ QtObject {
                 checking: dialog.checking, busy: dialog.busy, unavailable: dialog.unavailable, collision: dialog.collision, error: dialog.errorText,
                 output: dialog.outputPath, outputText: dialog.outputItem.text, outputLines: dialog.outputItem.lineCount,
                 outputRect: root.fleaWindow.rectOf(dialog.outputItem),
-                bodyRect: root.fleaWindow.rectOf(dialog.bodyItem), scrollY: dialog.bodyItem.contentY,
+                bodyRect: root.cardRectOf(dialog.bodyItem), scrollY: dialog.bodyItem.contentY,
                 requestId: dialog.requestId, operationId: dialog.operationId, cursor: dialog.cursor, focusPart: dialog.focusPart, canConvert: dialog.canConvert,
-                rect: root.fleaWindow.rectOf(dialog.cardItem),
+                rect: root.cardRectOf(dialog.cardItem),
                 formats: dialog.formats.map(function(format, index) {
                     return Object.assign(root.controlState(format, dialog.formatItem(index)), {selected: dialog.format === format,
                         current: dialog.formatItem(index).current, labelColor: String(dialog.formatItem(index).labelColor),
@@ -743,7 +753,7 @@ QtObject {
             if (!dialog) return JSON.stringify({opened: false})
             return JSON.stringify({opened: dialog.opened, footer: dialog.footerText, rename: dialog.renameText,
                 canRename: dialog.canRename, count: dialog.oldNames.length, focus: dialog.focusedControl,
-                rect: root.fleaWindow.rectOf(dialog.cardItem)})
+                rect: root.cardRectOf(dialog.cardItem)})
         }
         // The preview column's own table and state, so a test asserts the canvas's rows without OCR.
         function previewFacts(): string { return root.columns ? root.columns.factsLine() : "" }
@@ -936,7 +946,7 @@ QtObject {
             return JSON.stringify({opened: true, phase: String(dlg.phase), note: String(dlg.noteText),
                 noteIsError: dlg.noteIsError === true, device: String(dlg.device), label: String(dlg.driveLabel),
                 subtitle: String(dlg.subtitleText), focus: dlg.focusPart(), masked: dlg.masked === true,
-                rect: root.fleaWindow.rectOf(dlg.cardItem),
+                rect: root.cardRectOf(dlg.cardItem),
                 controls: ["cancel", "unlock"].map(function (b) { return root.controlState(b, dlg.buttonItem(b)) }),
                 revealed: dlg.fieldItem.revealed, eye: dlg.fieldItem.eyeCentre()})
         }
