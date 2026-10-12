@@ -43,4 +43,19 @@ seq 1 $oversized_lines | sed 's/^/\/\/ line /' > "$scratch/src/oversized.rs"
 ( cd "$scratch" && "$repo/tools/flea-file-budget" >/dev/null 2>&1 )
 check "oversized file fails" 1 $?
 
+# The duplicate-ceiling gate reads a hardcoded list, so a scratch-root copy of the tool names one file twice and runs there.
+rm -f "$scratch/src/oversized.rs"
+sed 's|^known_over_cap="shelf/Model.js 683$|&\nshelf/Model.js 683|' "$repo/tools/flea-file-budget" > "$scratch/dup-budget"
+if cmp -s "$repo/tools/flea-file-budget" "$scratch/dup-budget"; then
+  echo "FAIL duplicate fixture: the sed did not duplicate a known_over_cap entry"
+  fail=1
+fi
+chmod +x "$scratch/dup-budget"
+dup_out=$(cd "$scratch" && "$scratch/dup-budget" 2>&1)
+check "a duplicated ceiling fails" 1 $?
+case $dup_out in
+  *"DUPLICATE ceiling: shelf/Model.js"*) echo "ok   duplicate is named" ;;
+  *) echo "FAIL duplicate is named: got '$dup_out'"; fail=1 ;;
+esac
+
 exit $fail
