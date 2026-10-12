@@ -32,20 +32,24 @@ function start(root) {
         root.restoreRecentSort()
     }
     root.searchFrom = root.path
-    // Gens keep rising across sessions, so a closed session's late line never matches; the first answer parks on row 0.
-    root.searchOpenedGen = root.searchGen
-    if (root.swap) { root.swap.landedGen = 0; root.swap.answeredQuery = "" }
-    root.searchQuery = ""
     root.searchMode = TYPING
-    root.searchRunning = true
-    root.searchCancelled = false
-    root.searchScanned = 0
-    var scope = scopeRoot(root.path, root.home || "", root.searchHere)
-    root.backend.searchOpen(scope, root.path, root.showHidden)
+    openScope(root)
     // Recent's rows name paths under "/", so the folder's own rows are asked for now and Esc re-lists it.
     if (fromRecent) {
         sendQuery(root)
     }
+}
+
+// The backend session for the pane's scope, with the drawn state of a fresh walk; f and a tag place both open through here.
+function openScope(root) {
+    // Gens keep rising across sessions, so a closed session's late line never matches; the first answer parks on row 0.
+    root.searchOpenedGen = root.searchGen
+    if (root.swap) { root.swap.landedGen = 0; root.swap.answeredQuery = "" }
+    root.searchQuery = ""
+    root.searchRunning = true
+    root.searchCancelled = false
+    root.searchScanned = 0
+    root.backend.searchOpen(scopeRoot(root.path, root.home || "", root.searchHere), root.path, root.showHidden)
 }
 
 // Universal search: home when the pane stands inside it, else the pane's directory (backend has no home notion). Issue 30: here=true stays; abort()/reveal() leave it; nothing persists.
@@ -99,7 +103,7 @@ function takesQuery(root) {
     return root.searchLeaving !== true
 }
 
-// A query set from outside the strip lands as results over the Home scope, from a fresh session or a standing one; a leaving session takes none.
+// A query set from outside the strip lands as results over the Home scope, from a fresh session, a standing one or a cancelled one; a leaving session takes none.
 // Sample input: (pane, "tag:Red") with the pane browsing, in Recent, or typing or showing results at either scope.
 function openQuery(root, query) {
     if (!takesQuery(root)) {
@@ -108,6 +112,10 @@ function openQuery(root, query) {
     if ((root.searchMode || "").length === 0) {
         root.searchHere = false
         start(root)
+    } else if (root.searchCancelled === true) {
+        // A cancelled walk answers nothing more, so the place opens a fresh Home session with the drawn state of a new walk.
+        root.searchHere = false
+        openScope(root)
     } else if (root.searchHere) {
         // The old query is dropped first, so the rescope sends nothing and the new query is the one request.
         root.searchQuery = ""

@@ -67,7 +67,7 @@ impl Search {
             let child = rel.join(&raw);
             let text = child.to_string_lossy();
             // The tags were read in bounded chunks for the names this walk can match; an unread entry carries none.
-            if !self.tags.is_empty() && !carries(&tagged[i], &self.tags) {
+            if !self.tags.is_empty() && !names_carry(&tagged[i], &self.tags) {
                 if is_dir {
                     self.pending.push(child);
                 }
@@ -128,8 +128,8 @@ pub fn split_query(query: &str) -> (Vec<String>, String) {
     (tags, words.join(" "))
 }
 
-// Every named tag must be present, compared case-insensitively; an unreadable file matches nothing.
-fn carries(have: &[String], tags: &[String]) -> bool {
+// The one rule for both searches: the names a file has hold every wanted tag, compared case-insensitively.
+pub(crate) fn names_carry(have: &[String], tags: &[String]) -> bool {
     tags.iter().all(|want| have.iter().any(|got| super::tags::name_matches(got, want)))
 }
 

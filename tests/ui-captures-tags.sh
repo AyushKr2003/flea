@@ -189,7 +189,12 @@ case_cap_tags() {
     # callout 4: a foreign word survives a Flea toggle and shows in Properties
     printf 'foreign\n' > "$dir/plain-sub/foreign.txt"
     cap_tags_set "$dir/plain-sub/foreign.txt" "Red,Project-X"
+    # Properties is hidden on a fresh ui.json (src/uischema.rs menu.hidden), so this callout starts a window whose hidden list is the default one less properties
+    seed_ui_state "$fixture_root/cap-tags-properties-state" '{"keys":"default","view":"list","keyHints":true,"menu":{"hidden":["delete","openTerminal","placeMenu","runScript","moveto","copyto","permissions","copyAs","pasteAs","invertSelection","extThumbs","run","openAsText"]}}'
+    launch "$dir/plain-sub"
+    wait_path "$dir/plain-sub"
     wait_listing 3
+    cap_resize 1100 700
     seek_row_named "foreign.txt" || fail "cap_tags: could not find foreign.txt"
     click_row "$(row_index_of foreign.txt)" right
     settle

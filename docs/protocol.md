@@ -404,7 +404,10 @@ its index. Closing mid-walk cancels it: no directory opens after close.
 `{"c":"searchquery","query":"<string>","gen":<uint>,"count":<uint>[,"sizes":<uint>]}`
 
 Asks the open session. With no session open it answers nothing. The query is
-answered from the index with no walk. `gen` is the client's number, newer per
+answered from the index with no walk. A `tag:<name>` term keeps the entries that carry that tag, the
+same case-insensitive rule `search` uses; the names are read once per row on a worker
+thread after the walk lands, and until they are in the answer says `walking` true and
+the landing re-runs the query. `gen` is the client's number, newer per
 keystroke; a query whose `gen` is not newer than the last answered one is
 dropped in silence, and a burst answers only its newest query. `count` is the
 first window's size, the same meaning as `window`'s count; missing is the

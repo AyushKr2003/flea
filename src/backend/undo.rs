@@ -142,12 +142,26 @@ impl Entry {
 // The operations design's own number: a 50-entry ring; the cap also bounds the session file.
 pub(crate) const DEPTH: usize = 50;
 
+// What one journal entry's steps reached: the paths whose directory changed, and the files whose tags changed alone.
+#[derive(Default)]
+pub(crate) struct Reached {
+    pub dirs: Vec<std::path::PathBuf>,
+    pub tags: Vec<std::path::PathBuf>,
+}
+
+impl Reached {
+    pub(crate) fn of(steps: &[Step]) -> Reached {
+        let tags = steps.iter().filter_map(|step| if let Step::Tags { path, .. } = step { Some(path.clone()) } else { None }).collect();
+        Reached { dirs: Journal::touched_paths(steps), tags }
+    }
+}
+
 pub struct Journal {
     entries: Vec<Entry>,
     redo: Vec<Result<super::redo::Replay, FleaError>>,
     shared: Option<super::undoshare::Shared>,
     // Paths the last reversal touched, so a session patches its index; cleared on take and on entry.
-    last_touched: Vec<std::path::PathBuf>,
+    last_touched: Reached,
     // Manifests by nonce for entries this backend recorded; a claim elsewhere finds no key and falls back.
     manifests: std::collections::HashMap<u64, super::copymanifest::Handle>,
     next_nonce: u32,
@@ -191,7 +205,7 @@ fn process_start_time() -> Option<u64> {
 }
 
 impl Journal {
-    // The paths one journal entry's steps touch.
+    // The paths one journal entry's steps touch; a tag step leaves every directory as it was, so Reached carries it apart.
     pub(crate) fn touched_paths(steps: &[Step]) -> Vec<std::path::PathBuf> {
         let mut out = Vec::new();
         for step in steps {
@@ -201,23 +215,23 @@ impl Journal {
                     out.push(to.clone());
                 }
                 Step::Copied { to, .. } => out.push(to.clone()),
-                Step::MadeDir { path, .. } | Step::MadeFile { path, .. } | Step::Created { path, .. } | Step::RemovedEmptyDir { path, .. } | Step::Tags { path, .. } => {
+                Step::MadeDir { path, .. } | Step::MadeFile { path, .. } | Step::Created { path, .. } | Step::RemovedEmptyDir { path, .. } => {
                     out.push(path.clone())
                 }
                 Step::Linked { path, .. } => out.push(path.clone()),
                 Step::Trashed(entry) => out.push(entry.original.clone()),
-                Step::Mode { .. } | Step::Barrier => {}
+                Step::Mode { .. } | Step::Tags { .. } | Step::Barrier => {}
             }
         }
         out
     }
 
     // Takes the last reversal's paths, leaving none behind for the next take.
-    pub(crate) fn take_last_touched(&mut self) -> Vec<std::path::PathBuf> {
+    pub(crate) fn take_last_touched(&mut self) -> Reached {
         std::mem::take(&mut self.last_touched)
     }
     pub fn new() -> Journal {
-        Journal { entries: Vec::new(), redo: Vec::new(), shared: None, last_touched: Vec::new(), manifests: std::collections::HashMap::new(), next_nonce: 0, nonce_high: nonce_high_once() }
+        Journal { entries: Vec::new(), redo: Vec::new(), shared: None, last_touched: Reached::default(), manifests: std::collections::HashMap::new(), next_nonce: 0, nonce_high: nonce_high_once() }
     }
 
     // Production attaches the session journal file; a refused directory keeps the in-memory one.
@@ -351,7 +365,7 @@ impl Journal {
 
     // A failing step stops the rest, mode and tag steps skip changed paths with a note, and shared entries reattach this backend's manifests.
     pub fn undo(&mut self) -> Result<String, FleaError> {
-        self.last_touched.clear();
+        self.last_touched = Reached::default();
         if let Some(shared) = self.shared.clone() {
             let (mut entry, gen) = match super::undoshare::claim_undo(&shared) {
                 Ok(Some(pair)) => pair,
@@ -374,7 +388,7 @@ impl Journal {
                 }
             }
             let op = entry.op.clone();
-            self.last_touched = Self::touched_paths(&entry.steps);
+            self.last_touched = Reached::of(&entry.steps);
             let mut changes = Vec::new();
             for step in entry.steps.iter().rev() {
                 match reverse(step) {
@@ -398,7 +412,7 @@ impl Journal {
             Some(e) => e,
             None => return Err(err("there is nothing to undo")),
         };
-        self.last_touched = Self::touched_paths(&entry.steps);
+        self.last_touched = Reached::of(&entry.steps);
         let mut skipped: Vec<String> = Vec::new();
         let mut restored: Vec<Step> = Vec::new();
         for step in entry.steps.iter().rev() {
@@ -443,7 +457,7 @@ impl Journal {
 
     pub fn redo(&mut self, id: usize, cancel: &std::sync::atomic::AtomicBool,
                 tx: &std::sync::mpsc::Sender<super::opsreq::OpMsg>) -> Result<String, FleaError> {
-        self.last_touched.clear();
+        self.last_touched = Reached::default();
         if self.shared.is_some() {
             let (result, touched) = super::undoshare::redo_newest(&mut self.shared, id, cancel, tx);
             self.last_touched = touched;
@@ -453,7 +467,7 @@ impl Journal {
         let replay = self.redo.pop().ok_or_else(|| FleaError { where_: "redo".into(), path: String::new(), msg: "there is nothing to redo".into() })??;
         let (entry, changes, result) = replay.run(id, cancel, tx);
         for (old, new) in changes { self.rebase(&old, &new); }
-        self.last_touched = Self::touched_paths(&entry.steps);
+        self.last_touched = Reached::of(&entry.steps);
         if !entry.steps.is_empty() { self.entries.push(entry); }
         if result.is_err() { self.redo.clear(); }
         result

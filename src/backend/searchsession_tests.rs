@@ -345,15 +345,18 @@ fn a_tag_term_filters_the_session_answer() {
     crate::backend::tags::write_names(&d.join("holiday.jpg"), &["Red".to_string()]).unwrap();
     let root = d.path().to_str().expect("utf-8").to_string();
     let mut s = Session::open_sync(&root, &root, false);
-    let answer = s.query(1, "tag:Red", 100).expect("the tag query answers");
+    // The first tag term starts the read off the loop and answers partial; the names are in for the asks after it.
+    assert!(s.query(1, "tag:Red", 100).expect("the tag query answers").walking, "the first ask stands on unread names");
+    s.tags.wait_read();
+    let answer = s.query(2, "tag:Red", 100).expect("the tag query answers");
     let names: Vec<String> = answer.rows.iter().map(|(path, _)| path.clone()).collect();
     assert_eq!(names, ["holiday.jpg"], "only the tagged file answers the tag term");
-    let combined = s.query(2, "tag:Red holiday", 100).expect("the tag term combines with the fuzzy text");
+    let combined = s.query(3, "tag:Red holiday", 100).expect("the tag term combines with the fuzzy text");
     let names: Vec<String> = combined.rows.iter().map(|(path, _)| path.clone()).collect();
     assert_eq!(names, ["holiday.jpg"]);
-    let missed = s.query(3, "tag:Red notes", 100).expect("the tag term refuses what the text alone would keep");
+    let missed = s.query(4, "tag:Red notes", 100).expect("the tag term refuses what the text alone would keep");
     assert_eq!(missed.total, 0, "notes.txt carries no Red tag over {} indexed rows", missed.indexed);
-    let plain = s.query(4, "notes", 100).expect("a query with no tag term answers as today");
+    let plain = s.query(5, "notes", 100).expect("a query with no tag term answers as today");
     let names: Vec<String> = plain.rows.iter().map(|(path, _)| path.clone()).collect();
     assert_eq!(names, ["notes.txt"]);
 }

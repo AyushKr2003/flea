@@ -1,9 +1,9 @@
 // One live search session: the scope's snapshot index plus the standing query and its generation.
-use crate::backend::fuzzy::{rank_order, Fuzzy};
-use crate::backend::searchindex::{self, Index};
+use crate::backend::fuzzy::Fuzzy;
+use crate::backend::searchindex::{self, rank_cmp, select_head, Index};
 use crate::backend::searchreq::Answer;
 use crate::backend::searchwalk::WalkProbes;
-use std::cmp::{Ordering as CmpOrdering, Reverse};
+use std::cmp::Reverse;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -24,41 +24,6 @@ pub(crate) struct Counters {
 }
 
 // The wire lines live in searchreq.rs and the walk thread that fills the index in searchwalk.rs.
-
-// The one rank comparator for answers and rest chunks, so a scrolled window only extends the head's order.
-fn rank_cmp(index: &Index, a: &(i32, usize), b: &(i32, usize)) -> CmpOrdering {
-    rank_order(a.0, index.path(a.1), b.0, index.path(b.1))
-}
-
-// The best `window` hits in rank order, the rest unranked; the path comparator runs only on the window and its edge ties.
-fn select_head<K, F, C>(hits: &mut Vec<(i32, usize)>, window: usize, key: F, cmp: C) -> Vec<(i32, usize)>
-where
-    K: Ord,
-    F: Fn(&(i32, usize)) -> K,
-    C: Fn(&(i32, usize), &(i32, usize)) -> CmpOrdering,
-{
-    if window > 0 && window < hits.len() {
-        hits.select_nth_unstable_by_key(window - 1, &key);
-        let edge = key(&hits[window - 1]);
-        // Hits tied with the edge on the integer key can sit on either side of the cut, so the comparator picks among them.
-        if hits[window..].iter().any(|hit| key(hit) == edge) {
-            let (mut sure, mut tied, mut past) = (Vec::with_capacity(window), Vec::new(), Vec::new());
-            for &hit in hits.iter() {
-                match key(&hit).cmp(&edge) {
-                    CmpOrdering::Less => sure.push(hit),
-                    CmpOrdering::Equal => tied.push(hit),
-                    CmpOrdering::Greater => past.push(hit),
-                }
-            }
-            // The edge hit is tied and inside the window, so at least one tied hit joins the head.
-            tied.select_nth_unstable_by(window - sure.len() - 1, &cmp);
-            *hits = [sure, tied, past].concat();
-        }
-    }
-    let rest = hits.split_off(window.min(hits.len()));
-    hits.sort_by(&cmp);
-    rest
-}
 
 pub(crate) struct Session {
     pub scope: PathBuf,
@@ -91,6 +56,8 @@ pub(crate) struct Session {
     pub(crate) last_batch: Instant,
     // Folder sizes this session's answers carry inline; see src/backend/answersizes.rs.
     pub(crate) sizes: crate::backend::answersizes::AnswerSizes,
+    // The tag terms' names, read once per row off the loop thread; see src/backend/searchtags.rs.
+    pub(crate) tags: crate::backend::searchtags::Tags,
     #[cfg(test)]
     pub counters: Counters,
 }
@@ -199,7 +166,9 @@ impl Session {
     // Re-runs the standing query once when the walk lands, with its own gen and the walk's ms.
     pub(crate) fn re_answer_standing(&mut self) -> Option<Answer> {
         let (gen, query, count) = self.standing.clone()?;
-        if query.is_empty() || !self.standing_while_walking {
+        // A landed rewrite stands for one re-run of a tagged query, whatever answers came between the write and the landing.
+        let rewritten = self.tags.rewrite_due(&query);
+        if query.is_empty() || !(self.standing_while_walking || rewritten) {
             return None;
         }
         self.standing_while_walking = false;
@@ -209,6 +178,8 @@ impl Session {
         let mut answer = self.answer(&query, count);
         answer.gen = gen;
         answer.ms = self.walk_ms;
+        // A tagged query whose names are still being read stands for one more re-run.
+        self.standing_while_walking = answer.walking;
         self.last_query = query;
         self.last_matches = answer.all.clone();
         self.last_batch = Instant::now();
@@ -248,12 +219,13 @@ impl Session {
     // Scores the index and ranks only the first window; the callers own the generations.
     pub(crate) fn answer(&mut self, query: &str, count: usize) -> Answer {
         let started = Instant::now();
-        let (tags, text) = super::search::split_query(query);
-        // A query with no tag term takes exactly today's path: the raw query fuzzed with no extra work.
-        let fuzzy = if tags.is_empty() { Fuzzy::new(query) } else { Fuzzy::new(&text) };
+        let terms = crate::backend::searchtags::Tags::terms(query);
+        let narrow = self.tags.narrows(&self.last_query, query);
+        let unread = self.tags.prepare(&terms, &self.index, &self.scope, &self.body, self.walking());
+        let fuzzy = Fuzzy::new(&terms.text);
         let index = self.index.lock().unwrap();
-        // Incremental narrowing: an extension on the same tag set scores only the previous matches, any other change scores the index.
-        let candidates: Vec<usize> = if !self.last_query.is_empty() && query.starts_with(&self.last_query) && super::search::split_query(&self.last_query).0 == tags {
+        // Incremental narrowing: an extension scores only the previous matches, any other change scores the index.
+        let candidates: Vec<usize> = if narrow {
             self.last_matches.clone()
         } else {
             (0..index.len()).collect()
@@ -261,10 +233,7 @@ impl Session {
         #[cfg(test)]
         let scored = candidates.len();
         let mut hits = searchindex::score_all(&fuzzy, &candidates, &index);
-        // A tag term keeps only the hits carrying every named tag.
-        if !tags.is_empty() {
-            super::searchtags::retain_tagged(&mut hits, &self.scope, &self.body, &index, &tags);
-        }
+        self.tags.keep(&mut hits, &terms);
         #[cfg(test)]
         {
             self.counters.rows_scored = scored;
@@ -298,7 +267,7 @@ impl Session {
             rows,
             total,
             indexed,
-            walking: self.walking(),
+            walking: self.walking() || unread,
             ms: started.elapsed().as_secs_f64() * 1000.0,
             count,
             scope: self.scope.clone(),
@@ -373,11 +342,16 @@ impl Session {
     fn patch(&mut self, rel: &Path) -> bool {
         // A change under the scope can move every folder size above it, whether or not the index takes the patch.
         self.sizes.forget();
-        if !self.index.lock().unwrap().patch_dir(&self.scope, rel, self.hidden, &self.body) {
+        let mut index = self.index.lock().unwrap();
+        if !index.patch_dir(&self.scope, rel, self.hidden, &self.body) {
             return false;
         }
+        // A finished tag pass follows its rows to their new ids and queues the added ones; an unfinished one starts over.
+        let added = self.tags.carry(&index);
+        drop(index);
         self.last_query.clear();
         self.pending_rest = None;
+        self.tags.read_added(added, &self.index);
         true
     }
 
