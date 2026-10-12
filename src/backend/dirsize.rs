@@ -191,6 +191,14 @@ fn list_into(path: &Path, walk: &mut Walk<'_>, folders: &mut Vec<PathBuf>) {
             }
             continue;
         }
+        // A known mount point on another device is entered first, so a hang in the stat that crosses into it is charged to that mount.
+        let known_dev = if file_type.is_dir() { walk.dev_of.and_then(|f| f(&entry.path())) } else { None };
+        let crossing = known_dev.is_some_and(|dev| !same_device(walk.start_dev, dev));
+        if crossing {
+            if let Some(entering) = walk.progress.as_ref().and_then(|p| p.entering) {
+                entering(&entry.path());
+            }
+        }
         let meta = match entry.metadata() {
             Ok(m) => m,
             Err(_) => {
@@ -200,7 +208,7 @@ fn list_into(path: &Path, walk: &mut Walk<'_>, folders: &mut Vec<PathBuf>) {
         };
         walk.count(meta.size());
         // Sample mount: start_dev 2049 with child 62 never descends, so du -x holds across mounts.
-        let child_dev = walk.dev_of.and_then(|f| f(&entry.path())).unwrap_or_else(|| meta.dev());
+        let child_dev = known_dev.unwrap_or_else(|| meta.dev());
         if file_type.is_dir() && same_device(walk.start_dev, child_dev) {
             folders.push(entry.path());
         }

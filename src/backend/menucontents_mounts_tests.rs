@@ -3,7 +3,7 @@ use super::tests::{lines, tree};
 use super::*;
 use crate::json::{field_bool, field_usize as number};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 // The sandbox is local and holds an nfs mount point at `mnt`, as /run/user/1000 holds the gvfs mount.
@@ -87,20 +87,70 @@ fn a_walk_that_keeps_counting_past_its_deadline_answers_partial_and_marks_no_mou
     assert!(field_bool(&again.last().unwrap(), "done") && field_bool(&again.last().unwrap(), "partial"), "{}", again.last().unwrap());
 }
 
+// The watcher marks off the menu thread, so a test polls for a mark that may land after the reply.
+fn marked_within(mounts: &[PathBuf], wait: Duration) -> Option<PathBuf> {
+    let until = Instant::now() + wait;
+    loop {
+        if let Some(found) = crate::backend::walkmounts::stuck_among(mounts) { return Some(found); }
+        if Instant::now() >= until { return None; }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
 #[test]
-fn a_walk_that_counts_nothing_by_its_deadline_marks_the_mount_it_sits_in_so_a_repeat_skips_the_walk() {
+fn a_walk_silent_past_the_call_bound_marks_the_mount_it_sits_in_so_a_repeat_skips_the_walk() {
     let (_sandbox, root) = tree("contents-stall-marks-its-mount");
     for n in 0..16 { fs::write(root.join(format!("f{}", n)), "x").unwrap(); }
     let _body = crate::backend::iomount::test_hold_body(remote_root_body(&root));
     let _pace = test_hold_pace(Duration::from_millis(1500));
+    let _silence = test_hold_silence(Duration::from_millis(200));
     let (first, took) = contents_run(&root, Duration::from_millis(300));
     assert!(took < Duration::from_millis(1000), "the deadline ends the wait, not the stalled walk: {:?}", took);
     assert!(field_bool(&first[0], "done") && field_bool(&first[0], "partial"), "{}", first[0]);
+    assert_eq!(marked_within(&[root.clone()], Duration::from_secs(1)), Some(root.clone()), "the stalled walk's mount is marked");
     assert_eq!(crate::backend::walkmounts::stuck_among(&[root.join("mnt")]), None, "only the mount holding the walk is marked");
-    assert_eq!(crate::backend::walkmounts::stuck_among(&[root.clone()]), Some(root.clone()), "the stalled walk's mount is not marked");
     let (again, took) = contents_run(&root, Duration::from_secs(5));
     assert!(took < Duration::from_millis(200), "a repeat on a marked mount starts no walk: {:?}", took);
     assert_eq!(again.len(), 1, "{:?}", again);
     assert!(field_bool(&again[0], "done") && field_bool(&again[0], "partial"), "{}", again[0]);
     assert_eq!((number(&again[0], "items"), number(&again[0], "bytes")), (Some(0), Some(0)), "{}", again[0]);
+}
+
+#[test]
+fn a_slow_walk_that_answers_inside_the_call_bound_marks_no_mount_and_the_menu_replies_at_the_deadline() {
+    let (_sandbox, root) = tree("contents-slow-walk-marks-nothing");
+    for n in 0..8 { fs::write(root.join(format!("f{}", n)), "x").unwrap(); }
+    let _body = crate::backend::iomount::test_hold_body(remote_root_body(&root));
+    let _pace = test_hold_pace(Duration::from_millis(500));
+    let _silence = test_hold_silence(Duration::from_secs(2));
+    let (sent, took) = contents_run(&root, Duration::from_millis(300));
+    assert!(took >= Duration::from_millis(250) && took < Duration::from_millis(450), "the menu still answers at the deadline: {:?}", took);
+    assert!(field_bool(&sent[0], "done") && field_bool(&sent[0], "partial"), "{}", sent[0]);
+    assert_eq!(marked_within(&[root.clone(), root.join("mnt")], Duration::from_millis(2500)), None, "a walk that answers inside the call bound marks a mount");
+}
+
+#[test]
+fn a_stall_inside_a_nested_remote_mount_marks_that_mount_and_not_the_one_holding_the_walk() {
+    let (_sandbox, root) = tree("contents-stall-in-nested-mount");
+    fs::create_dir(root.join("mnt")).unwrap();
+    let _body = crate::backend::iomount::test_hold_body(remote_root_body(&root));
+    let _pace = test_hold_pace(Duration::from_millis(600));
+    let _silence = test_hold_silence(Duration::from_millis(100));
+    contents_run(&root, Duration::from_secs(2));
+    assert_eq!(marked_within(&[root.join("mnt")], Duration::from_secs(1)), Some(root.join("mnt")), "the nested mount holds the hung stat");
+    assert_eq!(crate::backend::walkmounts::stuck_among(&[root.clone()]), None, "the healthy outer mount stays unmarked");
+}
+
+#[test]
+fn a_stall_in_a_local_folder_that_holds_a_remote_mount_marks_nothing() {
+    let (_sandbox, root) = tree("contents-local-stall-marks-nothing");
+    for n in 0..16 { fs::write(root.join(format!("f{}", n)), "x").unwrap(); }
+    fs::create_dir(root.join("mnt")).unwrap();
+    let _body = crate::backend::iomount::test_hold_body(nested_remote_body(&root));
+    let _pace = test_hold_pace(Duration::from_millis(1500));
+    let _silence = test_hold_silence(Duration::from_millis(200));
+    let (first, _) = contents_run(&root, Duration::from_millis(300));
+    assert!(field_bool(&first[0], "done") && field_bool(&first[0], "partial"), "{}", first[0]);
+    let held = [PathBuf::from("/"), root.clone(), root.join("mnt")];
+    assert_eq!(marked_within(&held, Duration::from_secs(1)), None, "a stall in a local folder marks a mount");
 }
