@@ -21,6 +21,8 @@ ShellRoot {
         QtObject {
             signal peeked(string path, bool hidden, int total, var rows, bool readFailed, int mode, bool hiddenLast, int first)
             signal metaResult(var message)
+            signal changed(string path)
+            signal shebang(string path, bool hasShebang, int id)
             property int dirDev: 0
             function peek(path, size, hidden) {}
             function askMeta(index, wantLines, wantMedia, wantArchive) { return 0 }
