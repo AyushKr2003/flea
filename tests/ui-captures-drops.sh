@@ -258,26 +258,26 @@ case_cap_drops() {
     click_chrome columns
     settle
     [[ "$(ipc viewMode)" == "columns" ]] || fail "cap_drops: the chrome never reached columns"
-    # The child column lists Photos after its own read, so the check waits for it, up to 5 s.
-    local child_end=$((SECONDS + 5)) child=""
-    while child=$(ipc columnNames child); [[ "$child" != *"p1.txt"* ]] && (( SECONDS < child_end )); do sleep 0.1; done
-    [[ "$child" == *"p1.txt"* ]] \
-        || fail "cap_drops: the child column never listed p1.txt (child '$child', parent '$(ipc columnNames parent)', path $(ipc path))"
+    # Photos holds files only, so the child slot is undrawn; the active column lists p1.txt after its own read, so the check waits for it, up to 5 s.
+    local child_end=$((SECONDS + 5))
+    while index=$(row_index_of p1.txt 2>/dev/null); [[ -z "$index" ]] && (( SECONDS < child_end )); do sleep 0.1; done
+    [[ -n "$index" ]] \
+        || fail "cap_drops: the active column never listed p1.txt (parent '$(ipc columnNames parent)', path $(ipc path))"
     names=$(ipc columnNames parent)
-    index=$(printf '%s' "$names" | tr '|' '\n' | grep -nx "deep" | head -n 1 | cut -d: -f1 || true)
-    [[ -n "$index" ]] || fail "cap_drops: the parent column never listed deep: $names"
-    dst_pt=$(cap_drops_centre columnParentRowCentre "$((index - 1))")
-    src_pt=$(cap_drops_centre columnChildRowCentre 0)
+    local deep_index
+    deep_index=$(printf '%s' "$names" | tr '|' '\n' | grep -nx "deep" | head -n 1 | cut -d: -f1 || true)
+    [[ -n "$deep_index" ]] || fail "cap_drops: the parent column never listed deep: $names"
+    dst_pt=$(cap_drops_centre columnParentRowCentre "$((deep_index - 1))")
+    src_pt=$(cap_drops_centre rowCentre "$index")
+    printf 'CAP_DROPS columns src=%s active=%s cursor=%s\n' "$src_pt" "$(ipc columnActiveRect)" "$(ipc visibleRowName "$(ipc cursor)")"
     read -r tx ty <<< "$dst_pt"
     read -r cx cy <<< "$src_pt"
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
     cap_drops_wait_target "Move 1 item to deep · ctrl at lift copies"
     shot drops-columns-parent
-    names=$(ipc columnNames child)
-    index=$(printf '%s' "$names" | tr '|' '\n' | grep -nx "p2.txt" | head -n 1 | cut -d: -f1 || true)
-    [[ -n "$index" ]] || { cap_drops_abandon; fail "cap_drops: the child column lost p2.txt"; }
-    dst_pt=$(cap_drops_centre columnChildRowCentre "$((index - 1))")
+    index=$(row_index_of p2.txt 2>/dev/null) || { cap_drops_abandon; fail "cap_drops: the active column lost p2.txt"; }
+    dst_pt=$(cap_drops_centre rowCentre "$index")
     read -r tx ty <<< "$dst_pt"
     cap_drops_steer "$tx" "$ty"
     cap_drops_release

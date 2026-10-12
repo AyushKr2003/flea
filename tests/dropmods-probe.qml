@@ -30,7 +30,8 @@ Window {
         onDropped: function (drop) {
             root.drops++
             console.log("PROBE drop#" + root.drops + " offered=" + drop.supportedActions + " proposed=" + drop.proposedAction
-                + " urls=" + drop.urls.length + " marker=" + drop.getDataAsString("application/x-flea-rows").split("\n")[0].length + "chars")
+                + " urls=" + drop.urls.length + " marker=" + drop.getDataAsString("application/x-flea-rows").split("\n")[0].length + "chars"
+                + " formats=" + drop.formats.join(","))
             drop.acceptProposedAction()
             console.log("PROBE drop#" + root.drops + " chose=" + actionName(drop.action))
         }
