@@ -1839,15 +1839,16 @@ Example: `{"t":"transferprogress","id":12,"index":0,"name":"a.txt","bytes":40000
 Throttled to at most one line per 150 ms for the whole operation, not per item: the first sample goes out
 at once and a run of small files shares one window, so a fast copy of a thousand small files sends a few
 lines (plus one `transferitem` per item, below), and a single large file sends one per window as it
-always did. A thousand small files once sent a progress line and an item line each, and a client that
-parses and redraws on every one of them cannot draw the card's first frame until the stream ends. An item
+always did. A thousand small files once sent a progress line and an item line each, so the card model
+was written 2002 times; the throttle cuts the progress lines from 1000 to 2 and the writes to 1004. An item
 that sends no line of its own is correct and not a missing message.
 
 **Bytes ride on the next line, never get lost.** A client counts an item's bytes from the last sample it
-saw for that item (`ui/js/Transfer.js` `itemDone`), so a sample sent after skipped items carries what they
-copied too: `bytes` is the batch's unreported bytes plus this item's own, and `total` is 0 (the item's
-size is not named, as for a directory). A closing sample, `total` 0 and `index` the last item's,
-follows the last item when anything is still unreported, ahead of the drive flush below. What the
+saw for that item (`ui/js/Transfer.js` `itemDone`), so the bytes of items that sent no line go out once, ahead
+of the next item's first line: a sample with `total` 0 under the `index` and `name` of the last item to end,
+which the client has already closed, so it joins the running sum and moves nothing on the card. The next item
+then sends its own `bytes` and `total`, so a large file keeps its size on every line. A closing sample of the
+same shape follows the last item when anything is still unreported, ahead of the drive flush below. What the
 card draws is then the figure an unthrottled run draws, to the byte, whatever the
 throttle skipped; an item that ends short (a failure or a cancel) counts as the total its last line
 named, as it always did. Only a copy or a same-device move sent by the transfer loop paces this way; a

@@ -55,12 +55,12 @@ function run(check) {
     check("and a sample that brings one records it", Transfer.sampled(many, 4, "x", 1, 0, 77).scanned, 77)
     // Directive 50: the walk runs beside the copy with no deadline, so the total can arrive at any
     // sample, and the line has to take it then rather than having decided there is none.
-    // The same sample twice, so the only thing that changes is the total the walk brings with it.
-    var early = Transfer.sampled(many, 0, "one.bin", 100 * megabyte, 0, 0)
+    // The same sample twice, so the only thing that changes is the total the walk brings with it; item 3 is the one in flight.
+    var early = Transfer.sampled(many, 3, "one.bin", 100 * megabyte, 0, 0)
     check("a sample before the walk settles carries no total",
           Transfer.byteParts(early, megabyte).map(function (p) { return p.text }).join(""),
           "400.0 MB copied · 1.0 MB/s")
-    var late = Transfer.sampled(early, 0, "one.bin", 100 * megabyte, 0, 8400 * megabyte)
+    var late = Transfer.sampled(early, 3, "one.bin", 100 * megabyte, 0, 8400 * megabyte)
     check("and the one that brings the settled total draws it, and the time left with it",
           Transfer.byteParts(late, megabyte).map(function (p) { return p.text }).join(""),
           "400.0 MB of 8.4 GB · 1.0 MB/s · 2:13:20 left")
@@ -164,4 +164,32 @@ function run(check) {
     check("the flush keeps the counted bytes and spends the sample",
           flushed.moved + "|" + flushed.bytes + "|" + flushed.total + "|" + flushed.name,
           "3400000000|0|0|")
+
+    // The closing sample rides under the last item the backend ended in the pace, so the client sees an item it has closed.
+    var openAt = function (index) {
+        return { id: 12, n: 4, moving: false, index: index, name: "", done: index, bytes: 0, total: 0, moved: 0,
+                 scanned: 3000, running: true }
+    }
+    var skipLast = Transfer.itemDone(Transfer.itemDone(openAt(0), 0, "a.jpg"), 1, "b.jpg")
+    var skipClosed = Transfer.sampled(skipLast, 1, "b.jpg", 700, 0, 0)
+    check("a closing sample after a skipped last path keeps the items and the name where they were",
+          skipClosed.done + "|" + skipClosed.index + "|" + skipClosed.name, "2|1|b.jpg")
+    check("and its bytes count as moved through the flush",
+          Transfer.movedBytes(Transfer.markWriting(skipClosed, "128GB")), 700)
+    var refused = Transfer.itemDone(skipLast, 2, "c.jpg")
+    var lateOwed = Transfer.sampled(refused, 1, "b.jpg", 700, 0, 0)
+    check("bytes owed under an item a refused path has passed join moved and leave the card where it is",
+          lateOwed.done + "|" + lateOwed.index + "|" + Transfer.movedBytes(lateOwed), "3|2|700")
+
+    // Owed bytes ride once under the item that just ended, and the next item then keeps its own total.
+    var afterSmall = Transfer.itemDone(Transfer.itemDone(openAt(0), 0, "a.jpg"), 1, "b.jpg")
+    var owedOnce = Transfer.sampled(afterSmall, 1, "b.jpg", 300, 0, 0)
+    var bigAt = Transfer.sampled(owedOnce, 2, "big.mkv", 1000 * megabyte, 4200 * megabyte, 0)
+    check("a large file after paced ones keeps its size on the file line",
+          Transfer.fileLine(bigAt), "big.mkv · 4.2 GB")
+    check("and its own bytes fill the bar against its own total",
+          bigAt.bytes + "|" + bigAt.total + "|" + Transfer.movedBytes(bigAt), 1000 * megabyte + "|" + 4200 * megabyte + "|" + (1000 * megabyte + 300))
+    var bigLater = Transfer.sampled(bigAt, 2, "big.mkv", 2000 * megabyte, 4200 * megabyte, 0)
+    check("the line after it still names the size",
+          Transfer.fileLine(bigLater), "big.mkv · 4.2 GB")
 }

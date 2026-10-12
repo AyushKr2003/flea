@@ -1,7 +1,12 @@
 // The progress cadence of one whole operation and the bytes its lines still owe the client, see docs/protocol.md "transferprogress".
-use super::PROGRESS_EVERY;
-use std::cell::Cell;
+use super::{OpMsg, PROGRESS_EVERY};
+use std::cell::{Cell, RefCell};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::Sender;
 use std::time::Instant;
+
+// What a client counts for an item that ended: the bytes of the items before it that no line of theirs carried.
+type Owed = (usize, String, u64);
 
 pub(super) struct Pace {
     last: Cell<Option<Instant>>,
@@ -10,49 +15,73 @@ pub(super) struct Pace {
     // What finished items copied, and what a client counts from the lines it saw.
     copied: Cell<u64>,
     counted: Cell<u64>,
-    // The last line sent for the item in flight: its index, what a client counts from it, and the part of that which is the item's own.
-    sent: Cell<Option<(usize, u64, u64)>>,
+    // The last line sent for the item in flight: its index and what a client counts from it.
+    sent: Cell<Option<(usize, u64)>>,
+    // The last item to end, which the bytes owed ride on: the client has closed it, so they join its sum.
+    ended: RefCell<Option<(usize, String)>>,
+}
+
+pub(super) struct Sampled {
+    pub(super) owed: Option<Owed>,
+    pub(super) bytes: u64,
+    pub(super) total: u64,
 }
 
 impl Pace {
     pub(super) fn new() -> Self {
-        Pace { last: Cell::new(None), live: Cell::new((usize::MAX, 0)), copied: Cell::new(0), counted: Cell::new(0), sent: Cell::new(None) }
+        Pace { last: Cell::new(None), live: Cell::new((usize::MAX, 0)), copied: Cell::new(0), counted: Cell::new(0), sent: Cell::new(None), ended: RefCell::new(None) }
     }
 
-    // One byte report of the item in flight: the (bytes, total) to put on the wire now, or None while the window is open.
-    pub(super) fn sample(&self, now: Instant, index: usize, done: u64, total: u64) -> Option<(u64, u64)> {
+    // One byte report of the item in flight, on the wire when its window is open.
+    pub(super) fn report(&self, tx: &Sender<OpMsg>, id: usize, (index, name): (usize, &str), (done, total): (u64, u64), settled: &AtomicU64) {
+        let Some(line) = self.sample(now(), index, done, total) else { return };
+        let scanned = settled.load(Ordering::Relaxed);
+        if let Some((owed_index, owed_name, bytes)) = line.owed {
+            let _ = tx.send(OpMsg::Progress { id, index: owed_index, name: owed_name, bytes, total: 0, scanned });
+        }
+        let _ = tx.send(OpMsg::Progress { id, index, name: name.to_string(), bytes: line.bytes, total: line.total, scanned });
+    }
+
+    // The bytes still unreported after the last item go out under that item, ahead of the drive flush the card shows as copied.
+    pub(super) fn close(&self, tx: &Sender<OpMsg>, id: usize, settled: &AtomicU64) {
+        if let Some((index, name, bytes)) = self.take_owed() {
+            let _ = tx.send(OpMsg::Progress { id, index, name, bytes, total: 0, scanned: settled.load(Ordering::Relaxed) });
+        }
+    }
+
+    // One byte report of the item in flight: what to put on the wire now, or None while the window is open.
+    // The bytes skipped items left unreported go first, under the item that ended last, and the item keeps its own bytes and total.
+    pub(super) fn sample(&self, now: Instant, index: usize, done: u64, total: u64) -> Option<Sampled> {
         self.live.set((index, done));
         if self.last.get().is_some_and(|last| now.saturating_duration_since(last) < PROGRESS_EVERY) {
             return None;
         }
         self.last.set(Some(now));
-        let owed = self.owed();
-        let (bytes, total) = if owed > 0 { (owed + done, 0) } else { (done, total) };
-        self.sent.set(Some((index, if total > 0 { total } else { bytes }, if total > 0 { total } else { done })));
-        Some((bytes, total))
+        let owed = self.take_owed();
+        self.sent.set(Some((index, if total > 0 { total } else { done })));
+        Some(Sampled { owed, bytes: done, total })
     }
 
     // The item is over, whatever it ended in: its bytes join the totals on both sides, and a short one counts whole where its line named a total.
-    pub(super) fn ended(&self, index: usize) {
+    pub(super) fn ended(&self, index: usize, name: &str) {
         let (live, done) = self.live.get();
         let done = if live == index { done } else { 0 };
-        let (counted, own) = match self.sent.get() {
-            Some((sent, counted, own)) if sent == index => (counted, own),
-            _ => (0, 0),
+        let counted = match self.sent.get() {
+            Some((sent, counted)) if sent == index => counted,
+            _ => 0,
         };
-        self.copied.set(self.copied.get() + done.max(own));
+        self.copied.set(self.copied.get() + done.max(counted));
         self.counted.set(self.counted.get() + counted);
         self.sent.set(None);
         self.live.set((usize::MAX, 0));
+        *self.ended.borrow_mut() = Some((index, name.to_string()));
     }
 
-    fn owed(&self) -> u64 {
-        self.copied.get().saturating_sub(self.counted.get())
-    }
-
-    // The bytes still unreported after the last item.
-    pub(super) fn closing(&self) -> Option<u64> {
-        Some(self.owed()).filter(|owed| *owed > 0)
+    fn take_owed(&self) -> Option<Owed> {
+        let owed = self.copied.get().saturating_sub(self.counted.get());
+        let (index, name) = self.ended.borrow().clone().filter(|_| owed > 0)?;
+        self.counted.set(self.copied.get());
+        Some((index, name, owed))
     }
 }
 
@@ -87,118 +116,5 @@ impl Drop for FrozenClock {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::Duration;
-
-    // ui/js/Transfer.js sampled and itemDone, which is how the card counts what the lines say.
-    #[derive(Default)]
-    struct Client {
-        index: usize,
-        bytes: u64,
-        total: u64,
-        moved: u64,
-    }
-    impl Client {
-        fn sampled(&mut self, index: usize, bytes: u64, total: u64) {
-            (self.index, self.bytes, self.total) = (index, bytes, total);
-        }
-        fn item_done(&mut self, index: usize) {
-            let sampled = if self.index == index { if self.total > 0 { self.total } else { self.bytes } } else { 0 };
-            (self.index, self.bytes, self.total, self.moved) = (index, 0, 0, self.moved + sampled);
-        }
-        fn shown(&self) -> u64 {
-            self.moved + self.bytes
-        }
-    }
-
-    #[test]
-    fn a_thousand_items_inside_one_window_send_one_line_and_the_closing_one() {
-        let pace = Pace::new();
-        let base = Instant::now();
-        let mut sent = Vec::new();
-        for index in 0..1000usize {
-            let now = base + Duration::from_micros(index as u64 * 100);
-            if let Some(line) = pace.sample(now, index, 4096, 4096) {
-                sent.push((index, line));
-            }
-            pace.ended(index);
-        }
-        assert_eq!(sent, vec![(0, (4096, 4096))]);
-        assert_eq!(pace.closing(), Some(999 * 4096));
-    }
-
-    #[test]
-    fn a_one_gib_item_sends_one_line_per_window() {
-        let pace = Pace::new();
-        let base = Instant::now();
-        let mut sent = 0;
-        for step in 1..=1024u64 {
-            let now = base + Duration::from_millis(step - 1);
-            if let Some((bytes, total)) = pace.sample(now, 0, step << 20, 1 << 30) {
-                sent += 1;
-                assert_eq!((bytes, total), (step << 20, 1 << 30), "a lone item reports its own bytes and total");
-            }
-        }
-        assert_eq!(sent, 7, "samples at 0, 150, 300, 450, 600, 750 and 900 ms");
-        pace.ended(0);
-        assert_eq!(pace.closing(), None, "the item's total was named, so nothing is owed");
-    }
-
-    #[test]
-    fn the_first_sample_of_a_later_item_waits_for_the_window_and_then_names_what_was_skipped() {
-        let pace = Pace::new();
-        let base = Instant::now();
-        assert!(pace.sample(base, 0, 10, 10).is_some());
-        pace.ended(0);
-        assert!(pace.sample(base + Duration::from_millis(50), 1, 20, 20).is_none());
-        pace.ended(1);
-        assert_eq!(pace.sample(base + Duration::from_millis(150), 2, 5, 40), Some((20 + 5, 0)));
-    }
-
-    #[test]
-    fn the_card_counts_every_byte_whatever_the_window_skipped() {
-        let pace = Pace::new();
-        let (mut client, mut copied) = (Client::default(), 0u64);
-        let base = Instant::now();
-        let mut clock = 0u64;
-        // Mixed sizes, a few reports per item, and a clock that sometimes stands still for a run of items.
-        for index in 0..400usize {
-            let size = 1 + (index as u64 * 7919) % 5000;
-            for part in 1..=3u64 {
-                clock += if index % 40 < 30 { 1 } else { 90 };
-                let done = size * part / 3;
-                if let Some((bytes, total)) = pace.sample(base + Duration::from_millis(clock), index, done, size) {
-                    client.sampled(index, bytes, total);
-                    assert_eq!(client.shown(), copied + done, "item {index} part {part}");
-                }
-            }
-            pace.ended(index);
-            copied += size;
-            client.item_done(index);
-            assert!(client.shown() <= copied, "the card never counts more than was copied");
-        }
-        if let Some(owed) = pace.closing() {
-            client.sampled(399, owed, 0);
-        }
-        assert_eq!(client.shown(), copied);
-    }
-
-    #[test]
-    fn an_item_that_ends_short_counts_whole_on_both_sides_so_a_later_skipped_item_is_still_reported() {
-        let pace = Pace::new();
-        let (mut client, base) = (Client::default(), Instant::now());
-        let (bytes, total) = pace.sample(base, 0, 10, 100).expect("the first sample goes out at once");
-        client.sampled(0, bytes, total);
-        assert!(pace.sample(base + Duration::from_millis(10), 0, 40, 100).is_none());
-        pace.ended(0);
-        client.item_done(0);
-        assert!(pace.sample(base + Duration::from_millis(50), 1, 50, 50).is_none());
-        pace.ended(1);
-        client.item_done(1);
-        let owed = pace.closing();
-        assert_eq!(owed, Some(50), "the second item's bytes are still owed after the short one");
-        client.sampled(1, owed.unwrap(), 0);
-        assert_eq!(client.shown(), 100 + 50, "the card shows what an unthrottled one shows");
-    }
-}
+#[path = "opspace_tests.rs"]
+mod tests;

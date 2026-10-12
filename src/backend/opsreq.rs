@@ -489,11 +489,7 @@ pub(crate) fn run_transfer_checked(
         }
     }
     // The bytes the throttled lines left unreported go out before the drive flush, which the card shows as copied.
-    if let Some(owed) = pace.closing() {
-        let index = paths.len() - 1;
-        let name = base_name(Path::new(&paths[index]));
-        let _ = tx.send(OpMsg::Progress { id, index, name, bytes: owed, total: 0, scanned: settled.load(Ordering::Relaxed) });
-    }
+    pace.close(&tx, id, &settled);
     // A batch that replaced nothing lists nothing; every Replace settles here, cancel included.
     if let Some(slot) = deferred.as_mut() {
         slot.settle(&mut steps);
@@ -550,14 +546,11 @@ fn one_item(
     steps: &mut Vec<Step>,
     durability: &mut super::durable::Durability,
 ) -> Result<(), FleaError> {
-    let mut sink = |done: u64, total: u64| {
-        let Some((bytes, total)) = pace.sample(opspace::now(), index, done, total) else { return };
-        // scanned is still 0 while the sweep counts, and the batch's own total from the moment it settles.
-        let _ = tx.send(OpMsg::Progress { id, index, name: name.to_string(), bytes, total, scanned: settled.load(Ordering::Relaxed) });
-    };
+    // scanned is still 0 while the sweep counts, and the batch's own total from the moment it settles.
+    let mut sink = |done: u64, total: u64| pace.report(tx, id, (index, name), (done, total), settled);
     let mut p = Progress { cancel, on_bytes: &mut sink, partial: None, tree: None, manifest: if moving { super::copymanifest::writer_for_move(src, dst) } else { super::copymanifest::writer_for(src, dst) }, durability: Some(durability), for_move: moving };
     let mut outcome = if moving { move_any(src, dst, &mut p) } else { copy_any(src, dst, &mut p) };
-    pace.ended(index);
+    pace.ended(index, name);
     match &outcome {
         Ok(()) if moving => steps.push(undo::moved(src, dst, source)?),
         Ok(()) => steps.push(undo::copied(src, dst, source)?),

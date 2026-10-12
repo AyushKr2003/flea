@@ -167,10 +167,10 @@ paths=$(seq 1 "$items" | sed "s|.*|\"$D/many/f&.txt\"|" | paste -sd, -)
 began=$(date +%s%3N)
 send "{\"c\":\"transfer\",\"op\":\"copy\",\"paths\":[$paths],\"dest\":\"$D/many-dest\"}"
 await '"t":"transferdone"' || fail=1
+# No duration on the wire, so the stopwatch above is the bound.
 elapsed=$(( $(date +%s%3N) - began ))
 progress=$(grep '"t":"transferprogress"' "$D/out" | grep -vc '"phase":"writing"')
-# The protocol reports no duration, so the stopwatch above is it: Pace sends one line at once, one per window of the copy and a closing line, so a slow machine moves the bound with its clock.
-# The window, from PROGRESS_EVERY in src/backend/opsreq.rs.
+# One window, from PROGRESS_EVERY in src/backend/opsreq.rs.
 progress_every_ms=150
 # The line sent at once and the closing line, which the per-window count leaves out.
 progress_edge_lines=2

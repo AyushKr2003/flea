@@ -10,8 +10,8 @@
 function sampled(t, index, name, bytes, total, scanned) {
     // A sample carrying none must not unset the total an earlier one already brought.
     var settled = scanned > 0 ? scanned : (t.scanned || 0)
-    // The closing sample names the item itemDone just closed: its bytes are the ones paced lines left out, so they join moved.
-    if (index === t.index && index < (t.done || 0))
+    // A sample for an item itemDone already closed carries the bytes paced lines left out, so they join moved and the card stays put.
+    if (index < (t.done || 0))
         return Object.assign({}, t, {moved: (t.moved || 0) + bytes, scanned: settled})
     return Object.assign({}, t, {index: index, name: name, done: index, bytes: bytes, total: total, scanned: settled})
 }
