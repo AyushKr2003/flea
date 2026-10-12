@@ -67,7 +67,7 @@ ShellRoot {
     Flea.ColumnPane {
         id: column
         width: 400
-        height: 300
+        height: 600
         pane: root.stubPane
         // A pooled row reads listingIndex -1, so no selection is the state that lights one when a guard is missing.
         selectedIndex: -1

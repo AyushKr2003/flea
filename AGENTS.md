@@ -9092,3 +9092,5 @@ The shared prebuild driver (`ui/PrebuildDriver.qml`, 146 lines, under the QML ca
 The key log's tick cap check moves one ceiling, re-derived with `wc -l`: `tests/columnsprebuild.qml` 415 to 416 for the check that fails once the tick log reaches `keepTicks`, where a key's stored tick index no longer holds.
 
 The picker path strip fix moves two ceilings, each re-derived with `wc -l`: `ui/PickerChrome.qml` 426 to 429 for the strip's `pickerWhere` name, its centring in the band above the rule and the parents' width held to their text, and `tests/picker-grid.qml` 450 to 465 for the cursor and marked tile frame check.
+
+The Columns cache buffer (el1) moves one ceiling, re-derived with `wc -l`: `ui/ColumnPane.qml` 438 to 440 for the view's `cacheBuffer` of the pane's `cacheRows`, in place of Qt's 320 px default that built about 12 unseen rows into every landing; `tests/columnnarrow.qml` grows its fixture from 300 to 600 px so its more-than-20-drawn-rows precondition holds, and `tests/staticgates-unqualified.tsv` moves the `ui/ColumnPane.qml` rows from line 228 on by those two lines, in both profiles.
