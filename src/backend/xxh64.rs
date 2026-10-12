@@ -34,19 +34,15 @@ fn merge(acc: u64, lane: u64) -> u64 {
 }
 
 // The specification's one-shot hash with seed 0, the only seed this tree uses.
+// Sample input: b"abc" answers 0x44bc2cf5ad770999.
 pub fn hash(bytes: &[u8]) -> u64 {
-    hash_with_seed(bytes, 0)
-}
-
-// Sample input: b"abc" with seed 0 answers 0x44bc2cf5ad770999.
-fn hash_with_seed(bytes: &[u8], seed: u64) -> u64 {
     let mut at = 0;
     let mut acc: u64;
     if bytes.len() >= STRIPE {
-        let mut v1 = seed.wrapping_add(P1).wrapping_add(P2);
-        let mut v2 = seed.wrapping_add(P2);
-        let mut v3 = seed;
-        let mut v4 = seed.wrapping_sub(P1);
+        let mut v1 = P1.wrapping_add(P2);
+        let mut v2 = P2;
+        let mut v3 = 0;
+        let mut v4 = P1.wrapping_neg();
         while at + STRIPE <= bytes.len() {
             v1 = round(v1, lane_at(bytes, at));
             v2 = round(v2, lane_at(bytes, at + LANE));
@@ -58,7 +54,7 @@ fn hash_with_seed(bytes: &[u8], seed: u64) -> u64 {
         acc = v1.rotate_left(r1).wrapping_add(v2.rotate_left(r2)).wrapping_add(v3.rotate_left(r3)).wrapping_add(v4.rotate_left(r4));
         acc = merge(merge(merge(merge(acc, v1), v2), v3), v4);
     } else {
-        acc = seed.wrapping_add(P5);
+        acc = P5;
     }
     acc = acc.wrapping_add(bytes.len() as u64);
     while at + LANE <= bytes.len() {
