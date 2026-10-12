@@ -115,8 +115,8 @@ function run(check) {
     // Nav.js drops canTag at the request and only the fs line brings it back; under a loading mark that line meets the old path.
     var fsBody = Source.block(Source.source("ui/PaneWire.qml"), "function onFsInfo(fs, free, path, storageClass, tagable, systemVolume)", "ui/PaneWire.qml")
     var fsLine = new Function("pane", "root", "ExtThumbs", "ViewState", "return function (fs, free, path, storageClass, tagable, systemVolume) {" + fsBody + "}")
-    function fsLineAt(listInFlight, path) {
-        var out = { path: "", listingPath: "/fx/v/work", listInFlight: listInFlight, recentMode: "", fsName: "", fsFree: 0,
+    function fsLineAt(listInFlight, path, panePath) {
+        var out = { path: panePath || "", listingPath: "/fx/v/work", listInFlight: listInFlight, recentMode: "", fsName: "", fsFree: 0,
                     storageClass: "", storageKnown: false, systemVolume: false, canTag: false, extVerdict: "", listArea: null }
         fsLine(out, { pane: out }, { verdict: function () { return "" } }, { preview: "" })("tmpfs", 64100000, path, "", true, false)
         return out.canTag + "|" + out.storageKnown
@@ -127,4 +127,6 @@ function run(check) {
           fsLineAt(false, "/fx/v/work"), "false|false")
     check("the fs line for a path that is neither the pane's nor the listing's is refused even while a listing is out",
           fsLineAt(true, "/fx/v/other"), "false|false")
+    check("the fs line for the settled pane's own path is accepted with no listing out",
+          fsLineAt(false, "/fx/v/work", "/fx/v/work"), "true|true")
 }
