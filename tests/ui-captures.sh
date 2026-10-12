@@ -1016,7 +1016,7 @@ EOF2
 
 # PropertiesCount: Properties on a folder of known contents shows the exact size and item count once its walk is done.
 case_cap_properties_count() {
-    local dir="$fixture_root/cap-propcount" counted total_bytes total_items want_size want_items state shown_size shown_items end
+    local dir="$fixture_root/cap-propcount" counted entry_bytes total_bytes total_items want_size want_items state shown_size shown_items end
     local settle_limit_s=15
     counted="$dir/counted"
     sandbox_scratch "$dir"
@@ -1027,10 +1027,13 @@ case_cap_properties_count() {
     head -c 700 /dev/zero > "$counted/sub/d.bin"
     head -c 1 /dev/zero > "$counted/sub/e.bin"
     # The walk counts the folder's own entry and every entry below it by lstat size, and the items below it alone.
-    total_bytes=$(find "$counted" -printf '%s\n' | awk '{ sum += $1 } END { print sum }')
+    total_bytes=0
+    while IFS= read -r entry_bytes; do
+        total_bytes=$((total_bytes + entry_bytes))
+    done < <(find "$counted" -printf '%s\n')
     total_items=$(find "$counted" -mindepth 1 | wc -l)
     [[ "$total_items" == "6" ]] || fail "cap_propcount: the fixture holds $total_items entries, not 6"
-    want_size=$(cap_propcount_size "$total_bytes")
+    want_size=$(cap_propcount_size "$total_bytes") || fail "cap_propcount: the expected size did not derive from $total_bytes"
     want_items="6 items"
     seed_ui_state "$fixture_root/cap-propcount-state" '{"keys":"default","view":"list","menu":{"hidden":["delete","openTerminal","moveto","copyto","permissions","copyAs","pasteAs","invertSelection"]}}'
     launch "$dir"
@@ -1048,6 +1051,8 @@ case_cap_properties_count() {
         jq -e '.opened and .action == "properties" and .facts.directory == true and .liveLines.contains.tail == ""' <<< "$state" >/dev/null && break
         sleep 0.05
     done
+    jq -e '.opened and .action == "properties" and .facts.directory == true and .liveLines.contains.tail == ""' <<< "$state" >/dev/null \
+        || fail "cap_propcount: the count never finished inside ${settle_limit_s} s: $state"
     jq -e '.liveLines.size.value and .liveLines.contains.value' <<< "$state" >/dev/null \
         || fail "cap_propcount: the card never finished counting, or menuDialogState carries no liveLines, last state $state"
     shown_size=$(jq -er '.liveLines.size.value' <<< "$state")
