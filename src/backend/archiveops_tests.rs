@@ -281,9 +281,9 @@ fn a_password_compress_without_7z_is_refused_before_any_tool_runs() {
     let formats = Formats::from_tools(true, false);
     assert!(formats.offers("zip"), "bsdtar offers zip, so only the password rule can refuse it");
     for format in ["zip", "7z"] {
-        let pw = Password { secret: "s3cret", encrypt_names: false };
+        let password = Password { secret: "s3cret", encrypt_names: false };
         let dest = d.join(&format!("out.{}", format));
-        let e = compress(&formats, d.path(), &["a.txt".to_string()], format, &dest, &AtomicBool::new(false), Some(pw)).unwrap_err();
+        let e = compress(&formats, d.path(), &["a.txt".to_string()], format, &dest, &AtomicBool::new(false), Some(password)).unwrap_err();
         assert_eq!(e.msg, "a password needs 7-Zip, which is not installed", "{}", format);
         assert!(!dest.exists(), "{} wrote a destination", format);
     }

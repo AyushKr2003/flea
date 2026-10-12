@@ -111,8 +111,8 @@ pub(crate) fn system(sys: &Path) {
 // The marker and name prefix a direct root carries, the same guard TestDir applies to its own.
 const DIRECT_MARKER: &str = ".flea-test-sandbox";
 const DIRECT_PREFIX: &str = "flea-test-direct-";
-// O_DIRECT on x86_64, opened through custom_flags.
-pub(crate) const O_DIRECT: i32 = 0o40000;
+// The flag the code under test checks, so the fixture opens targets the same way.
+pub(crate) use crate::backend::flashio::O_DIRECT;
 // A bad address and a bad length for an O_DIRECT probe: one byte past an aligned buffer, half a block.
 const PROBE_SKEW: usize = 1;
 const PROBE_LEN: usize = 512;

@@ -107,7 +107,7 @@ fn a_second_flash_while_one_runs_is_refused() {
 }
 
 // One press on the fake stick (diskseq 2) through a stub helper that opens drive.img for writing: the lines, whether the helper ran, whether drive.img stayed zero.
-fn press_on_fake(tag: &str, seq: u64) -> (Vec<FlashMsg>, bool, bool) {
+fn press_on_fake(tag: &str, seq: u64, cancelled: bool) -> (Vec<FlashMsg>, bool, bool) {
     let f = fake(tag);
     stick(&f.sys);
     let d = TestDir::new(&format!("{tag}-files"));
@@ -125,7 +125,7 @@ fn press_on_fake(tag: &str, seq: u64) -> (Vec<FlashMsg>, bool, bool) {
     let (tx, rx) = std::sync::mpsc::channel::<FlashMsg>();
     let req = FlashReq { id: 3, image: image.to_string_lossy().to_string(), dev: "sda".to_string(), seq,
         serial: "2003007157171692".to_string(), bytes: 124_623_257_600 };
-    run_flash_on(req, Arc::new(AtomicBool::new(false)), &tx, &host);
+    run_flash_on(req, Arc::new(AtomicBool::new(cancelled)), &tx, &host);
     drop(tx);
     let zero = std::fs::read(&target_path).unwrap().iter().all(|b| *b == 0);
     (rx.into_iter().collect(), reached.exists(), zero)
@@ -134,7 +134,7 @@ fn press_on_fake(tag: &str, seq: u64) -> (Vec<FlashMsg>, bool, bool) {
 // A5 and A13: layers 1 to 4 run under the prepare phase, no password beat precedes a refusal, and the target stays untouched.
 #[test]
 fn the_worker_refuses_a_changed_identity_before_any_write() {
-    let (lines, reached, zero) = press_on_fake("flashop-changed", 0);
+    let (lines, reached, zero) = press_on_fake("flashop-changed", 0, false);
     let text: Vec<&String> = lines.iter().map(|m| &m.line).collect();
     assert!(!reached, "the helper was never asked for the descriptor: {text:?}");
     assert_eq!(lines.len(), 3, "started, one prepare beat, then done: {text:?}");
@@ -146,10 +146,21 @@ fn the_worker_refuses_a_changed_identity_before_any_write() {
     assert!(zero, "a refused flash writes nothing to the target");
 }
 
+// A cancel that lands during prepare ends before the helper opens anything, so no prompt rises for a dead flash.
+#[test]
+fn a_cancel_during_prepare_never_reaches_the_helper() {
+    let (lines, reached, zero) = press_on_fake("flashop-precancel", 2, true);
+    let text: Vec<&String> = lines.iter().map(|m| &m.line).collect();
+    assert!(!reached, "the helper was never asked for the descriptor: {text:?}");
+    assert!(!text.iter().any(|l| l.contains("\"phase\":\"password\"")), "no prompt beat for a dead flash: {text:?}");
+    assert!(text.last().is_some_and(|l| l.contains("\"t\":\"flashdone\"") && l.contains("\"err\":\"cancelled\"")), "{text:?}");
+    assert!(zero, "a cancelled flash writes nothing to the target");
+}
+
 // The control: with the identity intact the stub is reached and hands over drive.img, and layer 6 still refuses a regular file before a byte moves.
 #[test]
 fn the_stub_helper_is_reached_when_the_identity_holds() {
-    let (lines, reached, zero) = press_on_fake("flashop-reached", 2);
+    let (lines, reached, zero) = press_on_fake("flashop-reached", 2, false);
     let text: Vec<&String> = lines.iter().map(|m| &m.line).collect();
     assert!(reached, "the helper was asked for the descriptor: {text:?}");
     assert!(text.iter().any(|l| l.contains("\"phase\":\"password\"")), "{text:?}");

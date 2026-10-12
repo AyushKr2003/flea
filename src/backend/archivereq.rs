@@ -77,20 +77,19 @@ pub(crate) fn run_archive(id: usize, compressing: bool, paths: Vec<String>, form
     let result = if let Err(error) = validate_sources(selection.as_deref(), &sources) {
         Err(op_err("archive", "", &error))
     } else if compressing {
-        // A compress has nothing to verify against: it writes the archive rather than reading one.
-        // A password is a 7z job, so an empty one is no password at all and keeps today's path.
-        let pw = (!password.is_empty()).then(|| crate::backend::archiveops::Password {
+        // A compress writes the archive, so nothing verifies it and an empty password is no password.
+        let password = (!password.is_empty()).then(|| crate::backend::archiveops::Password {
             secret: &password,
             encrypt_names,
         });
         match split_paths(&paths) {
-            Some((parent, names)) => compress(formats, &parent, &names, &format, &dest, &cancel, pw).map(|()| true),
+            Some((parent, names)) => compress(formats, &parent, &names, &format, &dest, &cancel, password).map(|()| true),
             None => Err(op_err("archive", "", "a compress takes absolute paths from one directory")),
         }
     } else {
         // An empty password is no password: the encrypted probe below decides whether to ask.
-        let pw = (!password.is_empty()).then_some(password.as_str());
-        extract(formats, &archive, &dest, &cancel, pw)
+        let password = (!password.is_empty()).then_some(password.as_str());
+        extract(formats, &archive, &dest, &cancel, password)
     };
     let line = match result {
         Ok(verified) => archivedone_line(id, true, verified, ""),

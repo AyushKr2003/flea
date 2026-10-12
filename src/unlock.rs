@@ -20,7 +20,9 @@ pub fn dispatch(args: &[String]) -> Option<i32> {
 
 // Sample input: "/dev/sdb1", the LUKS container to unlock.
 pub fn validate(device: &str) -> Result<String, String> {
-    if device.starts_with("/dev/") && device.len() > 5 && !device.contains('\n') {
+    // A dot-dot part would leave /dev, so it is refused however the path starts.
+    if device.starts_with("/dev/") && device.len() > 5 && !device.contains('\n')
+        && !device.split('/').any(|part| part == "..") {
         return Ok(device.to_string());
     }
     Err("flea: --unlock takes one device path under /dev".to_string())
@@ -101,7 +103,8 @@ mod tests {
 
     #[test]
     fn anything_else_names_the_shape() {
-        for bad in ["", "/etc/passwd", "sdb1", "dev/sdb1", "/dev/", "/dev/sdb1\n"] {
+        for bad in ["", "/etc/passwd", "sdb1", "dev/sdb1", "/dev/", "/dev/sdb1\n", "/dev/../etc/passwd",
+                    "/dev/sda/../../etc/passwd", "/dev/mapper/../sda"] {
             let message = validate(bad).expect_err("the device must be refused");
             assert!(message.contains("--unlock"), "{} should name {}, got {}", bad, "--unlock", message);
         }

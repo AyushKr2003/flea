@@ -45,9 +45,9 @@ pub fn compress(formats: &Formats, parent: &Path, names: &[String], format: &str
     let mut work = Work::new(parent, "arc")?;
     let staged = work.dir.join(format!("archive.{}", format));
     // The password arm builds its own 7z argv and runs it in the archive jail beside every other archive job.
-    if let Some(pw) = password {
-        let inner = archivepass::compress_argv(format, &staged, parent, names, pw.encrypt_names);
-        match archivepass::run_boxed_cancellable_pw("archive", inner, parent, &mut work, Some(pw.secret), cancel)? {
+    if let Some(password) = password {
+        let inner = archivepass::compress_argv(format, &staged, parent, names, password.encrypt_names);
+        match archivepass::run_boxed_cancellable_password("archive", inner, parent, &mut work, Some(password.secret), cancel)? {
             None => {}
             Some(f) => return Err(op_err("archive", format, &f.message)),
         }
@@ -128,7 +128,7 @@ pub fn extract(
         return Err(op_err("archive", &archive.to_string_lossy(), "cancelled"));
     }
     if archivepass::reads_password(formats, archive) {
-        if let Some(f) = archivepass::run_boxed_cancellable_pw("archive", inner, archive, &mut work, password, cancel)? {
+        if let Some(f) = archivepass::run_boxed_cancellable_password("archive", inner, archive, &mut work, password, cancel)? {
             let said = archivepass::extract_verdict(f.code, password.is_some(), || archiveenc::password_needed(archive, formats, cancel));
             // A cancel during the guarded re-probe killed it; the job is cancelled, whatever the extract's exit said.
             if cancel.load(Ordering::Relaxed) {
