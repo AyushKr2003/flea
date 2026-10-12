@@ -28,7 +28,7 @@ ShellRoot {
     property double calmFrom: 0
     property bool ticking: false
     property bool finished: false
-    // Asks counted at each move's start, the largest line any reply reached, and the loads tried while a reload's listing was out, and the asks and queued loads made then.
+    // Asks counted at each move's start, the largest line any reply reached, and the listings seen while a reload runs, and the asks and queued loads made then.
     property int askBase: 0
     property int farthest: 0
     property bool watchLoad: false
@@ -281,7 +281,6 @@ ShellRoot {
         chosen.loadQueuedKey = ""
         root.pane.loadSelectionPreview()
         root.askedLoading += chosen.loadQueuedKey === "" ? 0 : 1
-        root.loadsSeen += 1
     }
     function beginWalk() {
         root.askBase = root.backend().codeToken
@@ -359,6 +358,7 @@ ShellRoot {
             if (!root.watchLoad) return
             // The asks between the flip in and the flip out.
             root.askedLoading += (root.pane.listInFlight ? -1 : 1) * realBackend.codeToken
+            root.loadsSeen += root.pane.listInFlight ? 1 : 0
             if (root.pane.listInFlight) Qt.callLater(root.tryLoad)
         }
     }
