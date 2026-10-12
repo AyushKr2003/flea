@@ -49,21 +49,30 @@ cap_drops_release() {
     settle
     if [[ "$(ipc collideState | jq -r .opened)" == "true" ]]; then key -k Escape >/dev/null; settle; fi
 }
-# A drag is in flight only once the listing says so; a shot before that is a shot of no drag.
-cap_drops_wait_active() {
-    local seen="" end=$((SECONDS + 15))
+# Seconds a drag-line or undo wait polls; statusActivityState prints {"activities":[{"id":0,"text":"Copy 1 item to sub","running":false,...}],...}, a drag line always id 0.
+cap_drops_wait_s=15
+# A row, a crumb or a column under the drag takes it above the floor and keeps the floor signal dark, so the status line a drag shows there, in the target's own words, is the hover.
+cap_drops_wait_target() {
+    [[ "$#" -eq 1 ]] || fail "cap_drops: wait_target needs the drag line, got $#"
+    local want="$1" seen="" end=$((SECONDS + cap_drops_wait_s))
     while (( SECONDS < end )); do
-        seen=$(ipc listingDropActive 2>/dev/null || printf unavailable)
-        [[ "$seen" == "true" ]] && return 0
+        seen=$(ipc statusActivityState 2>/dev/null | jq -r --arg w "$want" '.activities[] | select(.id == 0 and .running == false and .text == $w) | .text' 2>/dev/null | head -n 1 || true)
+        [[ -n "$seen" ]] && return 0
         sleep 0.1
     done
-    fail "cap_drops: no drag in flight over the listing, saw $seen"
+    seen=$(ipc statusActivityState 2>/dev/null | jq -r '[.activities[] | select(.running == false) | .text] | join(" | ")' 2>/dev/null || true)
+    # A case holding the pointer names its release here, so a timeout never leaves the drag held.
+    "${cap_drops_wait_abort:-:}"
+    fail "cap_drops: no drag line reading \"$want\" (status lines: ${seen:-none})"
 }
-# One pasted copy is undone and the copy is awaited away, so the next leg starts clean.
+# One dropped file is awaited in, undone and awaited away, so the next leg starts clean.
 cap_drops_undo_copy() {
     [[ "$#" -eq 1 ]] || fail "cap_drops: undo_copy needs a path, got $#"
-    local gone="$1" end=$((SECONDS + 15))
+    local gone="$1" end=$((SECONDS + cap_drops_wait_s))
+    while (( SECONDS < end )); do [[ -e "$gone" ]] && break; sleep 0.1; done
+    [[ -e "$gone" ]] || fail "cap_drops: the drop never landed $gone, so z has no drop to undo (said $(ipc lastMessage 2>/dev/null); found at $(find "$fixture_root" -maxdepth 3 -name "$(basename "$gone")" | tr '\n' ' '))"
     key z >/dev/null
+    end=$((SECONDS + cap_drops_wait_s))
     while (( SECONDS < end )); do
         [[ ! -e "$gone" ]] && return 0
         sleep 0.1
@@ -170,8 +179,11 @@ case_cap_drops() {
     read -r tx ty <<< "$dst_pt"
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_drops_wait_active
+    cap_drops_wait_target "Move 1 item to Photos · ctrl at lift copies"
+    # The setting is on, so a rest of 700 ms (DragOut.OPEN_MS) opens Photos; one ipc round trip alone is 190 to 565 ms, so a steer to the same point (a move restarts the rest) leaves the shot and then the release their own 700 ms.
+    cap_drops_steer "$tx" "$ty"
     shot drops-drop-target
+    cap_drops_steer "$tx" "$ty"
     cap_drops_release
     cap_drops_undo_copy "$dir/Photos/a.txt"
     wait_listing 203
@@ -182,7 +194,7 @@ case_cap_drops() {
     read -r tx ty <<< "$dst_pt"
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_drops_wait_active
+    cap_drops_wait_target "Move 1 item to Photos · ctrl at lift copies"
     wait_path "$dir/Photos"
     shot drops-hover-open
     cap_drops_release
@@ -226,7 +238,7 @@ case_cap_drops() {
     read -r cx cy <<< "$src_pt"
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_drops_wait_active
+    cap_drops_wait_target "Copy 1 item to outer/"
     shot drops-crumb
     read -r ax ay aw ah <<< "$(ipc listAreaRect)"
     cap_drops_steer "$((ax + aw / 2))" "$((ay + ah - 20))"
@@ -246,7 +258,11 @@ case_cap_drops() {
     click_chrome columns
     settle
     [[ "$(ipc viewMode)" == "columns" ]] || fail "cap_drops: the chrome never reached columns"
-    [[ "$(ipc columnNames child)" == *"p1.txt"* ]] || fail "cap_drops: the child column never listed p1.txt"
+    # The child column lists Photos after its own read, so the check waits for it, up to 5 s.
+    local child_end=$((SECONDS + 5)) child=""
+    while child=$(ipc columnNames child); [[ "$child" != *"p1.txt"* ]] && (( SECONDS < child_end )); do sleep 0.1; done
+    [[ "$child" == *"p1.txt"* ]] \
+        || fail "cap_drops: the child column never listed p1.txt (child '$child', parent '$(ipc columnNames parent)', path $(ipc path))"
     names=$(ipc columnNames parent)
     index=$(printf '%s' "$names" | tr '|' '\n' | grep -nx "deep" | head -n 1 | cut -d: -f1 || true)
     [[ -n "$index" ]] || fail "cap_drops: the parent column never listed deep: $names"
@@ -256,7 +272,7 @@ case_cap_drops() {
     read -r cx cy <<< "$src_pt"
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_drops_wait_active
+    cap_drops_wait_target "Move 1 item to deep · ctrl at lift copies"
     shot drops-columns-parent
     names=$(ipc columnNames child)
     index=$(printf '%s' "$names" | tr '|' '\n' | grep -nx "p2.txt" | head -n 1 | cut -d: -f1 || true)

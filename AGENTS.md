@@ -8976,6 +8976,8 @@ Quick Look's warm kind units keep `tests/startup-units.txt` at its 170 units whi
 
 The Quick Look image zoom keeps `tests/startup-units.txt` at its 170 units while its `bytes` line moves from 1596965 to 1597661, the sum the probe's tool takes over them with the image branch of the zoom keys in `ui/js/Focus.js` (its own gate for `e`, which stays a PDF key), the `0` row in `ui/js/Keymap.js` and the shared ladder step in `ui/js/PreviewKeys.js`.
 
+drp4 2026-10-11 raises the first-frame `bytes` line in `tests/startup-units.txt` from 1,596,985 to 1,598,921 (+1,936, no unit added): +1,260 are the recorded hover-open destination in `ui/FileDrag.qml` (`dropDest`, `dropDestDev`) and `ui/RowDrag.qml` (`lit()` and `landing()`, the recorded address `refuseDrop()` and `dropped()` read), both loaded by the first window; the other 676 were already over the old pin on the DRP3 head `4d1132c3`.
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one

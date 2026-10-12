@@ -17,6 +17,9 @@ Item {
     readonly property var targetPane: root.dropScope ? root.dropScope.pane : root.pane
     readonly property string targetDir: root.dropScope ? root.dropScope.dir : (root.pane ? Search.baseOf(root.pane) : "")
 
+    // The drop destination this delegate last recorded on the session, kept so leaving clears only its own record.
+    property string recorded: ""
+
     anchors.fill: parent
     // A peek column's row lifts through the session's peekSource; which drops it takes is the DropArea's call alone.
     enabled: !!root.row && (root.pane !== null ? !root.pane.listInFlight && root.listingIndex >= 0
@@ -54,23 +57,12 @@ Item {
             root.hoverAt(drag)
         }
         onPositionChanged: function (drag) {
-            if (root.session.dropIndex === root.listingIndex) {
+            if (root.lit()) {
                 root.session.showTarget(root.row.n, root.row.v)
                 root.hoverAt(drag)
             }
         }
-        onExited: {
-            if (root.session.dropIndex === root.listingIndex) {
-                root.session.dropIndex = -1
-                root.session.leaveTarget()
-            }
-            if (root.session.dragRows.length === 0) {
-                root.session.dragCopy = false
-                root.session.dragLink = false
-            }
-            root.session.hoverEnded()
-            DragOut.keys.leave()
-        }
+        onExited: root.leaveRow()
         onDropped: function (drop) {
             if (drop.getDataAsString(Tabs.TAB_MIME) !== "")
                 return
@@ -85,10 +77,29 @@ Item {
         }
     }
 
+    // The pointer leaves this delegate: the destination it recorded goes, even when a swap reused the delegate on another row, and a destination another row recorded since stays.
+    function leaveRow() {
+        if (root.recorded.length > 0 && root.session.dropDest === root.recorded) {
+            root.session.dropIndex = -1
+            root.session.dropDest = ""
+            root.session.dropDestDev = 0
+            root.session.leaveTarget()
+        }
+        root.recorded = ""
+        if (root.session.dragRows.length === 0) {
+            root.session.dragCopy = false
+            root.session.dragLink = false
+        }
+        root.session.hoverEnded()
+        DragOut.keys.leave()
+    }
+
     // One reset for every finished gesture, refused or dropped: the drag's keys end and the row goes dark again.
     function clearTarget() {
         DragOut.keys.clear()
         root.session.dropIndex = -1
+        root.session.dropDest = ""
+        root.session.dropDestDev = 0
         root.session.dragCopy = false
         root.session.dragLink = false
         root.session.leaveTarget()
@@ -111,16 +122,33 @@ Item {
             return false
         }
         root.session.dropIndex = root.listingIndex
+        // The drop's own address: the swap may rebuild this delegate on another row before the release.
+        root.session.dropDest = dest
+        root.session.dropDestDev = root.row.v || 0
+        root.recorded = dest
         DragOut.keys.enter(marker, lift)
         root.session.enterTarget(marker, urls, root.row.n, root.row.v, shelf, proposed)
         return true
     }
 
+    // Lit means this delegate still shows the hovered folder: after a swap the index may name another row.
+    function lit() {
+        return root.session.dropIndex === root.listingIndex && !!root.row
+                && root.session.dropDest === root.targetPane.join(root.targetDir, root.row.n)
+    }
+
+    // Where a drop lands: the recorded hovered folder, else this row's own folder, since a swap may have reused the delegate.
+    function landing() {
+        if (root.session.dropDest.length > 0) return { dest: root.session.dropDest, dev: root.session.dropDestDev }
+        var folder = root.row && root.row.d === true
+        return { dest: folder ? root.targetPane.join(root.targetDir, root.row.n) : "", dev: folder ? root.row.v : 0 }
+    }
+
     // Testable refusal: says the sentence and darkens exactly like dropped(), so a refused
     // drop never leaves the row lit (Qt sends dropped, not exited, after the drop).
     function refuseDrop(marker, urls, shelf, plain) {
-        if (!(root.row && root.row.d === true)) return ""
-        var dest = root.targetPane.join(root.targetDir, root.row.n)
+        var dest = root.landing().dest
+        if (!dest) return ""
         var line = DragOut.refusal(DragOut.sources(urls, plain, marker, shelf), dest, marker, shelf)
         if (!line) return ""
         root.targetPane.message(line, false)
@@ -131,9 +159,10 @@ Item {
     // The drop apart from its platform event, which tests/js/collide.js cannot build: answers whether it was taken.
     function dropped(marker, urls, shelf, plain, proposed) {
         var accepted = false
-        if (root.row && root.row.d === true) {
+        var at = root.landing()
+        if (at.dest.length > 0) {
             if (DragOps.hasPaths(urls) || (plain && !marker && !shelf))
-                accepted = DragOps.dropInto(root.targetPane, marker, urls, root.targetPane.join(root.targetDir, root.row.n), root.row.v, shelf, plain, proposed, DragOut.keys.ctrl, DragOut.keys.shift)
+                accepted = DragOps.dropInto(root.targetPane, marker, urls, at.dest, at.dev, shelf, plain, proposed, DragOut.keys.ctrl, DragOut.keys.shift)
             else if (root.dropScope === null
                      && DragOps.canDropByIndex(marker, root.targetDir, root.session.dragRows, root.listingIndex))
                 accepted = DragOps.dropByIndex(root.targetPane, root.session.dragRows, root.listingIndex,
@@ -152,7 +181,7 @@ Item {
         if (!list || !viewer || root.targetDir !== Search.baseOf(viewer))
             return
         var pt = root.mapToItem(list, drag.x, drag.y)
-        if (root.session.dropIndex === root.listingIndex)
+        if (root.lit())
             root.session.hoverBegan(root.listingIndex, root.targetPane.join(root.targetDir, root.row.n), pt.y, list.height)
         else
             root.session.hoverMoved(pt.y, list.height)

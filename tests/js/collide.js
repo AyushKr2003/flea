@@ -159,6 +159,7 @@ function run(check) {
     failedClears(check)
     busyMenu(check)
     refusedRow(check)
+    reusedRowAfterHoverOpen(check)
     cannotLeaveEnds(check)
     pasteLinks(check)
 }
@@ -225,6 +226,26 @@ function refusedRow(check) {
           target.dropped(marker, selfUrls, "", "", Qt.CopyAction), false)
     check("and leaves the row dark", session.dropIndex, -1)
     at.parent.destroy()
+}
+
+// A hover-open swaps the lit delegate onto another row: the drop uses the recorded folder, never the reused row's path.
+function reusedRowAfterHoverOpen(check) {
+    var reused = [{ n: "p2.txt", d: false }, { n: "2024", d: true }]
+    for (var i = 0; i < reused.length; i++) {
+        var at = Fixture.scene(7)
+        var tag = reused[i].d ? "reused folder row" : "reused file row"
+        at.target.row = { n: "Photos", d: true }
+        check("hovering a folder takes the drop", at.target.enter("", ["file:///x/a.txt"], "", "", Qt.CopyAction), true)
+        check("and records the hovered folder", at.session.dropDest, "/d/Photos")
+        at.pane.path = "/d/Photos"
+        at.target.row = reused[i]
+        var before = at.backend.sent.length
+        check("a drop on the " + tag + " still takes", at.target.dropped("", ["file:///x/a.txt"], "", "", Qt.CopyAction), true)
+        var sent = at.backend.sent.slice(before)
+        check("and sends one question from the " + tag, sent.length, 1)
+        check("into the hovered folder from the " + tag, sent.length > 0 ? sent[0].dest : "", "/d/Photos")
+        at.parent.destroy()
+    }
 }
 
 // A watcher re-read landing while a menu action waits loses the rename: the
