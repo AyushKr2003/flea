@@ -36,7 +36,7 @@ permissions_expect() {
         fi
         sleep 0.05
     done
-    fail "permissions: $reader expected $expected, observed $observed"
+    fail "permissions: $reader expected $expected, observed $observed (caller ${BASH_LINENO[0]})"
 }
 
 permissions_point() {
@@ -44,8 +44,8 @@ permissions_point() {
     read -r cx cy <<< "$centre"
     [[ "$cx" =~ ^[0-9]+$ && "$cy" =~ ^[0-9]+$ ]] || fail "permissions: native control has no centre"
     read -r wx wy ww wh < <(window_box) || fail "native window coordinates unavailable"
-    # permissions_control names the control it clicks; a bare point reports as "control". The positive form fails closed on a size that is not a number.
-    if ! (( cx < ww && cy < wh )); then
+    # permissions_control names the control it clicks; a bare point reports as "control". Sizes are checked as numbers first, since a name in (( )) aborts under set -u.
+    if ! [[ "$ww" =~ ^[0-9]+$ && "$wh" =~ ^[0-9]+$ ]] || ! (( cx < ww && cy < wh )); then
         scene=$(ipc windowSize 2>&1) || scene="unavailable"
         fail "permissions: ${permissions_target:-control} centre $cx,$cy is outside the actual viewport ${ww}x${wh} (window at $wx,$wy; QML scene $scene)"
     fi
@@ -58,6 +58,7 @@ permissions_menu_point() {
     local index="$1" model target cursor step steps centre cx cy fx fy fw fh permissions_target="menu row $1"
     model=$(ipc contextMenuModel) || fail "permissions: menu inventory unavailable"
     # A menu taller than the window scrolls its body, so the cursor moves onto the nearest row it can reach and brings the row into view first.
+    # Sample input: [{"action":"a"},{"separator":true},{"action":"permissions","disabled":true},{"action":"permissions"}] with index 3.
     target=$(jq -er --argjson index "$index" '. as $rows | [range(0; length) | select($rows[.].separator != true and $rows[.].disabled != true)] | min_by((. - $index) | fabs)' <<< "$model") \
         || fail "permissions: the menu has no row the cursor can reach"
     steps=$(jq -er 'length' <<< "$model") || fail "permissions: menu inventory has no length"

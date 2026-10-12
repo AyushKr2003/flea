@@ -38,6 +38,7 @@ ipc() {
     esac
 }
 key() {
+    [[ "${STUCK:-0}" == 1 ]] && return 0
     case "$2" in
         Down) fake_cursor=$((fake_cursor + 1)); while [[ "$fake_cursor" == 4 || "$fake_cursor" == 5 ]]; do fake_cursor=$((fake_cursor + 1)); done ;;
         Up) fake_cursor=$((fake_cursor - 1)); while [[ "$fake_cursor" == 4 || "$fake_cursor" == 5 ]]; do fake_cursor=$((fake_cursor - 1)); done ;;
@@ -59,7 +60,7 @@ expect_fail "a malformed window width refuses" "outside the actual viewport" per
 win="0 0 1100 8+"
 expect_fail "a malformed window height refuses" "outside the actual viewport" permissions_point "10 10"
 win="0 0 wide 800"
-expect_fail "a non-numeric window width refuses" "" permissions_point "10 10"
+expect_fail "a non-numeric window width refuses" "outside the actual viewport" permissions_point "10 10"
 win="0 0 1100"
 expect_fail "a missing window height refuses" "outside the actual viewport" permissions_point "10 10"
 win="0 0 1100 800"
@@ -85,6 +86,13 @@ permissions_menu_point 5 || fail "a refused row was not revealed"
 [[ "$fake_cursor" == 6 ]] || fail "the cursor ended on $fake_cursor, not on the nearest reachable row 6"
 [[ "$(cat "$clicks")" == "click 700 350 left" ]] || fail "the refused row was not clicked: $(cat "$clicks")"
 printf 'PERMPOINT PASS a refused row is revealed through its nearest reachable neighbour\n'
+# A cursor that never advances cannot reach its row, so the menu refuses instead of clicking.
+: > "$clicks"
+fake_cursor=0
+STUCK=1
+expect_fail "a stuck menu cursor refuses" "menu cursor stalled at" permissions_menu_point 7
+STUCK=0
+[[ ! -s "$clicks" ]] || fail "a stalled cursor still clicked: $(cat "$clicks")"
 # A revealed row that still sits outside the frame is a clipped row, and it refuses.
 fake_cursor=0
 fake_frame="600 50 200 200"
