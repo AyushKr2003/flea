@@ -1,4 +1,4 @@
-// Tag terms inside a live search session: the names are read once per row on a worker thread, never on the loop, and every read rides the mount bound.
+// Tag terms inside a live search session: the names are read once per row on a worker thread, never on the loop; local rows read direct and remote rows read under the mount bound.
 use crate::backend::events::Event;
 use crate::backend::search::{names_carry, split_query};
 use crate::backend::searchindex::{is_hidden, Index};
@@ -44,16 +44,15 @@ impl Bound {
         Bound { scope: scope.to_path_buf(), body: body.to_string(), scope_remote, nested }
     }
 
-    // The tags of each scope-relative row, parallel to `rels`: a local row reads direct; a remote mount's rows read in bounded chunks,
-    // and a chunk the mount does not answer ends that mount's reads and leaves its rest untagged.
-    pub(crate) fn read(&self, rels: &[Vec<u8>]) -> Vec<Vec<String>> {
-        let mut out = vec![Vec::new(); rels.len()];
+    // The tags of each scope-relative row, parallel to `rels`: a local row reads direct, a remote mount's rows read in bounded chunks, and a chunk the mount does not answer ends that mount's reads with its rest left unread (None) for a later retry.
+    pub(crate) fn read(&self, rels: &[Vec<u8>]) -> Vec<Option<Vec<String>>> {
+        let mut out: Vec<Option<Vec<String>>> = vec![None; rels.len()];
         let mut remote: BTreeMap<&Path, Vec<usize>> = BTreeMap::new();
         for (at, rel) in rels.iter().enumerate() {
             let path = self.scope.join(OsStr::from_bytes(rel));
             match self.mount_of(&path) {
                 Some(mount) => remote.entry(mount).or_default().push(at),
-                None => out[at] = super::tags::read(&path).unwrap_or_default(),
+                None => out[at] = Some(super::tags::read(&path).unwrap_or_default()),
             }
         }
         for (mount, rows) in remote {
@@ -62,7 +61,7 @@ impl Bound {
                 let read = move || paths.iter().map(|path| super::tags::read(path).unwrap_or_default()).collect::<Vec<_>>();
                 let Ok(have) = super::iomount::call(mount, &self.body, "search", read) else { break };
                 for (&at, tags) in chunk.iter().zip(have) {
-                    out[at] = tags;
+                    out[at] = Some(tags);
                 }
             }
         }
@@ -97,6 +96,8 @@ struct Pass {
     stop: AtomicBool,
     // Bumped when a patch renumbers the rows, so a re-read that located its rows before it locates them again.
     epoch: AtomicUsize,
+    // Raised when a bounded chunk fails and leaves rows unread, so the answer stays partial until a retry reads them; a patch that only adds rows never raises it.
+    unread_failed: AtomicBool,
     // Test seam: attribute reads this pass made, so a query with no tag term can pin zero.
     #[cfg(test)]
     reads: AtomicUsize,
@@ -113,6 +114,7 @@ impl Pass {
             rewritten: AtomicBool::new(false),
             stop: AtomicBool::new(false),
             epoch: AtomicUsize::new(0),
+            unread_failed: AtomicBool::new(false),
             #[cfg(test)]
             reads: AtomicUsize::new(0),
         })
@@ -209,6 +211,21 @@ impl Tags {
                 pass
             }
         };
+        // A failed bounded chunk left rows unread: the answer stays partial and the missing rows are queued for a re-read, so a later query can read them again. Rows a patch added without any failure keep the old whole answer.
+        if pass.done.load(Ordering::Relaxed) && pass.unread_failed.load(Ordering::Relaxed) {
+            let unread: Vec<bool> = pass.names.lock().unwrap().iter().map(Option::is_none).collect();
+            let missing: Vec<Vec<u8>> = {
+                let index = index.lock().unwrap();
+                (0..index.len()).filter(|&row| unread.get(row).is_some_and(|unread| *unread)).map(|row| index.raw(row).to_vec()).collect()
+            };
+            if missing.is_empty() {
+                pass.unread_failed.store(false, Ordering::Relaxed);
+            } else {
+                self.whole = false;
+                self.refresh(missing, index);
+                return true;
+            }
+        }
         self.whole = pass.done.load(Ordering::Relaxed);
         !self.whole
     }
@@ -281,9 +298,14 @@ fn read_all(pass: &Pass, index: &Mutex<Index>, len: usize, events: &Sender<Event
         let read = pass.bound.read(&rels);
         #[cfg(test)]
         pass.reads.fetch_add(read.len(), Ordering::Relaxed);
+        if read.iter().any(Option::is_none) {
+            pass.unread_failed.store(true, Ordering::Relaxed);
+        }
         let mut names = pass.names.lock().unwrap();
         for (offset, have) in read.into_iter().enumerate() {
-            names[row + offset] = Some(have);
+            if let Some(tags) = have {
+                names[row + offset] = Some(tags);
+            }
         }
         row = end;
     }
@@ -346,10 +368,17 @@ fn reread(pass: &Pass, index: &Mutex<Index>, rels: Vec<Vec<u8>>) {
         if pass.epoch.load(Ordering::Relaxed) != epoch {
             continue;
         }
+        // A failed re-read keeps the old names standing instead of clearing them, so only read rows are swapped in.
+        let mut failed = false;
         for ((at, _), have) in found.iter().zip(have) {
-            if let Some(slot) = names.get_mut(*at) {
-                *slot = Some(have);
+            match (have, names.get_mut(*at)) {
+                (Some(have), Some(slot)) => *slot = Some(have),
+                (None, Some(slot)) if slot.is_none() => failed = true,
+                _ => {}
             }
+        }
+        if failed {
+            pass.unread_failed.store(true, Ordering::Relaxed);
         }
         return;
     }

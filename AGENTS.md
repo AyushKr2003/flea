@@ -9201,3 +9201,4 @@ The Grid caption IPC (`gridCaptionState` in `ui/Ipc.qml`) now answers `wrapAt`, 
 
 The tag-write reach moves two ceilings, each re-derived with `wc -l`: `src/backend/undo.rs` 661 to 675 for `Reached`, which carries the files a reversal changed only in tags apart from the directories it touched, and `src/backend/run.rs` 1091 to 1105 for the calls that hand an own tag write to the open search session.
 Joining the tag place into the 0.3.10 stage moves `ui/js/Search.js` 383 to 391, re-derived with `wc -l`, for `openScope`, the one opener `f` and a tag place share, and the branch in `openQuery` that opens a fresh Home session when the tag walk was cancelled.
+The failed-chunk unread fix moves two ceilings, each re-derived with `wc -l`: `src/backend/searchtags.rs` 387 to 416 for the `None` unread rows, the `unread_failed` flag and the later-query retry, and `src/backend/searchtags_tests.rs` 385 to 418 for the unread-and-readable-again and partial-and-retries checks.
