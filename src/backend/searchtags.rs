@@ -127,6 +127,8 @@ pub(crate) struct Tags {
     events: Sender<Event>,
     // False while the last answer ran on a pass still reading, so its matches cannot seed a narrowing.
     whole: bool,
+    // The unread retry's stamp: a new query or a patch arms it, the retry spends it, so its own landing never queues another.
+    armed: bool,
 }
 
 impl Drop for Tags {
@@ -139,7 +141,12 @@ impl Drop for Tags {
 
 impl Tags {
     pub(crate) fn new(events: Sender<Event>) -> Tags {
-        Tags { pass: None, events, whole: true }
+        Tags { pass: None, events, whole: true, armed: true }
+    }
+
+    // A new query lets the unread retry fire once more.
+    pub(crate) fn arm(&mut self) {
+        self.armed = true;
     }
 
     // A patch moves row ids: a finished pass follows its rows and answers the added ones to queue; a pass still reading is dropped.
@@ -149,6 +156,7 @@ impl Tags {
             *self = Tags::new(self.events.clone());
             return Vec::new();
         }
+        self.armed = true;
         let (kept, survivors) = index.last_patch();
         let mut names = pass.names.lock().unwrap();
         let old = std::mem::take(&mut *names);
@@ -222,7 +230,9 @@ impl Tags {
                 pass.unread_failed.store(false, Ordering::Relaxed);
             } else {
                 self.whole = false;
-                self.refresh(missing, index);
+                if std::mem::take(&mut self.armed) {
+                    self.refresh(missing, index);
+                }
                 return true;
             }
         }
@@ -368,12 +378,15 @@ fn reread(pass: &Pass, index: &Mutex<Index>, rels: Vec<Vec<u8>>) {
         if pass.epoch.load(Ordering::Relaxed) != epoch {
             continue;
         }
-        // A failed re-read keeps the old names standing instead of clearing them, so only read rows are swapped in.
+        // A failed re-read drops the slot's old names, so the row reads unread and partial until a retry, never whole on stale tags.
         let mut failed = false;
         for ((at, _), have) in found.iter().zip(have) {
             match (have, names.get_mut(*at)) {
                 (Some(have), Some(slot)) => *slot = Some(have),
-                (None, Some(slot)) if slot.is_none() => failed = true,
+                (None, Some(slot)) => {
+                    *slot = None;
+                    failed = true;
+                }
                 _ => {}
             }
         }
