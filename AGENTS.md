@@ -3863,6 +3863,8 @@ kmount-r4 2026-10-06 moves one ceiling, re-derived with `wc -l`: `tests/js/rail.
 
 kmount-r5 2026-10-06 moves one ceiling, re-derived with `wc -l`: `tests/js/rail.js` 325 to 329 for the in-home protondrive share-row pins. `src/backend/netfs.rs` keeps 52 lines with protondrive back in the shared list, and `ui/js/Cloud.js` keeps 100 lines with the matching sample comments.
 
+ip257p 2026-10-12 proves the #257 ship conditions without new ceilings: `tests/network-kernel-mounts.sh` runs the rail under `strace` and fails on any syscall naming an idle systemd automount (an autofs line draws no row and is never opened or stat'ed), with a sed mutant that opens it and must go red, `tests/js/mounts.js` keeps 327 with the stacked autofs-plus-nfs4 pin, and `tools/flea-share-route` times one share through its kernel path and its GVFS path in fresh Flea launches on minipc (`--dry-run` proves the script on stubs).
+
 2026-10-08 drops one ceiling, re-derived with `wc -l`: `src/backend/fsinforeq.rs` 429 to 149, under the cap, because the system flag and the share probe meet with the tests in `src/backend/fsinforeq_tests.rs`, which ends at 354 with the system-volume test.
 
 backfix 2026-10-06 moves four ceilings, re-derived with `wc -l`: `src/backend/watch.rs` 533 to 535 for `set_incoming` storing the mount the list worker computed and its commit pin, `src/backend/iomount.rs` 606 to 622 for the worker computing that mount into `ListOut.watch_mount` and its `list_dir` pin, `src/backend/undoshare.rs` 403 to 413 for the bounded nonblocking journal read and the regular-file refusal, `src/backend/undoshare_tests.rs` 533 to 553 for the FIFO and oversize pins.
