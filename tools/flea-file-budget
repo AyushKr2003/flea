@@ -73,7 +73,7 @@ tests/js/devices.js 363
 tests/js/previewswap.js 469
 tests/js/mdstructure.js 655
 tests/js/keymap.js 324
-tests/js/focus.js 834
+tests/js/focus.js 837
 tests/js/mounts.js 327
 tests/js/menu.js 596
 tests/js/nav.js 479
@@ -161,7 +161,7 @@ ui/Theme.qml 465
 ui/TrashView.qml 468
 ui/UnlockDialog.qml 450
 ui/ViewState.qml 542
-ui/WindowBody.qml 809
+ui/WindowBody.qml 810
 ui/js/Anchor.js 379
 ui/js/ColumnsCarry.js 94
 ui/js/Devices.js 380
