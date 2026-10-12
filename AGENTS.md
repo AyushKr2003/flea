@@ -5080,8 +5080,8 @@ It owns the whole of publishing one entry safely: `exclusive_temp` opens
 `.flea-<pid>-<16 hex>.png` with `create_new` at 0600, `stamp` reads back the bare PNG a
 thumbnailer wrote and inserts three `tEXt` chunks directly after IHDR, and `write_marker`
 puts the same three chunks, and `X-Flea-Table` when it is given a table, in a 67-byte 1x1
-greyscale PNG for the `fail/` namespace. The keys are `Thumb::URI`, `Thumb::MTime` and
-`Software`.
+greyscale PNG for the `fail/` namespace. The keys are `Thumb::URI`, `Thumb::MTime`,
+`Software` and, on a marker given a table, `X-Flea-Table`.
 
 **The CRC-32 is in-tree because the cache is shared.** A `tEXt` chunk needs a CRC that `std`
 does not have, and the alternative, skipping the chunks and keeping the mtime in a Flea-owned

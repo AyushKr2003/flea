@@ -57,7 +57,7 @@ impl Cache {
             .join(format!("{}.png", md5::hex(uri.as_bytes())))
     }
 
-    // Order matters: a recorded failure wins over a stale thumbnail, so a broken file is never retried.
+    // Order matters: a recorded failure wins over a stale thumbnail; a marker naming another table or no table is retried.
     pub fn lookup(&self, path: &Path, mtime: i64, table: &str) -> Hit {
         let uri = uri_for(path);
         let failed = self.fail_path(&uri);

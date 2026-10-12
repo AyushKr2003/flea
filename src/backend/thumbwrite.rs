@@ -155,7 +155,7 @@ fn has_key(payload: &[u8], keys: &[&str]) -> bool {
     }
 }
 
-// The three keys the shared cache is read by, which Task 5's lookup reads back out of the file itself.
+// The keys the shared cache is read by, which Task 5's lookup reads back out of the file itself.
 fn write_stamped(path: &Path, png: &[u8], uri: &str, mtime: i64, table: Option<&str>) -> std::io::Result<()> {
     let mut chunks = vec![
         text_chunk(STAMPED_KEYS[0], uri),
