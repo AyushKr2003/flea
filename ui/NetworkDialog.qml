@@ -194,6 +194,7 @@ Item {
     function formHostPortWidths() { return form.hostPortWidths() }
     function formPasswordState() { return form.passwordState() }
     function formPasswordEyeCentre() { return form.passwordEyeCentre() }
+    function formPasswordHint() { return form.passwordHintText }
     function formNote() { return form.protocol === "NFS" ? "No credentials: NFS trusts the client host" : "" }
     function formAction() {
         if (root.saveCommitted) return "Close"

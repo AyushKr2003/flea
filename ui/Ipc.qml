@@ -44,7 +44,7 @@ QtObject {
     }
     function confirmationState(item) {
         return item ? {opened: item.opened, token: item.snapshot.token || 0, count: item.snapshot.count || 0,
-            all: item.snapshot.all === true, destructiveFocus: item.destructiveFocus, title: item.titleText,
+            all: item.snapshot.all === true, destructiveFocus: item.destructiveFocus, title: item.titleText, body: item.bodyText,
             rect: root.fleaWindow.rectOf(item.cardItem), cancel: root.controlState("Cancel", item.cancelItem),
             danger: root.controlState("Delete", item.dangerItem)} : {opened: false}
     }
@@ -862,6 +862,7 @@ QtObject {
         function networkPasswordState(): string { return root.networkDialog ? root.networkDialog.formPasswordState() : "" }
         function networkPasswordEyeCentre(): string { return root.networkDialog ? root.networkDialog.formPasswordEyeCentre() : "" }
         function networkNote(): string { return root.networkDialog ? root.networkDialog.formNote() : "" }
+        function networkPasswordHint(): string { return root.networkDialog ? root.networkDialog.formPasswordHint() : "" }
         function networkAction(): string { return root.networkDialog ? root.networkDialog.formAction() : "" }
         function networkStatus(): string { return root.networkDialog ? root.networkDialog.statusText : "" }
         function networkDialogMetrics(): string { return root.networkDialog ? root.networkDialog.formMetrics() : "" }
