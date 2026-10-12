@@ -37,10 +37,10 @@ src/backend/permissions.rs 699
 src/backend/run.rs 1091
 src/backend/run_session_tests.rs 525
 src/backend/ops.rs 423
-src/backend/thumbs.rs 466
+src/backend/thumbs.rs 495
 src/backend/dirsizeworker.rs 573
 src/backend/watch.rs 550
-src/backend/thumbreq.rs 417
+src/backend/thumbreq.rs 448
 src/backend/undo.rs 661
 src/backend/undo_tests.rs 423
 src/backend/undoshare.rs 414

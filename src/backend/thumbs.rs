@@ -210,7 +210,7 @@ pub(crate) fn run_one(tables: &Tables, job: &mut Job) -> Outcome {
     if matches!(ran, Ran::Succeeded) && wrote_something(&temp) {
     } else if records_marker(&ran, super::extclass::classify(&job.path)) {
         // corner: glycin exits 0 on bytes it cannot decode, so an empty output is the decoder's verdict on the file; see AGENTS.md "Thumbnail pool".
-        record_failure(&tables.cache, &key_uri, job.mtime);
+        record_failure(&tables.cache, &key_uri, job.mtime, tables.specs.fingerprint());
         return discard(&temp);
     } else {
         // corner: a child that never started is the machine's fault, not the file's, so it is not recorded in fail/; see AGENTS.md "Thumbnail pool".
@@ -243,7 +243,7 @@ fn discard(temp: &Path) -> Outcome {
     Outcome::Failed
 }
 
-fn record_failure(cache: &Cache, uri: &str, mtime: i64) {
+fn record_failure(cache: &Cache, uri: &str, mtime: i64, table: &str) {
     let path = cache.fail_path(uri);
     let dir = match path.parent() {
         Some(d) => d.to_path_buf(),
@@ -253,7 +253,7 @@ fn record_failure(cache: &Cache, uri: &str, mtime: i64) {
         return;
     }
     if let Some(temp) = exclusive_temp(&dir) {
-        if write_marker(&temp, uri, mtime).is_err() || std::fs::rename(&temp, &path).is_err() {
+        if write_marker(&temp, uri, mtime, Some(table)).is_err() || std::fs::rename(&temp, &path).is_err() {
             let _ = std::fs::remove_file(&temp);
         }
     }
@@ -263,7 +263,7 @@ fn record_failure(cache: &Cache, uri: &str, mtime: i64) {
 mod tests {
     use super::*;
     use crate::backend::testdir::TestDir;
-    use crate::backend::thumbcache::png_text;
+    use crate::backend::thumbcache::{png_text, Hit, TABLE_KEY};
     use std::sync::mpsc::{channel, Receiver};
     use std::thread::JoinHandle;
 
@@ -447,7 +447,7 @@ mod tests {
         let fixture = TestPool::new("thumbs-roundtrip", aliases, specs);
         let src = fixture.sandbox.join("in.png");
         // A real thumbnailer needs a real image, and the fail marker writer already makes the smallest valid one.
-        write_marker(&src, "file:///input", 0).unwrap();
+        write_marker(&src, "file:///input", 0, None).unwrap();
         fixture.pool.submit(Job { path: src.clone(), mtime: FIXTURE_MTIME, mime: "image/png".to_string(), trace: None });
         let done = fixture.receiver.as_ref().unwrap().recv_timeout(Duration::from_secs(30)).expect("no result");
         let out = match done.result {
@@ -461,5 +461,35 @@ mod tests {
         assert_eq!(png_text(&bytes, "Thumb::URI"), Some(uri_for(&src)));
         assert_eq!(png_text(&bytes, "Thumb::MTime"), Some(FIXTURE_MTIME.to_string()));
         assert_eq!(published, 1, "a temp file survived the publish");
+    }
+
+    #[test]
+    fn a_failure_after_a_table_miss_rewrites_the_marker_under_the_current_table() {
+        let d = TestDir::new("thumbs-rewrite");
+        let cache = Cache::at(d.path().to_path_buf());
+        let path = Path::new(MISSING);
+        let uri = uri_for(path);
+        record_failure(&cache, &uri, FIXTURE_MTIME, "table-a");
+        assert!(matches!(cache.lookup(path, FIXTURE_MTIME, "table-a"), Hit::Failed));
+        assert!(matches!(cache.lookup(path, FIXTURE_MTIME, "table-b"), Hit::Miss));
+        record_failure(&cache, &uri, FIXTURE_MTIME, "table-b");
+        assert!(matches!(cache.lookup(path, FIXTURE_MTIME, "table-b"), Hit::Failed));
+        assert_eq!(png_text(&std::fs::read(cache.fail_path(&uri)).unwrap(), TABLE_KEY), Some("table-b".to_string()));
+    }
+
+    #[test]
+    fn a_decoder_failure_records_its_marker_under_the_loaded_table() {
+        if crate::backend::sandboxprobe::skipped() { return; }
+        let body = "[Thumbnailer Entry]\nTryExec=/usr/bin/false\nExec=/usr/bin/false %i %o %s\nMimeType=image/jpeg;\n";
+        let aliases = Arc::new(Aliases::load());
+        let specs = Arc::new(Thumbnailers::from_entries(&[("fail.thumbnailer".to_string(), body.to_string())], &aliases));
+        let fixture = TestPool::new("thumbs-failtable", aliases, Arc::clone(&specs));
+        let src = fixture.sandbox.file("in.jpg", "bytes the decoder refuses");
+        fixture.pool.submit(Job { path: src.clone(), mtime: FIXTURE_MTIME, mime: "image/jpeg".to_string(), trace: None });
+        let done = fixture.receiver.as_ref().unwrap().recv_timeout(Duration::from_secs(30)).expect("no result");
+        assert!(matches!(done.result, Outcome::Failed));
+        let cache = Cache::at(fixture.sandbox.path().to_path_buf());
+        assert!(matches!(cache.lookup(&src, FIXTURE_MTIME, specs.fingerprint()), Hit::Failed), "the marker names the loaded table");
+        assert!(matches!(cache.lookup(&src, FIXTURE_MTIME, "another table"), Hit::Miss));
     }
 }

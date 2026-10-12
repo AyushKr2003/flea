@@ -45,7 +45,7 @@ fn thumb_of(
         .filter(|m| specs.for_mime(m, aliases).is_some())
         .map(str::to_string)?;
     let mtime = meta.mtime();
-    match cache.lookup(file, mtime) {
+    match cache.lookup(file, mtime, specs.fingerprint()) {
         Hit::Ready(ready) => Some(ready.to_string_lossy().to_string()),
         Hit::Failed => None,
         // A miss is produced here, in this process, with the tables the pane's own pool uses: the
