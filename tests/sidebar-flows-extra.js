@@ -160,7 +160,7 @@ function steps(root, pane, state, theme) {
 function mountExits(root, pane) {
     var damaged = "Error mounting /dev/sdb1 at /run/media/user/DATA #2: wrong fs type, bad option, bad superblock on /dev/sdb1, missing codepage or helper program, or other error"
     var busy = "Error unmounting /dev/sdb1: target is busy"
-    var refused = "Error ejecting /dev/sdb: Not authorized"
+    var refused = "gio: file:///run/media/user/Stick: Error ejecting /dev/sdb: Not authorized"
     var runs = [
         { name: "a refused mount", process: "mountProcess", stderr: damaged, label: "DATA #2", detail: "wrong fs type, bad option, bad superblock on /dev/sdb1, missing codepage or helper program, or other error",
           state: { _pendingOpenDevice: "/dev/sdb1", _pendingOpenLabel: "DATA #2", _mountErr: "" }, op: "mount" },
