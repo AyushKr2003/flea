@@ -231,6 +231,10 @@ fn usb_for(majmin: Option<&str>) -> bool {
 }
 
 #[cfg(test)]
+#[path = "extclass_tests.rs"]
+mod link_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::path::Path;

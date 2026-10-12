@@ -1,6 +1,7 @@
 .import "../../ui/js/Drag.js" as Drag
 .import "../../ui/js/DragOut.js" as DragOut
 .import "../../ui/js/Crumbs.js" as Crumbs
+.import "../../ui/js/DropDev.js" as DropDev
 .import "dragfixture.js" as Fixture
 .import "sourcefixture.js" as Source
 
@@ -355,7 +356,10 @@ function run(check) {
     var capCrumbs = Crumbs.crumbs("/home/gm/cap-drops/deep/outer/inner", "/home/gm", null)
     check("cap_drops names the crumb above the leaf by its own text, slash included", capCrumbs[capCrumbs.length - 2].text, "outer/")
     var capCrumb = Drag.feedbackFor(Drag.markerPayload([0], false, "/cap-drops/deep/outer/inner", 56), ["file:///cap-drops/deep/outer/inner/note.txt"])
-    check("cap_drops crumb reads a move, because its device is the lift's", Drag.feedbackLine(capCrumb, capCrumbs[capCrumbs.length - 2].text, 56),
+    var capDest = capCrumbs[capCrumbs.length - 2].path
+    var capDevs = {}
+    capDevs[capDest] = 56
+    check("cap_drops crumb reads a move, because its device is the lift's", Drag.feedbackLine(capCrumb, capCrumbs[capCrumbs.length - 2].text, DropDev.devFor(capDevs, capDest)),
         "Move 1 item to outer/ · ctrl at lift copies")
     var capColumn = Drag.feedbackFor(Drag.markerPayload([0], false, "/cap-drops/Photos", 56), ["file:///cap-drops/Photos/p1.txt"])
     check("cap_drops Columns parent row reads a move", Drag.feedbackLine(capColumn, "deep", 56),
