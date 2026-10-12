@@ -113,6 +113,7 @@ function run(check) {
     check("and the mode stands", standing.recentMode, "results")
     check("and the base is asked for those paths", standing.listed.join(","), "/home/gm/a.txt,/home/gm/b.txt|200")
     check("and the disk beside the counts is unknown", standing.fsName + "|" + standing.fsFree, "|0")
+    check("and that empty slot is an answer, not a wait", standing.fsAnswered, true)
     check("and Used describes the history's own newest-first order", standing.backend.sortBy + "|" + standing.backend.sortDesc, "mtime|true")
 
     // A second open while one lands takes its place, the way a navigation does.

@@ -492,6 +492,7 @@ Rectangle {
             : view.currentPane.trash.opened ? view.currentPane.trash.selectedCount : view.currentPane.selectionCount()
         fsName: view.currentPane.fsName
         fsFree: view.currentPane.fsFree
+        fsPending: !view.currentPane.fsAnswered
         searchRunning: view.currentPane.searchRunning
         searchLine: Search.live(view.currentPane)
                     ? Search.statusLine(view.currentPane.searchRunning, view.currentPane.total, view.currentPane.searchScanned, view.currentPane.searchMs)
