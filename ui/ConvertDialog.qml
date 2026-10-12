@@ -395,7 +395,7 @@ Item {
 
                     Flea.DialogButton {
                         id: convertButton
-                        label: root.busy ? "Converting..." : "Convert"
+                        label: root.busy ? "Converting…" : "Convert"
                         primary: true
                         focused: root.focusPart === 3
                         available: root.canConvert
