@@ -159,8 +159,7 @@ ShellRoot {
         })
     }
 
-    // Loading is up and the page lands a frame later: it stands, renderMin owes the rest,
-    // and a turn to a page not rendered before stops renderMin.
+    // Loading is up and the page lands a frame later: it stands, renderMin owes the rest, and a turn to an unrendered page stops renderMin.
     property double stamp: 0
     function afterBefore() {
         shell.stamp = Date.now()
