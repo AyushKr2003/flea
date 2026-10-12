@@ -9,7 +9,9 @@ Column {
     id: root
     required property var sidebar
     width: parent.width
-    visible: sidebar.placesState.showTags === true
+    // A rail that follows a pane with no tag in use draws no heading, and the network gap reserves no height for it.
+    visible: sidebar.placesState.showTags === true && root.entries.length > 0
+    height: root.visible ? root.implicitHeight : 0
     // Guarded as Sidebar.tagsListed is, because the rail can move to a pane that has built no tag state.
     readonly property var entries: Tags.railEntries(root.sidebar.navigationPane !== null && root.sidebar.navigationPane.tagState !== null
         ? root.sidebar.navigationPane.tagState.inUse : ({}))

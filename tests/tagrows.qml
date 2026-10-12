@@ -299,10 +299,13 @@ ShellRoot {
         var kept = railStub.navigationPane
         railStub.navigationPane = null
         root.check(section.entries.length === 0, "rail no pane: the section lists " + section.entries.length + " rows with no pane")
+        root.check(!section.visible && section.height === 0, "rail no pane: an empty TAGS heading stays drawn or reserved, height " + section.height)
         railStub.navigationPane = ({ tagState: null })
         root.check(section.entries.length === 0, "rail no pane: the section lists " + section.entries.length + " rows for a pane with no tag state")
+        root.check(!section.visible && section.height === 0, "rail no tag state: an empty TAGS heading stays drawn or reserved, height " + section.height)
         railStub.navigationPane = kept
         root.check(section.entries.length === 2, "rail no pane: the section lists " + section.entries.length + " rows once the tagged pane returns")
+        root.check(section.visible && section.height > 0, "rail no pane: the TAGS section stays hidden once the tagged pane returns")
     }
 
     function colours() {
