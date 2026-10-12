@@ -41,16 +41,21 @@ cat > "$probe/bin/lsblk" <<'SH'
 printf '{"blockdevices":[]}\n'
 SH
 chmod 700 "$probe/bin/lsblk" || exit 1
-env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state \
-    '{"preview":{"column":false,"thumbnails":"off"},"updates":{"autoCheck":false},"places":{"autoHide":true}}' >/dev/null || exit 1
 ln -s "$PWD/ui" "$probe/config/flea"
 ln -s "$(readlink -f ui/boot/Commons)" "$probe/config/Commons"
 ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui"
 ln -s "$PWD/ui/boot/fleatab.qml" "$probe/config/fleatab.qml"
 cp tests/railmotion.qml "$probe/config/shell.qml"
+cp tests/RailIpc.qml "$probe/config/RailIpc.qml"
+# Every leg starts from this state: the motion leg ends in Dual and saves it, so the next leg is seeded again.
+seed_state() {
+    env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state \
+        '{"view":"list","preview":{"column":false,"thumbnails":"off"},"updates":{"autoCheck":false},"places":{"autoHide":true}}' >/dev/null
+}
 run_once() {
     local reduced=$1 tag=$2 log="$probe/qs-$2.log" tick tally
     : > "$log"
+    seed_state || return 1
     env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLEA_SELECT \
         HOME="$probe/home" XDG_STATE_HOME="$probe/state" XDG_CONFIG_HOME="$probe/config" \
         XDG_DATA_HOME="$probe/data" XDG_CACHE_HOME="$probe/cache" XDG_RUNTIME_DIR="$probe/runtime" \

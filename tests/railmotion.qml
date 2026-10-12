@@ -4,8 +4,7 @@ import QtTest
 import Quickshell
 import "flea" as Flea
 
-// The auto-hidden rail slides in and out on x: the real window offscreen, a synthetic pointer, and a fast sampler of x, visible, width and row y.
-// FLEA_REDUCED_MOTION=1 runs the snap leg only.
+// The auto-hidden rail slides in and out on x: the real window offscreen, a synthetic pointer, and a fast sampler of x, visible, width and row y; FLEA_REDUCED_MOTION=1 runs the snap leg only.
 ShellRoot {
     id: root
     readonly property var pane: body.currentPane
@@ -30,6 +29,7 @@ ShellRoot {
     property real xRe: 0
     property real listWidth: 0
 
+    RailIpc { id: railIpc; report: root.check }
     function check(name, actual, expected) {
         checks++
         var equal = JSON.stringify(actual) === JSON.stringify(expected)
@@ -137,7 +137,7 @@ ShellRoot {
         function () { return until("the first listing", ready(root.home)) },
         function () {
             root.host = root.find(pane, "PaneRail")
-            check("the reduced-motion switch reads on", Flea.Theme.reducedMotion, true)
+            check("the reduced leg opens in the single view with the switch on", [body.dualMode, Flea.Theme.reducedMotion], [false, true])
             root.mark("settle")
             return true
         },
@@ -171,10 +171,10 @@ ShellRoot {
             check("auto-hide is on", root.host.overlay, true)
             check("no Sidebar exists at launch", root.sidebar(), null)
             check("the rail is not built at launch", root.host.built, false)
-            check("and railState reads hidden at rest with width 0", pane.sidebarWidth + "|" + root.host.hidden, "0|true")
             root.mark("settle")
             return true
         },
+        function () { return until("railState over IPC", railIpc.is("railState reads hidden at rest with width 0", { hidden: true, width: 0, revealed: false, x: 0 })) },
         // A crossing shorter than the dwell builds the Sidebar and never reveals it.
         function () { if (since("settle") < 300) return false; root.startSampling(); root.edgeIn(); root.mark("in"); return true },
         function () { if (since("in") < 50) return false; root.edgeOut(); root.mark("out"); return true },
@@ -216,6 +216,7 @@ ShellRoot {
             check("every rail row keeps its y through the first reveal", root.distinct(root.samples.map(function (s) { return s.sig })), 1)
             return true
         },
+        function () { return until("railState over IPC", railIpc.is("railState reads the shown rail", { hidden: false, width: root.railW, revealed: true, x: 0 })) },
         function () {
             var sb = root.sidebar()
             sb.cursorIndex = 3
