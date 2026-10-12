@@ -118,6 +118,21 @@ menus_trash_own() {
     [[ "$uri" == trash:///* && "${uri#trash:///}" != */* ]] || fail "menus: no trash entry for $original"
     trash=$(sandbox_trash_files_dir "$original") || fail "menus: no GLib trash directory for $original"
     trash_trap_own "$trash" "$menu_box" menus "${uri#trash:///}"
+    menus_trash_files="$trash" menus_trash_name="${uri#trash:///}"
+}
+
+# Proves ORIGINAL sits in the Trash Flea's rule picks for its device, with its bytes and a trashinfo naming the original path.
+menus_trash_lands() {
+    local original="$1" bytes="$2" root="${menus_trash_files%/files}" info recorded
+    info="$root/info/$menus_trash_name.trashinfo"
+    [[ -f "$info" && "$(sed -n 1p "$info")" == '[Trash Info]' ]] || fail "menus: no trashinfo for $original at $info"
+    # Sample input: Path=/home/u/a%20b.txt in a home Trash, Path=d/a%20b.txt in a $topdir/.Trash-1000, relative to $topdir.
+    recorded=$(sed -n 's/^Path=//p' "$info")
+    recorded=$(printf '%b' "${recorded//%/\\x}")
+    [[ "$recorded" == /* ]] || recorded="${root%/.Trash*}/$recorded"
+    grep -Eq '^DeletionDate=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$' "$info" || fail "menus: trashinfo $info has no DeletionDate"
+    menus_equal "$preset Trash records the original path in its trashinfo" "$original" "$recorded"
+    menus_equal "$preset Trash keeps the item bytes in its Trash" "$bytes" "$(cat "$menus_trash_files/$menus_trash_name")"
 }
 
 menus_point() {
@@ -453,7 +468,7 @@ menus_actions() {
     trash_guard_store "$menus_trashed"
     menus_trash_own "$directory/trash.txt"
     [[ ! -e "$directory/trash.txt" ]] || fail "menus: $preset Trash left its source"
-    menus_equal "$preset Trash reaches the real private GIO provider" "$directory/trash.txt" "$(tail -n 1 "$menu_box/gio-trash.log")"
+    menus_trash_lands "$directory/trash.txt" "$preset trash"
 
     open_count=$(wc -l < "$menu_box/gio-open.log")
     menus_file_menu source.txt
