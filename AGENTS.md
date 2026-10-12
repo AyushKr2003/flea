@@ -9221,3 +9221,5 @@ The crumb device check lands a sample `devs` reply through `Messages.route` and 
 The home Trash cancel fix moves one ceiling, re-derived with `wc -l`: `src/backend/copyfile.rs` 732 to 734 (the file grows from 719 lines, 13 under its old ceiling, to 734) for the test-only hook that raises the copy's own cancel after its first chunk lands, so a mid-copy cancel in `place_copy` is deterministic.
 
 The FIN port moves one ceiling, re-derived with `wc -l`: `src/backend/copyfile.rs` 734 to 737. The merge that seeds the port (d07d7683f) already holds those 737 lines, finfix's cancel check and test hook in `place_copy` beside the stage's own changes, so the ceiling follows the merged file and no line of the port itself grows it.
+
+The FIN port moves one ceiling, re-derived with `wc -l`: `src/backend/searchindex.rs` 395 to 401, recorded as a new known-over-cap entry, for the keep rule in `patch_dir` that holds a row only while its entry keeps its kind (a `kinds` map of name to is_dir in place of the `names` set), pinned by `a_patch_follows_a_name_that_changed_kind` in `src/backend/searchindex_tests.rs` at 186.
