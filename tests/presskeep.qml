@@ -116,8 +116,9 @@ ShellRoot {
             check("the press became a platform drag", dragsStarted > dragsBefore, true)
             check("the drag's end clears the held button", pane.pointerHeld, false)
             dragWatch.destroy()
-            // The press after a drag meets a fresh handler, so it is held again and let go again; the stray release tells the window the drag's button is up.
+            // The offscreen platform sends no release when a drag ends; QtWayland sends one (QWaylandInputDevice::Pointer::releaseButtons), which this stands in for.
             driver.mouseRelease(body, heldPoint.x, heldPoint.y, current.button, Qt.NoModifier, pointerEventMs)
+            // The press after a drag is held again and let go again.
             driver.mousePress(body, heldPoint.x, heldPoint.y, current.button, Qt.NoModifier, pointerEventMs)
             check("the press after the drag is held", pane.pointerHeld, true)
             driver.mouseRelease(body, heldPoint.x, heldPoint.y, current.button, Qt.NoModifier, pointerEventMs)
