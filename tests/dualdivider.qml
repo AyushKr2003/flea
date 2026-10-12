@@ -58,6 +58,12 @@ ShellRoot {
     function owed() { return JSON.stringify(Flea.ViewState.unsaved) }
     function split() { return (Flea.ViewState.state.dual || {}).split }
 
+    // The handle's own MouseArea, the item the compositor cancels; its canceled signal is what a stolen grab emits.
+    function zoneOf(h) {
+        for (var i = 0; i < h.children.length; i++)
+            if (typeof h.children[i].canceled === "function" && h.children[i].acceptedButtons !== undefined) return h.children[i]
+        return null
+    }
     function press(h) { h.pressed({x: 0, y: 100}) }
     function move(h, dx) { h.moved({x: dx, y: 100}) }
     function drag(h, dx) { root.press(h); root.move(h, dx) }
@@ -115,6 +121,26 @@ ShellRoot {
             root.press(h)
             h.released()
             root.check(root.owed() === before && root.split() === 5000, r.name + " a click writes nothing")
+        }
+    }
+
+    // A grab the compositor takes mid-drag aborts it: no split is written, no listing moves, the line returns, and the release that follows finds nothing to commit.
+    function cancelStep(r) {
+        return function () {
+            var h = root.handles()[0]
+            var zone = root.zoneOf(h)
+            root.check(zone !== null, r.name + " the handle holds its mouse area")
+            var leftBefore = root.leftWidth()
+            var before = root.owed()
+            root.drag(h, root.handleDrag)
+            root.check(h.hot && root.near(h.lineX, root.handleDrag), r.name + " the drag is live before the cancel")
+            zone.canceled()
+            root.check(!h.hot && root.near(h.lineX, 0), r.name + " a cancel rests the handle and returns the line")
+            root.check(root.split() === 5000 && root.owed() === before, r.name + " a cancel writes nothing, split " + root.split())
+            root.check(root.near(root.leftWidth(), leftBefore), r.name + " a cancel moves no listing")
+            h.released()
+            h.moved({x: root.handleDrag, y: 100})
+            root.check(root.split() === 5000 && root.owed() === before && root.near(h.lineX, 0), r.name + " a release or move after a cancel does nothing")
         }
     }
 
@@ -235,7 +261,7 @@ ShellRoot {
         var list = []
         for (var i = 0; i < root.rails.length; i++) {
             var r = root.rails[i]
-            list.push(root.railStep(r), root.autoStep(r), root.defaults(r), root.clickStep(r), root.dragStep(r),
+            list.push(root.railStep(r), root.autoStep(r), root.defaults(r), root.clickStep(r), root.cancelStep(r), root.dragStep(r),
                 root.clampStep(r, 1), root.clampStep(r, -1), root.doubleClickStep(r), root.storedStep(r), root.storedCheck(r), root.sharedCheck(r), root.focusStep(r), root.focusCheck(r))
         }
         list.push(root.narrowStep, root.narrowCheck, root.single, root.singleCheck)

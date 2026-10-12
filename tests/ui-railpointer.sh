@@ -257,6 +257,8 @@ case_dualdivider() {
     command -v ydotool >/dev/null || fail "dualdivider: no ydotool on PATH"
     [[ -S "${XDG_RUNTIME_DIR:-}/.ydotool_socket" ]] || fail "dualdivider: no ydotool socket at ${XDG_RUNTIME_DIR:-}/.ydotool_socket"
     local drag=120
+    # No IPC read names the divider's begin, move, end and cancel counts, so the handle logs each event it hears to the flea log when this is set (ui/ResizeHandle.qml trace).
+    export FLEA_TRACE_RESIZE=1
     for rail in shown hidden; do
         seed_ui_state "$fixture_root/dualdivider-state-$rail" "$(jq -cn --arg l "$dir/left" --arg r "$dir/right" --arg rail "$rail" '{view:"dual",places:{rail:$rail},dual:{paths:[$l,$r],focus:0}}')"
         dualdivider_launch "$dir/left"
@@ -270,9 +272,12 @@ case_dualdivider() {
         YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null || fail "dualdivider: $rail: ydotool mousemove failed"
         YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x40 >/dev/null 2>&1 || fail "dualdivider: $rail: the press failed"
         column_drag_absolute "$(( wx + div + 4 ))" "$y" "$drag" 4
-        # Nothing re-lays while the pointer is down.
+        # Nothing re-lays while the pointer is down; the handle log says whether a press, move, release or cancel reached the divider.
+        local trace
+        trace=$(grep -ao 'RESIZE divider [a-z]*' "$flea_log" | awk '{c[$3]++} END {printf "begin=%d move=%d end=%d cancel=%d", c["press"], c["move"], c["release"], c["cancel"]}')
+        printf 'DUALDIVIDER %s events %s\n' "$rail" "$trace"
         read -r moved0 moved1 <<< "$(dual_list_width 0) $(dual_list_width 1)"
-        (( moved0 == w0 && moved1 == w1 )) || fail "dualdivider: $rail: the listings moved during the drag ($w0/$w1 to $moved0/$moved1)"
+        (( moved0 == w0 && moved1 == w1 )) || fail "dualdivider: $rail: the listings moved during the drag ($w0/$w1 to $moved0/$moved1), divider events: $trace"
         YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || fail "dualdivider: $rail: the release failed"
         settle
         read -r moved0 moved1 <<< "$(dual_list_width 0) $(dual_list_width 1)"
@@ -296,6 +301,7 @@ case_dualdivider() {
         [[ "$(jq -er '.dual.split' "$XDG_STATE_HOME/flea/ui.json")" == 5000 ]] || fail "dualdivider: $rail: the double click left split $(jq -r '.dual.split' "$XDG_STATE_HOME/flea/ui.json")"
         printf 'DUALDIVIDER %s double=%s/%s\n' "$rail" "$r0" "$r1"
     done
+    unset FLEA_TRACE_RESIZE
     export XDG_STATE_HOME="$suite_home"
     kill_flea
 }

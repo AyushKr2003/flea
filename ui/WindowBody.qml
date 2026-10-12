@@ -438,10 +438,9 @@ Rectangle {
             function end() {
                 if (!divider.dragging) return
                 if (divider.moved && view.dualFits) ViewState.changeLeaf("dual", {split: Math.round(view.dualSplitScale * divider.shareAt(divider.dx))})
-                divider.dragging = false
-                divider.moved = false
-                divider.dx = 0
+                divider.reset()
             }
+            function reset() { divider.dragging = false; divider.moved = false; divider.dx = 0 }
             Rectangle {
                 width: Theme.spacing.hairline
                 height: parent.height
@@ -454,6 +453,7 @@ Rectangle {
                 hot: divider.dragging
                 onPressed: function (mouse) { divider.begin(mouse) }
                 onMoved: function (mouse) { divider.move(mouse) }
+                onCanceled: divider.reset()
                 onReleased: divider.end()
                 onDoubleClicked: ViewState.changeLeaf("dual", {split: view.dualEqualSplit})
             }
