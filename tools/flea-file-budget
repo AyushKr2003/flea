@@ -24,7 +24,7 @@ src/backend/localsend.rs 406
 src/backend/menu_actions.rs 641
 src/backend/menu_registry.rs 564
 src/backend/meta.rs 551
-src/backend/metareq.rs 442
+src/backend/metareq.rs 446
 src/backend/movebatch.rs 477
 src/backend/movebatch_tests.rs 752
 src/backend/opsdispatch.rs 2257
@@ -34,7 +34,7 @@ src/backend/permissions.rs 699
 src/backend/run.rs 1089
 src/backend/run_session_tests.rs 525
 src/backend/ops.rs 423
-src/backend/thumbs.rs 480
+src/backend/thumbs.rs 485
 src/backend/dirsizeworker.rs 573
 src/backend/watch.rs 550
 src/backend/thumbreq.rs 417

@@ -1760,7 +1760,10 @@ column's mark can follow the target the way a listing row's does.
 `raw` is an object for a camera RAW whose largest embedded JPEG preview was copied out, and `null` for every
 other file and for a RAW holding none. `file` is the copy under `$XDG_CACHE_HOME/flea/raw/`, named by the md5
 of the RAW's file URI and carrying the RAW's mtime, so a changed RAW is copied again and an unchanged one is
-neither walked nor written twice. `w`, `h` and `orient` read like the top-level fields, taken from the copy: stored
+neither walked nor written twice.
+The directory holds at most 4096 copies and 512 MiB: a new copy evicts the copies of the oldest RAWs first (a copy
+carries its RAW's mtime) and sweeps temps a minute old, and the copy just made stays. `w`, `h` and `orient` read like
+the top-level fields, taken from the copy: stored
 pixels and the EXIF turn, which the copy carries even when the camera put it only in the RAW's IFD0. The top-level
 `w` and `h` stay 0 for a RAW, because they name the file's own pixels and the preview is smaller.
 

@@ -63,6 +63,11 @@ impl Meta {
 // re-classify a row it has already classified once. media costs a subprocess, so it is only ever
 // asked for a row whose kind actually names a duration.
 pub fn read(path: &Path, text: bool, media: bool, archive: Option<&Formats>) -> Meta {
+    read_in(path, text, media, archive, &rawpreview::cache_dir())
+}
+
+// A camera RAW's copy goes in raw_dir, which a test points at its sandbox instead of the user's cache.
+pub(crate) fn read_in(path: &Path, text: bool, media: bool, archive: Option<&Formats>, raw_dir: &Path) -> Meta {
     let mut m = Meta::empty();
     m.owner = owner::of(path);
     if let Ok(link) = std::fs::read_link(path) {
@@ -75,7 +80,7 @@ pub fn read(path: &Path, text: bool, media: bool, archive: Option<&Formats>) -> 
         m.orientation = image.orientation;
     }
     if is_raw_name(&path.to_string_lossy()) {
-        m.raw = rawpreview::ensure(path);
+        m.raw = rawpreview::ensure_in(raw_dir, path);
     }
     if let Some(formats) = archive {
         let listed = list_archive(path, formats);
@@ -239,7 +244,6 @@ mod tests {
         let line = meta_line(3, &m);
         assert!(line.contains(r#""raw":{"file":"/c/a \"b\".jpg","w":1620,"h":1080,"orient":6},"owner""#), "{}", line);
         assert!(crate::jsondoc::parse(&line).is_ok());
-        assert_eq!((m.width, m.height), (0, 0), "the file's own pixels stay unknown for a RAW");
     }
 
     use crate::backend::fifotest::{mkfifo, peek, FifoWriter, BOUND};

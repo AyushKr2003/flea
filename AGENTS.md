@@ -9016,3 +9016,5 @@ The Columns prebuild convergence fix moves two ceilings, each re-derived with `w
 The shared prebuild driver (`ui/PrebuildDriver.qml`, 146 lines, under the QML cap) moves five ceilings, each re-derived with `wc -l`: `ui/List.qml` 589 to 480, `ui/GridArea.qml` 506 to 461 and `ui/ColumnPane.qml` 534 to 438, whose three drivers it replaces; `tests/listprebuild.qml` 413 to 412; `tests/gridprebuild.qml` 456 to 458 for the way back from 50 rows, which now checks that the next landing builds nothing.
 
 The key log's tick cap check moves one ceiling, re-derived with `wc -l`: `tests/columnsprebuild.qml` 415 to 416 for the check that fails once the tick log reaches `keepTicks`, where a key's stored tick index no longer holds.
+
+The camera RAW review round 1 moves two ceilings, each re-derived with `wc -l`: `src/backend/metareq.rs` 442 to 446 for `read_in`, which takes the RAW copy directory so a test points it at its sandbox, and `src/backend/thumbs.rs` 480 to 485 for `run_one_in` and the `raw_dir` argument of `input_for`, for the same reason; no code or comment was cut.

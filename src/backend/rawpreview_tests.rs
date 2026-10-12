@@ -5,15 +5,13 @@ use crate::backend::aliases::Aliases;
 use crate::backend::rawtiff::tests::{jpeg, pair, write, Ev, Tb};
 use crate::backend::testdir::TestDir;
 use crate::backend::thumbcache::{png_text, Cache};
-use crate::backend::thumbs::{input_for, run_one, Job, Outcome, Tables};
+use crate::backend::metareq::read_in;
+use crate::backend::thumbs::{input_for, run_one_in, Job, Outcome, Tables};
 use crate::backend::thumbspec::Thumbnailers;
 use crate::backend::thumbwrite::write_marker;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
-
-// The route reads the cache home from the environment, so the one test that points it at its sandbox holds this.
-static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 // A TIFF whose IFD0 names the JPEG as its JpgFromRaw-style pair, and optionally the turn the camera stored.
 fn raw_with(d: &TestDir, name: &str, jpg: &[u8], turn: Option<u32>) -> PathBuf {
@@ -192,17 +190,9 @@ fn tables(d: &TestDir, png: &[u8]) -> Tables {
     Tables { aliases, specs: Arc::new(jpeg_only_thumbnailer(png)), cache: Cache::at(d.join("cache").join("thumbnails")), worker: None }
 }
 
-// Runs the body with the cache home at the sandbox, because the route finds the copies through the environment.
-fn with_cache_home<T>(d: &TestDir, body: impl FnOnce() -> T) -> T {
-    let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let before = std::env::var_os("XDG_CACHE_HOME");
-    std::env::set_var("XDG_CACHE_HOME", d.join("cache"));
-    let out = body();
-    match before {
-        Some(v) => std::env::set_var("XDG_CACHE_HOME", v),
-        None => std::env::remove_var("XDG_CACHE_HOME"),
-    }
-    out
+// Where the route puts its copies in a test: inside the sandbox, never the user's cache.
+fn raw_dir(d: &TestDir) -> PathBuf {
+    d.join("cache").join("flea").join("raw")
 }
 
 #[test]
@@ -215,11 +205,14 @@ fn the_thumbnailer_of_a_camera_raw_is_handed_the_embedded_jpeg_and_a_jpeg_is_han
     let src = raw_with(&d, "t.rw2", &jpeg(1620, 1080), None);
     let plain = write(&d, "plain.jpg", &jpeg(10, 10));
     let bare = write(&d, "bare.rw2", b"II*\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00");
-    let (copy, own, none) = with_cache_home(&d, || {
-        (input_for(&t, &job(&src, "image/x-panasonic-raw2")), input_for(&t, &job(&plain, "image/jpeg")), input_for(&t, &job(&bare, "image/x-panasonic-rw2")))
-    });
+    let dir = raw_dir(&d);
+    let (copy, own, none) = (
+        input_for(&t, &job(&src, "image/x-panasonic-raw2"), &dir),
+        input_for(&t, &job(&plain, "image/jpeg"), &dir),
+        input_for(&t, &job(&bare, "image/x-panasonic-rw2"), &dir),
+    );
     let copy = copy.expect("the copy");
-    assert_eq!(copy, copy_path(&d.join("cache").join("flea").join("raw"), &src));
+    assert_eq!(copy, copy_path(&dir, &src));
     assert_eq!(own, Some(plain));
     assert_eq!(none, None, "a RAW with no preview has nothing to hand over");
     // The spec's own program, run unjailed on that input, writes the PNG only because the input is the JPEG.
@@ -243,9 +236,8 @@ fn a_camera_raw_is_thumbnailed_under_its_own_key() {
     let t = tables(&d, &std::fs::read(&png).unwrap());
     let src = raw_with(&d, "t.rw2", &jpeg(1620, 1080), None);
     let bare = write(&d, "bare.rw2", b"II*\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x00");
-    let (done, none) = with_cache_home(&d, || {
-        (run_one(&t, &mut job(&src, "image/x-panasonic-raw2")), run_one(&t, &mut job(&bare, "image/x-panasonic-rw2")))
-    });
+    let dir = raw_dir(&d);
+    let (done, none) = (run_one_in(&t, &mut job(&src, "image/x-panasonic-raw2"), &dir), run_one_in(&t, &mut job(&bare, "image/x-panasonic-rw2"), &dir));
     let Outcome::Ready(out) = done else { panic!("the RAW was not thumbnailed") };
     assert_eq!(out, t.cache.large_path(&uri_for(&src)));
     let bytes = std::fs::read(&out).unwrap();
@@ -253,4 +245,67 @@ fn a_camera_raw_is_thumbnailed_under_its_own_key() {
     assert_eq!(png_text(&bytes, "Thumb::MTime"), Some("1700000000".to_string()));
     assert!(matches!(none, Outcome::Failed));
     assert!(!d.join("cache").join("thumbnails").join("fail").exists(), "a RAW with no preview was recorded as broken");
+}
+
+// A RAW whose embedded JPEG is jpeg(w, 100), with its mtime set, so the copy's mtime orders the eviction.
+fn aged(d: &TestDir, name: &str, w: u16, secs: u64) -> PathBuf {
+    let src = raw_with(d, name, &jpeg(w, 100), None);
+    set_mtime(&src, secs);
+    src
+}
+
+#[test]
+fn the_cache_holds_its_count_by_dropping_the_oldest_raw_and_never_the_copy_just_made() {
+    let d = TestDir::new("rawprev-evict-count");
+    let cache = d.join("cache");
+    let (old, mid, new) = (aged(&d, "o.cr2", 100, 1_000), aged(&d, "m.cr2", 200, 2_000), aged(&d, "n.cr2", 300, 3_000));
+    for src in [&new, &mid] {
+        ensure_bounded(&cache, src, 2, u64::MAX).expect("a preview");
+    }
+    // The oldest RAW arrives last: it is the copy just made, so it stays and the older of the others goes.
+    let got = ensure_bounded(&cache, &old, 2, u64::MAX).expect("a preview");
+    assert!(got.file.exists(), "the copy just made was evicted");
+    assert!(copy_path(&cache, &new).exists(), "the newest RAW's copy went");
+    assert!(!copy_path(&cache, &mid).exists(), "the older RAW's copy stayed over the bound");
+    assert_eq!(std::fs::read_dir(&cache).unwrap().count(), 2);
+}
+
+#[test]
+fn the_cache_holds_its_bytes_and_keeps_a_lone_copy_larger_than_the_bound() {
+    let d = TestDir::new("rawprev-evict-bytes");
+    let cache = d.join("cache");
+    let (a, b) = (aged(&d, "a.cr2", 100, 1_000), aged(&d, "b.cr2", 200, 2_000));
+    let first = ensure_bounded(&cache, &a, usize::MAX, 1).expect("a preview");
+    assert!(first.file.exists(), "a lone copy over the byte bound was dropped");
+    let second = ensure_bounded(&cache, &b, usize::MAX, 1).expect("a preview");
+    assert!(second.file.exists() && !first.file.exists(), "the older copy stayed over the byte bound");
+}
+
+#[test]
+fn a_stale_temp_is_swept_and_a_recent_one_and_a_foreign_file_are_left() {
+    let d = TestDir::new("rawprev-evict-temp");
+    let cache = d.join("cache");
+    std::fs::create_dir_all(&cache).unwrap();
+    let stale = d.file("cache/dead.123.0.tmp", "x");
+    let recent = d.file("cache/live.124.0.tmp", "x");
+    let foreign = d.file("cache/notes.txt", "x");
+    set_mtime(&stale, 1_000);
+    ensure_bounded(&cache, &aged(&d, "t.cr2", 100, 2_000), 8, u64::MAX).expect("a preview");
+    assert!(!stale.exists(), "a dead writer's temp stayed");
+    assert!(recent.exists() && foreign.exists(), "a live temp or a foreign file was removed");
+}
+
+#[test]
+fn a_meta_read_of_a_raw_carries_the_copy_and_leaves_the_files_own_pixels_unknown() {
+    let d = TestDir::new("rawprev-meta");
+    let cache = raw_dir(&d);
+    let src = raw_with(&d, "m.cr2", &jpeg(1620, 1080), Some(6));
+    let m = read_in(&src, false, false, None, &cache);
+    let raw = m.raw.expect("the copy");
+    assert_eq!((raw.width, raw.height, raw.orientation), (1620, 1080, 6));
+    assert!(raw.file.starts_with(&cache), "the copy was not written under the directory the read was given");
+    assert_eq!((m.width, m.height, m.orientation), (0, 0, 1), "the RAW's own pixels are unknown, the preview's are not its own");
+    let plain = write(&d, "p.jpg", &jpeg(10, 10));
+    let p = read_in(&plain, false, false, None, &cache);
+    assert!(p.raw.is_none() && (p.width, p.height) == (10, 10));
 }

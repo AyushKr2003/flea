@@ -9,7 +9,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 const FILE_MODE: u32 = 0o600;
 const DIR_MODE: u32 = 0o700;
@@ -21,6 +21,24 @@ const EXIF_ORIENT: [u8; 36] = [
 ];
 // Where the orientation value sits in that segment.
 const EXIF_ORIENT_AT: usize = 28;
+// JPEG marker bytes: each marker is MARKER_START then one of these, and a length-prefixed segment follows all but SOS and EOI.
+const MARKER_START: u8 = 0xFF;
+const SOF_FIRST: u8 = 0xC0;
+const SOF_LAST: u8 = 0xCF;
+const DHT: u8 = 0xC4;
+const JPG: u8 = 0xC8;
+const DAC: u8 = 0xCC;
+const EOI: u8 = 0xD9;
+const SOS: u8 = 0xDA;
+const APP1: u8 = 0xE1;
+// The copies in the cache stay within this many files and bytes; the oldest RAW goes first, because a copy carries its RAW's mtime.
+const MAX_COPIES: usize = 4096;
+const MIB: u64 = 1_048_576;
+const MAX_BYTES: u64 = 512 * MIB;
+// A temp this old belongs to a writer that died, since a live copy of a preview takes seconds.
+const STALE_TEMP: Duration = Duration::from_secs(60);
+const TEMP_SUFFIX: &str = ".tmp";
+const COPY_SUFFIX: &str = ".jpg";
 // Two threads of this process can extract the same file at once, so each writes a temp of its own.
 static NEXT_TEMP: AtomicU32 = AtomicU32::new(0);
 
@@ -32,26 +50,27 @@ pub struct Extracted {
     pub orientation: u8,
 }
 
-fn cache_dir() -> PathBuf {
+pub fn cache_dir() -> PathBuf {
     crate::userfile::cache_home().join("flea").join("raw")
-}
-
-// None when the file is no RAW, holds no JPEG preview, or the cache cannot be written; a fresh copy costs no walk and no write.
-pub fn ensure(src: &Path) -> Option<Extracted> {
-    ensure_in(&cache_dir(), src)
 }
 
 // Named by the RAW's URI, the key the thumbnail cache uses for the same file.
 fn copy_path(dir: &Path, src: &Path) -> PathBuf {
-    dir.join(format!("{}.jpg", md5::hex(uri_for(src).as_bytes())))
+    dir.join(format!("{}{COPY_SUFFIX}", md5::hex(uri_for(src).as_bytes())))
 }
 
-fn ensure_in(dir: &Path, src: &Path) -> Option<Extracted> {
+// None when the file is no RAW, holds no JPEG preview, or dir cannot be written; a fresh copy costs no walk and no write.
+pub fn ensure_in(dir: &Path, src: &Path) -> Option<Extracted> {
+    ensure_bounded(dir, src, MAX_COPIES, MAX_BYTES)
+}
+
+fn ensure_bounded(dir: &Path, src: &Path, copies: usize, bytes: u64) -> Option<Extracted> {
     // Read before the bytes, so a RAW rewritten mid-copy leaves a stamp that no longer matches and extracts again.
     let stamp = std::fs::metadata(src).ok()?.modified().ok()?;
     let file = copy_path(dir, src);
     if !fresh(&file, stamp) {
         publish(dir, &file, src, stamp)?;
+        evict(dir, &file, copies, bytes);
     }
     let h = imagesize::header(&file)?;
     Some(Extracted { file, width: h.width, height: h.height, orientation: h.orientation })
@@ -64,17 +83,55 @@ fn fresh(file: &Path, stamp: SystemTime) -> bool {
         .unwrap_or(false)
 }
 
+// Stale temps go, then the oldest copies until the count and the bytes are within the bound; keep is the copy just made and stays whatever its mtime.
+fn evict(dir: &Path, keep: &Path, copies: usize, bytes: u64) {
+    let Ok(listing) = std::fs::read_dir(dir) else { return };
+    let now = SystemTime::now();
+    let mut kept: Vec<(SystemTime, PathBuf, u64)> = Vec::new();
+    let (mut count, mut total) = (0usize, 0u64);
+    for entry in listing.flatten() {
+        let path = entry.path();
+        let Ok(meta) = std::fs::symlink_metadata(&path) else { continue };
+        if !meta.file_type().is_file() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+        if name.ends_with(TEMP_SUFFIX) {
+            if now.duration_since(modified).is_ok_and(|age| age > STALE_TEMP) {
+                let _ = std::fs::remove_file(&path);
+            }
+        } else if name.ends_with(COPY_SUFFIX) {
+            count += 1;
+            total += meta.len();
+            if path != keep {
+                kept.push((modified, path, meta.len()));
+            }
+        }
+    }
+    kept.sort();
+    for (_, path, size) in kept {
+        if count <= copies && total <= bytes {
+            break;
+        }
+        let _ = std::fs::remove_file(&path);
+        count -= 1;
+        total -= size;
+    }
+}
+
 // The orientation of the first Exif segment among the JPEG's leading segments; None when it names none.
+// Sample input, the leading bytes of a camera's preview: FF D8 (SOI), FF E1 00 22 "Exif\0\0" 49 49 2A 00 08 00 00 00 ... (the Exif segment, length counting its own two bytes), FF DB ... (later segments), FF C0 ... (a frame header).
 fn head_orientation(head: &[u8]) -> Option<u16> {
     let mut at = 2;
-    while head.get(at)? == &0xFF {
+    while head.get(at)? == &MARKER_START {
         let marker = *head.get(at + 1)?;
-        if marker == 0xDA || marker == 0xD9 || ((0xC0..=0xCF).contains(&marker) && ![0xC4, 0xC8, 0xCC].contains(&marker)) {
+        if marker == SOS || marker == EOI || ((SOF_FIRST..=SOF_LAST).contains(&marker) && ![DHT, JPG, DAC].contains(&marker)) {
             return None;
         }
         let len = u16::from_be_bytes([*head.get(at + 2)?, *head.get(at + 3)?]) as usize;
         let body = head.get(at + 4..at + 2 + len)?;
-        if marker == 0xE1 && body.starts_with(EXIF_MAGIC) {
+        if marker == APP1 && body.starts_with(EXIF_MAGIC) {
             return facts_from_slice(&body[EXIF_MAGIC.len()..], false).orientation;
         }
         at += 2 + len;
@@ -95,7 +152,7 @@ fn publish(dir: &Path, file: &Path, src: &Path, stamp: SystemTime) -> Option<()>
     }
     let turn = facts.orientation.filter(|o| (2..=8).contains(o)).filter(|_| head_orientation(&head).is_none());
     std::fs::DirBuilder::new().recursive(true).mode(DIR_MODE).create(dir).ok()?;
-    let temp = file.with_extension(format!("{}.{}.tmp", std::process::id(), NEXT_TEMP.fetch_add(1, Ordering::Relaxed)));
+    let temp = file.with_extension(format!("{}.{}{TEMP_SUFFIX}", std::process::id(), NEXT_TEMP.fetch_add(1, Ordering::Relaxed)));
     let _ = std::fs::remove_file(&temp);
     let mut out = std::fs::OpenOptions::new().write(true).create_new(true).mode(FILE_MODE).open(&temp).ok()?;
     let rest = preview.length - head.len() as u64;
