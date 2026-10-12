@@ -294,7 +294,7 @@ case_cap_drops() {
     shot drops-columns-parent
     read -r tx ty <<< "$held_pt"
     cap_drops_steer "$tx" "$ty"
-    # A file row in the peek column takes no drop, so leaving the parent row drops the line to the bare "a folder" one (ui/js/Drag.js line()), and only then is the pointer on p2.txt.
+    # A file row in the peek column takes no drop, so the line falls to the bare "a folder" one (ui/js/Drag.js line()) once the pointer leaves the parent row for held_pt.
     cap_drops_wait_target "Move 1 item to a folder · ctrl at lift copies"
     cap_drops_release
     [[ ! -e "$dir/deep/p1.txt" ]] || fail "cap_drops: the columns release moved p1.txt"
