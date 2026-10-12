@@ -83,6 +83,7 @@ js/AnchorHold.js
 js/Archive.js
 js/BackReturn.js
 js/Buttons.js
+js/ChromeKeys.js
 js/ClipMarks.js
 js/ClipSelection.js
 js/Clipboard.js
@@ -169,4 +170,4 @@ js/Trash.js
 js/TrashDates.js
 js/UiState.js
 js/Update.js
-bytes 1596965
+bytes 1609234
