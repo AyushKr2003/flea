@@ -153,6 +153,8 @@ GridView {
         ctrlWheelAction: function (wheel) { return root.zoomWheel(wheel) }
         onWheeled: root.endLanding(false)
     }
+    // movementStarted is the view's own drag or flick, never a positionViewAtIndex or contentY write, so the landing's moves do not end its wait.
+    onMovementStarted: root.endLanding(false)
 
     readonly property alias scrollBar: verticalScroll
     Flea.ViewportScrollBar {
@@ -161,6 +163,7 @@ GridView {
         anchors { top: parent.top; right: parent.right }
         flickable: root
         ctrlWheelAction: function (wheel) { return root.zoomWheel(wheel) }
+        onUserScrolled: root.endLanding(false)
     }
 
     Flea.SelectionBand {
@@ -346,13 +349,13 @@ GridView {
     property bool landingWait: false
     // Where the landing ask's window starts, so its own reply is told from another ask's.
     property int landingStart: -1
-    // The wait ends on the ask's outcome, rows covering the cursor or not, or its refusal; a wheel ends it for an ask never answered.
+    // The wait ends on the ask's outcome, rows covering the cursor or not, or its refusal; a wheel, drag, flick or bar press ends it for an ask never answered.
     function landIfReady() {
         if (!root.landingWait || (root.windowOwed() && root.pane.held !== root.landingStart)) return
         root.landingWait = false
         root.revealCursor()
     }
-    // A refused or unanswered window leaves the view where it is and frees the drift asks; a wheel owns the view from here.
+    // A refused or unanswered window leaves the view where it is and frees the drift asks; the operator owns the view from here.
     function endLanding(reveal) {
         if (!root.landingWait) return
         root.landingWait = false

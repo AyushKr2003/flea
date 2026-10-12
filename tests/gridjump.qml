@@ -392,6 +392,53 @@ ShellRoot {
         })
     }
 
+    // A far jump whose window is lost, then the operator takes the view by act(): the wait ends at once, and the late window reveals nothing; a flick may coast on, a reveal lands a half content away.
+    function takeover(name, act) {
+        var s = root.script, last = root.files - 1, mine = { y: 0 }
+        s.push(function () { root.gridPane.land(); root.warm() })
+        s.push(function () {
+            root.gridBackend.mode = "lost"
+            root.gridBackend.queue = []
+            root.moveTo(root.gridPane, last)
+            root.later(300)
+        })
+        s.push(function () {
+            root.check(name + ": the wait holds while the reply is out", grid.landingWait, "landingWait=" + grid.landingWait)
+            grid.contentY = grid.contentHeight / 2
+            act()
+            root.check(name + ": the operator's scroll ends the wait", !grid.landingWait, "landingWait=" + grid.landingWait)
+            mine.y = grid.contentY
+            root.gridBackend.mode = "late"
+            root.gridBackend.reply()
+            root.later(250)
+        })
+        s.push(function () {
+            root.check(name + ": the late window does not reveal the cursor back", Math.abs(grid.contentY - mine.y) < grid.height && grid.contentY < grid.contentHeight - 2 * grid.height,
+                "contentY=" + grid.contentY + " at=" + mine.y)
+            root.runNext()
+        })
+    }
+    // A press on a tile, which the band lets through to the view, then moves past the drag threshold, then the release.
+    function dragView() {
+        var px = -1, py = -1
+        for (var y = grid.height / 2; y < grid.height - 10 && px < 0; y += 3)
+            for (var x = 10; x < grid.width - 40; x += 3)
+                if (grid.tileAt(x + grid.contentX, y + grid.contentY) >= 0) { px = x; py = y; break }
+        root.check("a tile exists to drag from", px >= 0, "px=" + px)
+        if (px < 0) return
+        driver.mousePress(grid, px, py, Qt.LeftButton, Qt.NoModifier, -1)
+        for (var i = 1; i <= 12; i++)
+            driver.mouseMove(grid, px, py - 12 * i, -1, Qt.LeftButton, Qt.NoModifier)
+        driver.mouseRelease(grid, px, py - 144, Qt.LeftButton, Qt.NoModifier, -1)
+    }
+    function dragBar() {
+        var bar = grid.scrollBar, knob = bar.knobItem
+        var at = knob.mapToItem(bar, knob.width / 2, knob.height / 2)
+        driver.mousePress(bar, at.x, at.y, Qt.LeftButton, Qt.NoModifier, -1)
+        driver.mouseMove(bar, at.x, at.y + 30, -1, Qt.LeftButton, Qt.NoModifier)
+        driver.mouseRelease(bar, at.x, at.y + 30, Qt.LeftButton, Qt.NoModifier, -1)
+    }
+
     function build() {
         var s = root.script, last = root.files - 1
         function step(fn) { s.push(fn) }
@@ -443,6 +490,8 @@ ShellRoot {
         root.outcome("failed window", "fail")
         root.outcome("short window", "short")
         root.outcome("lost window", "lost")
+        root.takeover("lost window, view drag", root.dragView)
+        root.takeover("lost window, bar drag", root.dragBar)
     }
 
     function finish() {

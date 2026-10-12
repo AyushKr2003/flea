@@ -11,6 +11,8 @@ Item {
     property int orientation: Qt.Vertical
     property var ctrlWheelAction: null
     property real endInset: 0
+    // The operator took the view: a press on the lane or a wheel over it, never the owner's own position writes.
+    signal userScrolled()
 
     readonly property bool vertical: root.orientation === Qt.Vertical
     // A flickable scrolls from origin less its leading margin to its content end plus the trailing margin, so the bar measures that span.
@@ -150,6 +152,7 @@ Item {
         property bool savedInteractive: true
 
         onPressed: function(mouse) {
+            root.userScrolled()
             var at = root.localAt(mouse)
             var start = root.handleOffset
             if (at < start || at > start + root.handleLength) {
@@ -187,5 +190,6 @@ Item {
         parent: root
         flickable: root.flickable
         ctrlWheelAction: root.ctrlWheelAction
+        onWheeled: root.userScrolled()
     }
 }
