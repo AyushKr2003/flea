@@ -14,7 +14,7 @@
 FLEA_INSTANT_PARENT (default /home/flea-sandbox) is where ROOT must live; FLEA_INSTANT_SMALL=1 shrinks the two big
 files to a few MiB, for a builder smoke away from minipc.
 
-Parts: smoke, p1-cursor, p2-held, p3-navigate, p4-open, p5-heavy, p6-ops, p7-load (PARTS below).
+Parts: smoke, p1-cursor, p2-held, p3-navigate, p4-open, p5-heavy, p6-ops, p7-load, p8-rename (PARTS below).
 
 The method is tools/flea-field-nav's, which is tools/flea-field-search's: tools/flea-framecap records which presented
 frames change inside a rectangle, stamped with the compositor's presentation time in CLOCK_MONOTONIC, and every input
@@ -121,6 +121,7 @@ BUDGET = {
 # Journey id patterns (PERF-PROGRAM-20261005.md), each with its budget row.
 JOURNEYS = [
     (r"^nav\.[a-z]+\.(down|up|j|k|pagedown|pageup|ctrl-d|ctrl-u|home|end|g|G|left|right|h|l|down-scroll|wheel|fling)$", 1),
+    (r"^nav\.[a-z]+\.(pre|after)-rename-(j|k)$", 1),
     (r"^nav\.[a-z]+\.held-j-sweep$", 2),
     (r"^nav\.[a-z]+\.(enter|back|shift-right|shift-left)$", 3),
     (r"^view\.switch\.[a-z]+-[a-z]+$", 3),
@@ -994,25 +995,60 @@ def folder_setup(patch, path):
     return [k("home")]  # folders first puts the first folder at row 0
 
 
+def names_off(fixture, want):
+    """Names that differ between a fixture directory and its expected names, sorted."""
+    return sorted(set(os.listdir(fixture)) ^ set(want))
+
+
+def put_back(fixture, want, typed):
+    """Rename each file whose stem grew by typed back to the expected name it came from."""
+    have, want = set(os.listdir(fixture)), set(want)
+    for name in sorted(have - want):
+        stem, ext = os.path.splitext(name)
+        old = name
+        if typed and stem.endswith(typed):
+            old = stem[:len(stem) - len(typed)] + ext
+        elif typed:
+            for w in sorted(want):
+                wstem, wext = os.path.splitext(w)
+                if w not in have and ext == wext and stem.startswith(wstem) and 0 < len(stem) - len(wstem) <= len(typed):
+                    old = w
+                    break
+        if old in want and old not in have:
+            os.rename(os.path.join(fixture, name), os.path.join(fixture, old))
+
+
 def series_cycle(sess, spec, n):
     """Repeated steps, a step with a journey timed; to_folder aims Enter at a folder, first_suffix renames cycle 0's journeys."""
-    for inp in folder_setup(sess.patch, sess.fixture) if spec.get("to_folder") else spec.get("setup", []):
-        sess.send(inp)
-        sess.settle(1.0, CAP[3])
+    # restores: the fixture's expected names; typed: what the cycle appends to a stem, to put a failed run back.
+    want = spec.get("restores")
+    if want is not None and names_off(sess.fixture, want):
+        raise RuntimeError("the fixture %s starts off its expected names: %s"
+                           % (sess.fixture, ", ".join(names_off(sess.fixture, want)[:4])))
     rows = sess.taken
-    for i in range(n * SERIES_ROWS_PER_SAMPLE["cycle"]):
-        for step in spec["steps"]:
-            j = step.get("journey")
-            if j is None:
-                sess.send(step["in"])
-                sess.settle(step.get("quiet", 1.0), step.get("cap", 3))
-                continue
-            if i < FIRST_ROWS and spec.get("first_suffix"):
-                j += spec["first_suffix"]
-            ev = "%s-%s-%d" % (sess.ctx["tag"], j, i) if i < FIRST_ROWS and sess.ctx.get("evidence") else None
-            rows.append(sess.sample(j, step["in"], row_of(j, spec.get("fixture", "local")) or 4, ev,
-                                    {"cycle": i}))
-    sess.require_window()
+    try:
+        for inp in folder_setup(sess.patch, sess.fixture) if spec.get("to_folder") else spec.get("setup", []):
+            sess.send(inp)
+            sess.settle(1.0, CAP[3])
+        for i in range(n * SERIES_ROWS_PER_SAMPLE["cycle"]):
+            for step in spec["steps"]:
+                j = step.get("journey")
+                if j is None:
+                    sess.send(step["in"])
+                    sess.settle(step.get("quiet", 1.0), step.get("cap", 3))
+                    continue
+                if i < FIRST_ROWS and spec.get("first_suffix"):
+                    j += spec["first_suffix"]
+                ev = "%s-%s-%d" % (sess.ctx["tag"], j, i) if i < FIRST_ROWS and sess.ctx.get("evidence") else None
+                rows.append(sess.sample(j, step["in"], row_of(j, spec.get("fixture", "local")) or 4, ev,
+                                        {"cycle": i}))
+        sess.require_window()
+    finally:
+        left = names_off(sess.fixture, want) if want is not None else []
+        if left:
+            put_back(sess.fixture, want, spec["typed"])
+    if left:
+        raise RuntimeError("the cycle left these names changed in %s: %s" % (sess.fixture, ", ".join(left[:4])))
     return rows
 
 
@@ -1333,6 +1369,25 @@ def open_close(journey, key_in, close=("esc",)):
     return cyc([{"journey": journey, "in": key_in}, {"in": k(*close), "quiet": 1.0, "cap": 3}])
 
 
+RENAME_PAIRS = 3  # j and k pairs timed in a row on each side of the rename
+RENAME_LETTERS = ("a", "b")  # typed at the end of the stem, so the new name sorts into the old name's slot
+NAV500_NAME = "f_%04d.txt"  # tools/flea-nav-fixture's name for file i of nav500
+
+
+def rename_cycle(view, names):
+    """p8-rename for one view: j and k pairs, the cursor row renamed, the same pairs again, the rename undone."""
+    def pairs(side):
+        return [{"journey": "nav.%s.%s-rename-%s" % (view, side, key), "in": k(key)}
+                for _ in range(RENAME_PAIRS) for key in ("j", "k")]
+
+    def edit(*keys):
+        typed = [{"in": k(c), "quiet": 0.3, "cap": 2} for c in keys]
+        return [{"in": k("r")}, {"in": k("right")}] + typed + [{"in": k("enter")}]
+    undo = ("backspace",) * len(RENAME_LETTERS)
+    return cyc(pairs("pre") + edit(*RENAME_LETTERS) + pairs("after") + edit(*undo),
+               setup=[k("ctrl", "d")] * 3, restores=names, typed="".join(RENAME_LETTERS))
+
+
 def enter_back(view, fixture="local"):
     return cyc([{"journey": "nav.%s.enter" % view, "in": k("enter")},
                 {"journey": "nav.%s.back" % view, "in": k("backspace")}], to_folder=True, fixture=fixture)
@@ -1404,6 +1459,9 @@ def parts(fx, samples):
     for load in ("a", "b", "c"):
         for s in load_series:
             out["p7-load"].append({"fixture": L, "view": "dual", "region": "left", "load": load, "series": [s]})
+    names = sorted(NAV500_NAME % i for i in range(fx["nav"]["nav500"]))
+    out["p8-rename"] = [{"fixture": n500, "view": v, "region": "content", "series": [rename_cycle(v, names)]}
+                        for v in views]
     out["smoke"] = [
         {"fixture": n10k, "view": "list", "region": "content", "series": [
             {"type": "pairs", "pairs": [(("down",), ("up",))]}, {"type": "wheel"}, {"type": "fling"},
@@ -1429,10 +1487,10 @@ def parts(fx, samples):
     return out
 
 
-PARTS = ["smoke", "p1-cursor", "p2-held", "p3-navigate", "p4-open", "p5-heavy", "p6-ops", "p7-load"]
+PARTS = ["smoke", "p1-cursor", "p2-held", "p3-navigate", "p4-open", "p5-heavy", "p6-ops", "p7-load", "p8-rename"]
 # Minutes of minipc per part at 20 samples, from the series' own pacing (keys at 400 ms, quiet gaps, launches).
 ESTIMATE_MIN = {"smoke": 5, "p1-cursor": 16, "p2-held": 8, "p3-navigate": 14, "p4-open": 14, "p5-heavy": 13,
-                "p6-ops": 13, "p7-load": 16}
+                "p6-ops": 13, "p7-load": 16, "p8-rename": 34}
 
 
 def journeys_of(sessions):
@@ -1492,7 +1550,8 @@ def only_series(sessions, pattern):
 
 
 # Synthetic fixtures facts for the plan: only usb/nas presence shapes the journeys gate expects.
-PLAN_FX = {"root": "/home/flea-sandbox/x", "usb": "/run/media/u/s/flea-instant-1", "nas": "/run/user/1/gvfs/n/f-2"}
+PLAN_FX = {"root": "/home/flea-sandbox/x", "nav": {"nav500": 500}, "usb": "/run/media/u/s/flea-instant-1",
+           "nas": "/run/user/1/gvfs/n/f-2"}
 
 
 def planned_counts(part, samples=20, fx=None, only=None):
@@ -2446,7 +2505,8 @@ def selftest():
     check("circuit_distinct", len(set(pairs_seen)), 12)
     check("circuit_no_self", all(a != b for a, b in pairs_seen), True)
     # Every part builds and maps every journey to a row, from a synthetic fixtures facts.
-    fx = {"root": "/home/flea-sandbox/x", "usb": "/run/media/u/s/flea-instant-1", "nas": "/run/user/1/gvfs/n/f-2"}
+    fx = {"root": "/home/flea-sandbox/x", "nav": {"nav500": 500}, "usb": "/run/media/u/s/flea-instant-1",
+          "nas": "/run/user/1/gvfs/n/f-2"}
     built = parts(fx, 20)
     check("parts", sorted(built), sorted(PARTS))
     for part, sessions in built.items():
@@ -2462,6 +2522,25 @@ def selftest():
                  "op.size.recursive", "op.archive", "op.copy.long"):
         check("covers %s" % want, want in cover, True)
     check("cover_size", len(cover) >= 100, True)
+    # p8-rename: a session per view, the four rename journeys of each, the rename keys in order, the names restored.
+    rn, views = built["p8-rename"], ["list", "columns", "grid", "dual"]
+    check("rename_views", [s["view"] for s in rn], views)
+    check("rename_journeys", journeys_of(rn), {"nav.%s.%s-rename-%s" % (v, side, key) for v in views
+                                              for side in ("pre", "after") for key in ("j", "k")})
+    check("rename_row", row_of("nav.columns.after-rename-k"), 1)
+    want = sorted(NAV500_NAME % i for i in range(500))
+    check("rename_restores", [(sp.get("restores"), sp.get("typed")) for s in rn for sp in s["series"]],
+          [(want, "ab")] * 4)
+    steps = rn[0]["series"][0]["steps"]
+    untimed = [st["in"][1] for st in steps if "journey" not in st]
+    check("rename_keys", untimed, [("r",), ("right",), ("a",), ("b",), ("enter",), ("r",), ("right",), ("backspace",),
+                                   ("backspace",), ("enter",)])
+    check("rename_pairs", [st["journey"].rsplit(".", 1)[1] for st in steps if "journey" in st],
+          ["pre-rename-j", "pre-rename-k"] * RENAME_PAIRS + ["after-rename-j", "after-rename-k"] * RENAME_PAIRS)
+    for chord in untimed + [i[1] for i in rn[0]["series"][0]["setup"]]:
+        check("rename key %s" % (chord,), all(c in S.KEYCODES or c in N.EXTRA_KEYCODES for c in chord), True)
+    check("rename_plan", planned_counts("p8-rename", 20)[("nav.grid.after-rename-j", "grid", "local")],
+          20 * RENAME_PAIRS)
     # Kinds sort in the cursor order the series walk.
     check("kinds_sorted", sorted(KINDS.values())[:3], ["a_photo.jpg", "c_doc.pdf", "d_notes.md"])
     # Sandbox guard: a path outside a marked root is refused.
@@ -2518,6 +2597,21 @@ def selftest():
     check("rep_noinst", "nav.list.fling list local: no instrument (why)" in text, True)
     check("rep_error", "error op.trash list : RuntimeError: x" in text, True)
     check("rep_order", text.index("nav.list.down") < text.index("held-j-sweep") < text.index("nav.grid.enter"), True)
+    # The rename rows sit among their own view's cursor rows, and a view's rows never interleave with another's.
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
+        tf.write(json.dumps({"manifest": {"date": "d", "host": "h", "flea_head": "c7e23485e", "plan": {"part": "x"},
+                                          "repeat": {"delay_ms": 250, "rate": 40, "source": "plan"}}}) + "\n")
+        for v, name in (("grid", "down"), ("list", "pre-rename-k"), ("list", "down"), ("list", "after-rename-j"),
+                        ("grid", "after-rename-k")):
+            tf.write(json.dumps({"journey": "nav.%s.%s" % (v, name), "row": 1, "view": v, "first_ms": 5.0,
+                                 "fixture": "local"}) + "\n")
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        report([tf.name])
+    os.unlink(tf.name)
+    check("rep_rename_order", re.findall(r"\| (nav\.[a-z]+\.[a-z-]+) \|", buf.getvalue()),
+          ["nav.grid.after-rename-k", "nav.grid.down", "nav.list.after-rename-j", "nav.list.down",
+           "nav.list.pre-rename-k"])
     # Gate: the same verdicts as report, one BREACH line per journey over ceiling, missing never passes.
     def run_gate(rows, part="x", samples=20, only=None, pattern=None):
         mani2 = {"manifest": {"date": "d", "host": "h", "flea_head": "c7e23485e",
@@ -2826,7 +2920,7 @@ def selftest():
         for name in ("b_text.txt", "f_0000.txt", "f_0001.txt", "zzz_big.bin"):
             open(os.path.join(L, name), "w").close()
         os.makedirs(os.path.join(td, "nav", "enter", "big"))
-        p7 = parts({"root": td}, 20)["p7-load"]
+        p7 = parts({"root": td, "nav": {"nav500": 500}}, 20)["p7-load"]
         enters = [sp for s in p7 for sp in s["series"] if sp["type"] == "cycle" and sp["steps"][0]["journey"] == "nav.dual.enter"]
         check("p7_enter_specs", (len(enters), all(sp.get("to_folder") for sp in enters), any(sp.get("setup") for sp in enters)),
               (3, True, False))
@@ -2838,7 +2932,7 @@ def selftest():
         shutil.rmtree(os.path.join(L, "a_dir"))
         os.makedirs(os.path.join(L, "g_dir"))
         check("folder_setup_fourth_by_name", folder_setup(ui_patch("dual", L), L), [k("home")])
-        targets, bad = dry_targets(parts({"root": td}, 20)["p7-load"])
+        targets, bad = dry_targets(parts({"root": td, "nav": {"nav500": 500}}, 20)["p7-load"])
         check("dry_enter_index", (bad, sorted({(t["enter_index"], t["aim"]) for t in targets if t["series"] == "cycle"})),
               (0, [(0, "the first folder, row 0 with folders first")]))
         try:
@@ -3437,6 +3531,63 @@ def selftest():
     check("gate_load_unproved_is_inactive", (code, "load inactive in 20 of 20 samples" in gtext), (2, True))
     code, gtext = run_gate(full, "p7-load", 20)
     check("gate_load_all_active", (code, "load inactive" in gtext), (0, False))
+    # Rows come only from a cycle that leaves the fixture as found; a rename or an exception fails the series and is put back; a dirty start refuses.
+    with tempfile.TemporaryDirectory() as td:
+        def fresh(name):
+            for old in os.listdir(td):
+                os.remove(os.path.join(td, old))
+            open(os.path.join(td, name), "w").close()
+        fresh("f_0001.txt")
+
+        def rename_away(*_):
+            os.rename(os.path.join(td, "f_0001.txt"), os.path.join(td, "f_0001ab.txt"))
+            return {}
+
+        def rename_then_raise(*_):
+            rename_away()
+            raise OSError("boom")
+        sampled = []
+        fake = types.SimpleNamespace(fixture=td, ctx={}, taken=[], send=lambda inp: None, settle=lambda *a: True,
+                                     sample=lambda *a: sampled.append(a) or {}, require_window=lambda: None)
+        spec = {"steps": [{"journey": "nav.list.pre-rename-j", "in": k("j")}], "restores": ["f_0001.txt"],
+                "typed": "ab"}
+        check("restores_kept", len(series_cycle(fake, spec, 1)), 1)
+        fake.sample = rename_away
+        try:
+            series_cycle(fake, spec, 1)
+            fail.append("restores_changed: a renamed file was not refused")
+        except RuntimeError as e:
+            check("restores_changed", "f_0001.txt, f_0001ab.txt" in str(e), True)
+        check("restores_put_back", sorted(os.listdir(td)), ["f_0001.txt"])
+        fresh("f_0001.txt")
+        fake.sample = rename_then_raise
+        try:
+            series_cycle(fake, spec, 1)
+            fail.append("restores_raise: the exception did not reach the caller")
+        except OSError as e:
+            check("restores_raise", str(e), "boom")
+        check("restores_raise_put_back", sorted(os.listdir(td)), ["f_0001.txt"])
+        fresh("f_0001.txt")
+
+        def rename_partial(*_):
+            os.rename(os.path.join(td, "f_0001.txt"), os.path.join(td, "f_0001a.txt"))
+            return {}
+        fake.sample = rename_partial
+        try:
+            series_cycle(fake, spec, 1)
+            fail.append("restores_partial: a partial-suffix rename was not refused")
+        except RuntimeError as e:
+            check("restores_partial", "f_0001.txt, f_0001a.txt" in str(e), True)
+        check("restores_partial_put_back", sorted(os.listdir(td)), ["f_0001.txt"])
+        fresh("f_0001ab.txt")
+        fake.sample = lambda *a: sampled.append(a) or {}
+        del sampled[:]
+        try:
+            series_cycle(fake, spec, 1)
+            fail.append("restores_drifted: a fixture off its names was not refused")
+        except RuntimeError as e:
+            check("restores_drifted", ("starts off its expected names" in str(e), sampled), (True, []))
+        check("restores_drifted_untouched", sorted(os.listdir(td)), ["f_0001ab.txt"])
     if fail:
         print("\n".join("FAIL " + f for f in fail))
         return 1
