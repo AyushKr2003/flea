@@ -310,7 +310,7 @@ ShellRoot {
             root.startSampling()
             root.mark("tabout")
             root.key(Qt.Key_Tab)
-            check("Tab out hands the keyboard back", pane.focusView, "list")
+            check("Tab out hands the keyboard on to the bar", pane.focusView, "chrome")
             return true
         },
         function () {
@@ -319,7 +319,7 @@ ShellRoot {
             check("Tab out skips the settle", root.hiddenAt[0] - root.marks.tabout < 100, true)
             check("and x reaches minus the width, undrawn", root.host.railX, -root.railW)
             // Tab out with the pointer on the rail keeps it up until the pointer leaves.
-            pane.listArea.forceActiveFocus()
+            pane.focusView = "list"; pane.listArea.forceActiveFocus()
             root.key(Qt.Key_Tab)
             return true
         },

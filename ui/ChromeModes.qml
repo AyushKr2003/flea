@@ -10,6 +10,8 @@ Row {
 
     property string viewMode: ""
     property bool inputLive: true
+    // The glyph the keyboard is on while Tab's chrome stop holds it, "" otherwise.
+    property string focusedGlyph: ""
 
     signal chosen(string mode)
 
@@ -32,6 +34,7 @@ Row {
             required property string modelData
             ruleRows: Theme.spacing.hairline
             glyph: modelData
+            keyboardFocused: root.focusedGlyph === modelData
             inputLive: root.inputLive
             restingColor: root.viewMode === modelData ? Theme.color.foreground : Theme.color.mutedFrame
             onActivated: root.chosen(modelData)

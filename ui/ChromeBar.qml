@@ -25,6 +25,9 @@ Item {
     property bool canSort: false
     // False while Quick Look is open: Qt 6 still hands a press beneath an accepted shield, so only handlers stop, never Item.enabled.
     property bool inputLive: true
+    // Tab's chrome stop: the keyboard is on the control named by glyph, which draws its own frame; ui/js/ChromeKeys.js moves it.
+    property bool stopFocused: false
+    property string focusedGlyph: ""
     // Drops callout 4: the pane whose collide sends a drop on a crumb.
     property var dropPane: null
 
@@ -137,6 +140,7 @@ Item {
             inputLive: root.inputLive
             ruleRows: Theme.spacing.hairline
             glyph: "arrow-left"
+            keyboardFocused: root.stopFocused && root.focusedGlyph === glyph
             enabled: root.canGoBack
             onActivated: root.backRequested()
         }
@@ -145,6 +149,7 @@ Item {
             inputLive: root.inputLive
             ruleRows: Theme.spacing.hairline
             glyph: "arrow-up"
+            keyboardFocused: root.stopFocused && root.focusedGlyph === glyph
             enabled: root.canGoUp
             onActivated: root.upRequested()
         }
@@ -279,6 +284,7 @@ Item {
             ruleRows: Theme.spacing.hairline
             visible: root.viewMode !== "grid"
             glyph: "search"
+            keyboardFocused: root.stopFocused && root.focusedGlyph === glyph
             onActivated: root.searchRequested()
         }
 
@@ -288,6 +294,7 @@ Item {
             visible: root.viewMode === "grid"
             enabled: root.canFilter
             glyph: "filter"
+            keyboardFocused: root.stopFocused && root.focusedGlyph === glyph
             accessName: "Filter"
             onActivated: root.filterRequested()
         }
@@ -298,6 +305,7 @@ Item {
             visible: root.viewMode === "grid"
             enabled: root.canSort
             glyph: "sort"
+            keyboardFocused: root.stopFocused && root.focusedGlyph === glyph
             accessName: "Sort"
             onActivated: root.sortRequested()
         }
@@ -306,6 +314,7 @@ Item {
             id: modes
             inputLive: root.inputLive
             viewMode: root.viewMode
+            focusedGlyph: root.stopFocused ? root.focusedGlyph : ""
             onChosen: function (mode) { root.viewChosen(mode) }
         }
 
@@ -322,6 +331,7 @@ Item {
             inputLive: root.inputLive
             ruleRows: Theme.spacing.hairline
             glyph: "sliders"
+            keyboardFocused: root.stopFocused && root.focusedGlyph === glyph
             onActivated: root.settingsRequested()
         }
     }

@@ -189,6 +189,7 @@ Rectangle {
         home: view.currentPane.home
         pathAlias: view.currentPane.pathAlias
         dropPane: view.currentPane
+        stopFocused: view.currentPane.focusView === Focus.CHROME
         canGoBack: view.currentPane.canGoBack
         canGoUp: view.currentPane.canGoUp
         viewMode: view.dualMode ? "dual" : view.currentPane.viewMode
@@ -243,6 +244,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: chrome.bottom
         pane: view.currentPane
+        stopFocused: view.currentPane.focusView === Focus.STRIP
     }
 
     // Load the acknowledgment handler from the boot URL to preserve startup without ui/qmldir.
@@ -304,6 +306,8 @@ Rectangle {
         dualMode: view.dualMode
         paneFocused: view.currentPane === primaryPane
         railPane: view.currentPane
+        chromeBar: chrome
+        tabStrip: tabBar
         onFocusRequested: view.focusPane(0)
         onSwitchPane: view.focusPane(1)
         onSwitchToRail: view.switchToLeftRail()
@@ -363,6 +367,8 @@ Rectangle {
                 backend: otherBackend
                 clipboardState: primaryPane.clipboardState
                 sharedSidebar: primaryPane.sidebar
+                chromeBar: chrome
+                tabStrip: tabBar
                 networkService: view.networkService
                 sharedNetworkService: primaryPane.networkService
                 dualMode: true

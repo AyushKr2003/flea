@@ -56,6 +56,10 @@ function run(check) {
         key(preset, "1", "", preset === "windows" ? ctrl | shift : ctrl, "viewList")
         key(preset, "2", "", preset === "windows" ? ctrl | shift : ctrl, "viewColumns")
         key(preset, "3", "", preset === "windows" ? ctrl | shift : ctrl, "viewGrid")
+        // KEYS-03: the Dual view has its own chord beside the three, and Shift+Tab walks the ring back from the listing.
+        key(preset, "4", "", preset === "windows" ? ctrl | shift : ctrl, "viewDual")
+        key(preset, "Tab", "", shift, "focusPrevious")
+        key(preset, "Backtab", "", shift, "focusPrevious")
         key(preset, "Comma", "", ctrl, "settings")
         for (var f = 0; f < 2; f++) {
             var frontend = ["gui", "tui"][f]
@@ -129,6 +133,7 @@ function run(check) {
     key("mac", "D", "", meta, "duplicate")
     key("mac", "Z", "", meta, "undo")
     key("mac", "Z", "", meta | shift, "redo")
+    key("default", "Z", "", ctrl | shift, "redo")
     key("mac", "A", "", meta, "selectAll")
     key("mac", "I", "", meta, "properties")
     key("mac", "BracketLeft", "", meta, "historyBack")

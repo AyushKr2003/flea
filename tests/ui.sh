@@ -15299,6 +15299,7 @@ case_previewviews() {
 . "$repo/tests/ui-openwith-design.sh"
 . "$repo/tests/ui-providers.sh"
 . "$repo/tests/ui-gvfsbridge.sh"
+. "$repo/tests/ui-keyreach.sh"
 # Native minipc checks two owned windows, surviving owners, GTK files and disabled text-only Paste inside a marked root.
 case_clipboard() {
     command -v wl-copy >/dev/null || fail "clipboard: wl-copy is missing"
@@ -15881,8 +15882,12 @@ failures=0
 # its own subshell, so a refusal's exit cannot stop the loop; counting it separately is what makes it
 # visible instead of arriving as one more FAIL among many.
 refusals=0
+# A TERM from the runner's timeout prints the running case's log so far and TIMEOUT <case>, then exits through the EXIT cleanup.
+running_case=""
+trap '[[ -z "$running_case" ]] || { cat "$case_log"; printf "TIMEOUT %s\n" "$running_case"; }; exit 143' TERM
 for name in "${wanted[@]}"; do
     printf '\n== case %s ==\n' "$name"
+    running_case="$name"
     # The subshell stays an if-condition, because a command substitution makes its set -e live and
     # every bare fallible statement mid-case (kill, ln -s, a bsdtar whose stderr is suppressed
     # precisely because it may fail) would abort that case with no diagnostic. Output goes to a file
@@ -15896,6 +15901,7 @@ for name in "${wanted[@]}"; do
         printf 'FAIL %s\n' "$name"
         failures=$((failures + 1))
     fi
+    running_case=""
     # grep on the file, not through a pipe: pipefail turns grep -q's early exit into a SIGPIPE on
     # the writer and a 141 status, which reads as no match on a payload larger than the pipe buffer.
     if grep -q '^REFUSED:' "$case_log"; then

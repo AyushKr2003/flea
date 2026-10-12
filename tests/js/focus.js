@@ -679,8 +679,8 @@ function run(check) {
     var paneSrc = Source.source("ui/Pane.qml")
     check("wire pin: Pane forwards railHidden changes to Focus.railHidden", paneSrc.indexOf("onRailHiddenChanged: if (root.railHidden) Focus.railHidden(root)") >= 0, true)
     check("wire pin: Pane imports the Focus library it forwards through", paneSrc.indexOf('import "js/Focus.js" as Focus') >= 0, true)
-    check("tab with a hidden rail stays in the list", Focus.next("list", false), "list")
-    check("tab with an auto-hide rail reveals it", Focus.next("list", true), "rail")
+    check("tab with a hidden rail stays in the list", Focus.next("list", {}, true), "list")
+    check("tab with an auto-hide rail reveals it", Focus.next("list", {rail: true}, true), "rail")
 
     // Dual's Tab walks the left pane's rail, the left list and the right list; the rig stands in for the window that switchPane and switchToRail reach.
     function dualPress(rail, stop, action) {
