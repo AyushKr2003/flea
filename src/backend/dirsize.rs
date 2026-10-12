@@ -44,8 +44,7 @@ pub fn walk_all(base: &Path, l: &Listing, deadline: Instant) -> Vec<Option<DirSi
     out
 }
 
-// A size sort on a share or a phone walks nothing: each folder takes what a walk past its deadline answers, its own entry
-// size marked partial, so the order is the one the deadline path already gives. Sample: class "network" never reads a folder.
+// On a share or a phone a size sort walks nothing: each folder keeps its entry size, partial, as an expired walk answers.
 pub fn sort_walk(base: &Path, class: &str, l: &Listing, stats: &[Stat], deadline: Instant) -> Vec<Option<DirSize>> {
     if !refuses_folder_sizes(class) {
         return walk_all(base, l, deadline);
