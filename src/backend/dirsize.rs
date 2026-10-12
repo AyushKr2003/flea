@@ -1,4 +1,6 @@
+use crate::backend::extclass::refuses_folder_sizes;
 use crate::backend::listing::Listing;
+use crate::backend::meta::Stat;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -40,6 +42,14 @@ pub fn walk_all(base: &Path, l: &Listing, deadline: Instant) -> Vec<Option<DirSi
         }
     });
     out
+}
+
+// On a share or a phone a size sort walks nothing: each folder keeps its entry size, partial, as an expired walk answers.
+pub fn sort_walk(base: &Path, class: &str, l: &Listing, stats: &[Stat], deadline: Instant) -> Vec<Option<DirSize>> {
+    if !refuses_folder_sizes(class) {
+        return walk_all(base, l, deadline);
+    }
+    (0..l.len()).map(|i| l.is_dir(i).then(|| DirSize { bytes: stats[i].size, partial: true })).collect()
 }
 
 // walk_until is the testable core: a test passes an already-past deadline to force partial without waiting 2000 ms.

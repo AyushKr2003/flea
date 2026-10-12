@@ -1,4 +1,5 @@
-use super::dirsize::{walk_all, walked_bytes, DirSize, SORT_BUDGET_MS};
+use super::dirsize::{sort_walk, walked_bytes, DirSize, SORT_BUDGET_MS};
+use super::extclass::classify;
 use super::listing::Listing;
 use super::meta::stat_all;
 use super::mime::Db;
@@ -61,7 +62,7 @@ pub fn ordered(
     // One shared deadline bounds the whole folder pass, so a size sort costs about one slow row.
     let walked: Vec<Option<DirSize>> = if by == "size" {
         let t = Instant::now();
-        let walked = walk_all(base, l, t + Duration::from_millis(SORT_BUDGET_MS));
+        let walked = sort_walk(base, classify(base), l, stats.as_ref().unwrap(), t + Duration::from_millis(SORT_BUDGET_MS));
         pass_ms += t.elapsed().as_secs_f64() * 1000.0;
         walked
     } else {
