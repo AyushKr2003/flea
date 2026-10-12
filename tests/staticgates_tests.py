@@ -183,6 +183,54 @@ class StaticGateTests(unittest.TestCase):
                          (5, ['ui/Quad.qml:2: Easing.OutQuad' + rule, 'ui/Spaced.qml:2: Easing.InQuad' + rule,
                               'ui/js/Curve.js:2: Easing.InOutSine' + rule]))
 
+    def test_ellipsis_rejects_three_stops_in_string_literals(self):
+        self.write('ui/Busy.qml', 'Item {\n'
+                   '    property string saving: "Saving..."\n'
+                   '    property string fixed: "Saving…"\n'
+                   '    // "Saving..." is a comment\n'
+                   '    property string uri: "smb://x..."\n'
+                   '    property string tail: "Saving…" // "Saving..." tail\n'
+                   '    property string dots: "..."\n'
+                   '}\n')
+        self.write('ui/js/Busy.js', 'function label() { return "Working..." }\n')
+        self.write('shelf/Busy.qml', 'Item { property string s: "Saving..." }\n')
+        files = ['ui/Busy.qml', 'ui/Missing.qml', 'ui/js/Busy.js', 'shelf/Busy.qml']
+        stops = ': three full stops after a letter, use the ellipsis character'
+        self.assertEqual(gates.ellipsis(self.root, files),
+                         (2, ['ui/Busy.qml:2' + stops, 'ui/Busy.qml:5' + stops, 'ui/js/Busy.js:1' + stops]))
+
+    def test_ellipsis_reads_all_string_kinds_and_skips_block_comments(self):
+        self.write('ui/Kinds.qml', 'Item {\n'
+                   "    property string single: 'Working...'\n"
+                   '    property string mixed: \'smb://h\' + "Loading..."\n'
+                   '    property string escaped: "a\\"//b..."\n'
+                   '    property string fixed: "Saving…"\n'
+                   '}\n')
+        self.write('ui/js/Ticks.js', 'function label() { return `Saving...` }\n')
+        self.write('ui/Block.qml', '/* "Saving..." */\n'
+                   '/* open\n'
+                   ' * "Saving..."\n'
+                   ' close */\n'
+                   'Item { property string ok: "fine" }\n')
+        files = ['ui/Kinds.qml', 'ui/js/Ticks.js', 'ui/Block.qml']
+        stops = ': three full stops after a letter, use the ellipsis character'
+        self.assertEqual(gates.ellipsis(self.root, files),
+                         (3, ['ui/Kinds.qml:2' + stops, 'ui/Kinds.qml:3' + stops,
+                               'ui/Kinds.qml:4' + stops, 'ui/js/Ticks.js:1' + stops]))
+
+    def test_ellipsis_skips_line_comments_before_blocks_and_code(self):
+        self.write('ui/LineApostrophe.qml', "// it's here\n"
+                   '/* "Saving..." */\n'
+                   'Item { property string saving: "Saving..." }\n'
+                   'Item { property string ok: "fine" }\n')
+        self.write('ui/LineBlock.qml', '// see /* note\n'
+                   'Item { property string saving: "Saving..." }\n'
+                   'Item { property string ok: "fine" }\n')
+        files = ['ui/LineApostrophe.qml', 'ui/LineBlock.qml']
+        stops = ': three full stops after a letter, use the ellipsis character'
+        self.assertEqual(gates.ellipsis(self.root, files),
+                         (2, ['ui/LineApostrophe.qml:3' + stops, 'ui/LineBlock.qml:2' + stops]))
+
     def test_worker_announce_allows_only_the_counted_worker(self):
         self.write('ui/Bare.qml', 'Item { WorkerScript { source: "W.js" } }\n')
         self.write('ui/Said.qml', 'WorkerScript {\n    // WORKER_STARTED\n    Component.onCompleted: console.info(log, "WORKER_STARTED " + source)\n}\n')
