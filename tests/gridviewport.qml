@@ -113,7 +113,7 @@ ShellRoot {
                     + " cols=" + area.columns + " vrows=" + area.visibleTileRows + " plan=" + area.landingTiles + " live=" + root.laidOut(area))
                 check(name + ": the Grid is whole after the key", root.whole(), "viewMode=" + pane.viewMode)
                 check(name + ": no frame drew a half-built Grid", root.partialFrames === 0, "partial=" + root.partialFrames)
-                // A hidden Grid holds no delegate (AGENTS.md rule 6), so every switch builds its tiles and takes none from a pool.
+                // The hidden Grid's model drains on hide (StableModel.drainHidden), so every switch builds its tiles and takes none from a pool.
                 check(name + ": the hidden Grid held no delegate at the key", root.heldAtKey === 0, "held=" + root.heldAtKey)
                 // The first frame that draws the Grid holds the viewport's tiles and one spare row at most; the cache rows come after it.
                 check(name + ": the first Grid frame holds the viewport's tiles and no cache row", root.firstFrameTiles >= viewport && root.firstFrameTiles <= area.columns * (area.visibleTileRows + 1), "first=" + root.firstFrameTiles + " viewport=" + viewport)
