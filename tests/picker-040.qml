@@ -271,7 +271,6 @@ ShellRoot {
             return
         }
         if (stage === 2) {
-            // The area settles over a few polls, so the geometry is read after them.
             // The first poll after the keystroke: the review state is read one frame on, with no settle wait.
             if (win.saveName !== "x.txt") return
             root.check("typing ends the review in one frame", [form.statusItem.visible, form.statusItem.text, root.acceptButton().label, root.acceptButton().destructive], [false, "", "Save", false])
@@ -311,8 +310,7 @@ ShellRoot {
             root.finish()
         }
     }
-    // A new folder, a re-list of the same folder and a new place each end a standing review: the folder is walked into from its row,
-    // the watcher's re-read of the folder is its own openWithoutHistory call, and Parent is the new place.
+    // A new folder (walked into), a re-list (the watcher's own openWithoutHistory call) and a new place (Parent) each end a standing review.
     function endsStep(form) {
         if (stage === 20) {
             if (win.path !== root.rootPath || win.listingState !== "ready" || !win.saveReady || !win.saveCollision) return
@@ -326,6 +324,8 @@ ShellRoot {
             if (root.endAt === 0) win.activate(root.rowIndex("sub"))
             else if (root.endAt === 1) win.openWithoutHistory(win.path)
             else win.goUp()
+            // clearListing drops the state to loading in the same call, so stage 22 waiting on ready waits for the new listing to land.
+            root.check("the " + ["folder", "re-list", "new place"][root.endAt] + " starts a listing", [win.listingState, win.pendingListings], ["loading", 1])
             root.stage = 22
             return
         }

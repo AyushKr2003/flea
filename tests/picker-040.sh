@@ -69,8 +69,7 @@ PY
             fi
             if [ "$code" -eq 143 ]; then code=0; fi
         fi
-        # A save answer is the reply file too: only Replace itself (Space or Enter on it) answers OK with the name over a taken one, a second
-        # Return in the field answers nothing (no reply file), and Cancel answers a refusal.
+        # A save answer is the reply file too: only Replace answers OK over a taken name, a second Return answers nothing, Cancel refuses.
         case "$scenario" in
             replace|replace-button) want="{\"response\":0,\"uris\":[\"file://$fixture/a.txt\"],\"filter\":0}" ;;
             cancel) want='{"response":1}' ;;
