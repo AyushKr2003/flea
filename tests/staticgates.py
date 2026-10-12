@@ -13,7 +13,7 @@ import tempfile
 import tarfile
 
 COUNTED_WORKER = 'ui/CountedWorker.qml'
-GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color', 'extern-variadic', 'pane-function-value', 'dead-module-call', 'worker-report', 'easing')
+GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color', 'extern-variadic', 'pane-function-value', 'dead-module-call', 'worker-report', 'easing', 'ellipsis')
 SUFFIXES = {'.rs', '.qml', '.js', '.sh'}
 # Bound alias propagation so pathological chains cannot keep a source gate running.
 ALIAS_FIXPOINT_CAP = 8
@@ -997,6 +997,104 @@ def easing(root, files):
     return scanned, errors
 
 
+# Sample input: x = "a//b" // 'c...' keeps the literals and drops the tail.
+def ellipsis_code(line, quote=None):
+    # A // tail is a comment only outside a string literal, so a URI keeps its slashes.
+    if quote != '`':
+        quote = None
+    out = ['`'] if quote == '`' else []
+    i = 0
+    while i < len(line):
+        char = line[i]
+        if quote is not None:
+            out.append(char)
+            if char == '\\':
+                out.append(line[i + 1:i + 2])
+                i += 2
+                continue
+            if char == quote:
+                quote = None
+        elif char in '"\'`':
+            quote = char
+            out.append(char)
+        elif char == '/' and line[i + 1:i + 2] == '/':
+            break
+        else:
+            out.append(char)
+        i += 1
+    # A template still open at the line end closes here so the pattern sees its tail.
+    return ''.join(out) + ('`' if quote == '`' else ''), quote
+
+
+# Sample input: /* "Saving..." */ keeps code; "//" keeps tails and "'" keeps quotes.
+def ellipsis_blocks(text):
+    # Blank block comments keeping newlines; // and quotes end at newline, backticks span.
+    out = []
+    quote = None
+    blocked = False
+    lined = False
+    i = 0
+    while i < len(text):
+        char = text[i]
+        pair = text[i:i + 2]
+        if quote is not None:
+            out.append(char)
+            if char == '\\':
+                nxt = text[i + 1:i + 2]
+                out.append(nxt)
+                if nxt == '\n' and quote != '`':
+                    quote = None
+                i += 2
+                continue
+            if (char == '\n' and quote != '`') or char == quote:
+                quote = None
+        elif blocked:
+            if pair == '*/':
+                blocked = False
+                out.append('  ')
+                i += 2
+                continue
+            out.append('\n' if char == '\n' else ' ')
+        elif lined:
+            out.append(char)
+            if char == '\n':
+                lined = False
+        elif pair == '//':
+            lined = True
+            out.append(pair)
+            i += 2
+            continue
+        elif pair == '/*':
+            blocked = True
+            out.append('  ')
+            i += 2
+            continue
+        elif char in '"\'`':
+            quote = char
+            out.append(char)
+        else:
+            out.append(char)
+        i += 1
+    return ''.join(out)
+
+
+# Sample input: label: 'Saving...' is rejected; "Saving…" and a /* "Saving..." */ block pass.
+def ellipsis(root, files):
+    errors = []
+    scanned = 0
+    for file in files:
+        path = root / file
+        if path.suffix not in ('.qml', '.js') or not file.startswith('ui/') or not path.is_file():
+            continue
+        scanned += 1
+        quote = None
+        for n, line in enumerate(ellipsis_blocks(path.read_text()).splitlines(), 1):
+            code, quote = ellipsis_code(line, quote)
+            for m in re.finditer(r'["\'`][^"\'`\n]*[A-Za-z]\.\.\.[^"\'`\n]*["\'`]', code):
+                errors.append(f'{file}:{n}: three full stops after a letter, use the ellipsis character')
+    return scanned, sorted(set(errors))
+
+
 # Sample input: extern "C" { fn fcntl(fd: c_int, cmd: c_int, arg: c_int) -> c_int; } is rejected; the same declaration with a ... tail passes.
 def extern_variadic(root, files):
     errors = []
@@ -1019,7 +1117,7 @@ def extern_variadic(root, files):
 
 
 CHECKS = dict(zip(GATES, (conflict_marker, fused_line, paneprops, del_printable, qml_undeclared_read, qml_duplicate_member, worker_announce,
-                          commons_color, extern_variadic, pane_function_value, dead_module_call, worker_report, easing)))
+                          commons_color, extern_variadic, pane_function_value, dead_module_call, worker_report, easing, ellipsis)))
 
 
 def negative_controls(root):
@@ -1039,6 +1137,7 @@ def negative_controls(root):
         'dead-module-call': ('ui/Sample.qml', 'import QtQuick\nimport "js/Search.js" as Search\nItem { function f() { Search.run(this) } }\n'),
         'worker-report': ('RESULT.md', 'run notes\n'),
         'easing': ('ui/Sample.qml', 'import QtQuick\nItem { NumberAnimation { easing.type: Easing.OutQuad } }\n'),
+        'ellipsis': ('ui/Sample.qml', 'Item { property string busy: "Saving..." }\n'),
     }
     errors = []
     script = root / 'tests/staticgates.py'
@@ -1077,6 +1176,7 @@ def negative_controls(root):
                         'dead-module-call': 'defines no function run',
                         'worker-report': 'worker report tracked at',
                         'easing': 'every transition uses Easing.OutCubic',
+                        'ellipsis': 'three full stops',
                         'qml-duplicate-member': ('wire declared again (first at 2)' if file.endswith('.js') else 'Duplicate alias name')}[gate]
             if (result.returncode != 1 or expected not in diagnostic or file + ':' not in diagnostic
                     or 'STATICGATES FAIL gates=1' not in result.stdout):

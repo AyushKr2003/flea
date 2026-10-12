@@ -252,7 +252,7 @@ FocusScope {
                 Text {
                     width: parent.width
                     visible: text.length > 0
-                    text: root.errorText || (root.busy ? "Working..." : "")
+                    text: root.errorText || (root.busy ? "Working…" : "")
                     textFormat: Text.PlainText
                     wrapMode: Text.Wrap
                     color: root.errorText ? Theme.color.error : Theme.color.muted
