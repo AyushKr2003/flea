@@ -197,7 +197,7 @@ ShellRoot {
             ViewState.changeLeaf("sort", { key: order.key === "mtime" ? "date" : order.key, reverse: order.desc })
             win.clearListing()
             win.pendingListings = 1
-            listing.sort(order.key, order.desc, ViewState.state.foldersFirst !== false, ViewState.state.groupByKind === true)
+            listing.sort(order.key, order.desc, ViewState.state.foldersFirst !== false, ViewState.state.groupByKind === true, ViewState.state.hiddenLast === true)
             // sort answers a listed line and no rows of its own, so the reordered window is asked for.
             listing.window(0, win.windowSize)
             win.focusView()
