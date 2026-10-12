@@ -67,6 +67,8 @@ pub struct Gate {
     deferred: VecDeque<String>,
     changes: Vec<i32>,
     unmounts: Vec<i32>,
+    // A poll's change or a probe's figures for the folder being left, which wait like a burst and are judged against the folder that lands.
+    held: Vec<Event>,
     // Descriptors a let-go scan handed back while another scan was out; inotify gives the same one for the same folder.
     late: Vec<i32>,
     closed: bool,
@@ -74,7 +76,7 @@ pub struct Gate {
 
 impl Gate {
     pub fn new(answers: Sender<Event>) -> Gate {
-        Gate { answers, scanner: None, fate: Arc::new(AtomicU8::new(ANSWERED)), job: None, deferred: VecDeque::new(), changes: Vec::new(), unmounts: Vec::new(), late: Vec::new(), closed: false }
+        Gate { answers, scanner: None, fate: Arc::new(AtomicU8::new(ANSWERED)), job: None, deferred: VecDeque::new(), changes: Vec::new(), unmounts: Vec::new(), held: Vec::new(), late: Vec::new(), closed: false }
     }
 
     // True while a scan is out, which is when a request cannot be answered against the listing it will replace.
@@ -161,6 +163,14 @@ impl Gate {
 
     pub fn take_unmounts(&mut self) -> Vec<i32> {
         std::mem::take(&mut self.unmounts)
+    }
+
+    pub fn hold(&mut self, event: Event) {
+        self.held.push(event);
+    }
+
+    pub fn take_held(&mut self) -> Vec<Event> {
+        std::mem::take(&mut self.held)
     }
 
     // A late descriptor comes back at once with the ones that waited, or waits while a scan is out that may have armed the same one.

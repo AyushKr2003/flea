@@ -91,7 +91,7 @@ function run(check) {
 
     // Unlock critic F8 (ui:cap_unlock proves it natively): Tab walks field, Cancel, Unlock. No property keeps the passphrase (tests/unlock-stdin.qml).
     var dialog = Source.source("ui/UnlockDialog.qml")
-    check("a card the user has typed in keeps its name", Source.slice(host, "    function cardTouched()", "    // Only an untouched card").indexOf("dlg.masked") >= 0
+    check("a card the user has typed in keeps its name", Source.slice(host, "    function cardTouched()", "    // Only an untouched card").indexOf("unlockDialog.masked") >= 0
         && Source.slice(host, "    function nameDevice()", "    // After an unlock").indexOf("root.cardTouched()") >= 0, true)
     check("the field's Tab steps the card's own order", /onTabbed: function \(from, back\) \{ root\.stepTab\(back\) \}/.test(dialog), true)
     check("the order is field, Cancel, Unlock", dialog.indexOf("[field.input, cancelButton, unlockButton]") >= 0, true)

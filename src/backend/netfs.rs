@@ -12,9 +12,9 @@ pub fn is_network_fstype(fstype: &str) -> bool {
     NETWORK_FSTYPES.iter().any(|kind| kind.eq_ignore_ascii_case(fstype))
 }
 
-// A filesystem whose stat can wedge: the shared network list plus any FUSE mount.
+// A filesystem whose stat can wedge: the shared network list plus any FUSE mount, block-backed fuseblk (ntfs-3g) included.
 pub fn can_wedge(kind: &str) -> bool {
-    is_network_fstype(kind) || kind == "fuse" || kind.starts_with("fuse.")
+    is_network_fstype(kind) || kind == "fuse" || kind == "fuseblk" || kind.starts_with("fuse.")
 }
 
 #[cfg(test)]
@@ -45,6 +45,17 @@ mod tests {
         out.sort();
         out.dedup();
         out
+    }
+
+    // Sample input: "fuseblk" is ntfs-3g's daemon on a local disk, whose hang wedges a stat like any FUSE daemon's.
+    #[test]
+    fn any_fuse_daemon_can_wedge_and_a_kernel_filesystem_cannot() {
+        for kind in ["fuse", "fuseblk", "fuse.mergerfs", "fuse.portal", "nfs4", "cifs"] {
+            assert!(can_wedge(kind), "{} can wedge", kind);
+        }
+        for kind in ["ext4", "btrfs", "vfat", "exfat", "ntfs3", "tmpfs", "nfsd", "fusectl", ""] {
+            assert!(!can_wedge(kind), "{} stays inline", kind);
+        }
     }
 
     #[test]

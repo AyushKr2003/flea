@@ -32,34 +32,35 @@ function run(check) {
         sticky: function () {},
         backend: {
             extract: function (path, dest, id) { pwSent.push("extract:" + path + "|" + dest) },
-            compressPw: function (paths, dest, format, password, encrypt, id) {
+            compressPassword: function (paths, dest, format, password, encrypt, id) {
                 pwSent.push([paths.length, dest, format, password === "s3cret", encrypt, id].join("|")) },
-            extractPw: function (path, dest, password, id) {
+            extractPassword: function (path, dest, password, id) {
                 pwSent.push(["extract", path, dest, password === "s3cret", id].join("|")) },
             askPaths: function (idx) { pwSent.push("ask:" + idx.join(",")) }
         } }
     var opened = []
     var pwCards = { openCompressDialog: function (source, leaf, holder) { opened.push(source); pwSent.push("dialog:" + source.paths.length + ":" + leaf) } }
+    var paneKeys = Object.keys(pwPane).join(",")
     Ops.extract(pwPane, 0)
     check("AB4: an extract sends its paths and keeps no stash on the pane",
-          pwSent.join(",") + "|" + ("extractPwSource" in pwPane), "extract:/d/backup.7z|/d/backup|false")
-    ArchiveOps.compressPwResolved(pwCards, pwPane, ["/d/a", "/d/b"], 3)
+          pwSent.join(",") + "|" + (Object.keys(pwPane).join(",") === paneKeys), "extract:/d/backup.7z|/d/backup|true")
+    ArchiveOps.compressPasswordResolved(pwCards, pwPane, ["/d/a", "/d/b"], 3)
     check("AB1: the cards host opens over the resolved paths and the menu id",
           pwSent[pwSent.length - 1] + "|" + opened[0].menuId, "dialog:2:d|3")
-    ArchiveOps.submitCompressPw(pwPane, opened[0], "7z", "Archive.7z", "s3cret", true)
+    ArchiveOps.submitCompressPassword(pwPane, opened[0], "7z", "Archive.7z", "s3cret", true)
     check("the submit carries the secret to the wire, never the card",
           pwSent[pwSent.length - 1] + "|" + JSON.stringify(opened[0]).indexOf("s3cret"), "2|/d/Archive.7z|7z|true|true|3|-1")
-    ArchiveOps.submitExtractPw(pwPane, { path: "/d/backup.7z", dest: "/d/backup" }, "s3cret")
+    ArchiveOps.submitExtractPassword(pwPane, { path: "/d/backup.7z", dest: "/d/backup" }, "s3cret")
     check("AB4: the retry goes to the source the card was opened over",
           pwSent[pwSent.length - 1], "extract|/d/backup.7z|/d/backup|true|0")
     var before = pwSent.length
-    ArchiveOps.submitExtractPw(pwPane, null, "s3cret")
+    ArchiveOps.submitExtractPassword(pwPane, null, "s3cret")
     check("AB4: a retry with no source sends nothing", pwSent.length, before)
     var refusedPane = { path: "/d", join: function (a, b) { return a + "/" + b },
         sticky: function (line) { pwSent.push("sticky:" + line) },
-        backend: { queueing: true, compressPw: function () { pwSent.push("queued-compress") } } }
+        backend: { queueing: true, compressPassword: function () { pwSent.push("queued-compress") } } }
     var queued = pwSent.length
-    ArchiveOps.submitCompressPw(refusedPane, { paths: ["/d/a"], menuId: 0 }, "7z", "Archive.7z", "s3cret", true)
+    ArchiveOps.submitCompressPassword(refusedPane, { paths: ["/d/a"], menuId: 0 }, "7z", "Archive.7z", "s3cret", true)
     check("AB4: a queueing send leaves no stale sticky line", pwSent.slice(queued).join(","), "queued-compress")
     // A 7z, zip, 7z round trip keeps header encryption: commit masks it for 7z whatever chooseFormat did.
     var cardParent = Qt.createComponent("QtQuick", "Item").createObject(null)
@@ -67,7 +68,7 @@ function run(check) {
     var cardSaid = []
     var cardPane = Fixture.pane("c", cardSent, cardSaid)
     var cardHost = Fixture.cards(cardParent)
-    cardHost.askCompressPw(cardPane, ["/c/x"], 6)
+    cardHost.askCompressPassword(cardPane, ["/c/x"], 6)
     cardHost.compressItem.takeSecretForTest("s3cret")
     cardHost.compressItem.chooseFormat(1)
     cardHost.compressItem.chooseFormat(0)
@@ -78,7 +79,7 @@ function run(check) {
           cardSent.join(","), "c|compress|/c/x|/c/x.7z|7z|s3cret|true|6")
     // A zip cannot encrypt names, so its submit masks the box that still reads true.
     cardSent.length = 0
-    cardHost.askCompressPw(cardPane, ["/c/x"], 7)
+    cardHost.askCompressPassword(cardPane, ["/c/x"], 7)
     cardHost.compressItem.takeSecretForTest("s3cret")
     cardHost.compressItem.chooseFormat(1)
     check("the box still reads true under zip", [cardHost.compressItem.format, cardHost.compressItem.encryptNames].join("|"), "zip|true")
@@ -89,11 +90,11 @@ function run(check) {
     var askPane = { path: "/d", selectedIndices: function () { return [0, 1] },
         join: function (a, b) { return a + "/" + b }, sticky: function () {},
         backend: { askPaths: function (idx) { pwSent.push("ask:" + idx.join(",")) } } }
-    ArchiveOps.openCompressPw(askPane, 5, pwCards)
+    ArchiveOps.openCompressPassword(askPane, 5, pwCards)
     check("without paths the selection is asked under a deliver claim",
           pwSent[pwSent.length - 1] + "|" + askPane.pathsPending.kind
           + "|" + (typeof askPane.pathsPending.deliver),
-          "ask:0,1|compressPw|function")
+          "ask:0,1|compressPassword|function")
     askPane.pathsPending.deliver(["/d/a", "/d/b"])
     check("and the reply opens the dialog with its menu id",
           pwSent[pwSent.length - 1] + "|" + opened[opened.length - 1].menuId,
@@ -103,7 +104,7 @@ function run(check) {
     var withPw = menuEntry(Menu.listingEntries(menuState({ archiveFormats: ["zip", "7z"] })), "compress")
     check("the submenu is the probed table plus the password row",
           withPw.submenu.map(function (r) { return r.separator === true ? "sep" : r.id }).join("|"),
-          "zip|7z|sep|compressPw")
+          "zip|7z|sep|compressPassword")
     check("and the password row wears the key mark",
           withPw.submenu[withPw.submenu.length - 1].glyph, "key")
     check("without 7z the password row is hidden",

@@ -348,3 +348,5 @@ mod unmount;
 mod newest;
 #[path = "run_gate_alias_tests.rs"]
 mod alias;
+#[path = "run_gate_poll_tests.rs"]
+mod poll;

@@ -435,7 +435,7 @@ Item {
             pane.sticky("")
             var action = Archive.doneAction(ok, err)
             if (action !== "") {
-                pane.extractPwRequested(path, dest, action === "wrong" ? err : "")
+                pane.extractPasswordRequested(path, dest, action === "wrong" ? err : "")
                 pane.refresh("")
                 return
             }

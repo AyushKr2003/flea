@@ -48,8 +48,8 @@ function pane(name, sent, said) {
         sticky: function () {},
         message: function (text) { said.push(name + ":" + text) },
         backend: { archiveFormats: ["7z", "zip"], queueing: false,
-            compressPw: function (paths, dest, format, password, encrypt, id) {
+            compressPassword: function (paths, dest, format, password, encrypt, id) {
                 sent.push([name, "compress", paths.join(","), dest, format, password, encrypt, id].join("|")) },
-            extractPw: function (path, dest, password, id) {
+            extractPassword: function (path, dest, password, id) {
                 sent.push([name, "extract", path, dest, password, id].join("|")) } } }
 }

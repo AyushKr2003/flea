@@ -331,10 +331,10 @@ Rectangle {
         onSticky: function (text) { bar.setActivity(primaryPane, text, primaryPane.transfer) }
         onConvertRequested: function (name) { convertDialog.open(name, primaryPane) }
         // Archives040: compress opens over resolved paths, extract over the named archive.
-        onCompressPwRequested: function (paths, menuId) {
-            view.openArchiveCards().askCompressPw(primaryPane, paths, menuId)
+        onCompressPasswordRequested: function (paths, menuId) {
+            view.openArchiveCards().askCompressPassword(primaryPane, paths, menuId)
         }
-        onExtractPwRequested: function (path, dest, err) { view.openArchiveCards().openExtractPw({ path: path, dest: dest }, primaryPane, err) }
+        onExtractPasswordRequested: function (path, dest, err) { view.openArchiveCards().openExtractPassword({ path: path, dest: dest }, primaryPane, err) }
         onPermissionsRequested: function (path) { permissionsDialog.open(path, primaryPane) }
         // Permissions040: the whole selection's paths for the multi-row card.
         onPermissionsBatchRequested: function (paths) { permissionsDialog.openMany(paths, primaryPane) }
@@ -392,10 +392,10 @@ Rectangle {
                 onOperationResult: function(headline, detail, error) { bar.say(headline, error, detail) }
                 onSticky: function(text) { bar.setActivity(otherPane, text, otherPane.transfer) }
                 onConvertRequested: function(name) { convertDialog.open(name, otherPane) }
-                onCompressPwRequested: function (paths, menuId) {
-                    view.openArchiveCards().askCompressPw(otherPane, paths, menuId)
+                onCompressPasswordRequested: function (paths, menuId) {
+                    view.openArchiveCards().askCompressPassword(otherPane, paths, menuId)
                 }
-                onExtractPwRequested: function (path, dest, err) { view.openArchiveCards().openExtractPw({ path: path, dest: dest }, otherPane, err) }
+                onExtractPasswordRequested: function (path, dest, err) { view.openArchiveCards().openExtractPassword({ path: path, dest: dest }, otherPane, err) }
                 onPermissionsRequested: function(path) { permissionsDialog.open(path, otherPane) }
                 onPermissionsBatchRequested: function (paths) { permissionsDialog.openMany(paths, otherPane) }
                 onBulkRenameRequested: function (paths) { view.openBulkRename(paths, otherPane) }

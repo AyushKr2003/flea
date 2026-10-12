@@ -207,7 +207,7 @@ check "and both cards expose one" "2" "$(cat ui/ArchivePasswordDialog.qml ui/Arc
 check "the host builds on first open only" "1" "$(grep -c 'Qt.createComponent("ArchiveCards.qml")' ui/WindowBody.qml)"
 check "and nothing instantiates it at startup" "0" "$(count_in 'Flea\.ArchiveCards {' ui/WindowBody.qml ui/ArchiveCards.qml)"
 check "no new surface logs" "0" "$(count_in 'console\.log' ui/ArchiveCompressDialog.qml ui/ArchivePasswordDialog.qml ui/ArchiveCards.qml ui/js/Archive.js ui/js/ArchiveOps.js ui/js/Kinds.js)"
-check "no unkeyed extract slot survives anywhere in the ui" "0" "$(grep -r -h 'extractPwSource' ui | wc -l | tr -d ' ')"
+check "no unkeyed extract slot survives anywhere in the ui" "0" "$(grep -r -h -E 'extractP(w|assword)Source' ui | wc -l | tr -d ' ')"
 check "phase B exports the backend seam" "1" "$(count_in 'FLEA_BIN="\$PWD/target/debug/flea"' tests/archive-threat.sh)"
 
 echo

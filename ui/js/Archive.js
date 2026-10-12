@@ -137,7 +137,7 @@ function passwordEntry(formats) {
     var table = formats || []
     if (table.indexOf("7z") < 0) return []
     return [{ separator: true },
-        { id: "compressPw", label: "With password…", glyph: "key" }]
+        { id: "compressPassword", label: "With password…", glyph: "key" }]
 }
 
 // The backend's two password codes, matched exactly the way "cancelled" routes, never as sentences.

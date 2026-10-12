@@ -27,9 +27,9 @@ ShellRoot {
         backend: {
             // The backend reports zip first; the card still offers 7z first, as the board draws it.
             archiveFormats: ["zip", "tar", "7z"],
-            compressPw: function (paths, dest, format, password, encrypt, id) {
+            compressPassword: function (paths, dest, format, password, encrypt, id) {
                 shell.sent.push([paths.length, dest, format, password === shell.canary, encrypt, id].join("|")) },
-            extractPw: function (path, dest, password, id) {
+            extractPassword: function (path, dest, password, id) {
                 shell.sent.push(["extract", path, dest, password === shell.canary, id].join("|")) }
         } })
 
@@ -132,7 +132,7 @@ ShellRoot {
             // Nothing is built until a card is asked for, and the held scan can see a typed secret.
             { id: "AB10 held scan", run: function () {
                 shell.check("no card is built before the first ask", [cards.compressItem, cards.extractItem], [null, null])
-                cards.askCompressPw(shell.holder, ["/s/a", "/s/b"], 7)
+                cards.askCompressPassword(shell.holder, ["/s/a", "/s/b"], 7)
                 shell.check("the card offers 7z then zip, whatever the backend's order", cards.compressItem.formats.join("|"), "7z|zip")
                 cards.compressItem.takeSecretForTest(shell.canary)
                 shell.check("compress holds the typed secret", cards.compressItem.password, shell.canary)
@@ -149,7 +149,7 @@ ShellRoot {
             // Close clears a held secret without submitting.
             { id: "AB10 close", run: function () {
                 shell.sent = []
-                cards.askCompressPw(shell.holder, ["/s/a"], 0)
+                cards.askCompressPassword(shell.holder, ["/s/a"], 0)
                 cards.compressItem.takeSecretForTest(shell.canary)
                 shell.check("AT5: a typed secret is held before close", shell.held(cards).length > 0, true)
                 cards.compressItem.close()
@@ -161,7 +161,7 @@ ShellRoot {
             } },
             // An empty pair, or a mismatched one, never reaches the wire.
             { id: "AB2 pair", run: function () {
-                cards.askCompressPw(shell.holder, ["/s/a"], 0)
+                cards.askCompressPassword(shell.holder, ["/s/a"], 0)
                 shell.check("AB2: an empty pair cannot compress", cards.compressItem.canCompress, false)
                 cards.compressItem.commit()
                 shell.check("AB2: and an empty commit sends nothing", shell.sent, [])
@@ -202,7 +202,7 @@ ShellRoot {
             { id: "AB4 AB8 open", run: function () {
                 shell.sent = []
                 shell.said = []
-                cards.openExtractPw({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "")
+                cards.openExtractPassword({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "")
                 shell.check("AB4: the extract card names its archive", cards.extractItem.leaf, "one.7z")
                 var stops = cards.extractItem.tabStops()
                 shell.check("AB7: an empty password keeps the live Extract in the tab order, as the board draws it",
@@ -211,11 +211,11 @@ ShellRoot {
                 shell.check("AB7: Extract with no password sends nothing and asks for one",
                     [shell.sent.length, cards.extractItem.errorText, cards.extractItem.opened].join("|"),
                     "0|Type a password first.|true")
-                cards.openExtractPw({ path: "/s/two.7z", dest: "/s/two" }, shell.holder, "encrypted")
+                cards.openExtractPassword({ path: "/s/two.7z", dest: "/s/two" }, shell.holder, "encrypted")
                 shell.check("AB8: a second extract request keeps the first card", cards.extractItem.leaf, "one.7z")
                 shell.check("AB8: and is answered with a whole sentence",
                     shell.said, [shell.busySentence])
-                cards.askCompressPw(shell.holder, ["/s/x"], 0)
+                cards.askCompressPassword(shell.holder, ["/s/x"], 0)
                 shell.check("AB8: a compress request over an open card is answered too",
                     [shell.said[1], cards.compressItem === null || !cards.compressItem.opened],
                     [shell.busySentence, true])
@@ -231,7 +231,7 @@ ShellRoot {
             } },
             // The backend answers wrong-password, and the card that reopens draws as many bullets as were typed, holding none.
             { id: "AT5 wrong-password", run: function () {
-                cards.openExtractPw({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "wrong-password")
+                cards.openExtractPassword({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "wrong-password")
                 shell.check("AT5: a wrong answer reopens with its sentence",
                     cards.extractItem.errorText, "That password did not open one.7z.")
                 shell.check("AT6: the reopened card holds no secret, only the count of what was typed",
@@ -257,24 +257,24 @@ ShellRoot {
             { id: "AT6 bullets", run: function () {
                 var submit = function () {
                     shell.sent = []
-                    cards.openExtractPw({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "encrypted")
+                    cards.openExtractPassword({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "encrypted")
                     cards.extractItem.takeSecretForTest(shell.canary)
                     cards.extractItem.commit()
                     return [cards.extractItem.opened, shell.held(cards)]
                 }
                 shell.check("AT6: a submit closes the card and leaves nothing held", submit(), [false, []])
-                cards.openExtractPw({ path: "/s/other.7z", dest: "/s/other" }, shell.holder, "wrong-password")
+                cards.openExtractPassword({ path: "/s/other.7z", dest: "/s/other" }, shell.holder, "wrong-password")
                 shell.check("AT6: another archive's wrong password draws no bullets", cards.extractItem.heldMarks, 0)
                 cards.extractItem.close()
                 submit()
-                cards.openExtractPw({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "encrypted")
+                cards.openExtractPassword({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "encrypted")
                 shell.check("AT6: a first ask of the same archive draws no bullets", cards.extractItem.heldMarks, 0)
                 cards.extractItem.close()
                 submit()
-                cards.openExtractPw({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "wrong-password")
+                cards.openExtractPassword({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "wrong-password")
                 shell.check("AT6: the re-ask after it draws the count", cards.extractItem.heldMarks, shell.canary.length)
                 cards.extractItem.close()
-                cards.openExtractPw({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "wrong-password")
+                cards.openExtractPassword({ path: "/s/one.7z", dest: "/s/one" }, shell.holder, "wrong-password")
                 shell.check("AT6: and a closed re-ask spent the count, so a later one draws none", cards.extractItem.heldMarks, 0)
                 cards.extractItem.close()
             } },
@@ -284,8 +284,8 @@ ShellRoot {
                 var failed = []
                 made.failed.connect(function (where, input, message, mode) { failed.push(message) })
                 made.askFsInfo()
-                made.compressPw(["/s/a"], "/s/a.7z", "7z", shell.canary, true, 0)
-                made.extractPw("/s/a.7z", "/s/a", shell.canary, 0)
+                made.compressPassword(["/s/a"], "/s/a.7z", "7z", shell.canary, true, 0)
+                made.extractPassword("/s/a.7z", "/s/a", shell.canary, 0)
                 shell.check("AB3: a plain request waits for the child", made.pending.length, 1)
                 shell.check("AB3: a password request is refused at once, naming the backend",
                     failed, ["the backend is not running", "the backend is not running"])

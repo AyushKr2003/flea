@@ -141,6 +141,7 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
             while gate.holds() && listwork::list_path(&line).is_some_and(|path| gate.let_go(&path)) {
                 let quit = listwork::replay(gate, |waiting, gate| handle_line(waiting, out, st, tb, pool, cache, ops, flash, watch, peeks, fsinfo, poller, loop_tx, gate) == Control::Quit);
                 gate.release_late().into_iter().for_each(|late| watch.abandon_wd(late)); // a local list answers inline, with no Event::List to release them
+                for held in gate.take_held() { dispatch(held, out, st, tb, pool, cache, ops, flash, watch, peeks, fsinfo, poller, loop_tx, gate); }
                 if quit { return Control::Quit; }
             }
             // A scan is out, so a later request cannot be answered against a listing it will replace.
@@ -159,6 +160,8 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
                     say_changed(out, st);
                 }
                 gate.take_unmounts().into_iter().for_each(|wd| leave_mount(out, &st.base, watch, poller, wd));
+                // A poll or a probe seen during the scan is judged against the folder that landed.
+                for held in gate.take_held() { dispatch(held, out, st, tb, pool, cache, ops, flash, watch, peeks, fsinfo, poller, loop_tx, gate); }
                 // A walk that landed during a session's folder scan is announced after that folder answer.
                 on_search_walked(out, st, tb, pool);
             }
@@ -175,6 +178,7 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
         Event::Flash(m) => flash.report(out, &m),
         Event::DirSize(d) => report_dirsize(out, st, d),
         // A slow mount's figures, printed only for the directory on screen now.
+        Event::FsInfo(d) if gate.holds() => gate.hold(Event::FsInfo(d)),
         Event::FsInfo(d) => {
             if let Some(info) = fsinfo.finish(d, &st.base) {
                 say(out, &fsinfo_line(&info, &st.base.to_string_lossy(), crate::backend::fsinforeq::slow_class(&st.base), fsinfo.tagable_shown(&st.base), false));
@@ -191,7 +195,8 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
         }
         // The open mount went away; while a scan is out the current descriptor is unknown, so it waits for the scan's answer.
         Event::Unmounted(wd) => if gate.holds() { gate.note_unmount(wd) } else { leave_mount(out, &st.base, watch, poller, wd) },
-        // A network folder's mtime moved, which inotify never delivers; only the open path counts.
+        // A network folder's mtime moved, which inotify never delivers; only the open path counts, and while a scan is out it waits for the scan's answer.
+        Event::PollChanged(path) if gate.holds() => gate.hold(Event::PollChanged(path)),
         Event::PollChanged(path) => {
             if path == st.base {
                 say(out, &changed_line(&st.base));
