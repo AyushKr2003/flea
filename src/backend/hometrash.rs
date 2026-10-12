@@ -326,9 +326,9 @@ fn place_copy(original: &Path, files_path: &Path, room: &Path, cancel: &AtomicBo
         partial: None, manifest: None, durability: None, for_move: false };
     match crate::backend::copyfile::copy_any(original, files_path, &mut progress) {
         Ok(()) => Ok(()),
-        // The room is read off the Trash folder itself, which stands whatever the copy left behind.
         // A cancel keeps its own word, which is what the transfer counts it by; copy_any already removed the partial.
         Err(_) if cancel.load(Ordering::Relaxed) => Err(crate::backend::collide::CANCELLED.to_string()),
+        // The room is read off the Trash folder itself, which stands whatever the copy left behind.
         Err(_) => Err(sentence_after_copy(free_bytes(room)).to_string()),
     }
 }
