@@ -1322,6 +1322,42 @@ fn a_symlinked_destination_into_a_vfat_stick_batches() {
     test_reset();
 }
 
+// A link into a share is followed no further than the share's edge: no readlink lands inside a mount that can wedge.
+#[test]
+fn a_link_into_a_share_is_never_read_past_the_share_edge() {
+    test_reset();
+    let d = TestDir::new("durable-link-wedge");
+    let share = d.dir("share").canonicalize().expect("the real share path");
+    let link = d.join("link");
+    std::os::unix::fs::symlink(&share, &link).expect("the link");
+    let body = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n30 1 0:45 / {} rw - cifs //nas/media rw\n", share.display());
+    let dest = link.join("sub").join("leaf");
+    let real = super::resolved_dest(&dest, &body);
+    let reads = test_link_reads();
+    assert!(reads.contains(&link), "the link itself is read, so the hook sees the walk: {:?}", reads);
+    assert!(reads.iter().all(|p| !p.starts_with(&share)), "no syscall reaches the share: {:?}", reads);
+    assert_eq!(real, share.join("sub").join("leaf"), "the answer is the share's edge plus the unresolved tail");
+    test_reset();
+}
+
+// A chain of links lands on the stick, and a loop answers the raw path once the kernel's bound is passed.
+#[test]
+fn a_link_chain_resolves_and_a_loop_answers_the_raw_path() {
+    test_reset();
+    let d = TestDir::new("durable-link-chain");
+    let stick = d.dir("stick").canonicalize().expect("the real stick path");
+    let (first, second) = (d.join("first"), d.join("second"));
+    std::os::unix::fs::symlink("second", &first).expect("the relative link");
+    std::os::unix::fs::symlink(stick.join("..").join("stick"), &second).expect("the link through a parent step");
+    let body = "1 0 8:1 / / rw - ext4 /dev/a rw\n";
+    assert_eq!(super::resolved_dest(&first, body), stick, "both links and the parent step are followed");
+    let (ping, pong) = (d.join("ping"), d.join("pong"));
+    std::os::unix::fs::symlink(&pong, &ping).expect("one end of the loop");
+    std::os::unix::fs::symlink(&ping, &pong).expect("the other end");
+    assert_eq!(super::resolved_dest(&ping, body), ping, "a loop answers the raw path");
+    test_reset();
+}
+
 // Three small files through the link cost one syncfs and no per-file fsync, the count a bare stick path gives.
 #[test]
 fn a_transfer_through_a_symlinked_destination_confirms_with_one_syncfs() {
