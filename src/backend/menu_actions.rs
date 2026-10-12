@@ -286,9 +286,10 @@ impl Snapshot {
                 let target = if meta.file_type().is_symlink() {
                     std::fs::read_link(&item.path).map_err(|e| format!("Could not read symlink: {}.", e))?.to_string_lossy().to_string()
                 } else { String::new() };
-                Ok(format!(r#""path":"{}","kind":"{}","directory":{},"symlink":{},"target":"{}","bytes":{},"modified":{},"mode":"{:04o}","owner":"{}","uid":{},"gid":{},"tags":{}"#,
+                Ok(format!(r#""path":"{}","kind":"{}","directory":{},"symlink":{},"target":"{}","bytes":{},"modified":{},"mode":"{:04o}","owner":"{}","uid":{},"gid":{},"tags":{},"photo":{}"#,
                     escape(&item.path.to_string_lossy()), kind, meta.is_dir(), meta.file_type().is_symlink(), escape(&target),
-                    meta.len(), meta.mtime(), meta.mode() & 0o7777, escape(&super::owner::name(meta.uid())), meta.uid(), meta.gid(), super::tags::names_json(&item.path)))
+                    meta.len(), meta.mtime(), meta.mode() & 0o7777, escape(&super::owner::name(meta.uid())), meta.uid(), meta.gid(), super::tags::names_json(&item.path),
+                    super::metareq::photo_json(&super::metareq::photo(&item.path, true))))
             }
             "applications" => {
                 let found = menu_registry::catalogue(registry, &item.path, field_bool(line, "installed"), cancel)?;
@@ -640,5 +641,20 @@ mod tests {
         assert_eq!(field_str(&line, "target"), Some(target.to_string_lossy().into()));
         snapshot.handle(r#"{"op":"close","id":9}"#, vec![]);
         assert!(snapshot.handle(r#"{"op":"properties","id":9}"#, vec![]).contains("expired"));
+    }
+    #[test]
+    fn properties_carry_a_jpeg_s_photo_facts_and_a_plain_file_carries_none() {
+        let sandbox = TestDir::new("menu-photo");
+        // FFD8, APP1 "Exif\0\0" whose IFD0 holds one Model of "R6", then EOI.
+        let mut jpeg = vec![0xFF, 0xD8, 0xFF, 0xE1, 0x00, 0x22];
+        jpeg.extend_from_slice(b"Exif\0\0II*\0\x08\0\0\0\x01\0\x10\x01\x02\0\x03\0\0\0R6\0\0\0\0\0\0\xFF\xD9");
+        let photo = sandbox.file("shot.jpg", "");
+        std::fs::write(&photo, jpeg).unwrap();
+        let plain = sandbox.file("notes.txt", "body");
+        let mut snapshot = Snapshot::default();
+        snapshot.handle(r#"{"op":"snapshot","id":4}"#, vec![photo.to_string_lossy().into()]);
+        assert!(snapshot.handle(r#"{"op":"properties","id":4}"#, vec![]).contains(r#""photo":{"model":"R6"}"#));
+        snapshot.handle(r#"{"op":"snapshot","id":5}"#, vec![plain.to_string_lossy().into()]);
+        assert!(snapshot.handle(r#"{"op":"properties","id":5}"#, vec![]).contains(r#""photo":null"#));
     }
 }

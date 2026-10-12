@@ -1228,8 +1228,8 @@ ui/MatchText.qml	72	root	Declared QML id; component context access is valid at r
 ui/MatchText.qml	83	root	Declared QML id; component context access is valid at runtime.
 ui/MatchText.qml	84	root	Declared QML id; component context access is valid at runtime.
 ui/MatchText.qml	86	root	Declared QML id; component context access is valid at runtime.
-ui/MenuActionDialog.qml	261	body	Declared QML id; component context access is valid at runtime.
-ui/MenuActionDialog.qml	264	root	Declared QML id; component context access is valid at runtime.
+ui/MenuActionDialog.qml	267	body	Declared QML id; component context access is valid at runtime.
+ui/MenuActionDialog.qml	270	root	Declared QML id; component context access is valid at runtime.
 ui/MountListing.qml	83	listOut	Quickshell type unresolved when its module is missing.
 ui/MountListing.qml	83	root	Declared QML id; component context access is valid at runtime.
 ui/MountListing.qml	83	root	Declared QML id; component context access is valid at runtime.
@@ -2756,8 +2756,8 @@ ui/MatchText.qml	72	root	Declared QML id; component context access is valid at r
 ui/MatchText.qml	83	root	Declared QML id; component context access is valid at runtime.
 ui/MatchText.qml	84	root	Declared QML id; component context access is valid at runtime.
 ui/MatchText.qml	86	root	Declared QML id; component context access is valid at runtime.
-ui/MenuActionDialog.qml	261	body	Declared QML id; component context access is valid at runtime.
-ui/MenuActionDialog.qml	264	root	Declared QML id; component context access is valid at runtime.
+ui/MenuActionDialog.qml	267	body	Declared QML id; component context access is valid at runtime.
+ui/MenuActionDialog.qml	270	root	Declared QML id; component context access is valid at runtime.
 ui/NetworkDialog.qml	309	contentBottomInset	BorderSurface from qs.Ui declares this inherited inset.
 ui/NetworkDialog.qml	309	contentTopInset	BorderSurface from qs.Ui declares this inherited inset.
 ui/NetworkDialog.qml	310	width	BorderSurface from qs.Ui declares this inherited size.

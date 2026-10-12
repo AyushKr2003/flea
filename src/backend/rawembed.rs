@@ -49,6 +49,8 @@ pub struct RawFacts {
     pub iso: Option<u32>,
     pub focal_mm: Option<(u32, u32)>,
     pub taken: Option<String>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
     pub orientation: Option<u16>,
 }
 

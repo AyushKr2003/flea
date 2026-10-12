@@ -35,8 +35,8 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     timeout 60 qs -p "$test_root/config" 2>&1)
 qs_status=$?
 
-# Sample input, the receipt: "  INFO qml: MENUCONTENTS DONE checks=37 failed=0"; the probe self-kills (143) after it, and a PASS beside any other status is a double's.
-expected_checks=37
+# Sample input, the receipt: "  INFO qml: MENUCONTENTS DONE checks=44 failed=0"; the probe self-kills (143) after it, and a PASS beside any other status is a double's.
+expected_checks=44
 pass_count=$(printf '%s\n' "$output" | grep -c 'MENUCONTENTS PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'MENUCONTENTS FAIL')
 done_count=$(printf '%s\n' "$output" | grep -c "MENUCONTENTS DONE checks=$expected_checks failed=0")

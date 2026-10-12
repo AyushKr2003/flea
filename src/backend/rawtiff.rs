@@ -188,6 +188,12 @@ pub(crate) fn walk_ifd<S: Src>(src: &mut S, w: &mut Walk, loc: &IfdLoc, ifd: u64
             t if t == ex::FOCAL && exif && w.facts.focal_mm.is_none() => {
                 w.facts.focal_mm = ex::rational_of(src, base, le, typ, cnt, val);
             }
+            t if t == ex::PIXEL_X && exif && w.facts.width.is_none() => {
+                w.facts.width = ex::one_u32(src, base, le, typ, cnt, val).map(|v| v as u32);
+            }
+            t if t == ex::PIXEL_Y && exif && w.facts.height.is_none() => {
+                w.facts.height = ex::one_u32(src, base, le, typ, cnt, val).map(|v| v as u32);
+            }
             t if t == ex::LENS && exif && w.facts.lens.is_none() => {
                 w.facts.lens = ex::ascii_of(src, base, le, typ, cnt, val);
             }

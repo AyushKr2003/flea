@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import "." as Flea
+import "js/Facts.js" as Facts
 import "js/Format.js" as Format
 import "js/PropertyFacts.js" as PropertyFacts
 
@@ -24,6 +25,10 @@ FocusScope {
     readonly property bool inputAction: action === "newFile" || action === "moveTo" || action === "copyTo"
     readonly property bool deletionActive: action === "deletePermanently" && committing
     readonly property bool canSubmit: !busy && inputAction && field.text.length > 0
+    // Raw.html and Properties040: a photo's Camera, Lens, Exposure and Taken, the ones its EXIF names, sit before Modified.
+    readonly property var photo: Facts.photoFacts(facts.photo)
+    readonly property var photoPairs: [["Camera", photo.camera], ["Lens", photo.lens], ["Exposure", photo.exposure], ["Taken", photo.taken]]
+        .filter(function (pair) { return pair[1].length > 0 })
     // The lines that change in place while the folder counts; the model names them and is not rebuilt as the count moves.
     readonly property var liveLines: facts.ok ? ({size: PropertyFacts.size(facts.bytes, walk), contains: PropertyFacts.contains(walk)}) : ({})
     readonly property string title: ({moveTo: "Move to", copyTo: "Copy to", properties: "Properties", newFile: "New File", deletePermanently: "Delete permanently"})[action] || ""
@@ -249,6 +254,7 @@ FocusScope {
                         ["Type", root.facts.kind],
                         ["Size", "", "size"],
                         ...(root.facts.directory ? [["Contains", "", "contains"]] : []),
+                        ...root.photoPairs,
                         ["Modified", Format.date(root.facts.modified)],
                         ["Permissions", root.facts.mode],
                         ["Owner", (root.facts.owner || "Unknown") + " (uid " + root.facts.uid + ")"],

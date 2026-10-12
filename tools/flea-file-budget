@@ -21,10 +21,10 @@ src/backend/gvfslist.rs 513
 src/backend/imagesize.rs 473
 src/backend/iomount.rs 613
 src/backend/localsend.rs 406
-src/backend/menu_actions.rs 644
+src/backend/menu_actions.rs 660
 src/backend/menu_registry.rs 564
 src/backend/meta.rs 551
-src/backend/metareq.rs 416
+src/backend/metareq.rs 493
 src/backend/movebatch.rs 477
 src/backend/movebatch_tests.rs 752
 src/backend/opsdispatch.rs 2257
@@ -62,6 +62,8 @@ src/vulkan.rs 751
 tests/js/columns.js 687
 tests/js/drag.js 469
 tests/js/devices.js 363
+tests/js/facts.js 351
+ui/js/Facts.js 340
 tests/js/previewswap.js 463
 tests/js/mdstructure.js 655
 tests/js/keymap.js 315

@@ -294,4 +294,58 @@ function run(check) {
           "214 entries \u00b7 3.4 GB unpacked|1 entry||0 entries|")
     check("and the Quick Look line groups a four-figure count",
           Facts.archiveLine({ entries: 1204, unpacked: 0, names: [] }), "1,204 entries")
+
+    // The photo facts: the backend sends the EXIF values as stored and the column and Properties word them here.
+    var canon = { make: "Canon", model: "Canon EOS R6", lens: "RF35mm F1.8 MACRO IS STM", exp: [1, 250], fnum: [28, 10], iso: 400,
+                  focal: [35, 1], taken: "2026:09:12 18:31:00" }
+    var shot = Facts.photoFacts(canon)
+    check("a photo's facts read as the board writes them",
+          [shot.camera, shot.lens, shot.exposure, shot.focal, shot.taken].join("|"),
+          "Canon EOS R6|RF35mm F1.8 MACRO IS STM|1/250 s \u00b7 f/2.8 \u00b7 ISO 400|35 mm|2026-09-12 18:31")
+    check("a model that already starts with the make's first word stands alone, in any case",
+          Facts.photoFacts({ make: "NIKON CORPORATION", model: "Nikon Z 6" }).camera + "|" + Facts.photoFacts({ make: "OLYMPUS IMAGING CORP.", model: "OLYMPUS E-M1" }).camera,
+          "Nikon Z 6|OLYMPUS E-M1")
+    check("a model that does not start with the make is joined to it",
+          Facts.photoFacts({ make: "SONY", model: "ILCE-7M3" }).camera + "|" + Facts.photoFacts({ make: "FUJIFILM", model: "X-T4" }).camera,
+          "SONY ILCE-7M3|FUJIFILM X-T4")
+    check("a make or a model alone is the camera, and neither is no camera",
+          Facts.photoFacts({ make: "Canon" }).camera + "|" + Facts.photoFacts({ model: "X100V" }).camera + "|" + Facts.photoFacts({}).camera, "Canon|X100V|")
+    check("an exposure under a second is a fraction and from a second it is a number of seconds",
+          [[1, 8000], [10, 2500], [1, 1], [2, 1], [3, 2], [30, 1]].map(function (e) { return Facts.photoFacts({ exp: e }).exposure }).join("|"),
+          "1/8000 s|1/250 s|1 s|2 s|1.5 s|30 s")
+    check("the aperture keeps one decimal and drops a trailing zero",
+          [[28, 10], [4, 1], [18, 10], [56, 10], [14, 10]].map(function (f) { return Facts.photoFacts({ fnum: f }).exposure }).join("|"),
+          "f/2.8|f/4|f/1.8|f/5.6|f/1.4")
+    check("an absent part of the exposure is left out and none leaves no exposure",
+          [{ iso: 800 }, { fnum: [28, 10], iso: 100 }, { exp: [1, 60], fnum: [4, 1] }, { exp: [0, 1], fnum: [1, 0], iso: 0 }]
+              .map(function (p) { return Facts.photoFacts(p).exposure }).join("|"),
+          "ISO 800|f/2.8 \u00b7 ISO 100|1/60 s \u00b7 f/4|")
+    check("the focal length rounds to a whole number of millimetres and zero is absent",
+          [[35, 1], [244, 10], [245, 10], [0, 1], [5, 0]].map(function (f) { return Facts.photoFacts({ focal: f }).focal }).join("|"),
+          "35 mm|24 mm|25 mm||")
+    check("a taken stamp is written like Modified and a malformed one is absent",
+          Facts.photoFacts({ taken: "2026:01:02 03:04:05" }).taken + "|" + Facts.photoFacts({ taken: "0000:00:00 00:00:00" }).taken + "|" + Facts.photoFacts({ taken: "yesterday" }).taken,
+          "2026-01-02 03:04||")
+    check("nothing reads Unknown: a missing photo is a set of empty strings",
+          Object.keys(Facts.photoFacts(null)).map(function (k) { return Facts.photoFacts(null)[k] }).join("|") + "|" + Facts.photoFacts(undefined).camera, "||||" + "|")
+
+    // Raw.html: the column follows Kind, Size, Modified, Camera, Lens, Exposure, Focal, Pixels, Taken.
+    var rawMeta = { w: 0, h: 0, photo: Object.assign({ w: 6000, h: 4000 }, canon) }
+    check("a raw image's column rows follow the board's order",
+          labels(Facts.facts("image", row("image-x-generic", 31200000), rawMeta, "Canon CR3 raw image")),
+          "Kind|Size|Modified|Camera|Lens|Exposure|Focal|Pixels|Taken")
+    check("a raw image's rows carry the worded values",
+          valueOf(Facts.facts("image", row("image-x-generic", 31200000), rawMeta, "Canon CR3 raw image"), "Exposure") + "|"
+          + valueOf(Facts.facts("image", row("image-x-generic", 31200000), rawMeta, "Canon CR3 raw image"), "Pixels"),
+          "1/250 s \u00b7 f/2.8 \u00b7 ISO 400|6000 \u00d7 4000")
+    check("a raw image with no EXIF keeps today's rows and nothing reads Unknown",
+          labels(Facts.facts("image", row("image-x-generic", 2100000), { w: 0, h: 0, photo: null }, "Canon CR3 raw image")), "Kind|Size|Modified")
+    check("a raw image with some facts draws only those, in order",
+          labels(Facts.facts("image", row("image-x-generic", 2100000), { photo: { model: "X-T4", make: "FUJIFILM", taken: "2026:01:02 03:04:05" } }, "Fujifilm RAF raw image")),
+          "Kind|Size|Modified|Camera|Taken")
+    check("a plain image without a photo keeps Kind, Size, Modified, Pixels",
+          labels(Facts.facts("image", row("image-x-generic", 2100000), { w: 2560, h: 1440 }, "PNG image")), "Kind|Size|Modified|Pixels")
+    check("a raw image's Pixels row is its sensor size from the photo facts, and a frame header's size wins",
+          Facts.pixels({ w: 0, h: 0, photo: { w: 6000, h: 4000 } }) + "|" + Facts.pixels({ w: 64, h: 48, photo: { w: 6000, h: 4000 } }) + "|"
+          + Facts.pixels({ w: 0, h: 0, photo: { w: 6000 } }) + "|" + Facts.pixels({ photo: null }), "6000 \u00d7 4000|64 \u00d7 48||")
 }
