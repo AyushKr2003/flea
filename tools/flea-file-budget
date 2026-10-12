@@ -38,6 +38,7 @@ src/backend/run.rs 1091
 src/backend/run_session_tests.rs 525
 src/backend/ops.rs 423
 src/backend/thumbs.rs 495
+src/backend/thumbspec.rs 410
 src/backend/dirsizeworker.rs 573
 src/backend/watch.rs 550
 src/backend/thumbreq.rs 448
