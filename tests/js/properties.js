@@ -38,4 +38,15 @@ function run(check) {
         JSON.stringify(["Link target", "/fixture/real.txt"]))
     var taggedLink = pairsOf(linkFacts(["Red"]), Format)
     check("a tagged link shows Tags, then Link target", names(taggedLink.slice(-2)), "Tags,Link target")
+    // The video and photo pairs sit between Size and Modified, as the board draws them; a card with none is unchanged.
+    function withExtra(extraPairs) {
+        var reply = propertiesFacts([])
+        reply.extraPairs = extraPairs
+        return reply
+    }
+    check("a card with no extra pairs reads as before", names(pairsOf(withExtra(undefined), Format)), "Path,Type,Size,Modified,Permissions,Owner,Group")
+    check("the video pairs land between Size and Modified", names(pairsOf(withExtra([["Codecs", "H.264 · AAC"], ["Bit rate", "8.1 Mb/s"]]), Format)),
+        "Path,Type,Size,Codecs,Bit rate,Modified,Permissions,Owner,Group")
+    check("the photo pairs land between Size and Modified", names(pairsOf(withExtra([["Camera", "x"], ["Lens", "y"], ["Exposure", "z"], ["Taken", "t"]]), Format)),
+        "Path,Type,Size,Camera,Lens,Exposure,Taken,Modified,Permissions,Owner,Group")
 }

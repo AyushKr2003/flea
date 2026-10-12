@@ -43,6 +43,9 @@ impl MenuActions {
                 if field_str(&line, "op").as_deref() == Some("contents") {
                     if super::menucontents::serve(&line, state.id, &state.items, &output, &cancel) { continue; } else { break; }
                 }
+                if field_str(&line, "op").as_deref() == Some("facts") {
+                    if super::menufacts::serve(&line, state.id, &state.items, &output, &cancel) { continue; } else { break; }
+                }
                 let mut reply = if cancel.check().is_ok() {
                     state.handle_request(&line, paths, cursor.as_deref(), &queries, &cancel)
                 } else { response(&line, Err("Menu request cancelled.".into())) };

@@ -44,3 +44,82 @@ function styled(line, muted) {
         return escape(line.value)
     return "%1<font color=\"%2\">%3</font>".arg(escape(line.value)).arg(muted).arg(escape(line.tail))
 }
+
+// The names ffprobe prints for the codecs a card is likely to meet; one it does not know is shown upper-cased, as ffprobe says it.
+var CODECS = {h264: "H.264", hevc: "H.265", vp8: "VP8", vp9: "VP9", av1: "AV1", mpeg4: "MPEG-4", mpeg2video: "MPEG-2", mpeg1video: "MPEG-1",
+              aac: "AAC", mp3: "MP3", opus: "Opus", vorbis: "Vorbis", flac: "FLAC", ac3: "AC-3", eac3: "E-AC-3", dts: "DTS", alac: "ALAC"}
+
+function codecName(name) {
+    if (!name)
+        return ""
+    if (name.indexOf("pcm_") === 0)
+        return "PCM"
+    return CODECS[name] || name.toUpperCase()
+}
+
+// Sample input: codecs("h264", "aac") reads "H.264 · AAC"; a file with one stream names that one.
+function codecs(video, audio) {
+    return [codecName(video), codecName(audio)].filter(function (name) { return name !== "" }).join(" · ")
+}
+
+// Sample input: 8100000 reads "8.1 Mb/s"; ffprobe's bits per second, decimal prefixes, whole kb/s below a megabit.
+function bitRate(bps) {
+    if (!(bps > 0))
+        return ""
+    if (bps < 1000)
+        return Math.round(bps) + " b/s"
+    var kilo = Math.round(bps / 1000)
+    return kilo < 1000 ? kilo + " kb/s" : (bps / 1000000).toFixed(1) + " Mb/s"
+}
+
+// A camera writes the make's first word into the model on its own (Canon EOS R6, NIKON CORPORATION and NIKON Z 6) or not (SONY, ILCE-7M4).
+function camera(make, model) {
+    if (!make || !model)
+        return model || make || ""
+    var brand = make.toLowerCase().split(/\s+/)[0]
+    return model.toLowerCase().indexOf(brand) === 0 ? model : make + " " + model
+}
+
+// A rational as [numerator, denominator], zero when the file named none or a zero denominator.
+function ratio(pair) {
+    return pair && pair[0] > 0 && pair[1] > 0 ? pair[0] / pair[1] : 0
+}
+
+// Sample input: [1, 250] reads "1/250 s", [10, 600] "1/60 s", [6, 10] "0.6 s", [13, 10] "1.3 s"; a fraction whose numerator divides its denominator stays a 1/n.
+function shutterText(pair, seconds) {
+    var num = pair[0], den = pair[1], tenths = Math.round(seconds * 10)
+    // A shutter that rounds to a whole second reads like one, so 0.96 s and 1 s both read "1 s".
+    if (tenths >= 10)
+        return String(tenths / 10) + " s"
+    if (den % num === 0 || num === 1)
+        return "1/" + (num === 1 ? den : den / num) + " s"
+    return tenths > 0 ? (tenths / 10).toFixed(1) + " s" : "1/" + Math.round(1 / seconds) + " s"
+}
+
+// Sample input: ([1, 250], [28, 10], 400) reads "1/250 s · f/2.8 · ISO 400"; a part the file lacks is left out.
+function exposure(shutter, fnumber, iso) {
+    var seconds = ratio(shutter), stop = ratio(fnumber), parts = []
+    if (seconds > 0)
+        parts.push(shutterText(shutter, seconds))
+    if (stop > 0)
+        parts.push("f/" + String(Math.round(stop * 10) / 10))
+    if (iso > 0)
+        parts.push("ISO " + iso)
+    return parts.join(" · ")
+}
+
+// Sample input: "2026:09:12 18:31:07", EXIF's own stamp, reads "2026-09-12 18:31" like every other date on the card.
+function taken(stamp) {
+    var m = /^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):\d{2}/.exec(stamp || "")
+    return m && m[1] !== "0000" ? m[1] + "-" + m[2] + "-" + m[3] + " " + m[4] + ":" + m[5] : ""
+}
+
+// The pairs a facts reply adds between Size and Modified, in the board's order and only for what the file has.
+function extraPairs(reply) {
+    if (!reply || !reply.ok)
+        return []
+    return [["Codecs", codecs(reply.vcodec, reply.acodec)], ["Bit rate", bitRate(reply.bps)],
+            ["Camera", camera(reply.make, reply.model)], ["Lens", reply.lens || ""],
+            ["Exposure", exposure(reply.shutter, reply.fnumber, reply.iso)], ["Taken", taken(reply.taken)]]
+        .filter(function (pair) { return pair[1] !== "" })
+}

@@ -166,6 +166,19 @@ numbers are then a floor. A cancelled walk answers once with `cancelled:true` an
 captured snapshot, a selection of several items, or an item that is not a directory (a symbolic link to one is a link)
 answers `ok:false` with an `error`.
 
+`{"c":"menuaction","op":"facts","id":4}` reads the codecs, bit rate and photo facts for Properties on a file, for the one captured
+item. Properties sends it once, right after the `properties` reply, for a file that is not a folder or a link, so the card opens on
+what the listing already knows and the new pairs arrive beside it. It answers one line on the menu worker, under the request's own
+cancellation: `{"t":"menuaction","id":4,"op":"facts","ok":true,"vcodec":"h264","acodec":"aac","bps":8100000,"make":"Canon","model":"Canon EOS R6","lens":"RF35mm F1.8 MACRO IS STM","shutter":[1,250],"fnumber":[28,10],"iso":400,"taken":"2026:09:12 18:31:07"}`.
+Every field is raw and a fact the file does not have is `""` or `0` (`[0,0]` for a rational), so the card shows no pair for it.
+`vcodec`, `acodec` and `bps` come from the same `ffprobe` header read `meta` uses (`format=duration,bit_rate` and the streams'
+`codec_name`; the first video and the first audio stream name the file), and only for a video container by extension. The photo
+fields come from the file's own EXIF, read from the head and never decoded: a JPEG's first Exif APP1, a TIFF-based RAW (CR2, NEF,
+ARW, DNG) from its IFD0 and Exif IFD in the first MiB, and a CR3 from the CMT1, CMT2 and CMT3 boxes of its Canon `uuid` box in the
+`moov`. Text is cut to 120 characters with control characters turned to spaces. A cancelled request answers `ok:true` with
+`cancelled:true` and no facts. An `id` that is not the captured snapshot, a selection of several items, or an item that is not a
+regular file answers `ok:false` with an `error`; a fifo or a device is never opened.
+
 ### listpaths
 
 `{"c":"listpaths","paths":[<string>,...],"first":<uint>}`

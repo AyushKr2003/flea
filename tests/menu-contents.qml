@@ -10,7 +10,10 @@ ShellRoot {
 
     readonly property int settleTicks: 3
     readonly property var fullFolder: ["Path", "Type", "Size", "Contains", "Modified", "Permissions", "Owner", "Group"]
-    readonly property var labels: ["Path", "Type", "Size", "Contains", "Modified", "Permissions", "Owner", "Group", "Tags", "Link target"]
+    readonly property var labels: ["Path", "Type", "Size", "Contains", "Modified", "Permissions", "Owner", "Group", "Tags", "Link target", "Codecs", "Bit rate", "Camera", "Lens", "Exposure", "Taken"]
+    readonly property var plainFile: ["Path", "Type", "Size", "Modified", "Permissions", "Owner", "Group"]
+    readonly property var videoFile: ["Path", "Type", "Size", "Codecs", "Bit rate", "Modified", "Permissions", "Owner", "Group"]
+    readonly property var photoFile: ["Path", "Type", "Size", "Camera", "Lens", "Exposure", "Taken", "Modified", "Permissions", "Owner", "Group"]
     readonly property string tail: " · counting…"
     property int checks: 0
     property var failures: []
@@ -85,6 +88,11 @@ ShellRoot {
         return Object.assign({t: "menuaction", id: 7, op: "properties", ok: true, path: "/fixture/Music", kind: "Directory", directory: true,
             symlink: false, target: "", bytes: 4096, modified: 1758835200, mode: "0755", owner: "gm", uid: 1000, gid: 1000, tags: []}, extra || {})
     }
+    function filed(id, path, extra) { return shell.reply(Object.assign({id: id, path: path, kind: "File", directory: false, bytes: 48300000}, extra || {})) }
+    function factsReply(id, extra) {
+        return Object.assign({t: "menuaction", id: id, op: "facts", ok: true, vcodec: "", acodec: "", bps: 0, make: "", model: "", lens: "", shutter: [0, 0], fnumber: [0, 0], iso: 0, taken: ""}, extra || {})
+    }
+    function factsAsked(id) { return shell.sent.filter(function (m) { return m.op === "facts" && m.id === id }) }
     function progress(extra) { return Object.assign({t: "menuaction", id: 7, op: "contents", ok: true, bytes: 4096, items: 0, partial: false, done: false}, extra) }
 
     Connections {
@@ -186,6 +194,7 @@ ShellRoot {
                 shell.check("a file has no Contains", shell.names(), shell.fullFolder.filter(function (n) { return n !== "Contains" }))
                 shell.check("a file's Size is its own", shell.line("Size"), "13 B (13 bytes)")
                 shell.check("and no count is asked for", shell.sent.filter(function (m) { return m.op === "contents" && m.id === 10 }).length, 0)
+                shell.check("a file asks for its facts once, under the same id", shell.factsAsked(10), [{c: "menuaction", op: "facts", id: 10}])
                 dialog.close()
             },
             function () {
@@ -194,11 +203,76 @@ ShellRoot {
                 shell.check("a link to a folder is the link, with its own size and no Contains", [shell.line("Type"), shell.line("Size"), shell.names().indexOf("Contains")], ["Symbolic link", "14 B (14 bytes)", -1])
                 shell.check("and its link target is a pair", shell.line("Link target"), "/fixture/Music")
                 shell.check("and no count is asked for", shell.sent.filter(function (m) { return m.op === "contents" && m.id === 11 }).length, 0)
+                shell.check("a link and a folder ask for no facts", [shell.factsAsked(11).length, shell.factsAsked(7).length], [0, 0])
                 dialog.close()
             }
         ]
     }
-    function buildPlan() { shell.plan = shell.folderSteps().concat(shell.otherSteps()) }
+    // The Video and RAW photo cards of Properties040: new pairs between Size and Modified, arriving with the facts reply and only for what the file has.
+    function factSteps() {
+        return [
+            function () {
+                dialog.open("properties", 12, "/fixture", parking)
+                shell.feed(shell.filed(12, "/fixture/panel-demo.mp4"))
+                shell.check("a video opens on the pairs the listing knows, before its facts", shell.names(), shell.plainFile)
+                shell.feed(shell.factsReply(12, {vcodec: "h264", acodec: "aac", bps: 8100000}))
+                shell.check("its facts add Codecs and Bit rate between Size and Modified", shell.names(), shell.videoFile)
+                shell.check("Codecs is the board's string", shell.line("Codecs"), "H.264 · AAC")
+                shell.check("Bit rate is the board's string", shell.line("Bit rate"), "8.1 Mb/s")
+                shell.check("they are plain foreground values like every other pair", [shell.pair("Codecs").color, shell.pair("Bit rate").textFormat === Text.PlainText], [Flea.Theme.color.foreground, true])
+            },
+            function () {
+                shell.check("laid out, the video pairs run top to bottom as the board has them", shell.drawn(), shell.videoFile)
+                dialog.close()
+            },
+            function () {
+                dialog.open("properties", 13, "/fixture", parking)
+                shell.feed(shell.filed(13, "/fixture/IMG_0412.jpg", {bytes: 31200000}))
+                shell.feed(shell.factsReply(13, {make: "Canon", model: "Canon EOS R6", lens: "RF35mm F1.8 MACRO IS STM", shutter: [1, 250], fnumber: [28, 10], iso: 400, taken: "2026:09:12 18:31:07"}))
+                shell.check("a photo's facts add Camera, Lens, Exposure and Taken before Modified", shell.names(), shell.photoFile)
+                shell.check("Camera is the board's string", shell.line("Camera"), "Canon EOS R6")
+                shell.check("Lens is the board's string", shell.line("Lens"), "RF35mm F1.8 MACRO IS STM")
+                shell.check("Exposure is the board's string", shell.line("Exposure"), "1/250 s · f/2.8 · ISO 400")
+                shell.check("Taken is the board's string", shell.line("Taken"), "2026-09-12 18:31")
+            },
+            function () {
+                shell.check("laid out, the photo pairs run top to bottom as the board has them", shell.drawn(), shell.photoFile)
+                dialog.close()
+            },
+            function () {
+                dialog.open("properties", 14, "/fixture", parking)
+                shell.feed(shell.filed(14, "/fixture/IMG_0413.jpg"))
+                shell.feed(shell.factsReply(14, {make: "FUJIFILM", model: "X100V", shutter: [1, 500], iso: 160}))
+                shell.check("a photo without a lens or a time leaves no empty pair", shell.names(), ["Path", "Type", "Size", "Camera", "Exposure", "Modified", "Permissions", "Owner", "Group"])
+                shell.check("and a missing aperture leaves the rest of the exposure", shell.line("Exposure"), "1/500 s · ISO 160")
+                dialog.close()
+            },
+            function () {
+                dialog.open("properties", 15, "/fixture", parking)
+                shell.feed(shell.filed(15, "/fixture/notes.md"))
+                shell.feed(shell.factsReply(15))
+                shell.check("a file with no facts keeps the plain card", shell.names(), shell.plainFile)
+                shell.feed({t: "menuaction", id: 15, op: "facts", ok: false, error: "Menu selection expired; reopen the menu."})
+                shell.check("a refused facts reply adds nothing and shows no error", [shell.names(), dialog.errorText, dialog.busy], [shell.plainFile, "", false])
+                shell.feed(shell.factsReply(15, {id: 99, vcodec: "h264"}))
+                shell.check("a facts reply for another card changes nothing", shell.names(), shell.plainFile)
+                dialog.close()
+                shell.feed(shell.factsReply(15, {vcodec: "h264", acodec: "aac", bps: 8100000}))
+                shell.check("a facts reply that lands after the close changes nothing", [dialog.opened, shell.names().length], [false, shell.plainFile.length])
+            },
+            function () {
+                dialog.open("properties", 16, "/fixture", parking)
+                shell.feed(shell.filed(16, "/fixture/clip.mp4"))
+                shell.feed(shell.factsReply(16, {vcodec: "h264", acodec: "aac", bps: 8100000}))
+                dialog.close()
+                dialog.open("properties", 17, "/fixture", parking)
+                shell.feed(shell.filed(17, "/fixture/other.txt"))
+                shell.check("a new card starts without the last card's facts", shell.names(), shell.plainFile)
+                dialog.close()
+            }
+        ]
+    }
+    function buildPlan() { shell.plan = shell.folderSteps().concat(shell.otherSteps()).concat(shell.factSteps()) }
 
     Timer {
         interval: 16

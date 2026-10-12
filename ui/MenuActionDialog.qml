@@ -20,6 +20,8 @@ FocusScope {
     property var facts: ({})
     // A folder's walk as the card knows it, null for anything else; the Size and Contains lines read it as it moves.
     property var walk: null
+    // A file's codec, bit rate or photo facts as the facts reply sent them, empty until it lands; the pairs between Size and Modified read it.
+    property var extra: ({})
     property string errorText: ""
     property bool busy: false
     property bool committing: false
@@ -30,6 +32,7 @@ FocusScope {
     readonly property bool canSubmit: !busy && inputAction && field.text.length > 0
     // The lines that change in place while the folder counts; the model names them and is not rebuilt as the count moves.
     readonly property var liveLines: facts.ok ? ({size: PropertyFacts.size(facts.bytes, walk), contains: PropertyFacts.contains(walk)}) : ({})
+    readonly property var extraPairs: PropertyFacts.extraPairs(extra)
     readonly property string title: ({moveTo: "Move to", copyTo: "Copy to", properties: "Properties", newFile: "New File", deletePermanently: "Delete permanently"})[action] || ""
     // The card and its scrim step aside for the confirmation, and stay aside while it fades out with a closing dialog.
     readonly property bool cardShown: !confirmation.opened && (root.opened || !confirmation.visible)
@@ -52,6 +55,7 @@ FocusScope {
         folder = parentPath
         focusHolder = holder
         walk = null
+        extra = ({})
         facts = ({})
         errorText = ""
         checkPending = false
@@ -69,13 +73,15 @@ FocusScope {
     // Two dialogs share the one request id, so this one answers only for the ops it asked for:
     // routing an Open with reply in here closed a Properties card that had just opened over it.
     readonly property var ownedOps: ["properties", "prepareDelete", "refreshDelete", "checkDelete",
-                                     "delete", "validate", "newFile", "contents", ""]
+                                     "delete", "validate", "newFile", "contents", "facts", ""]
     function receive(message) {
         if ((!opened && !deletionActive) || message.id !== requestId || message.op === "close") return
         if (root.ownedOps.indexOf(message.op === undefined ? "" : message.op) < 0) return
         if (deletionActive && message.op !== "delete") return
         // A late count after the card left Properties changes nothing; a refused one ends as the floor already counted.
         if (message.op === "contents") { if (walk) walk = PropertyFacts.next(walk, message); return }
+        // A refused or late facts reply adds no pair; the card already says everything else.
+        if (message.op === "facts") { if (message.ok) extra = message; return }
         // A reply that ends the card keeps its busy look until the fade ended.
         var ends = message.ok && !message.stale && (message.op === undefined || message.op === "" || message.op === "validate" || message.op === "newFile")
         if (!ends) { busy = false; committing = false }
@@ -102,6 +108,7 @@ FocusScope {
             walk = message.directory ? PropertyFacts.begin(message) : null
             facts = message
             if (walk) requested({c: "menuaction", op: "contents", id: requestId})
+            else if (message.kind === "File") requested({c: "menuaction", op: "facts", id: requestId})
             return
         }
         if (message.op === "validate") { approved(message); closeSettled(); return }
@@ -300,6 +307,7 @@ FocusScope {
                         ["Type", root.facts.kind],
                         ["Size", "", "size"],
                         ...(root.facts.directory ? [["Contains", "", "contains"]] : []),
+                        ...(root.extraPairs || []),
                         ["Modified", Format.date(root.facts.modified)],
                         ["Permissions", root.facts.mode],
                         ["Owner", (root.facts.owner || "Unknown") + " (uid " + root.facts.uid + ")"],

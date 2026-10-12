@@ -46,4 +46,50 @@ function run(check) {
           "&gt; 2.1 GB (2104332800 bytes)<font color=\"#565f89\"> · counting…</font>")
     check("the done form carries no markup beyond escaping", PropertyFacts.styled(PropertyFacts.contains(done), "#565f89"), "1,204 items")
     check("a markup character in a value is escaped", PropertyFacts.styled({value: "a<b&c", tail: ""}, "#565f89"), "a&lt;b&amp;c")
+
+    function same(name, actual, expected) { check(name, JSON.stringify(actual), JSON.stringify(expected)) }
+    // The video and photo pairs the board draws (Properties040, "Video" and "RAW photo"), each string the board's own.
+    check("H.264 and AAC read as the board has them, joined by a spaced middle dot", PropertyFacts.codecs("h264", "aac"), "H.264 · AAC")
+    check("a video with no audio stream names its one codec", PropertyFacts.codecs("hevc", ""), "H.265")
+    check("an audio-only container names its one codec", PropertyFacts.codecs("", "opus"), "Opus")
+    check("no stream names no Codecs value", PropertyFacts.codecs("", ""), "")
+    check("a codec the table does not know is upper-cased as ffprobe names it", PropertyFacts.codecs("prores", "pcm_s24le"), "PRORES · PCM")
+    check("VP9 and AV1 keep their own names", PropertyFacts.codecs("vp9", "vorbis") + "|" + PropertyFacts.codecs("av1", "mp3"), "VP9 · Vorbis|AV1 · MP3")
+    check("a bit rate over a megabit is one decimal of Mb/s", PropertyFacts.bitRate(8100000), "8.1 Mb/s")
+    check("the megabit edge rounds up into Mb/s and never reads 1000 kb/s", [PropertyFacts.bitRate(999499), PropertyFacts.bitRate(999500), PropertyFacts.bitRate(1000000)].join("|"), "999 kb/s|1.0 Mb/s|1.0 Mb/s")
+    same("a bit rate under a megabit is whole kb/s", [PropertyFacts.bitRate(640000), PropertyFacts.bitRate(1000), PropertyFacts.bitRate(128400)], ["640 kb/s", "1 kb/s", "128 kb/s"])
+    same("under a kilobit it is b/s", [PropertyFacts.bitRate(999), PropertyFacts.bitRate(8)], ["999 b/s", "8 b/s"])
+    same("an unknown or zero bit rate names no value", [PropertyFacts.bitRate(0), PropertyFacts.bitRate(undefined), PropertyFacts.bitRate(-5)], ["", "", ""])
+    check("a Canon model already carries its make, so it is not said twice", PropertyFacts.camera("Canon", "Canon EOS R6"), "Canon EOS R6")
+    check("a model without its make gets it in front", PropertyFacts.camera("SONY", "ILCE-7M4"), "SONY ILCE-7M4")
+    same("a make alone and a model alone each stand", [PropertyFacts.camera("Canon", ""), PropertyFacts.camera("", "X100V")], ["Canon", "X100V"])
+    check("the exposure is shutter, aperture and ISO as the board writes it", PropertyFacts.exposure([1, 250], [28, 10], 400), "1/250 s · f/2.8 · ISO 400")
+    check("a shutter that is not one over a whole number reads as the nearest 1/n", PropertyFacts.exposure([10, 600], [0, 0], 0), "1/60 s")
+    check("a fast shutter no whole n divides reads as the nearest 1/n", PropertyFacts.exposure([3, 1000], [0, 0], 0), "1/333 s")
+    same("a shutter that rounds to a second reads as one", [PropertyFacts.exposure([96, 100], [0, 0], 0), PropertyFacts.exposure([99, 100], [0, 0], 0)], ["1 s", "1 s"])
+    same("a shutter of a second or more is seconds", [PropertyFacts.exposure([2, 1], [0, 0], 0), PropertyFacts.exposure([13, 10], [0, 0], 0)], ["2 s", "1.3 s"])
+    same("a shutter under a second keeps its stored rational", [0.4, 0.5, 0.6, 0.8].map(function (s) { return PropertyFacts.exposure([Math.round(s * 10), 10], [0, 0], 0) }), ["0.4 s", "1/2 s", "0.6 s", "0.8 s"])
+    same("a numerator of one reads 1/den and a numerator that divides den reads 1/n", [PropertyFacts.exposure([1, 3], [0, 0], 0), PropertyFacts.exposure([1, 250], [0, 0], 0), PropertyFacts.exposure([2, 500], [0, 0], 0)], ["1/3 s", "1/250 s", "1/250 s"])
+    check("2.5 s reads one decimal of seconds", PropertyFacts.exposure([5, 2], [0, 0], 0), "2.5 s")
+    same("a make with a company suffix is not said twice when the model repeats its first word", [PropertyFacts.camera("NIKON CORPORATION", "NIKON Z 6"), PropertyFacts.camera("OM Digital Solutions", "OM-1"), PropertyFacts.camera("OLYMPUS IMAGING CORP.", "OLYMPUS E-M1")],
+         ["NIKON Z 6", "OM-1", "OLYMPUS E-M1"])
+    same("a make whose model never repeats its first word still leads", [PropertyFacts.camera("SONY", "ILCE-7M4"), PropertyFacts.camera("OM Digital Solutions", "TG-7")], ["SONY ILCE-7M4", "OM Digital Solutions TG-7"])
+    check("a whole f-number drops the decimal", PropertyFacts.exposure([0, 0], [4, 1], 0), "f/4")
+    same("an exposure missing parts keeps the rest in order", [PropertyFacts.exposure([0, 0], [18, 10], 100), PropertyFacts.exposure([1, 60], [0, 0], 3200)], ["f/1.8 · ISO 100", "1/60 s · ISO 3200"])
+    same("no exposure fact names no value", [PropertyFacts.exposure([0, 0], [0, 0], 0), PropertyFacts.exposure(undefined, undefined, undefined)], ["", ""])
+    check("a shutter with a zero denominator is no shutter", PropertyFacts.exposure([1, 0], [0, 0], 0), "")
+    check("Taken is the card's own stamp, minutes only", PropertyFacts.taken("2026:09:12 18:31:07"), "2026-09-12 18:31")
+    same("a camera's blank or malformed stamp names no value", [PropertyFacts.taken("0000:00:00 00:00:00"), PropertyFacts.taken("yesterday"), PropertyFacts.taken(""), PropertyFacts.taken(undefined)], ["", "", "", ""])
+
+    // The pairs in the board's slot: after Size and before Modified, only those the file has.
+    function labels(reply) { return PropertyFacts.extraPairs(reply).map(function (pair) { return pair[0] }).join(",") }
+    var video = {ok: true, vcodec: "h264", acodec: "aac", bps: 8100000}
+    check("a video gets Codecs then Bit rate", JSON.stringify(PropertyFacts.extraPairs(video)), JSON.stringify([["Codecs", "H.264 · AAC"], ["Bit rate", "8.1 Mb/s"]]))
+    check("a video with no bit rate gets Codecs alone", labels({ok: true, vcodec: "h264", acodec: "", bps: 0}), "Codecs")
+    var photo = {ok: true, make: "Canon", model: "Canon EOS R6", lens: "RF35mm F1.8 MACRO IS STM", shutter: [1, 250], fnumber: [28, 10], iso: 400, taken: "2026:09:12 18:31:07"}
+    check("a photo gets Camera, Lens, Exposure, Taken in the board's order", JSON.stringify(PropertyFacts.extraPairs(photo)),
+          JSON.stringify([["Camera", "Canon EOS R6"], ["Lens", "RF35mm F1.8 MACRO IS STM"], ["Exposure", "1/250 s · f/2.8 · ISO 400"], ["Taken", "2026-09-12 18:31"]]))
+    check("a photo with no lens leaves no empty pair", labels({ok: true, make: "FUJIFILM", model: "X100V", shutter: [1, 500], fnumber: [56, 10], iso: 160, taken: "2026:01:02 03:04:05"}), "Camera,Exposure,Taken")
+    same("a file with no facts adds nothing", [labels({ok: true}), labels(undefined), labels({})], ["", "", ""])
+    check("a refused facts reply adds nothing", labels({ok: false, error: "Menu selection expired; reopen the menu."}), "")
 }
