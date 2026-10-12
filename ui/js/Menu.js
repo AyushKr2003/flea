@@ -173,7 +173,7 @@ function availableEntry(e, p, kind) {
     if (e.action === "permissions") {
         var permission = permissionsEntry(p.rowMode, count, p.selectionModes)
         e.disabled = permission.disabled
-        if (permission.errored) { e.errored = true; e.hint = permission.hint }
+        if (permission.errored) { e.errored = true; if (permission.hint) e.hint = permission.hint }
     }
     // Only a cursor-row script without any execute bit qualifies; its two-byte probe runs once at menu open.
     if (e.action === "makeExecutable" && !canMakeExecutable(p.rowMode, count, p.hasShebang, p.cursorIsTarget)) return false
@@ -290,20 +290,27 @@ function availableRail(e, entry) {
 // MenuAdditions040: Permissions takes the whole selection, so one bad row
 // among modes refuses the row; the dialog inspects each file in turn.
 function permissionsEntry(mode, count, modes) {
+    var word
     if (modes !== undefined && modes !== null && modes.length > 0) {
         for (var i = 0; i < modes.length; i++) {
             var kind = (Number(modes[i]) || 0) & Format.S_IFMT
-            if (!(kind === Format.S_IFREG || kind === 0o040000))
-                return { label: "Permissions", action: "permissions", glyph: "lock", disabled: true, errored: true,
-                         hint: StateWords.permissions(modes[i]) }
+            if (!(kind === Format.S_IFREG || kind === 0o040000)) {
+                var bad = { label: "Permissions", action: "permissions", glyph: "lock", disabled: true, errored: true }
+                word = StateWords.permissions(modes[i])
+                if (word) bad.hint = word
+                return bad
+            }
         }
         return { label: "Permissions", action: "permissions", glyph: "lock", disabled: false, errored: false }
     }
-    var kind = (Number(mode) || 0) & Format.S_IFMT
-    var allowed = count >= 1 && (kind === Format.S_IFREG || kind === 0o040000)
+    var one = (Number(mode) || 0) & Format.S_IFMT
+    var allowed = count >= 1 && (one === Format.S_IFREG || one === 0o040000)
     var entry = { label: "Permissions", action: "permissions", glyph: "lock", disabled: !allowed, errored: !allowed }
-    // No selection refuses the row for want of an item, not for a kind, so it names no kind.
-    if (!allowed && count >= 1) entry.hint = StateWords.permissions(mode)
+    // No selection refuses the row for want of an item, not for a kind, so it names no kind; an unread mode names none either.
+    if (!allowed && count >= 1) {
+        word = StateWords.permissions(mode)
+        if (word) entry.hint = word
+    }
     return entry
 }
 

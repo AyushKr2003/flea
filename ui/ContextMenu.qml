@@ -200,6 +200,7 @@ Item {
             taildropReason: root.taildropReason, taildropCode: root.taildropCode,
             taildropRefreshing: view.taildropRefreshing, dropboxRefreshing: view.dropboxRefreshing,
             archiveFormats: root.archiveFormats,
+            rowIsFile: root.rowIsFile,
             rowIsArchive: root.rowIsArchive,
             archiveName: root.archiveName,
             rowIsImage: root.rowIsImage,

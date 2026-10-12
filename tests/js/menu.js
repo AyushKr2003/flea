@@ -9,7 +9,7 @@
 .import "sourcefixture.js" as Source
 
 function state(changes) {
-    var value = { hasRow: true, selectionCount: 1, rowMode: 0o100644, clipboardAvailable: false,
+    var value = { hasRow: true, selectionCount: 1, rowMode: 0o100644, rowIsFile: true, clipboardAvailable: false,
         rowIsSymlink: false, rowName: "debian-13.iso", flashZipMember: "",
         hiddenActions: ["delete", "openTerminal", "moveto", "copyto", "properties", "permissions",
             "copyAs", "pasteAs", "invertSelection"],
@@ -184,8 +184,13 @@ function run(check) {
     check("Taildrop signed out says signed out", word({ taildropPeers: [], taildropCode: "signedOut" }, "taildrop"), "signed out")
     check("Taildrop with no peers says no devices", word({ taildropPeers: [], taildropCode: "noPeers" }, "taildrop"), "no devices")
     check("Taildrop stopped says offline", word({ taildropPeers: [], taildropCode: "stopped" }, "taildrop"), "offline")
-    check("Taildrop on a folder says files only", word({ taildropPeers: [], rowMode: 0o040755, rowIsImage: false, taildropCode: "signedOut" }, "taildrop"), "files only")
-    check("LocalSend on a folder says files only", word({ localSendInstalled: true, localSendPeers: [], rowMode: 0o040755, rowIsImage: false }, "localsend"), "files only")
+    check("Taildrop on a folder says files only", word({ taildropPeers: [], rowIsFile: false, rowIsImage: false, taildropCode: "signedOut" }, "taildrop"), "files only")
+    check("Taildrop on a folder whose mode was never read says files only", word({ taildropPeers: [], rowIsFile: false, rowMode: 0, rowIsImage: false, taildropCode: "" }, "taildrop"), "files only")
+    check("Taildrop on a link to a folder says files only", word({ taildropPeers: [], rowIsFile: false, rowMode: 0o120777, rowIsImage: false, taildropCode: "noPeers" }, "taildrop"), "files only")
+    check("Taildrop on a file whose mode was never read says offline", word({ taildropPeers: [], rowIsFile: true, rowMode: 0, taildropCode: "" }, "taildrop"), "offline")
+    check("LocalSend on a folder says files only", word({ localSendInstalled: true, localSendPeers: [], rowIsFile: false, rowIsImage: false }, "localsend"), "files only")
+    check("LocalSend on a folder whose mode was never read says files only", word({ localSendInstalled: true, localSendPeers: [], rowIsFile: false, rowMode: 0, rowIsImage: false }, "localsend"), "files only")
+    check("LocalSend on a link to a folder says files only", word({ localSendInstalled: true, localSendPeers: [], rowIsFile: false, rowMode: 0o120777, rowIsImage: false }, "localsend"), "files only")
     check("LocalSend with nobody answering says no devices", word({ localSendInstalled: true, localSendPeers: [] }, "localsend"), "no devices")
     check("LocalSend still being read says nothing", word({ localSendInstalled: true, localSendPeers: [], localSendChecking: true }, "localsend"), "undefined")
     check("Dropbox signed out says signed out", word({ dropboxPath: "", dropboxCode: "signedOut" }, "dropbox"), "signed out")
@@ -234,18 +239,21 @@ function run(check) {
     // Issue 193: a row that cannot act reads red with one state word beside it, never "Unavailable" (decided 2026-09-24).
     function refusal(e) { return e.disabled + "|" + e.errored + "|" + e.hint }
     check("permissions on a symlink reads as an error with one word", refusal(Menu.permissionsEntry(0o120777, 1)), "true|true|symlink")
-    check("permissions on a row whose mode could not be read says special file", refusal(Menu.permissionsEntry(0, 1)), "true|true|special file")
+    check("permissions on a row whose mode could not be read names no word", refusal(Menu.permissionsEntry(0, 1)), "true|true|undefined")
     check("permissions with nothing selected is refused with no kind to name", refusal(Menu.permissionsEntry(0o100644, 0)), "true|true|undefined")
     check("permissions with nothing selected names no kind even for a link", refusal(Menu.permissionsEntry(0o120777, 0)), "true|true|undefined")
     check("permissions on a fifo says special file", refusal(Menu.permissionsEntry(0o010644, 1)), "true|true|special file")
+    check("permissions on a socket says special file", refusal(Menu.permissionsEntry(0o140644, 1)), "true|true|special file")
     check("and a file's row can act, so it is not red", refusal(Menu.permissionsEntry(0o100644, 1)), "false|false|undefined")
     var perms = function (changes) { return entry(Menu.listingEntries(state(changes)), "permissions") }
-    check("the menu row under a parent without execute reads red with one word",
-          refusal(perms({ hiddenActions: [], rowMode: 0 })), "true|true|special file")
+    check("the menu row under a parent without execute reads red with no word",
+          refusal(perms({ hiddenActions: [], rowMode: 0 })), "true|true|undefined")
     check("the menu row for a multi-selection reads plain on files",
         refusal(perms({ hiddenActions: [], selectionCount: 2, selectionModes: [0o100644, 0o100644] })), "false|undefined|undefined")
     check("and red when one of them is a link",
         refusal(perms({ hiddenActions: [], selectionCount: 2, selectionModes: [0o100644, 0o120777] })), "true|true|symlink")
+    check("and red with no word when one of them could not be read",
+        refusal(perms({ hiddenActions: [], selectionCount: 2, selectionModes: [0o100644, 0] })), "true|true|undefined")
     check("the menu row for a symlink reads the same way", refusal(perms({ hiddenActions: [], rowMode: 0o120777 })), "true|true|symlink")
     check("the menu row for a folder it can change is plain", refusal(perms({ hiddenActions: [], rowMode: 0o040755 })), "false|undefined|undefined")
     check("permissions rejects missing metadata", Menu.permissionsEntry(undefined, 1).disabled, true)
@@ -275,8 +283,8 @@ function run(check) {
     check("Permissions for a folder owned by somebody else reads red and says not yours",
           refusal(entry(stranger, "permissions")), "true|true|not yours")
     var unreadable = LockedMenu.lockedEntries({ lockedMode: 0, hiddenActions: [] })
-    check("Permissions with no mode to read reads red and says special file",
-          refusal(entry(unreadable, "permissions")), "true|true|special file")
+    check("Permissions with no mode to read reads red and names no word",
+          refusal(entry(unreadable, "permissions")), "true|true|undefined")
     check("hiding Open in terminal takes it off the Locked tile as well",
           entry(LockedMenu.lockedEntries({ lockedMode: 0o040000, hiddenActions: ["openTerminal"] }), "openTerminal").action, undefined)
     var shippedHidden = ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions", "copyAs", "extThumbs"]

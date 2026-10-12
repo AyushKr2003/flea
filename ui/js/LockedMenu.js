@@ -31,7 +31,7 @@ function lockedEntries(p) {
         if (entry.action === "permissions") {
             var permission = lockedPermissions(p.lockedMode)
             entry.disabled = permission.disabled
-            if (permission.errored) { entry.errored = true; entry.hint = permission.hint }
+            if (permission.errored) { entry.errored = true; if (permission.hint) entry.hint = permission.hint }
             else { delete entry.errored; delete entry.hint }
         }
         if (out.length && group !== spec[4]) out.push({ separator: true })
@@ -52,7 +52,12 @@ function lockedRefusal(p) {
 // locked out too may still be the owner, so that row stays plain: it is the way back in.
 function lockedPermissions(mode) {
     var kind = (Number(mode) || 0) & 0o170000
-    if (kind !== 0o100000 && kind !== 0o040000) return { disabled: true, errored: true, hint: StateWords.permissions(mode) }
+    if (kind !== 0o100000 && kind !== 0o040000) {
+        var bad = { disabled: true, errored: true }
+        var word = StateWords.permissions(mode)
+        if (word) bad.hint = word
+        return bad
+    }
     if (Errors.notYours(mode)) return { disabled: true, errored: true, hint: StateWords.WORDS.permissionsNotYours }
     return { disabled: false }
 }

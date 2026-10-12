@@ -2,8 +2,7 @@
 
 .import "Format.js" as Format
 
-// The state word an errored menu row says in its hint slot, beside the red label (MenuAdditions040).
-// One table, keyed by trigger: a word is a fixed value here, never a provider's reason passed through.
+// The state word an errored menu row says in its hint slot: a fixed value here, never a provider's reason.
 var WORDS = {
     taildropFolder: "files only",
     taildropSignedOut: "signed out",
@@ -18,18 +17,16 @@ var WORDS = {
     permissionsNotYours: "not yours"
 }
 
-function isFolder(mode) { return ((Number(mode) || 0) & Format.S_IFMT) === Format.S_IFDIR }
-
-// Sample input: { rowMode: 0o040755, taildropCode: "" }, or { rowMode: 0o100644, taildropCode: "signedOut" }; codes are ui/js/Taildrop.js status().
+// Sample input: { rowIsFile: false, taildropCode: "" }, or { rowIsFile: true, taildropCode: "signedOut" }; codes are ui/js/Taildrop.js status().
 function taildrop(p) {
-    if (isFolder(p.rowMode)) return WORDS.taildropFolder
+    if (p.rowIsFile === false) return WORDS.taildropFolder
     if (p.taildropCode === "signedOut") return WORDS.taildropSignedOut
     return p.taildropCode === "noPeers" ? WORDS.taildropNoPeers : WORDS.taildropDown
 }
 
-// Sample input: { rowMode: 0o040755 }. The send finds nobody on the network for any other cause.
+// Sample input: { rowIsFile: false }. The send finds nobody on the network for any other cause.
 function localsend(p) {
-    return isFolder(p.rowMode) ? WORDS.localsendFolder : WORDS.localsendNoPeers
+    return p.rowIsFile === false ? WORDS.localsendFolder : WORDS.localsendNoPeers
 }
 
 // Sample input: { dropboxCode: "signedOut" }; codes are ui/js/Dropbox.js account() and status().
@@ -37,7 +34,9 @@ function dropbox(p) {
     return p.dropboxCode === "signedOut" ? WORDS.dropboxSignedOut : WORDS.dropboxDown
 }
 
-// A link names itself; any other kind that is neither a file nor a folder, or no readable mode at all, is special.
+// A link names itself; any other kind that is neither a file nor a folder is special, and a mode never read names nothing.
 function permissions(mode) {
-    return ((Number(mode) || 0) & Format.S_IFMT) === Format.S_IFLNK ? WORDS.permissionsLink : WORDS.permissionsSpecial
+    var kind = (Number(mode) || 0) & Format.S_IFMT
+    if (kind === 0) return ""
+    return kind === Format.S_IFLNK ? WORDS.permissionsLink : WORDS.permissionsSpecial
 }
