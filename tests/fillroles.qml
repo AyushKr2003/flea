@@ -5,8 +5,7 @@ import Quickshell
 import "flea" as Flea
 import "qml-probe.js" as QmlProbe
 
-// tests/fillroles.sh's harness: the real transfer card, seek strip and two dialogs, drawn with a sentinel for every role that has an
-// accent or error variant, so each fill and each error ink is read off the component and shown to be the role the board names.
+// tests/fillroles.sh's harness: the real transfer card, seek strip and two dialogs with a sentinel per accent or error role, so each fill and ink is read off the component.
 ShellRoot {
     id: root
 
@@ -49,6 +48,7 @@ ShellRoot {
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
     function rgba(c) { return [c.r, c.g, c.b, c.a].map(function (v) { return Math.round(v * root.milli) / root.milli }).join(",") }
+    // Sample input: "QQuickText(0x55d0c0a0)" gives QQuickText, "DialogButton_QML_42(0x55d0c0a0, \"ok\")" gives DialogButton.
     // The type name without the instance address or the QML suffix, so Text and TextInput are told apart.
     function typeName(o) { return String(o).split("(")[0].replace(/_QML_\d+$/, "") }
     function findAll(top, accept) {
