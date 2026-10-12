@@ -20,6 +20,8 @@ Item {
     x: root.edge - 1 - Math.floor(root.width / 2)
 
     property real pressX: 0
+    // False from the press until the pointer is past the platform drag distance, so a click or a jitter keeps the stored width.
+    property bool pulled: false
 
     ResizeHandle {
         id: handle
@@ -28,11 +30,15 @@ Item {
         onPressed: function (mouse) {
             root.pressX = handle.mapToItem(null, mouse.x, mouse.y).x
             root.dragging = true
+            root.pulled = false
             root.grabbed()
         }
         // The zone reports hover moves too, so only a held drag moves the edge.
         onMoved: function (mouse) {
-            if (root.dragging) root.dragged(Math.round(handle.mapToItem(null, mouse.x, mouse.y).x - root.pressX))
+            if (!root.dragging) return
+            var shift = Math.round(handle.mapToItem(null, mouse.x, mouse.y).x - root.pressX)
+            if (!root.pulled && Math.abs(shift) > Qt.styleHints.startDragDistance) root.pulled = true
+            if (root.pulled) root.dragged(shift)
         }
         onReleased: { root.dragging = false; root.released() }
         onDoubleClicked: root.restored()

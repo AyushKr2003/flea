@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The Columns view's preview column edge on the real ui/ColumnsArea.qml, offscreen: no line at rest, the board's line and mark on hover, a live drag with one save on release, both clamps, a double click back to the default third, and a relaunch that restores the width.
+# The Columns view's preview column edge on the real ui/ColumnsArea.qml, offscreen: no line at rest, the board's line and mark on hover, a live drag with one save on release, both clamps, a double click back to the default third, a click and a jitter that save nothing, a grab lost or an edge hidden mid-drag, and a relaunch that restores the width on its first frame.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -28,6 +28,8 @@ ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
 ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/columns-pwid.qml "$test_root/config/shell.qml" || exit 1
+cp tests/columns-pwid-pane.qml "$test_root/config/PwidPane.qml" || exit 1
+cp tests/columns-pwid-legs.js "$test_root/config/columns-pwid-legs.js" || exit 1
 
 saves="$test_root/saves.log"
 # Stands for flea --ui-state PATCH: it records the patch it was asked to store and stores nothing.
@@ -70,6 +72,7 @@ run_probe drag 0
 drag_output=$output
 # The relaunch reads what the first run's last save said, as the writer would have stored it.
 last_save=$(tail -n 1 "$saves")
+# Sample input: '{"preview":{"width":42}}', the one patch line the stub writer logs per save; the sed keeps the digits after "width".
 stored=$(printf '%s\n' "$last_save" | sed -n 's/.*"width":\([0-9]*\).*/\1/p')
 if [ -z "$stored" ]; then
     printf 'FAIL the drag run saved no width to restore\n'

@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import QtTest
 import "flea" as Flea
+import "columns-pwid-legs.js" as Grab
 
 // tests/columns-pwid.sh's harness: the real ui/ColumnsArea.qml over a stub pane and the real ViewState, a stub writer that logs each patch, and a pointer driven on the preview column's edge.
 ShellRoot {
@@ -21,6 +22,9 @@ ShellRoot {
     readonly property int areaWidth: 1200
     readonly property int areaHeight: 600
     readonly property real hair: Flea.Theme.spacing.hairline
+
+    // What the first frame drew with the preview column up, kept from the window's frameSwapped.
+    property var firstFrame: null
 
     function log(line) { console.log("PWID " + line) }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
@@ -63,48 +67,7 @@ ShellRoot {
 
     Component {
         id: paneStub
-        QtObject {
-            property string path: "/probe/studio/deep/er"
-            property var rows: []
-            property var shown: null
-            property int cursorIndex: 0
-            property int shownTotal: 0
-            property int total: 0
-            property int held: 0
-            property int renamingIndex: -1
-            property var trash: ({ opened: false })
-            property var clipboard: ({ paths: [], moving: false })
-            property int previewIndex: -1
-            property string pendingSelect: ""
-            property bool pendingMenu: false
-            property var selectionBand: null
-            property string focusView: "list"
-            property bool showHidden: false
-            property int windowSize: 35
-            property bool listInFlight: false
-            property string listingState: "ready"
-            property string searchMode: ""
-            property var thumbState: ({ file: {}, order: [] })
-            property var dirSizeState: ({ file: {}, order: [] })
-            property var kindNames: ["text-x-generic", "image-x-generic"]
-            property bool storageKnown: true
-            property string storageClass: "local"
-            property int firstSettleMs: 70
-            property int settleMs: 120
-            property int coalesceMs: 16
-            property int refetchMargin: 25
-            property int buffer: 150
-            property var backend: null
-            function join(base, name) { return String(base) + "/" + String(name) }
-            function rowFor(index) { return (index >= 0 && index < rows.length) ? rows[index] : null }
-            function isSelected(index) { return false }
-            function selectedIndices() { return [] }
-            function selectionCount() { return 0 }
-            function thumbFor(index) { return "" }
-            function open(path) {}
-            function openFile(path) {}
-            function focusRequested() {}
-        }
+        PwidPane {}
     }
 
     Component {
@@ -134,6 +97,15 @@ ShellRoot {
             menu: menuStub.createObject(shell)
         }
         TestEvent { id: driver }
+    }
+
+    // The QQuickWindow under the Quickshell window, which is where frameSwapped comes from.
+    Connections {
+        target: area.Window.window
+        function onFrameSwapped() {
+            if (shell.firstFrame === null && area.thirdShown && shell.laid().length === 3)
+                shell.firstFrame = { widths: shell.widths(), tiled: shell.tiles(shell.rects()) }
+        }
     }
 
     function isColumnPane(o) {
@@ -221,6 +193,16 @@ ShellRoot {
         shell.check(name + ": no accent line on the edge", shell.lines().length, 0)
         shell.check(name + ": no mark by the edge", shell.marks().length, 0)
     }
+    // The press zone under the edge: the MouseArea ui/ResizeHandle.qml puts over the hairline.
+    function zoneItem() {
+        var found = null
+        var edge = shell.edgeItem()
+        if (edge === null) return null
+        shell.walk(edge, function (o) { if (o.hoverEnabled !== undefined && o.cursorShape === Qt.SplitHCursor) found = o })
+        return found
+    }
+    // The saves after the first `from`, so a leg names only what it wrote.
+    function savedAfter(from) { return shell.savedWidths().slice(from) }
     function pointer(x, y) { driver.mouseMove(area, x, y, 0, Qt.NoButton, Qt.NoModifier) }
     function dragTo(x, y) { driver.mouseMove(area, x, y, 0, Qt.LeftButton, Qt.NoModifier) }
 
@@ -281,7 +263,7 @@ ShellRoot {
             shell.resting("pointer left")
             shell.pointer(800, 300)
         },
-        // A drag of 20 moves: the edge follows every move, nothing is built or dropped, nothing is saved until release.
+        // A drag of 20 moves: the edge holds until the pointer passes the drag threshold, then follows every move; nothing is built or dropped, nothing is saved until release.
         function () {
             driver.mousePress(area, 800, 300, Qt.LeftButton, Qt.NoModifier, 0)
             shell.edgeHome.count = shell.countObjects()
@@ -290,12 +272,13 @@ ShellRoot {
             for (var i = 1; i <= 20; i++) {
                 shell.dragTo(800 - 6 * i, 300)
                 var edge = shell.edgeX()
-                if (edge !== 800 - 6 * i) { shell.edgeHome.good = false; shell.log("move " + i + " put the edge at " + edge) }
+                var want = 6 * i > Qt.styleHints.startDragDistance ? 800 - 6 * i : 800
+                if (edge !== want) { shell.edgeHome.good = false; shell.log("move " + i + " put the edge at " + edge) }
                 if (!shell.tiles(shell.rects())) { shell.edgeHome.good = false; shell.log("move " + i + " left a gap, an overlap or an empty column") }
             }
         },
         function () {
-            shell.check("drag: the edge followed all 20 moves and every frame tiled", shell.edgeHome.good, true)
+            shell.check("drag: the edge held under the threshold, followed past it, and every frame tiled", shell.edgeHome.good, true)
             shell.check("drag: mid-drag widths are whole pixels", shell.widths(), [340, 340, 520])
             shell.check("drag: no delegate was built or dropped in 20 moves", shell.countObjects(), shell.edgeHome.count)
             shell.check("drag: nothing is written while the pointer is down", shell.saves().length, 0)
@@ -348,6 +331,8 @@ ShellRoot {
             shell.check("double click: it writes 0", shell.savedWidths(), [43, 50, 25, 0])
             shell.pointer(100, 300)
         },
+        // The click, jitter, lost grab, hidden edge and jittering double click legs: tests/columns-pwid-legs.js.
+        ...Grab.legs(shell, driver, area),
         // The last width this run leaves behind is the one the restore run reads back.
         function () { shell.pointer(800, 300) },
         function () {
@@ -357,17 +342,22 @@ ShellRoot {
             driver.mouseRelease(area, 700, 300, Qt.LeftButton, Qt.NoModifier, 0)
         },
         function () {
-            shell.check("last drag writes 42", shell.savedWidths(), [43, 50, 25, 0, 42])
+            shell.check("last drag writes 42", shell.savedAfter(shell.edgeHome.base), [42])
             shell.pointer(100, 300)
         }
     ]
 
-    // Phase B: a relaunch with the stored width in ui.json draws it in the first frames, with no line at rest.
+    // Phase B: a relaunch with the stored width in ui.json draws it on the first frame that shows the preview column, with no line at rest.
     property var restore: [
         function () {
             var want = Math.round(shell.areaWidth * shell.stored / 100)
             var column = Math.floor((shell.areaWidth - want) / 2)
             shell.check("relaunch: the stored percent is read", Flea.ViewState.previewWidth, shell.stored)
+            shell.check("relaunch: a frame drew the preview column", shell.firstFrame !== null, true)
+            if (shell.firstFrame !== null) {
+                shell.check("relaunch: the first frame already has the stored width", shell.firstFrame.widths, [column, column, shell.areaWidth - 2 * column])
+                shell.check("relaunch: the first frame tiles the area", shell.firstFrame.tiled, true)
+            }
             shell.check("relaunch: the width lays the rects out", shell.widths(), [column, column, shell.areaWidth - 2 * column])
             shell.check("relaunch: the rects tile the area", shell.tiles(shell.rects()), true)
             shell.resting("relaunch")
