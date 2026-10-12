@@ -504,14 +504,15 @@ Item {
                 wrapMode: Text.Wrap
             }
 
+            // The status slot is always laid out, two caption lines tall (the network slot's rowHeight) inside its padding, so rest, busy and a short error keep one card height; only a longer error grows it.
             Text {
                 width: parent.width
                 leftPadding: Theme.spacing.rowPaddingX
                 rightPadding: Theme.spacing.rowPaddingX
                 bottomPadding: Theme.spacing.gap
-                visible: root.errorText.length > 0
-                text: root.errorText
-                color: Theme.color.error
+                height: Math.max(Theme.rowHeight + topPadding + bottomPadding, implicitHeight)
+                text: root.committing ? "Opening…" : root.errorText
+                color: root.committing ? Theme.color.muted : Theme.color.error
                 font.family: Theme.font.family
                 font.pixelSize: Theme.font.caption
                 textFormat: Text.PlainText
@@ -538,7 +539,7 @@ Item {
 
                     Flea.DialogButton {
                         id: openButton
-                        label: root.committing ? "Opening…" : "Open"
+                        label: "Open"
                         primary: true
                         focused: root.focusPart === 4
                         available: root.canSubmit

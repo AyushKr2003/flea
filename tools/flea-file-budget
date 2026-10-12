@@ -114,11 +114,12 @@ tests/sidebar-flows.qml 669
 tests/touchpad.qml 882
 tests/xwsettings-tabs.qml 444
 ui/Backend.qml 576
+tests/dialog-board.qml 465
 ui/ChromeBar.qml 342
 ui/ColumnsArea.qml 547
 ui/ColumnPane.qml 450
 ui/ContextMenu.qml 751
-ui/ConvertDialog.qml 446
+ui/ConvertDialog.qml 447
 ui/GridArea.qml 481
 ui/Ipc.qml 966
 tests/gridprebuild.qml 458
