@@ -103,9 +103,11 @@ Item {
     }
     on_PowerOffDiskChanged: if (_powerOffDisk.length > 0) powerSectorsFile.active = true
 
+    // False parks the poll once the first listing answered; a mount or a release in flight reads the next listing, so it keeps polling.
+    property bool polling: true
     Timer {
         interval: root.pollMs
-        running: true
+        running: root.polling || !root.firstAnswered || root.releasing || root._pendingOpenDevice.length > 0 || root._powerOffDisk.length > 0
         repeat: true
         triggeredOnStart: true
         onTriggered: root.poll()

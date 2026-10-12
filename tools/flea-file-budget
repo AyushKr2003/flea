@@ -129,7 +129,7 @@ ui/ColumnPane.qml 450
 ui/ContextMenu.qml 781
 ui/ConvertDialog.qml 453
 ui/GridArea.qml 491
-ui/Ipc.qml 984
+ui/Ipc.qml 985
 tests/gridprebuild.qml 458
 tests/columnsprebuild.qml 416
 ui/KeymapSheet.qml 551
@@ -137,6 +137,7 @@ ui/List.qml 480
 tests/listprebuild.qml 412
 tests/poolpark.qml 419
 tests/touchpad-edge.qml 438
+tests/railmotion.qml 457
 ui/FastScrollHandler.qml 474
 ui/FigureService.qml 405
 ui/FlashView.qml 399
@@ -144,7 +145,7 @@ ui/NetworkDialog.qml 435
 ui/NetworkForm.qml 426
 ui/NetworkMounts.qml 909
 ui/OpenWithDialog.qml 612
-ui/Pane.qml 1226
+ui/Pane.qml 1228
 ui/PaneMenuActions.qml 522
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
@@ -152,13 +153,13 @@ ui/PickerWindow.qml 797
 ui/Preview.qml 839
 ui/PreviewColumn.qml 586
 ui/PickerChrome.qml 429
-ui/DeviceMounts.qml 528
+ui/DeviceMounts.qml 530
 ui/PreviewMarkdown.qml 625
 ui/Row.qml 496
 ui/SettingsPanel.qml 547
 ui/SettingsRow.qml 409
-ui/Sidebar.qml 705
-ui/StatusBar.qml 474
+ui/Sidebar.qml 708
+ui/StatusBar.qml 472
 ui/Theme.qml 465
 ui/TrashView.qml 468
 ui/UnlockDialog.qml 450
