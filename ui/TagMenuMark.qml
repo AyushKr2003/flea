@@ -47,6 +47,6 @@ Item {
         swatch: root.tagRow.swatch
         fallback: root.tagRow.fallback
         digit: root.tagRow.digit
-        palette: Theme.tag.menuColors
+        tagColors: Theme.tag.menuColors
     }
 }

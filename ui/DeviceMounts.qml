@@ -406,8 +406,7 @@ Item {
         // which hid / behind /home here and left the system disk unidentifiable.
         // TRAN is the transport, asked for because RM alone misses a USB bridge: a WD My Passport
         // reports rm=false with tran=usb, and a drive you can unplug has to offer Eject (PR 74).
-        // PARTTYPE, PTTYPE, PARTN and UUID are the hide rule's own columns: a firmware type, an
-        // FSVER beside FSTYPE names LUKS1 or LUKS2; RO keeps Flash off a write-protected card.
+        // PARTTYPE, PTTYPE, PARTN and UUID are the hide rule's own columns (a firmware type, an installer ISO keep, a recovery label, the dedupe key); FSVER beside FSTYPE names LUKS1 or LUKS2; RO keeps Flash image off a write-protected card.
         command: ["lsblk", "--bytes", "--json", "-o", "NAME,PATH,LABEL,MOUNTPOINTS,RM,RO,TRAN,SIZE,TYPE,MODEL,FSTYPE,FSVER,PARTTYPENAME,PARTTYPE,PTTYPE,PARTN,UUID"]
         stdout: StdioCollector {
             id: listOut

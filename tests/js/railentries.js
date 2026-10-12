@@ -41,4 +41,8 @@ function run(check) {
     check("a write-protected stick through the rail never offers Flash image", menuOf("LOCKED"), "Open|Unmount|Eject")
     check("and its writable twin through the same rail still does", menuOf("OPEN"), "Open|Unmount|Eject|Flash image")
     check("the rail's lsblk asks for the RO column, or every volume reads writable", Source.source("ui/DeviceMounts.qml").indexOf("MOUNTPOINTS,RM,RO,TRAN,") >= 0, true)
+    var lsblk = Source.source("ui/DeviceMounts.qml")
+    check("the lsblk comment says why PARTTYPE, PTTYPE, PARTN and UUID are fetched, in whole lines",
+        lsblk.indexOf("a firmware type, an installer ISO keep, a recovery label, the dedupe key); FSVER beside FSTYPE") >= 0
+        && lsblk.indexOf("a firmware type, an\n") < 0, true)
 }

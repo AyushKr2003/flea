@@ -94,4 +94,15 @@ function run(check) {
     new Function("root", "Search", "return function (name) {" + openBody + "}")({ pane: openPane }, Search)("Red")
     check("a tag row click opens a session at home, not the pane's folder, then sends its tag query",
         openSent.join(","), "searchopen /h,searchquery tag:Red")
+    // The shared swatch and heading name their constants and leave Qt's Item.palette alone.
+    var swatchSrc = Source.source("ui/TagSwatch.qml")
+    check("TagSwatch takes its colour map as tagColors, not as Item.palette",
+        swatchSrc.indexOf("required property var tagColors") >= 0 && swatchSrc.indexOf("palette") < 0, true)
+    check("TagSwatch names its fallback border", swatchSrc.indexOf("readonly property int fallbackBorder: 2") >= 0 && swatchSrc.indexOf("? root.fallbackBorder : 0") >= 0, true)
+    check("every caller passes tagColors", ["TagSlot", "TagMenuMark", "TagRailSection"].every(function (f) {
+        var src = Source.source("ui/" + f + ".qml")
+        return src.indexOf("tagColors: Theme.tag.") >= 0 && src.indexOf("palette:") < 0 }), true)
+    var headingSrc = Source.source("ui/RailHeading.qml")
+    check("RailHeading names its lead and tracking", headingSrc.indexOf("headingLead: 0.15") >= 0 && headingSrc.indexOf("headingTracking: 1") >= 0
+        && headingSrc.indexOf("* root.headingLead") >= 0 && headingSrc.indexOf("letterSpacing: root.headingTracking") >= 0, true)
 }

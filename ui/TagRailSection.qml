@@ -27,7 +27,7 @@ Column {
                 swatch: slot.entry.swatch || ""
                 fallback: Theme.tag.fallback
                 digit: slot.entry.digit || ""
-                palette: Theme.tag.menuColors
+                tagColors: Theme.tag.menuColors
             }
         }
     }

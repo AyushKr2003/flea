@@ -34,7 +34,7 @@ Item {
             swatch: cell.modelData
             fallback: Theme.tag.fallback
             digit: Tags.keyFor(cell.modelData)
-            palette: Theme.tag.colors
+            tagColors: Theme.tag.colors
         }
     }
 }

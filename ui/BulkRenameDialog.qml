@@ -25,7 +25,7 @@ FocusScope {
     // 255 name bytes plus one newline per selected name, the TUI batch's own bound.
     readonly property int nameLineBytes: 256
     // The two half-width columns share one gap, so both halves measure the same remainder.
-    readonly property int columnGap: Theme.spacing.rowPaddingX
+    readonly property int columnGap: 14
     // The new-names stack breathes less than a column gap, the way the old-names one does.
     readonly property int stackGap: 4
     // The names frame's own insets: a hairline-scale margin with wider sides for the caret.
