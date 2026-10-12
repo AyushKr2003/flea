@@ -35,6 +35,7 @@ case_cap_gridhover() {
     read -r wx wy ww wh < <(window_box) || fail "gridhover: native window coordinates unavailable"
     # Sample input, rowRect 0 prints "14 100 118 128": the window x, y, width and height of tile 0.
     read -r _ first _ _ <<< "$(ipc rowRect 0)"
+    [[ "$first" =~ ^[0-9]+$ ]] || fail "gridhover: tile 0 has no row rectangle: '$first'"
     tile=-1
     for ((index = 1; index < 12; index++)); do
         read -r _ row_y _ _ <<< "$(ipc rowRect "$index")"
@@ -42,7 +43,9 @@ case_cap_gridhover() {
     done
     (( tile > 0 )) || fail "gridhover: no tile of the second row among 12 files"
     read -r row_x row_y row_w row_h <<< "$(ipc rowRect "$tile")"
+    # Sample input, rowThumbRect 5 prints "30 250 64 64": the window x, y, width and height of tile 5's icon box.
     read -r icon_x icon_y icon_w icon_h <<< "$(ipc rowThumbRect "$tile")"
+    [[ "$icon_x $icon_y $icon_w $icon_h" =~ ^[0-9]+\ [0-9]+\ [0-9]+\ [0-9]+$ ]] || fail "gridhover: tile $tile has no icon box: '$icon_x $icon_y $icon_w $icon_h'"
     # Sample input, gridCaptionState: {"name":"file05.txt","lines":1,"truncated":false,"textHeight":17,"slotHeight":34,"bottom":116,"tileHeight":128}.
     read -r lines text_h slot_h bottom < <(ipc gridCaptionState "$tile" | jq -er '[.lines, .textHeight, .slotHeight, .bottom] | map(floor) | @tsv') \
         || fail "gridhover: tile $tile has no caption state"
