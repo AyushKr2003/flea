@@ -34,6 +34,19 @@ fn the_zip_stream_binds_the_image_read_only_and_carries_no_cpu_cap() {
     assert_eq!(tail, inner.as_slice(), "the inner argv is still last and unchanged");
 }
 
+// The producer's zip branch builds through wrap_stream, not wrap_readonly: a swap must go red.
+#[test]
+fn the_producer_jail_binds_the_image_only_for_a_zip() {
+    let zip_inner = vec!["bsdtar".to_string(), "-xOf".to_string(), "/in/bundle.zip".to_string(), "disk.img".to_string()];
+    let zip = producer_jail(&zip_inner, "zip", std::path::Path::new("/in/bundle.zip"));
+    assert!(!zip.iter().any(|a| a.starts_with("--cpu=")), "a zip inflates past the decoder cap: {:?}", zip);
+    assert!(zip.join(" ").contains("--ro-bind /in/bundle.zip /in/bundle.zip"), "the zip branch binds the image: {}", zip.join(" "));
+    let other_inner = vec!["xz".to_string(), "-dc".to_string()];
+    let other = producer_jail(&other_inner, "xz", std::path::Path::new("/in/a.img.xz"));
+    assert!(!other.iter().any(|a| a.starts_with("--cpu=")), "a stream lasts as long as the image: {:?}", other);
+    assert!(!other.join(" ").contains("--ro-bind /in/a.img.xz"), "only the zip branch binds the image: {}", other.join(" "));
+}
+
 // A zip member named with brackets streams itself: bsdtar reads -xOf operands as patterns.
 #[test]
 fn a_zip_member_named_with_brackets_streams_itself() {
