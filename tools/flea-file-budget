@@ -78,9 +78,9 @@ tests/js/mounts.js 327
 tests/js/menu.js 560
 tests/js/nav.js 479
 tests/js/rail.js 454
-tests/js/picker.js 343
+tests/js/picker.js 352
 tests/picker-grid.qml 465
-tests/picker-hunt.qml 448
+tests/picker-hunt.qml 449
 tests/js/network.js 307
 tests/js/ops.js 574
 tests/js/slowclick.js 309
@@ -179,7 +179,7 @@ ui/js/Format.js 305
 ui/js/Ops.js 480
 ui/js/Search.js 383
 ui/js/Mounts.js 298
-ui/js/Picker.js 328
+ui/js/Picker.js 335
 ui/js/Settings.js 461
 ui/js/Scroll.js 304
 ui/js/Tabs.js 720
