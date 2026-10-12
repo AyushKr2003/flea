@@ -26,6 +26,10 @@ ShellRoot {
     property var guardMap: ({})
     property var guardAskLog: []
     property bool guardHold: false
+    // The Columns phase's row: a model file the backend offers no thumbnail for.
+    property int modelRow: -1
+    // The Columns phase's second row: a model file whose thumbnail is on offer and has not landed.
+    property int pendingRow: -1
 
     function log(line) { console.log("PREVIEW " + line) }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
@@ -68,6 +72,10 @@ ShellRoot {
     function rowFor(i) {
         if (shell.guardMap.hasOwnProperty(i))
             return { n: shell.guardMap[i], d: false, t: true, s: 1000, m: 1000, p: 33188, i: "image-x-generic" }
+        if (i === shell.modelRow)
+            return { n: "mount.stl", d: false, t: false, s: 1000, m: 1000, p: 33188, i: "image-x-generic" }
+        if (i === shell.pendingRow)
+            return { n: "pending.stl", d: false, t: true, s: 1000, m: 1000, p: 33188, i: "image-x-generic" }
         if (i === shell.interimRowOverride && shell.interimOrig !== "")
             return { n: shell.interimOrig, d: false, t: true, s: 1000, m: 1000, p: 33188, i: "image-x-generic" }
         if (i < 0 || i > shell.restRow) return null
@@ -630,10 +638,113 @@ ShellRoot {
             if (qp.status === "This image could not be read.") {
                 stop()
                 shell.log("STLCONTROL status=" + qp.status)
-                quitTimer.restart()
+                shell.beginColumnsModel()
             } else if (waited > 8000) {
                 stop()
                 shell.log("FAIL the control never kept the sentence (status " + qp.status + ")")
+                shell.quit()
+            }
+        }
+    }
+
+    // The Columns preview over a model with no thumbnail: its frame must not hand the file to the decoder.
+    property bool modelSeen: false
+    Connections {
+        target: loader.item ? loader.item.pictureItem : null
+        function onSourceChanged() {
+            if (String(loader.item.pictureItem.source).indexOf("/mount.stl") >= 0) shell.modelSeen = true
+        }
+    }
+    function beginColumnsModel() {
+        quickPreview.item.close()
+        stub.thumbState = ({ file: {} })
+        shell.metaWH = [0, 0]
+        shell.modelRow = 9
+        stub.cursorIndex = 9
+        colModelPoll.waited = 0
+        colModelPoll.restart()
+    }
+    Timer {
+        id: colModelPoll
+        interval: 10
+        repeat: true
+        property int waited: 0
+        onTriggered: {
+            waited += interval
+            var col = loader.item
+            if (col.path.endsWith("/mount.stl") && col.previewState === "image" && col.noThumbComing) {
+                stop()
+                colModelDwell.restart()
+            } else if (waited > 8000) {
+                stop()
+                shell.log("FAIL the Columns preview never reached the model (state " + col.previewState + ")")
+                shell.quit()
+            }
+        }
+    }
+    // Long enough for an asynchronous decode of the model to fail, were one started.
+    // Sample log line: "PREVIEW COLMODEL source= seen=false status=3 note=no preview could be made ready=true".
+    Timer {
+        id: colModelDwell
+        interval: 300
+        onTriggered: {
+            var col = loader.item
+            shell.log("COLMODEL source=" + String(col.pictureItem.source) + " seen=" + shell.modelSeen + " status=" + col.frameStatus
+                + " note=" + col.frameNote() + " ready=" + col.ready)
+            shell.beginColumnsPending()
+        }
+    }
+
+    // The same frame over a model whose thumbnail is still to come: it reads Null and shows no sentence until the thumbnail lands, then draws it.
+    property bool pendingSawError: false
+    property bool pendingSawSentence: false
+    function beginColumnsPending() {
+        stub.thumbState = ({ file: {} })
+        shell.pendingRow = 10
+        stub.cursorIndex = 10
+        colPendingPoll.stage = "wait"
+        colPendingPoll.waited = 0
+        colPendingPoll.restart()
+    }
+    // Sample log lines: "PREVIEW COLPENDING status=0 note= ready=false sawerror=false sawsentence=false" and "PREVIEW COLLAND status=1 source=stl-cache.png note= ready=true sawerror=false sawsentence=false".
+    Timer {
+        id: colPendingPoll
+        interval: 10
+        repeat: true
+        property string stage: "wait"
+        property int waited: 0
+        onTriggered: {
+            waited += interval
+            var col = loader.item
+            // Only the pending model's frames count; mount.stl's refused frame before the switch is by design.
+            if (col.path.endsWith("/pending.stl") && col.frameStatus === Image.Error) shell.pendingSawError = true
+            if (col.path.endsWith("/pending.stl") && col.frameNote() === "no preview could be made") shell.pendingSawSentence = true
+            if (stage === "wait") {
+                if (col.path.endsWith("/pending.stl") && col.previewState === "image" && col.loadedIndex === 10 && !col.noThumbComing) {
+                    stage = "dwell"
+                    waited = 0
+                } else if (waited > 8000) {
+                    stop()
+                    shell.log("FAIL the Columns preview never reached the pending model (state " + col.previewState + ")")
+                    shell.quit()
+                }
+            } else if (stage === "dwell") {
+                if (waited >= 300) {
+                    shell.log("COLPENDING status=" + col.frameStatus + " note=" + col.frameNote() + " ready=" + col.ready
+                        + " sawerror=" + shell.pendingSawError + " sawsentence=" + shell.pendingSawSentence)
+                    stub.thumbState = ({ file: { 10: shell.photoDir + "/stl-cache.png" } })
+                    stage = "land"
+                    waited = 0
+                }
+            } else if (col.frameStatus === Image.Ready && col.ready) {
+                stop()
+                shell.log("COLLAND status=" + col.frameStatus + " source=" + String(col.pictureItem.source).split("/").pop()
+                    + " note=" + col.frameNote() + " ready=" + col.ready
+                    + " sawerror=" + shell.pendingSawError + " sawsentence=" + shell.pendingSawSentence)
+                quitTimer.restart()
+            } else if (waited > 8000) {
+                stop()
+                shell.log("FAIL the pending model's thumbnail never drew (status " + col.frameStatus + ")")
                 shell.quit()
             }
         }
