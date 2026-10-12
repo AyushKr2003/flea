@@ -273,11 +273,11 @@ case_dualdivider() {
         YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x40 >/dev/null 2>&1 || fail "dualdivider: $rail: the press failed"
         column_drag_absolute "$(( wx + div + 4 ))" "$y" "$drag" 4
         # Nothing re-lays while the pointer is down; the handle log says whether a press, move, release or cancel reached the divider.
-        local trace
-        trace=$(grep -ao 'RESIZE divider [a-z]*' "$flea_log" | awk '{c[$3]++} END {printf "begin=%d move=%d end=%d cancel=%d", c["press"], c["move"], c["release"], c["cancel"]}')
-        printf 'DUALDIVIDER %s events %s\n' "$rail" "$trace"
+        local trace="" event
+        for event in press move release cancel; do trace+=" $event=$(grep -ac "RESIZE divider $event" "$flea_log")"; done
+        printf 'DUALDIVIDER %s events%s\n' "$rail" "$trace"
         read -r moved0 moved1 <<< "$(dual_list_width 0) $(dual_list_width 1)"
-        (( moved0 == w0 && moved1 == w1 )) || fail "dualdivider: $rail: the listings moved during the drag ($w0/$w1 to $moved0/$moved1), divider events: $trace"
+        (( moved0 == w0 && moved1 == w1 )) || fail "dualdivider: $rail: the listings moved during the drag ($w0/$w1 to $moved0/$moved1), divider events:$trace"
         YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || fail "dualdivider: $rail: the release failed"
         settle
         read -r moved0 moved1 <<< "$(dual_list_width 0) $(dual_list_width 1)"
