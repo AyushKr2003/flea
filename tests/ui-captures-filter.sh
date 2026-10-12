@@ -1,5 +1,5 @@
 # Filter and search captures in List, Grid and Columns at text size 14, native only; fixture: 14 top-level entries, 8 names holding ap, 3 without, sub and extra holding matches, one empty folder.
-cap_filter_straddle_name=a-very-long-grid-caption-that-wraps.txt
+cap_filter_straddle_name=grid-caption-that-wraps.txt
 cap_filter_ap_shown=8
 cap_filter_search_total=11
 cap_filter_full_total=14
@@ -236,28 +236,33 @@ cap_filter_matches() {
 
 # Item 1: the wash across the wrapped Grid label, cursor parked off the tile.
 cap_filter_straddle() {
-    local dir="$1" idx caption lines line0 line1 a b cand matches best best_n holder total want cur prev guard
+    local dir="$1" idx state caption shown wrap lines line0 line1 a b cand tried matches best best_n holder total want cur prev guard
     cap_filter_launch "$dir" "$fixture_root/cap-filter-state-straddle" '{"keys":"default","view":"grid","display":{"textSize":{"mode":14}}}' "$cap_filter_full_total"
     sweep_wait viewMode grid
     idx=$(row_index_of "$cap_filter_straddle_name")
-    caption=$(ipc gridCaptionState "$idx" | jq -er .name) || fail "cap_filter: the long tile has no caption"
-    lines=$(ipc gridCaptionState "$idx" | jq -er .lines) || fail "cap_filter: the long tile has no line count"
-    [[ "$lines" == 2 ]] || fail "cap_filter: the long name lays out on $lines lines, not a wrapped pair"
-    line0=${caption%%$'\n'*}
-    line1=${caption#*$'\n'}
-    line1=${line1%%$'\n'*}
-    [[ -n "$line0" && -n "$line1" ]] || fail "cap_filter: the long caption has no two lines to straddle"
+    # Sample input: '{"name":"grid-caption-\nthat-wraps.txt","wrapAt":13,"broken":true,"lines":2,"truncated":false,"textHeight":33.7,"slotHeight":34,"bottom":121,"tileHeight":200}'
+    state=$(ipc gridCaptionState "$idx") || fail "cap_filter: the long tile has no caption state"
+    caption=$(jq -er .name <<< "$state") || fail "cap_filter: the long tile has no caption"
+    lines=$(jq -er .lines <<< "$state") || fail "cap_filter: the long tile has no line count"
+    wrap=$(jq -er .wrapAt <<< "$state") || fail "cap_filter: the long tile has no wrap index"
+    [[ "$lines" == 2 && "$wrap" -gt 0 && $(jq -er .broken <<< "$state") == true ]] || fail "cap_filter: the long name is not a wrapped pair Flea broke itself: $state"
+    shown=${caption//$'\n'/}
+    [[ "$shown" == "$cap_filter_straddle_name" ]] || fail "cap_filter: the caption [$caption] drops letters, so it has none to straddle"
+    line0=${shown:0:wrap}
+    line1=${shown:wrap}
     best=""
     best_n=0
+    tried=""
     for a in 3 2 1; do
         for b in 1 2; do
             cand=${line0: -$a}${line1:0:$b}
+            tried+=" [$cand]"
             [[ "$cand" == -* || "$cand" == *'*'* || "$cand" == *'?'* ]] && continue
             matches=$(cap_filter_matches "$cand")
             if (( matches > best_n )); then best=$cand; best_n=$matches; fi
         done
     done
-    [[ -n "$best" ]] || fail "cap_filter: no query straddles the wrap"
+    [[ -n "$best" ]] || fail "cap_filter: no query straddles the wrap of [$caption] at $wrap, tried$tried"
     total=$cap_filter_full_total
     if (( best_n < 2 )); then
         holder="zz-$best-holder.txt"

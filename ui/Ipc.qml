@@ -95,7 +95,7 @@ QtObject {
             var item = root.pane.visibleItemFor(i)
             if (!item || !item.captionItem) return "{}"
             var caption = item.captionItem
-            return JSON.stringify({name: caption.text, lines: caption.lineCount, truncated: caption.truncated,
+            return JSON.stringify({name: caption.text, wrapAt: caption.text.indexOf("\n"), broken: !caption.truncated && caption.lineCount === caption.text.split("\n").length, lines: caption.lineCount, truncated: caption.truncated,
                 textHeight: caption.contentHeight, slotHeight: caption.height,
                 bottom: caption.y + caption.height, tileHeight: item.height})
         }
