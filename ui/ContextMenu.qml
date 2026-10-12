@@ -25,6 +25,7 @@ Item {
     property bool taildropInstalled: false
     property var localSend: ({ installed: false, peers: [], checking: false })
     property string taildropReason: ""
+    property string taildropCode: ""
     property bool providersRefreshing: false
     property bool refreshOwed: false
     property var lastProviderAnswer: null
@@ -60,6 +61,7 @@ Item {
     property string dropboxPath: ""
     property bool dropboxInstalled: false
     property string dropboxReason: ""
+    property string dropboxCode: ""
     // A row already inside the account directory offers a share link instead of another move.
     property bool rowInDropbox: false
     // False on a listing's empty space, where Menus.html's background column is what opens instead.
@@ -192,10 +194,10 @@ Item {
             rowInDropbox: root.rowInDropbox,
             dropboxPath: view.dropboxPath,
             dropboxInstalled: root.dropboxInstalled,
-            dropboxReason: root.dropboxReason,
+            dropboxReason: root.dropboxReason, dropboxCode: root.dropboxCode,
             taildropPeers: root.rowIsFile ? view.taildropPeers : [],
             taildropInstalled: root.taildropInstalled,
-            taildropReason: root.taildropReason,
+            taildropReason: root.taildropReason, taildropCode: root.taildropCode,
             taildropRefreshing: view.taildropRefreshing, dropboxRefreshing: view.dropboxRefreshing,
             archiveFormats: root.archiveFormats,
             rowIsArchive: root.rowIsArchive,

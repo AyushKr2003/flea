@@ -155,6 +155,7 @@ js/ShelfPile.js
 js/SlowClick.js
 js/SlowOp.js
 js/Sort.js
+js/StateWords.js
 js/Startup.js
 js/Status.js
 js/Swap.js
@@ -169,4 +170,4 @@ js/Trash.js
 js/TrashDates.js
 js/UiState.js
 js/Update.js
-bytes 1598588
+bytes 1602784

@@ -39,21 +39,22 @@ function parsePeers(raw) {
     return out
 }
 
+// The code names the state for logic (statusFailed, invalid, signedOut, stopped, disabled, noPeers, or "" when ready); the reason is for people.
 // Sample input: {"BackendState":"Running","Self":{"CapMap":{"https://tailscale.com/cap/file-sharing":[]}},"Peer":{}}.
 function status(raw, exitCode, error) {
-    if (exitCode !== 0) return { peers: [], reason: String(error || "Tailscale status failed.").trim() }
+    if (exitCode !== 0) return { peers: [], reason: String(error || "Tailscale status failed.").trim(), code: "statusFailed" }
     var data
-    try { data = JSON.parse(raw) } catch (e) { return { peers: [], reason: "invalid status" } }
-    if (!data || typeof data !== "object") return { peers: [], reason: "invalid status" }
-    if (data.BackendState === "NeedsLogin") return { peers: [], reason: "signed out" }
-    if (data.BackendState !== "Running") return { peers: [], reason: String(data.BackendState || "unavailable").toLowerCase() }
+    try { data = JSON.parse(raw) } catch (e) { return { peers: [], reason: "invalid status", code: "invalid" } }
+    if (!data || typeof data !== "object") return { peers: [], reason: "invalid status", code: "invalid" }
+    if (data.BackendState === "NeedsLogin") return { peers: [], reason: "signed out", code: "signedOut" }
+    if (data.BackendState !== "Running") return { peers: [], reason: String(data.BackendState || "unavailable").toLowerCase(), code: "stopped" }
     var self = data.Self || {}, capability = "https://tailscale.com/cap/file-sharing"
     var capabilities = Array.isArray(self.Capabilities) ? self.Capabilities : []
     if (!(self.CapMap && self.CapMap[capability] !== undefined)
             && capabilities.indexOf(capability) < 0)
-        return { peers: [], reason: "disabled for this account" }
+        return { peers: [], reason: "disabled for this account", code: "disabled" }
     var peers = parsePeers(raw)
-    return { peers: peers, reason: peers.length ? "" : "no peers" }
+    return { peers: peers, reason: peers.length ? "" : "no peers", code: peers.length ? "" : "noPeers" }
 }
 
 // A specific TaildropTarget wins outright; 0 (unset) falls back to "do we own it too".

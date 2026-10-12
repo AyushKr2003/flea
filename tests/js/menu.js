@@ -2,6 +2,7 @@
 .import "../../ui/js/Menu.js" as Menu
 .import "../../ui/js/MenuRefresh.js" as MenuRefresh
 .import "../../ui/js/LockedMenu.js" as LockedMenu
+.import "../../ui/js/StateWords.js" as StateWords
 .import "../../ui/js/Nav.js" as Nav
 .import "../../ui/js/Icons.js" as Icons
 .import "../../ui/js/Mounts.js" as Mounts
@@ -170,13 +171,37 @@ function run(check) {
     check("absent Taildrop provider removes its row", entry(Menu.listingEntries(state({ taildropInstalled: false })), "taildrop").action, undefined)
     var offline = entry(Menu.listingEntries(state({ taildropPeers: [] })), "taildrop")
     check("offline installed Taildrop remains disabled", offline.disabled, true)
-    check("offline Taildrop reads as an error, with no sentence beside it", offline.errored + "|" + offline.hint, "true|undefined")
+    check("offline Taildrop reads as an error, with one state word beside it", offline.errored + "|" + offline.hint, "true|offline")
     check("offline Taildrop offers no stale peers", offline.submenu.length, 0)
     check("fresh status disables a cached Taildrop target", entry(Menu.listingEntries(state({taildropRefreshing: true})), "taildrop").disabled, true)
     check("a provider still being read is dimmed, not errored", String(entry(Menu.listingEntries(state({taildropRefreshing: true})), "taildrop").errored), "undefined")
+    check("and says no word until it has answered", String(entry(Menu.listingEntries(state({taildropRefreshing: true, taildropPeers: []})), "taildrop").hint), "undefined")
     check("fresh status disables a cached Dropbox directory", entry(Menu.listingEntries(state({dropboxRefreshing: true})), "dropbox").disabled, true)
     check("a Taildrop still being read leaves Dropbox as it was answered", entry(Menu.listingEntries(state({taildropRefreshing: true})), "dropbox").disabled, false)
     check("installed signed-out provider reads as an error", entry(Menu.listingEntries(state({taildropPeers: [], taildropReason: "signed out"})), "taildrop").errored, true)
+    // Q13: every errored trigger says its own word in the hint slot, from the table in ui/js/StateWords.js.
+    function word(changes, action) { return String(entry(Menu.listingEntries(state(changes)), action).hint) }
+    check("Taildrop signed out says signed out", word({ taildropPeers: [], taildropCode: "signedOut" }, "taildrop"), "signed out")
+    check("Taildrop with no peers says no devices", word({ taildropPeers: [], taildropCode: "noPeers" }, "taildrop"), "no devices")
+    check("Taildrop stopped says offline", word({ taildropPeers: [], taildropCode: "stopped" }, "taildrop"), "offline")
+    check("Taildrop on a folder says files only", word({ taildropPeers: [], rowMode: 0o040755, rowIsImage: false, taildropCode: "signedOut" }, "taildrop"), "files only")
+    check("LocalSend on a folder says files only", word({ localSendInstalled: true, localSendPeers: [], rowMode: 0o040755, rowIsImage: false }, "localsend"), "files only")
+    check("LocalSend with nobody answering says no devices", word({ localSendInstalled: true, localSendPeers: [] }, "localsend"), "no devices")
+    check("LocalSend still being read says nothing", word({ localSendInstalled: true, localSendPeers: [], localSendChecking: true }, "localsend"), "undefined")
+    check("Dropbox signed out says signed out", word({ dropboxPath: "", dropboxCode: "signedOut" }, "dropbox"), "signed out")
+    check("Dropbox that is not answering says not running", word({ dropboxPath: "", dropboxCode: "notRunning" }, "dropbox"), "not running")
+    check("Dropbox still being read says nothing", word({ dropboxPath: "", dropboxRefreshing: true }, "dropbox"), "undefined")
+    check("Share link says the same word as Dropbox", word({ dropboxPath: "", rowInDropbox: true, dropboxCode: "signedOut" }, "sharelink"), "signed out")
+    check("a provider reason is never passed through", word({ taildropPeers: [], taildropReason: "Tailscale status failed." }, "taildrop"), "offline")
+    check("and no sentence is read: a signed out reason under another code says offline", word({ taildropPeers: [], taildropReason: "signed out", taildropCode: "stopped" }, "taildrop"), "offline")
+    check("nor a no peers reason under the failed code", word({ taildropPeers: [], taildropReason: "no peers", taildropCode: "statusFailed" }, "taildrop"), "offline")
+    check("Taildrop with an empty or unknown code says offline", word({ taildropPeers: [], taildropCode: "" }, "taildrop") + "|" + word({ taildropPeers: [], taildropCode: "other" }, "taildrop"), "offline|offline")
+    check("Taildrop codes invalid, disabled and statusFailed say offline", ["invalid", "disabled", "statusFailed"].map(function (code) { return word({ taildropPeers: [], taildropCode: code }, "taildrop") }).join("|"), "offline|offline|offline")
+    check("Dropbox signed out reason under a running code says not running", word({ dropboxPath: "", dropboxReason: "Dropbox is signed out", dropboxCode: "notRunning" }, "dropbox"), "not running")
+    check("Dropbox with an empty or unknown code says not running", word({ dropboxPath: "", dropboxCode: "" }, "dropbox") + "|" + word({ dropboxPath: "", dropboxCode: "other" }, "dropbox"), "not running|not running")
+    check("Dropbox codes readFailed, invalid and statusFailed say not running", ["readFailed", "invalid", "statusFailed"].map(function (code) { return word({ dropboxPath: "", dropboxCode: code }, "dropbox") }).join("|"), "not running|not running|not running")
+    check("every state word is one short lowercase run with no period",
+          Object.keys(StateWords.WORDS).every(function (key) { return /^[a-z]+( [a-z]+)?$/.test(StateWords.WORDS[key]) }), true)
     var absent = Menu.listingEntries(state({taildropInstalled: false, dropboxInstalled: false}))
     var available = Menu.listingEntries(state({}))
     var trashCursor = absent.findIndex(function(row) { return row.action === "trash" })
@@ -206,19 +231,22 @@ function run(check) {
     check("hidden files toggle uses inverse wording", Menu.hiddenRow(true).label, "Hide hidden files")
     check("permissions accepts ordinary file", Menu.permissionsEntry(0o100644, 1).disabled, false)
     check("permissions accepts directory", Menu.permissionsEntry(0o040755, 1).disabled, false)
-    // Issue 193: a row that cannot act reads red with no sentence beside it, never "Unavailable" (decided 2026-09-24).
+    // Issue 193: a row that cannot act reads red with one state word beside it, never "Unavailable" (decided 2026-09-24).
     function refusal(e) { return e.disabled + "|" + e.errored + "|" + e.hint }
-    check("permissions on a symlink reads as an error with no sentence", refusal(Menu.permissionsEntry(0o120777, 1)), "true|true|undefined")
-    check("permissions on a row whose mode could not be read does too", refusal(Menu.permissionsEntry(0, 1)), "true|true|undefined")
+    check("permissions on a symlink reads as an error with one word", refusal(Menu.permissionsEntry(0o120777, 1)), "true|true|symlink")
+    check("permissions on a row whose mode could not be read says special file", refusal(Menu.permissionsEntry(0, 1)), "true|true|special file")
+    check("permissions with nothing selected is refused with no kind to name", refusal(Menu.permissionsEntry(0o100644, 0)), "true|true|undefined")
+    check("permissions with nothing selected names no kind even for a link", refusal(Menu.permissionsEntry(0o120777, 0)), "true|true|undefined")
+    check("permissions on a fifo says special file", refusal(Menu.permissionsEntry(0o010644, 1)), "true|true|special file")
     check("and a file's row can act, so it is not red", refusal(Menu.permissionsEntry(0o100644, 1)), "false|false|undefined")
     var perms = function (changes) { return entry(Menu.listingEntries(state(changes)), "permissions") }
-    check("the menu row under a parent without execute reads red with no sentence",
-          refusal(perms({ hiddenActions: [], rowMode: 0 })), "true|true|undefined")
+    check("the menu row under a parent without execute reads red with one word",
+          refusal(perms({ hiddenActions: [], rowMode: 0 })), "true|true|special file")
     check("the menu row for a multi-selection reads plain on files",
         refusal(perms({ hiddenActions: [], selectionCount: 2, selectionModes: [0o100644, 0o100644] })), "false|undefined|undefined")
     check("and red when one of them is a link",
-        refusal(perms({ hiddenActions: [], selectionCount: 2, selectionModes: [0o100644, 0o120777] })), "true|true|undefined")
-    check("the menu row for a symlink reads the same way", refusal(perms({ hiddenActions: [], rowMode: 0o120777 })), "true|true|undefined")
+        refusal(perms({ hiddenActions: [], selectionCount: 2, selectionModes: [0o100644, 0o120777] })), "true|true|symlink")
+    check("the menu row for a symlink reads the same way", refusal(perms({ hiddenActions: [], rowMode: 0o120777 })), "true|true|symlink")
     check("the menu row for a folder it can change is plain", refusal(perms({ hiddenActions: [], rowMode: 0o040755 })), "false|undefined|undefined")
     check("permissions rejects missing metadata", Menu.permissionsEntry(undefined, 1).disabled, true)
     check("permissions rejects fifo", Menu.permissionsEntry(0o010644, 1).disabled, true)
@@ -244,11 +272,11 @@ function run(check) {
     check("Permissions stays plain while its owner may still be the operator, the way back in",
           refusal(entry(locked, "permissions")), "false|undefined|undefined")
     var stranger = LockedMenu.lockedEntries({ lockedMode: 0o040755, hiddenActions: [] })
-    check("Permissions for a folder owned by somebody else reads red with no sentence",
-          refusal(entry(stranger, "permissions")), "true|true|undefined")
+    check("Permissions for a folder owned by somebody else reads red and says not yours",
+          refusal(entry(stranger, "permissions")), "true|true|not yours")
     var unreadable = LockedMenu.lockedEntries({ lockedMode: 0, hiddenActions: [] })
-    check("Permissions with no mode to read reads red with no sentence too",
-          refusal(entry(unreadable, "permissions")), "true|true|undefined")
+    check("Permissions with no mode to read reads red and says special file",
+          refusal(entry(unreadable, "permissions")), "true|true|special file")
     check("hiding Open in terminal takes it off the Locked tile as well",
           entry(LockedMenu.lockedEntries({ lockedMode: 0o040000, hiddenActions: ["openTerminal"] }), "openTerminal").action, undefined)
     var shippedHidden = ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions", "copyAs", "extThumbs"]

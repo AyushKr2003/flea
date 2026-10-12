@@ -134,8 +134,8 @@ providers_open() {
 
 providers_disabled() {
     local action="$1" reason="$2" state target before
-    # A provider that cannot answer reads as red, so the row carries no reason at all.
-    menus_expect menuState "any(.entries[]; .action == \"$action\" and .disabled and .errored and (.hint == null))" "$action reads as an error ($reason)"
+    # A provider that cannot answer reads as red with one state word, never its reason.
+    menus_expect menuState "any(.entries[]; .action == \"$action\" and .disabled and .errored and (.hint | IN(\"offline\", \"signed out\", \"no devices\", \"files only\", \"not running\")))" "$action reads as an error ($reason)"
     state=$(ipc menuState)
     target=$(jq -er --arg action "$action" '.entries | to_entries[] | select(.value.action == $action) | .key' <<< "$state")
     before=$(providers_calls omarchy-tailscale-send)

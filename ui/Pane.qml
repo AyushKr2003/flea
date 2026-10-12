@@ -1030,6 +1030,7 @@ FocusScope {
         rowIsFile: root.cursorRow !== null && !root.cursorRow.d
         taildropInstalled: !root.backend.providers.taildrop || root.backend.providers.taildrop.installed !== false
         taildropReason: root.cursorRow && root.cursorRow.d ? "Taildrop sends files only" : wire.taildrop.reason
+        taildropCode: wire.taildrop.code
         archiveFormats: root.backend.archiveFormats
         canConvert: root.backend.canConvert
         canExtract: root.menuValuesLive && root.cursorRow !== null
@@ -1061,6 +1062,7 @@ FocusScope {
                       peers: (root.cursorRow && !root.cursorRow.d) ? menuActions.localSend.peers : [], answeredOnce: menuActions.localSend.answeredOnce })
         dropboxPath: root.dropboxService && root.dropboxService.dropboxReady ? root.dropboxService.dropboxPath : ""
         dropboxReason: root.dropboxService ? root.dropboxService.dropboxReason : "Dropbox service unavailable"
+        dropboxCode: root.dropboxService ? root.dropboxService.dropboxCode : ""
         rowInDropbox: root.menuValuesLive && root.dropboxService && root.cursorRow
             && Dropbox.contains(root.dropboxService.dropboxPath, root.join(Search.baseOf(root), root.cursorRow.n))
         // Issue 133: no GVFS mount, share or phone, has a trash of its own, so the row is not offered there.

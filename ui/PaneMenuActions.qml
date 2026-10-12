@@ -398,7 +398,10 @@ Loader {
             }
             if (message.op === "providerDestination") {
                 root.providerDestinationPending = false
-                if (!message.ok && root.pane.dropboxService) root.pane.dropboxService.dropboxReason = message.error
+                if (!message.ok && root.pane.dropboxService) {
+                    root.pane.dropboxService.dropboxReason = message.error
+                    root.pane.dropboxService.dropboxCode = ""
+                }
                 root.providersFinished()
                 return
             }

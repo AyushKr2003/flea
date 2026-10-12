@@ -4,6 +4,7 @@
 .import "ExtThumbs.js" as ExtThumbs
 .import "Format.js" as Format
 .import "Sort.js" as Sort
+.import "StateWords.js" as StateWords
 
 // Submenus carry an entry array, including an empty array while a provider is unavailable.
 function hasSubmenu(entry) {
@@ -172,7 +173,7 @@ function availableEntry(e, p, kind) {
     if (e.action === "permissions") {
         var permission = permissionsEntry(p.rowMode, count, p.selectionModes)
         e.disabled = permission.disabled
-        if (permission.errored) e.errored = true
+        if (permission.errored) { e.errored = true; e.hint = permission.hint }
     }
     // Only a cursor-row script without any execute bit qualifies; its two-byte probe runs once at menu open.
     if (e.action === "makeExecutable" && !canMakeExecutable(p.rowMode, count, p.hasShebang, p.cursorIsTarget)) return false
@@ -217,9 +218,9 @@ function availableEntry(e, p, kind) {
         delete e.glyph
         e.submenu = p.taildropPeers || []
         e.disabled = p.taildropRefreshing === true || !e.submenu.length
-        // The row says it cannot answer by being red, not by carrying the reason: a sentence here
-        // widened the menu past its own frame while the providers were still being read.
-        if (e.disabled && p.taildropRefreshing !== true) e.errored = true
+        // The row says it cannot answer by being red and by one state word, not by the reason:
+        // a sentence here widened the menu past its own frame while the providers were still being read.
+        if (e.disabled && p.taildropRefreshing !== true) { e.errored = true; e.hint = StateWords.taildrop(p) }
     }
     // Absent rather than greyed when nothing is installed, the Menu board's rule for a row whose
     // whole destination is missing; the row is a plain send, so it has no submenu and no reason.
@@ -230,13 +231,13 @@ function availableEntry(e, p, kind) {
         delete e.glyph
         e.submenu = p.localSendPeers || []
         e.disabled = p.localSendChecking === true || !e.submenu.length
-        if (e.disabled && p.localSendChecking !== true) e.errored = true
+        if (e.disabled && p.localSendChecking !== true) { e.errored = true; e.hint = StateWords.localsend(p) }
     }
     if (e.action === "dropbox" || e.action === "sharelink") {
         if (!p.dropboxInstalled || (e.action === "dropbox" ? p.rowInDropbox : !p.rowInDropbox)) return false
         e.disabled = p.dropboxRefreshing === true || !p.dropboxPath
         if (e.action === "dropbox") { e.mark = "dropbox"; delete e.glyph }
-        if (e.disabled && p.dropboxRefreshing !== true) e.errored = true
+        if (e.disabled && p.dropboxRefreshing !== true) { e.errored = true; e.hint = StateWords.dropbox(p) }
     }
     if (e.action === "sort") e.submenu = sortEntries(p.hasFolderSort === true)
     // Present only while a check has found a newer build, whose version rides the hint slot beside the status square.
@@ -285,7 +286,7 @@ function availableRail(e, entry) {
 }
 
 // The mode describes the selected object itself, so a symlink never grants access to its unseen target.
-// Issue 193, decided 2026-09-24: a row that cannot act reads red with no sentence, as a provider does.
+// Issue 193, decided 2026-09-24: a row that cannot act reads red with one state word, as a provider does.
 // MenuAdditions040: Permissions takes the whole selection, so one bad row
 // among modes refuses the row; the dialog inspects each file in turn.
 function permissionsEntry(mode, count, modes) {
@@ -293,13 +294,17 @@ function permissionsEntry(mode, count, modes) {
         for (var i = 0; i < modes.length; i++) {
             var kind = (Number(modes[i]) || 0) & Format.S_IFMT
             if (!(kind === Format.S_IFREG || kind === 0o040000))
-                return { label: "Permissions", action: "permissions", glyph: "lock", disabled: true, errored: true }
+                return { label: "Permissions", action: "permissions", glyph: "lock", disabled: true, errored: true,
+                         hint: StateWords.permissions(modes[i]) }
         }
         return { label: "Permissions", action: "permissions", glyph: "lock", disabled: false, errored: false }
     }
     var kind = (Number(mode) || 0) & Format.S_IFMT
     var allowed = count >= 1 && (kind === Format.S_IFREG || kind === 0o040000)
-    return { label: "Permissions", action: "permissions", glyph: "lock", disabled: !allowed, errored: !allowed }
+    var entry = { label: "Permissions", action: "permissions", glyph: "lock", disabled: !allowed, errored: !allowed }
+    // No selection refuses the row for want of an item, not for a kind, so it names no kind.
+    if (!allowed && count >= 1) entry.hint = StateWords.permissions(mode)
+    return entry
 }
 
 // Only a single cursor-row regular file with a shebang and no execute bit.

@@ -104,6 +104,8 @@ Item {
     property string dropboxPath: ""
     onDropboxPathChanged: root.rebuild()
     property string dropboxReason: "Checking Dropbox"
+    // What state the reason is, for logic: ui/js/Dropbox.js names the codes.
+    property string dropboxCode: ""
     property bool dropboxChecking: false
     property bool _dropboxAwaitingStart: false
     property string _dropboxOutput: ""
@@ -123,8 +125,10 @@ Item {
         if (!facts || facts.dropboxInfo === undefined) return
         root.dropboxAnswered = true
         var account = Dropbox.account(facts.dropboxInfo, facts.dropboxError)
-        if (dropboxPath !== account.path || account.reason)
+        if (dropboxPath !== account.path || account.reason) {
             dropboxReason = account.reason || "Checking Dropbox"
+            dropboxCode = account.code
+        }
         dropboxPath = account.path
     }
 
@@ -161,6 +165,7 @@ Item {
         if (dropboxChecking) return false
         var provider = facts.dropbox || {}
         root.readDropboxAccount(facts)
+        if (provider.reason || dropboxPath) dropboxCode = ""
         dropboxReason = provider.reason || (dropboxPath ? "Checking Dropbox" : dropboxReason)
         if (!provider.command || !dropboxPath) { root.dropboxAnswered = true; return true }
         dropboxChecking = true
@@ -183,13 +188,16 @@ Item {
                 root._dropboxAwaitingStart = false
                 root.dropboxChecking = false
                 root.dropboxReason = "Dropbox status helper could not start"
+                root.dropboxCode = ""
                 root.dropboxRefreshed()
             }
         }
         onExited: function(exitCode) {
             root._dropboxAwaitingStart = false
-            root.dropboxReason = exitCode === 137 || exitCode === 9 ? "Dropbox status was interrupted or timed out"
+            var answer = exitCode === 137 || exitCode === 9 ? { reason: "Dropbox status was interrupted or timed out", code: "statusFailed" }
                 : Dropbox.status(dropboxOut.text || root._dropboxOutput, exitCode, dropboxErr.text || root._dropboxError)
+            root.dropboxReason = answer.reason
+            root.dropboxCode = answer.code
             root.dropboxChecking = false
             root.dropboxRefreshed()
         }
