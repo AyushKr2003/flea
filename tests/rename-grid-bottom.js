@@ -17,7 +17,7 @@ if (testCase === "all") {
         const result = spawnSync(process.execPath, [__filename, repo, `--case=${selected}`, `--product-root=${productRoot}`], {stdio: "inherit"});
         assert.equal(result.status, 0, `${selected} case failed`);
     }
-    fs.writeSync(1, `rename-grid-bottom: 154 prior + ${owner.checks} owner checks, 0 failed\n`);
+    fs.writeSync(1, `rename-grid-bottom: 157 prior + ${owner.checks} owner checks, 0 failed\n`);
     process.exit(0);
 }
 // These functions run in the generated Qt fixture, with its real GridView and Loader.
@@ -63,8 +63,14 @@ function measurementStep(turn) {
         probe.finish()
     }
 }
-// A count change pools the editing tile, then Grid hands it back to its own row (turn 1) or to another row (turn 3).
+// A count change pools the editing tile, then Grid hands it back to its own row (turns 1-2) or to another row (turn 3).
 function reuseStep(turn) {
+    if (turn === 2) {
+        var next = probe.editor()
+        probe.check(next && next.ownsEdit() && next.inputItem.activeFocus, "same-row reuse keeps focus in the owning editor on the next turn")
+        probe.check(next && next.current === "reuse-draft.md" && next.inputItem.selectionStart === 2 && next.inputItem.selectionEnd === 9 && next.inputItem.cursorPosition === 2, "same-row reuse keeps the draft, selection and caret on the next turn")
+        editPane.renamingIndex = -1
+    }
     if (turn === 0 || turn === 2) {
         Theme.rowHeight = 31
         editPane.shownTotal = 20
@@ -98,8 +104,8 @@ function reuseStep(turn) {
         label + " leaves one laid-out tile holding the owning editor")
     probe.check(kept && kept.current === "reuse-draft.md" && kept.inputItem.selectionStart === 2
         && kept.inputItem.selectionEnd === 9 && kept.inputItem.cursorPosition === 2, label + " keeps the draft, selection and caret")
-    editPane.renamingIndex = -1
-    if (!sameRow) probe.finish()
+    if (sameRow) probe.check(kept && kept.inputItem.activeFocus, label + " keeps keyboard focus")
+    else { editPane.renamingIndex = -1; probe.finish(); return }
 }
 function restorePendingLoader() {
     var loader = probe.pendingLoader
@@ -340,6 +346,6 @@ const output = result.stdout + result.stderr;
 fs.writeFileSync(path.join(testRoot, "probe.log"), output);
 fs.writeSync(1, `rename-grid-bottom evidence: ${testRoot}\n${output.trim()}\n`);
 assert.equal(result.status, 0);
-assert.equal(output.split(`RENAME_GRID_BOTTOM CHECKS=${({legacy: 68, measurement: 10, pending: 25, focus: 27, owner: owner.checks, reuse: 10, count: 14})[testCase]}`).length - 1, 1);
+assert.equal(output.split(`RENAME_GRID_BOTTOM CHECKS=${({legacy: 68, measurement: 10, pending: 25, focus: 27, owner: owner.checks, reuse: 13, count: 14})[testCase]}`).length - 1, 1);
 assert.equal(output.split("RENAME_GRID_BOTTOM DONE failures=0").length - 1, 1);
 assert.doesNotMatch(output, /\bFAIL\b|\bWARN(?:ING)?\b|Error|error:|Binding loop|failed to load|Unable to assign|Cannot assign/i);
