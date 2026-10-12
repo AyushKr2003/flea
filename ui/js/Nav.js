@@ -93,7 +93,7 @@ function openWithoutHistory(pane, newPath, options) {
     if (newPath !== pane.path) pane.linkTargetPendingId = 0 // A waiting Show original belongs to the listing being left, so leaving it drops the reveal.
     pane.listingPath = newPath
     // Verdicts stay the left directory's until fsinfo answers, so re-read keeps them.
-    if (newPath !== pane.path) { pane.storageClass = ""; pane.storageKnown = false; pane.systemVolume = false; pane.canTag = false }
+    if (newPath !== pane.path) { pane.storageClass = ""; pane.storageKnown = false; pane.fsAnswered = false; pane.systemVolume = false; pane.canTag = false }
     if (pane.viewMode !== shown) ask.clearAtOnce = true
     // A walk closed above keeps its rows and its strip until this listing lands.
     if (pane.searchLeaving === true) ask.holdWalk = true

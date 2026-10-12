@@ -181,9 +181,9 @@ function run(check) {
     var onFsInfoBody = Source.block(Source.source("ui/PaneWire.qml"),
         "function onFsInfo(fs, free, path, storageClass, tagable, systemVolume)", "ui/PaneWire.qml")
     function answer(pane, line) {
-        var onFsInfo = new Function("pane", "ExtThumbs", "ViewState",
+        var onFsInfo = new Function("root", "pane", "ExtThumbs", "ViewState",
             "return function (fs, free, path, storageClass, tagable, systemVolume) {" + onFsInfoBody + "}")(
-            pane, { verdict: function () { return "" } }, { preview: "" })
+            { pane: pane }, pane, { verdict: function () { return "" } }, { preview: "" })
         Messages.route({ fsInfo: onFsInfo }, JSON.parse(line))
     }
     // Sample output, src/backend/fsinfo.rs: {"t":"fsinfo","fs":"btrfs","free":7,"path":"/home/gm","class":"","tagable":false,"system":true}
