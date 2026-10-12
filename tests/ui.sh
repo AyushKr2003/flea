@@ -15702,8 +15702,8 @@ printf '\nLOG_CHECK_BEGIN %s\n' "$run_log"
 # The reader has no -q, so it drains the pipe and takes no SIGPIPE; pipefail then reports its own
 # status, which is what says whether anything but that one line matched.
 expected_warning="inotify_add_watch($fixture_root/network-state/flea/ui.json) failed: (Permission denied)"
-# Qt Multimedia's ffmpeg backend saying VAAPI zero-copy needs an OpenGL RHI; Flea runs Vulkan, the backend falls back, and case_views proves the frames still change.
-vaapi_warning="VAAPITextureConverter: No rhi or non openGL based RHI"
+# Qt Multimedia's ffmpeg backend saying zero-copy needs an OpenGL RHI (VAAPITextureConverter or DmaBufEglContext); Flea runs Vulkan, the backend falls back, and case_views proves the frames still change.
+vaapi_warning=": No rhi or non openGL based RHI"
 # case_formats and case_previewviews open a file with no permission bits on purpose; Qt names it, and this run's fixture path is the whole match.
 unreadable_warning="$fixture_root/formats/shut.jpg"
 unreadable_warning2="$fixture_root/previewviews/shut.jpg"
