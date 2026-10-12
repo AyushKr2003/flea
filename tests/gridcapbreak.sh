@@ -28,7 +28,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     timeout 30 qs -p "$test_root/config" 2>&1)
 
-# Sample input, one probe line: "  INFO qml: GRIDCAPBREAK PASS base=14 window=1320 tiles=4 widths=162,157,153,148 queries=t-w,n-t,n-t,n-t"
+# Sample input, one probe line: "  INFO qml: GRIDCAPBREAK PASS base=14 window=1320 tiles=6 widths=162,157,153,148 queries=t-w,n-t,n-t,n-t"
 pass_count=$(printf '%s\n' "$output" | grep -c 'GRIDCAPBREAK PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'GRIDCAPBREAK FAIL')
 noisy=$(printf '%s\n' "$output" | grep -aiE 'Binding loop|failed to load|Unable to assign|Cannot assign|TypeError|ReferenceError|is not a function|is not defined')

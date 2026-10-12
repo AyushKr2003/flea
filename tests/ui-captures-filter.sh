@@ -240,6 +240,7 @@ cap_filter_straddle() {
     cap_filter_launch "$dir" "$fixture_root/cap-filter-state-straddle" '{"keys":"default","view":"grid","display":{"textSize":{"mode":14}}}' "$cap_filter_full_total"
     sweep_wait viewMode grid
     idx=$(row_index_of "$cap_filter_straddle_name")
+    # Sample input: '{"name":"grid-caption-\nthat-wraps.txt","wrapAt":13,"broken":true,"lines":2,"truncated":false,"textHeight":33.7,"slotHeight":34,"bottom":121,"tileHeight":200}'
     state=$(ipc gridCaptionState "$idx") || fail "cap_filter: the long tile has no caption state"
     caption=$(jq -er .name <<< "$state") || fail "cap_filter: the long tile has no caption"
     lines=$(jq -er .lines <<< "$state") || fail "cap_filter: the long tile has no line count"
