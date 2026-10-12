@@ -78,7 +78,7 @@ chmod +x "$test_root/flea-proxy" || exit 1
 strace_prefix="strace -ttt -y -qq -s 96 -o @@LOG@@ -e trace=%file,read,pread64,readv,getdents64"
 failures=0
 legs=0
-# run_leg LEG DIR TOTAL TARGET CLASS HOLDMS PROXYCMD PROXYSUB [OPENHOLD]: one fresh qs process; the proxy holds PROXYCMD requests naming PROXYSUB for HOLDMS and reports CLASS (empty reports local); OPENHOLD "open" holds every open of the target file instead (a slow mount's first read), HOLDMS capped at 8000, and takes the place of the GUI-thread audit.
+# run_leg LEG DIR TOTAL TARGET CLASS HOLDMS PROXYCMD PROXYSUB [OPENHOLD]: one fresh qs process (a leg named enter-net-nohold audits every call on the fixture, not only reads); the proxy holds PROXYCMD requests naming PROXYSUB for HOLDMS and reports CLASS (empty reports local); OPENHOLD "open" holds every open of the target file instead (a slow mount's first read), HOLDMS capped at 8000, and takes the place of the GUI-thread audit.
 run_leg() {
     local leg=$1 dir=$2 total=$3 target=$4 class=$5 hold=$6 cmd=$7 sub=$8 openhold=${9:-}
     local leg_root="$test_root/$leg" log="$test_root/$leg/run.log" status fifo="$test_root/fixture/$2/$4" releaser=''
@@ -107,7 +107,7 @@ run_leg() {
     [ -z "${FLEA_CI_SUITE_LOGS:-}" ] || cp "$log" "$FLEA_CI_SUITE_LOGS/slowsource-nas-$leg.log" 2>/dev/null
     # Sample input, one probe line: "  INFO qml: NASPROBE ENTER hold=400 cap=1 capFrame=4 markFrame=5 markDelta=1 timer=swap-cap keyToCapMs=70 keyToMarkMs=82 landMs=401 shownMs=332".
     grep -a 'NASPROBE \(STORAGE\|ENTER\|LOOK\|WINDOW\|FAIL\|DONE\)' "$log" | sed 's/\x1b\[[0-9;]*m//g; s/^.*NASPROBE /NASPROBE /' | sed "s/^/$leg: /"
-    [ "$openhold" = open ] || audit_leg "$leg" "$log" "$leg_root/strace.log" "$test_root/fixture"
+    [ "$openhold" = open ] || AUDIT_ALL=$([ "$leg" = enter-net-nohold ] && echo 1) audit_leg "$leg" "$log" "$leg_root/strace.log" "$test_root/fixture"
     if ! qslog_crash "slowsource-nas $leg" "$log"; then
         failures=$((failures + 1))
     fi
@@ -118,14 +118,14 @@ run_leg() {
     fi
 }
 # audit_leg LEG LOG STRACE FIXTURE: the GUI thread (the qs process itself, the only one traced) makes no read of the browsed folder between the key and the end of the leg; its path calls are listed.
-# Sample input, one strace line: "1760000000.123456 read(21</x/fixture/look/b-notes.txt>, ..., 4096) = 4096" inside the window is a FAIL.
+# Sample input, one strace line: "1760000000.123456 read(21</x/fixture/look/b-notes.txt>, ..., 4096) = 4096" inside the window is a FAIL; with AUDIT_ALL set so is a statx or openat on the fixture.
 audit_leg() {
     local leg=$1 log=$2 trace=$3 fixture=$4 window out
     window=$(sed 's/\x1b\[[0-9;]*m//g' "$log" | grep -a 'NASPROBE WINDOW' | tail -1 | sed 's/.*from=\([0-9]*\) to=\([0-9]*\).*/\1 \2/')
     [ -n "$window" ] || return 0
     [ -s "$trace" ] || { printf 'FAIL slowsource-nas: %s leg has no strace record, so a silent audit proves nothing\n' "$leg"; failures=$((failures + 1)); return; }
     out=$(python3 -I - "$trace" "$fixture" $window <<'EOP'
-import re, sys
+import os, re, sys
 trace, fixture, t0, t1 = sys.argv[1], sys.argv[2], int(sys.argv[3]) / 1000.0, int(sys.argv[4]) / 1000.0
 line = re.compile(r"^(\d+\.\d+)\s+(\w+)\((.*)$")
 reads, paths, window = [], {}, []
@@ -142,9 +142,8 @@ for raw in open(trace, errors="replace"):
     where = re.search(re.escape(fixture) + r"[^\s>,\"]*", rest)
     key = call + " " + (where.group(0).replace(fixture, "") if where else "")
     paths[key] = paths.get(key, 0) + 1
-    if call in ("read", "pread64", "readv", "getdents64"):
+    if call in ("read", "pread64", "readv", "getdents64") or os.environ.get("AUDIT_ALL"):
         reads.append(key)
-import os
 dest = os.environ.get("FLEA_CI_SUITE_LOGS")
 if dest:
     open(os.path.join(dest, "slowsource-nas-" + os.path.basename(os.path.dirname(trace)) + ".strace"), "w").write("\n".join(window[:400]) + "\n")
@@ -164,6 +163,7 @@ run_leg enter-net start 2 "$here/start/sub" network 400 list /start/sub
 run_leg enter-local start 2 "$here/start/sub" "" 400 list /start/sub
 run_leg enter-net-100 start 2 "$here/start/sub" network 100 list /start/sub
 run_leg enter-net-40 start 2 "$here/start/sub" network 40 list /start/sub
+run_leg enter-net-nohold start 2 "$here/start/sub" network 0 "" ""
 run_leg look-txt look 8 b-notes.txt network 0 "" ""
 run_leg look-md look 8 c-readme.md network 0 "" ""
 run_leg look-jpg look 8 d-pic.jpg network 0 "" ""
