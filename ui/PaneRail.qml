@@ -16,10 +16,7 @@ Item {
     id: root
 
     property var pane: null
-    // The window-long network host ui/WindowBody.qml builds lazily on the first open, handed to
-    // the rail below: a docked rail's Loader unloads the Sidebar when the rail hides, an auto-hide one
-    // keeps it built with its DEVICES poll parked, and this service and these connections outlive both,
-    // so a mount, a bridge wait or a dialog answer that lands afterwards still opens, messages and clears its sticky line.
+    // The window-long network host from ui/WindowBody.qml, outliving the Sidebar loader so a late mount answer still lands.
     property var service: null
     readonly property bool overlay: ViewState.railAutoHide
     readonly property bool hidden: root.overlay ? !root.revealed : ViewState.railHidden
