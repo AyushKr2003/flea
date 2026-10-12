@@ -23,6 +23,8 @@ Item {
     // The last good answer. A theme change asks again and the old images stay up until the new three replace them at once.
     property var look: null
     property int pending: 0
+    // The path the pending ask carried, so an answer is read against its own request and not the path at answer time.
+    property string pendingPath: ""
     property string askedKey: ""
 
     // The board's sizes before the text-size ratio, then the pixels the image is drawn with at this window's pixel ratio.
@@ -48,11 +50,12 @@ Item {
         onTriggered: root.ask()
     }
 
-    // The id is this pane's own count: one font shows at a time, and an older answer is dropped by it.
+    // The id comes from one count shared by every font pane, so an older answer is dropped even across a Loader rebuild.
     function ask() {
         if (root.askKey === "" || root.askKey === root.askedKey) return
         root.askedKey = root.askKey
-        root.pending += 1
+        root.pending = Kinds.nextLookId()
+        root.pendingPath = root.path
         root.backend.send({ c: "fontlook", id: root.pending, path: root.path, fg: root.fg, bg: root.bg, sizes: root.physical, text: Kinds.SAMPLE_TEXT })
     }
 
@@ -60,10 +63,13 @@ Item {
         target: root.backend
         function onFontLooked(message) {
             if (message.id !== root.pending) return
-            if (message.err) root.failedPath = root.path
-            else {
+            if (message.err) {
+                root.failedPath = root.pendingPath
+                // The old page goes with a refusal, so it never draws beside the unsupported state.
+                root.look = null
+            } else {
                 root.failedPath = ""
-                root.look = { path: root.path, message: message }
+                root.look = { path: root.pendingPath, message: message }
             }
         }
     }

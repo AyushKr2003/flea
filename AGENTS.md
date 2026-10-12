@@ -8926,7 +8926,7 @@ The release-line join of the approved fix, bench, search, picker and Flash strip
 
 The Network Tab ring moves three ceilings, each re-derived with `wc -l`: `ui/NetworkDialog.qml` 447 to 457 for the ids, `tabHandle` and `onTabbed` lines that put Cancel, the primary and Install Dropbox in the form's walk after the TLS box, with Escape moved from the form to the card's content so a focused button closes the dialog too, and `ui/NetworkForm.qml` 406 to 413 for the `trailing` prop, the joined ring, the pass-over step and the button labels in `focusName`, and `tests/button-members.qml` 445 to 485 for the trailing-walk checks that Tab from TLS reaches each button and wraps to the first chip, Backtab returns, an unavailable button is passed over and `focusName` names the focused button.
 
-The font page keeps `tests/startup-units.txt` at its 170 units while its `bytes` line moves from 1596965 to 1598409, the sum the probe's tool takes over them with the `fontlook` request and `fontLooked` signal in `ui/Backend.qml`, the `fontlooked` route in `ui/js/Messages.js` and the font kind, sample sizes and facts line in `ui/js/Kinds.js`.
+The font page keeps `tests/startup-units.txt` at its 170 units while its `bytes` line moves from 1596965 to 1598587, the sum the probe's tool takes over them with the `fontlook` request and `fontLooked` signal in `ui/Backend.qml`, the `fontlooked` route in `ui/js/Messages.js` and the font kind, sample sizes, shared ask count and facts line in `ui/js/Kinds.js`.
 
 ## The image flasher
 

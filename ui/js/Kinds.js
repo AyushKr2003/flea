@@ -66,6 +66,10 @@ function isFont(name) {
 var SAMPLE_TEXT = "The quick brown fox jumps over the lazy dog"
 var SAMPLE_SIZES = [22, 15, 12]
 
+// One count for every font pane, so an answer meant for an earlier pane never carries a later pane's id.
+var lookSeq = 0
+function nextLookId() { lookSeq += 1; return lookSeq }
+
 // "Inter · Bold · 312.0 kB · 2,548 glyphs"; a table the font lacks drops its part, and the size is always known.
 // pluralWord is Ops.pluralWord, handed in because Ops reaches Sort.js and RecentMode.js, which import this file.
 function fontLine(family, style, bytes, glyphs, pluralWord) {

@@ -47,7 +47,7 @@ probe() {
     ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
         HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_CACHE_HOME="$test_root/cache" XDG_RUNTIME_DIR="$test_root/runtime" \
         FLEA_REDUCED_MOTION=1 FONTPANE_DIR="$test_root/fixture" FONTPANE_ALT="$test_root/alt-colors.toml" \
-        FONTPANE_COLORS="$palette/theme/colors.toml" FONTPANE_NAME="$palette/theme.name" \
+        FONTPANE_DARK="$test_root/colors-dark.toml" FONTPANE_COLORS="$palette/theme/colors.toml" FONTPANE_NAME="$palette/theme.name" \
         QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 \
         QT_LOGGING_RULES="$(qslog_rules)" \
         timeout 90 qs -p "$config" > "$test_root/$name.log" 2>&1; exit $? ) 2>/dev/null
@@ -101,6 +101,9 @@ control() {
 }
 control immediate-ask FontPane.qml 'onAskKeyChanged: askTimer.restart()' 'onAskKeyChanged: root.ask()' 'the theme change'
 control any-answer FontPane.qml 'if (message.id !== root.pending) return' '' 'a stale answer'
+control restarting-id FontPane.qml 'root.pending = Kinds.nextLookId()' 'root.pending += 1' "an earlier pane's late answer"
+control kept-page-on-refusal FontPane.qml 'root.look = null' 'root.look = root.look' 'a refusal after a drawn page'
+control bar-always-visible FontPane.qml 'visible: root.drawn' 'visible: true' 'the bar shows before the answer'
 control no-refusal Preview.qml 'root.archiveFailed || root.fontFailed' 'root.archiveFailed' 'the unsupported sentence'
 printf 'fontpane: %s failed\n' "$failures"
 [ "$failures" -eq 0 ]
