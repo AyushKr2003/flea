@@ -27,6 +27,9 @@ pub(crate) struct Index {
     wide: Vec<u32>,
     rows: Vec<Row>,
     pub capped: bool,
+    // How the last patch moved rows: the old row ids it kept in order (None when it kept all) and how many old rows survived; every row past that count is new.
+    kept: Option<Vec<usize>>,
+    survivors: usize,
     // Test seams: arena repacks and rows a patch reads, so its cost is counted, never timed.
     #[cfg(test)]
     pub(crate) compactions: usize,
@@ -57,6 +60,8 @@ impl Index {
             wide: Vec::new(),
             rows: Vec::new(),
             capped: false,
+            kept: None,
+            survivors: 0,
             #[cfg(test)]
             compactions: 0,
             #[cfg(test)]
@@ -156,10 +161,16 @@ impl Index {
         self.rows = rows;
     }
 
+    // The last patch's row moves: the old ids kept in order (None: all kept) and the count of surviving old rows.
+    pub(crate) fn last_patch(&self) -> (Option<&[usize]>, usize) {
+        (self.kept.as_deref(), self.survivors)
+    }
+
     // Reconciles one scope-relative directory in one pass and one repack; false when its mount does not answer.
     pub(crate) fn patch_dir(&mut self, root: &Path, rel: &str, hidden: bool, body: &str) -> bool {
         let dir = if rel.is_empty() { root.to_path_buf() } else { root.join(rel) };
         let Ok(listing) = read_bounded(&dir, body) else { return false };
+        (self.kept, self.survivors) = (None, self.rows.len());
         let prefix = if rel.is_empty() { String::new() } else { format!("{}/", rel) };
         // A directory that is gone drops itself and its subtree; the scope itself drops every row.
         let Some(listing) = listing else {
@@ -167,6 +178,7 @@ impl Index {
                 .filter(|&row| !rel.is_empty() && self.path(row) != rel && !self.path(row).starts_with(&prefix))
                 .collect();
             self.compact(&kept);
+            (self.survivors, self.kept) = (kept.len(), Some(kept));
             return true;
         };
         let seen: Vec<(String, bool)> = listing
@@ -193,8 +205,10 @@ impl Index {
                 }
             }
         }
+        self.survivors = kept.len();
         if kept.len() < self.rows.len() {
             self.compact(&kept);
+            self.kept = Some(kept);
         }
         let mut added_dirs = Vec::new();
         for (child, is_dir) in seen {

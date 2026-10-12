@@ -60,7 +60,7 @@ pub enum OpMsg {
     Trashed { ok: usize, failed: usize, entry: Entry, reason: String },
     Linked { ok: usize, failed: usize, skipped: usize, entry: Entry, note: String, first_err: String, dest: String },
     Duplicated { ok: bool, path: String, err: String, entry: Entry },
-    RedoDone { journal: super::undo::Journal, result: Result<String, FleaError>, touched: Vec<PathBuf> },
+    RedoDone { journal: super::undo::Journal, result: Result<String, FleaError>, touched: super::undo::Reached },
     MenuDeleteDone { line: String },
     // A terminal line, written like Meta: SlotDone also releases the slot, DetachedDone drops a compress or convert from the quit registry.
     SlotDone { line: String },

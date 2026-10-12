@@ -9020,3 +9020,5 @@ The Columns prebuild convergence fix moves two ceilings, each re-derived with `w
 The shared prebuild driver (`ui/PrebuildDriver.qml`, 146 lines, under the QML cap) moves five ceilings, each re-derived with `wc -l`: `ui/List.qml` 589 to 480, `ui/GridArea.qml` 506 to 461 and `ui/ColumnPane.qml` 534 to 438, whose three drivers it replaces; `tests/listprebuild.qml` 413 to 412; `tests/gridprebuild.qml` 456 to 458 for the way back from 50 rows, which now checks that the next landing builds nothing.
 
 The key log's tick cap check moves one ceiling, re-derived with `wc -l`: `tests/columnsprebuild.qml` 415 to 416 for the check that fails once the tick log reaches `keepTicks`, where a key's stored tick index no longer holds.
+
+The tag-write reach moves two ceilings, each re-derived with `wc -l`: `src/backend/undo.rs` 661 to 675 for `Reached`, which carries the files a reversal changed only in tags apart from the directories it touched, and `src/backend/run.rs` 1089 to 1103 for the calls that hand an own tag write to the open search session.

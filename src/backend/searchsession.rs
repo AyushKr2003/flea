@@ -166,7 +166,9 @@ impl Session {
     // Re-runs the standing query once when the walk lands, with its own gen and the walk's ms.
     pub(crate) fn re_answer_standing(&mut self) -> Option<Answer> {
         let (gen, query, count) = self.standing.clone()?;
-        if query.is_empty() || !self.standing_while_walking {
+        // A landed rewrite stands for one re-run of a tagged query, whatever answers came between the write and the landing.
+        let rewritten = self.tags.rewrite_due(&query);
+        if query.is_empty() || !(self.standing_while_walking || rewritten) {
             return None;
         }
         self.standing_while_walking = false;
@@ -346,12 +348,16 @@ impl Session {
     fn patch(&mut self, rel: &str) -> bool {
         // A change under the scope can move every folder size above it, whether or not the index takes the patch.
         self.sizes.forget();
-        if !self.index.lock().unwrap().patch_dir(&self.scope, rel, self.hidden, &self.body) {
+        let mut index = self.index.lock().unwrap();
+        if !index.patch_dir(&self.scope, rel, self.hidden, &self.body) {
             return false;
         }
+        // A finished tag pass follows its rows to their new ids and queues the added ones; an unfinished one starts over.
+        let added = self.tags.carry(&index);
+        drop(index);
         self.last_query.clear();
         self.pending_rest = None;
-        self.tags.reset();
+        self.tags.read_added(added, &self.index, &self.scope);
         true
     }
 

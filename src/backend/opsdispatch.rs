@@ -414,13 +414,13 @@ fn land_mkdir(out: &mut impl Write, ops: &mut Ops, result: Result<(PathBuf, Vec<
 }
 
 // Answers every path the reversal may have touched, failed or not, so a session patches its index.
-pub(crate) fn do_undo(out: &mut impl Write, ops: &mut Ops) -> Vec<std::path::PathBuf> {
+pub(crate) fn do_undo(out: &mut impl Write, ops: &mut Ops) -> super::undo::Reached {
     if ops.live.running().is_some() {
         busy(out, "undo");
-        return Vec::new();
+        return Default::default();
     }
     if pending_busy(out, ops, "undo") {
-        return Vec::new();
+        return Default::default();
     }
     match ops.journal.undo() {
         Ok(op) => writeln!(out, "{}", undone_line(&op, true)).ok(),

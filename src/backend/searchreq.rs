@@ -216,10 +216,20 @@ pub fn op_write_paths(msg: &crate::backend::opsreq::OpMsg) -> Vec<PathBuf> {
                 paths.extend(Journal::touched_paths(steps));
             }
         }
-        OpMsg::RedoDone { touched, .. } => paths.extend(touched.clone()),
+        OpMsg::RedoDone { touched, .. } => paths.extend(touched.dirs.clone()),
         _ => {}
     }
     paths
+}
+
+// The files whose tags one landed write changed, so the session re-reads exactly their names and patches no directory.
+pub fn op_tag_paths(msg: &crate::backend::opsreq::OpMsg) -> Vec<PathBuf> {
+    use crate::backend::opsreq::OpMsg;
+    match msg {
+        OpMsg::SetTagsDone { result: Ok((_, steps, _)), .. } => crate::backend::undo::Reached::of(steps).tags,
+        OpMsg::RedoDone { touched, .. } => touched.tags.clone(),
+        _ => Vec::new(),
+    }
 }
 
 
@@ -336,7 +346,7 @@ mod tests {
         let redone: OpMsg = OpMsg::RedoDone {
             journal: crate::backend::undo::Journal::new(),
             result: Ok("rename".to_string()),
-            touched: vec![PathBuf::from("/scope/back.txt")],
+            touched: crate::backend::undo::Reached { dirs: vec![PathBuf::from("/scope/back.txt")], tags: Vec::new() },
         };
         assert_eq!(op_write_paths(&redone), vec![PathBuf::from("/scope/back.txt")], "a redo patches its snapshot");
     }
