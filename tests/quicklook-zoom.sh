@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Quick Look's image zoom on the real Preview: + steps, one full decode, the band and knobs, a drag, 0, a move, a reopen, a small picture and an SVG, offscreen.
+# Quick Look's image zoom on the real Preview: + steps, one full decode, the band and knobs, a drag, 0, a move, a reopen, a small picture, an SVG and a failed SVG redraw, offscreen.
 set -uo pipefail
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 . "$(dirname "$0")/qslog-gate.sh"

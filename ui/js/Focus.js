@@ -90,9 +90,9 @@ function lookup(event, root) {
     // takes the bare arrows above, before the map is consulted.
     if (action === "seekBack" || action === "seekForward")
         return root.preview && root.preview.active && (root.preview.isMedia || root.preview.isPdf) ? action : ""
-    // Minus, plus and e mean nothing outside a PDF, and an image takes the zoom keys and 0. l is h's forward: page, else enter or preview.
+    // A PDF or an image takes the zoom keys and 0; e expands a PDF only, so it means nothing over an image. l is h's forward: page, else enter or preview.
     if (action === "zoomOut" || action === "zoomIn" || action === "zoomFit" || action === "expand")
-        return (root.preview && root.preview.active && (root.preview.isPdf || root.preview.isImage)) ? action : ""
+        return (root.preview && root.preview.active && (root.preview.isPdf || (root.preview.isImage && action !== "expand"))) ? action : ""
     if (action === "pageForward") {
         if (root.preview && root.preview.active)
             return root.preview.isPdf ? action : ""

@@ -27,6 +27,6 @@ Image {
     sourceSize: root.want
     onStatusChanged: {
         if (root.status === Image.Ready) root.drawn = true
-        else if (root.status === Image.Null) root.drawn = false
+        else if (root.status !== Image.Loading) root.drawn = false
     }
 }

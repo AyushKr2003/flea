@@ -194,7 +194,7 @@ function runThumbThreading(check) {
     check("Space with zero matches opens nothing hidden", hidden.calls.length, 0)
 }
 
-// Quick Look's image zoom: the PDF's ladder (fit is 1, a quarter a press, 4 at most), + and - on it, 0 back to fit, and nothing but an image or a PDF takes the keys.
+// Quick Look's image zoom: the PDF's ladder (fit is 1, a quarter a press, 4 at most), + and - on it, 0 back to fit, and nothing but an image or a PDF takes the keys; e expands a PDF only.
 function runImageZoom(check) {
     var rung = 1
     var up = []
@@ -224,23 +224,41 @@ function runImageZoom(check) {
     var plus = { key: Qt.Key_Plus, text: "+", modifiers: Qt.ShiftModifier }
     var minus = { key: Qt.Key_Minus, text: "-", modifiers: none }
     var zero = { key: Qt.Key_0, text: "0", modifiers: none }
+    var expand = { key: Qt.Key_E, text: "e", modifiers: none }
     var kinds = [
-        ["an image", { active: true, isMedia: false, isPdf: false, isImage: true }, "zoomIn,zoomOut,zoomFit"],
-        ["a PDF", { active: true, isMedia: false, isPdf: true, isImage: false }, "zoomIn,zoomOut,"],
-        ["a text file", { active: true, isMedia: false, isPdf: false, isImage: false }, ",,"],
-        ["a Markdown file", { active: true, isMedia: false, isPdf: false, isImage: false, isMarkdown: true }, ",,"],
-        ["an archive", { active: true, isMedia: false, isPdf: false, isImage: false, isArchive: true }, ",,"],
-        ["a video", { active: true, isMedia: true, isPdf: false, isImage: false }, ",,"],
-        ["no preview", { active: false, isMedia: false, isPdf: false, isImage: false }, ",,"]
+        ["an image", { active: true, isMedia: false, isPdf: false, isImage: true }, "zoomIn,zoomOut,zoomFit,"],
+        ["a PDF", { active: true, isMedia: false, isPdf: true, isImage: false }, "zoomIn,zoomOut,,expand"],
+        ["a text file", { active: true, isMedia: false, isPdf: false, isImage: false }, ",,,"],
+        ["a Markdown file", { active: true, isMedia: false, isPdf: false, isImage: false, isMarkdown: true }, ",,,"],
+        ["an archive", { active: true, isMedia: false, isPdf: false, isImage: false, isArchive: true }, ",,,"],
+        ["a video", { active: true, isMedia: true, isPdf: false, isImage: false }, ",,,"],
+        ["no preview", { active: false, isMedia: false, isPdf: false, isImage: false }, ",,,"]
     ]
     var wasPreset = Keymap.preset
     for (var preset of Keymap.PRESETS) {
         Keymap.setPreset(preset)
         for (var kind of kinds) {
             var pane = { focusView: "list", shown: null, viewMode: "list", searchMode: "", recentMode: "", preview: kind[1] }
-            check(preset + ": +, - and 0 over " + kind[0] + " mean " + kind[2],
-                [Focus.lookup(plus, pane), Focus.lookup(minus, pane), Focus.lookup(zero, pane)].join(","), kind[2])
+            check(preset + ": +, -, 0 and e over " + kind[0] + " mean " + kind[2],
+                [Focus.lookup(plus, pane), Focus.lookup(minus, pane), Focus.lookup(zero, pane), Focus.lookup(expand, pane)].join(","), kind[2])
         }
     }
     Keymap.setPreset(wasPreset)
+
+    // The map binds e in a PDF only, so Focus.lookup's own gate is what keeps expand off every other kind should a row ever bind it wider: bind it into the preview context here and ask.
+    var bound = Keymap.PRESET_KEYS.filter(function (row) { return row.action === "expand" && row.context === "pdf" })[0]
+    var wide = {}
+    for (var field in bound) wide[field] = bound[field]
+    wide.context = "preview,pdf"
+    Keymap.PRESET_KEYS.push(wide)
+    try {
+        for (kind of kinds) {
+            pane = { focusView: "list", shown: null, viewMode: "list", searchMode: "", recentMode: "", preview: kind[1] }
+            var want = kind[1].isPdf ? "expand" : ""
+            check("e bound into the preview context still means \"" + want + "\" over " + kind[0], Focus.lookup(expand, pane), want)
+        }
+    } finally {
+        Keymap.PRESET_KEYS.pop()
+    }
+    check("the widened e row is gone again", Keymap.PRESET_KEYS.indexOf(wide), -1)
 }

@@ -6,7 +6,7 @@ import Quickshell
 import "flea" as Flea
 import "flea/js/PreviewKeys.js" as PreviewKeys
 
-// Quick Look's image zoom on the real Preview: fit, + steps, a drag and the wheel, 0, a move, a reopen, a small picture and an SVG.
+// Quick Look's image zoom on the real Preview: fit, + steps, a drag and the wheel, 0, a move, a reopen, a small picture, an SVG and a failed SVG redraw.
 ShellRoot {
     id: shell
 
@@ -316,10 +316,26 @@ ShellRoot {
                     shell.check(full.visible && !it.pictureItem.visible, "the redrawn SVG is not the layer drawn")
                     shell.press("zoomFit")
                     shell.check(it.zoom === 1 && full.status === Image.Null && it.pictureItem.visible && !full.visible, "an SVG back at fit kept its zoomed decode")
-                    shell.finish()
+                    shell.failedRedraw(it)
                 }, "the second SVG decode")
             }, "the first SVG decode")
         })
+    }
+
+    // A redraw that fails after a frame was drawn gives the fit picture back: the surface is never left with neither layer.
+    function failedRedraw(it) {
+        var full = it.fullPicture
+        var before = shell.readies
+        shell.press("zoomIn")
+        shell.until(function () { return shell.readies === before + 1 && full.drawn && !it.pictureItem.visible }, function () {
+            // Points the layer at a file that is not there, as a redraw the decoder cannot make does to it.
+            full.source = "file://" + shell.dir + "/missing.svg"
+            shell.until(function () { return full.status === Image.Error }, function () {
+                shell.check(!full.drawn && !full.visible, "a failed SVG redraw kept the sharp layer drawn")
+                shell.check(it.pictureItem.visible && it.status === "image", "a failed SVG redraw left the surface with no picture")
+                shell.finish()
+            }, "the failed SVG redraw")
+        }, "the third SVG decode")
     }
 
     function finish() {
