@@ -104,7 +104,7 @@ out=$(run "$(target "$copy_line")" eval "d_text='$copy_line'; abandon() { echo r
 
 # Sample input, case_cap_drops: the four hover waits, in order, are the lines that wait on a drag target.
 calls=()
-while IFS= read -r line; do calls+=("${line# }"); done < <(sed -n '/^case_cap_drops()/,/^}/p' tests/ui-captures-drops.sh | grep -E '^    cap_drops_wait_' | grep -Ev '^    cap_drops_wait_(settled|rename) ')
+while IFS= read -r line; do calls+=("${line# }"); done < <(sed -n '/^case_cap_drops()/,/^}/p' tests/ui-captures-drops.sh | grep -E '^    cap_drops_wait_' | grep -Ev '^    cap_drops_wait_(settled|rename|column) ')
 photos_line='Move 1 item to Photos · ctrl at lift copies'
 crumb_line='Copy 1 item to outer/'
 columns_line='Move 1 item to deep · ctrl at lift copies'
@@ -128,8 +128,8 @@ done
 # One definition of the sentence wait, shared by both cases.
 [ "$(grep -h '^cap_[a-z_]*wait_target()' tests/ui-captures-drops.sh tests/ui-captures-dropmods.sh | wc -l)" = 1 ] \
     && ok "the sentence wait is defined once" || bad "the sentence wait is defined more than once"
-[ "$(grep -c 'cap_drops_wait_target' tests/ui-captures-dropmods.sh)" = 4 ] \
-    && ok "cap_dropmods waits through the shared helper" || bad "cap_dropmods does not call the shared wait four times, both legs in each window"
+[ "$(grep -c 'cap_drops_wait_target' tests/ui-captures-dropmods.sh)" = 6 ] \
+    && ok "cap_dropmods waits through the shared helper" || bad "cap_dropmods does not call the shared wait six times, the four lift legs and the two probe legs"
 
 # Leg 1 runs with the setting on: a steer before the shot and another before the release each restart the 700 ms rest that opens Photos.
 seq=$(sed -n '/^case_cap_drops()/,/^}/p' tests/ui-captures-drops.sh | sed -n '/cap_drops_wait_target "Move 1 item to Photos/,/cap_drops_release/{p;/cap_drops_release/q}' | grep -v '^ *#' | awk '{print $1}' | paste -sd, -)

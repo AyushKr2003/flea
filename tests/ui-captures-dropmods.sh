@@ -38,6 +38,19 @@ cap_dropmods_release() {
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || fail "cap_dropmods: pointer release failed"
     settle
 }
+# A press that lands on the parked probe starts no drag, so a probe covering the source point fails the case before the press.
+cap_dropmods_probe_clear_of() {
+    [[ "$#" -eq 2 ]] || fail "cap_dropmods: probe_clear_of needs x and y, got $#"
+    local clients found
+    clients=$(hyprctl clients -j 2>/dev/null) \
+        || fail "cap_dropmods: hyprctl clients was unreadable, so the parked probe could not be located"
+    found=$(jq -er '[.[] | select(.title == "DropProbe")] | length' <<< "$clients") \
+        || fail "cap_dropmods: hyprctl clients was unreadable, so the parked probe could not be located"
+    [[ "$found" == "1" ]] || fail "cap_dropmods: expected one parked DropProbe window, found $found"
+    jq -e --argjson x "$1" --argjson y "$2" '[.[] | select(.title == "DropProbe")] | .[0]
+        | (.at[0] <= $x and $x < .at[0] + .size[0] and .at[1] <= $y and $y < .at[1] + .size[1]) | not' <<< "$clients" >/dev/null \
+        || fail "cap_dropmods: the parked probe covers the source point $1,$2, so the press would miss the row"
+}
 # ydotool key 29 is left Ctrl and 42 left Shift.
 cap_dropmods_key() {
     [[ "$#" -eq 2 ]] || fail "cap_dropmods: key needs a code and 1 or 0, got $#"
@@ -210,7 +223,7 @@ case_cap_dropmods() {
     hypr_window_resize_absolute "$probe_addr" 420 300 >/dev/null || fail "cap_dropmods: the probe window would not take its size"
     sleep 0.3
     read -r wx wy ww wh <<< "$(window_box)"
-    hypr_window_move_absolute "$probe_addr" "$((wx + ww - 480))" "$((wy + 60))" >/dev/null \
+    hypr_window_move_absolute "$probe_addr" "$((wx + ww - 480))" "$((wy + wh - 360))" >/dev/null \
         || fail "cap_dropmods: the probe window would not park"
     sleep 0.5
     probe_box=$(hyprctl clients -j 2>/dev/null | jq -er '[.[] | select(.title == "DropProbe")] | select(length == 1) | .[0] | [.at[0] + .size[0] / 2, .at[1] + .size[1] / 2] | select(all(.[]; . == floor)) | @tsv' 2>/dev/null || printf "")
@@ -222,9 +235,11 @@ case_cap_dropmods() {
     seek_row_named "probe1.txt" || fail "cap_dropmods: probe1.txt never came under the cursor"
     src_pt=$(ipc rowCentre "$(row_index_of probe1.txt)"); read -r cx cy <<< "$src_pt"
     read -r wx wy ww wh <<< "$(window_box)"
+    cap_dropmods_probe_clear_of "$((cx + wx))" "$((cy + wy))"
     cap_dropmods_press_at "$((cx + wx))" "$((cy + wy))"
     cap_dropmods_steer_to "$tx" "$ty"
     printf 'CAP_DROPMODS c1 aim %s,%s cursor %s windows %s\n' "$tx" "$ty" "$(hyprctl cursorpos)" "$(hyprctl clients -j | jq -c '[.[] | select(.title == "DropProbe" or .class == "com.thisisgm.flea") | [.title, .floating, .at, .size]]')"
+    cap_drops_wait_target "Move 1 item to a folder · ctrl at lift copies"
     sleep 0.5
     cap_dropmods_release
     local offered1="" offered2=""
@@ -244,8 +259,10 @@ case_cap_dropmods() {
     seek_row_named "probe2.txt" || fail "cap_dropmods: probe2.txt never came under the cursor"
     src_pt=$(ipc rowCentre "$(row_index_of probe2.txt)"); read -r cx cy <<< "$src_pt"
     read -r wx wy ww wh <<< "$(window_box)"
+    cap_dropmods_probe_clear_of "$((cx + wx))" "$((cy + wy))"
     cap_dropmods_press_at "$((cx + wx))" "$((cy + wy))"
     cap_dropmods_steer_to "$tx" "$ty"
+    cap_drops_wait_target "Move 1 item to a folder · ctrl at lift copies"
     sleep 0.5
     cap_dropmods_key 29 1
     cap_dropmods_release
