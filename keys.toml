@@ -1996,6 +1996,17 @@ label = "rendered/source"
 frontend = "all"
 context = "preview"
 
+# w wraps the open code or text Quick Look and stays close tab in the listing (preview context only).
+[[preset]]
+name = "all"
+mods = "text"
+key = "w"
+keys = "w"
+action = "toggleWrap"
+label = "wrap"
+frontend = "all"
+context = "preview"
+
 [[preset]]
 name = "all"
 mods = "text"

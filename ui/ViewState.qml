@@ -172,6 +172,8 @@ QtObject {
     // Huge 192 and Largest 256 decode nothing new: the shared cache already holds 256.
     readonly property int thumbnailPixels: Density.thumbPixelsFor(root.thumbnailSize)
     readonly property bool ctrlZoom: root.preview.ctrlZoom !== false
+    // Quick Look's w: long lines wrap in a code or text file; off until pressed, and remembered.
+    readonly property bool previewWrap: root.preview.wrap === true
     readonly property string density: root.state.density || "compact"
     readonly property string addressBar: root.state.addressBar || "breadcrumb"
     readonly property bool hyprlandIcons: root.display.hyprlandIcons === true

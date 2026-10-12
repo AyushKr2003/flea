@@ -93,6 +93,9 @@ function lookup(event, root) {
     // Minus, plus and e mean nothing outside a PDF. l is h's forward: page, else enter or preview.
     if (action === "zoomOut" || action === "zoomIn" || action === "expand")
         return (root.preview && root.preview.active && root.preview.isPdf) ? action : ""
+    // w wraps a code or text Quick Look and means nothing on any other kind.
+    if (action === "toggleWrap")
+        return (root.preview && root.preview.active && root.preview.isCodeText) ? action : ""
     if (action === "pageForward") {
         if (root.preview && root.preview.active)
             return root.preview.isPdf ? action : ""
