@@ -28,8 +28,7 @@ FocusScope {
     readonly property int columnGap: 14
     // The new-names stack breathes less than a column gap, the way the old-names one does.
     readonly property int stackGap: 4
-    // The names frame's own insets: a hairline-scale margin with wider sides for the caret.
-    readonly property int frameMargin: 2
+    // The names frame's sides, wider than its top and bottom for the caret; those take the old column's rowsInset.
     readonly property int frameSide: 8
     // A new name and its reason sit one side-inset apart.
     readonly property int reasonGap: 8
@@ -279,6 +278,7 @@ FocusScope {
                     width: parent.width
                     spacing: root.columnGap
                     Flea.BulkOldNames {
+                        id: oldColumn
                         oldNames: root.oldNames
                         columnGap: root.columnGap
                         headGap: root.stackGap
@@ -300,12 +300,13 @@ FocusScope {
                             // One editor, so the frame follows the caret however many lines it holds.
                             border.color: namesScope.activeFocus ? Theme.color.accent : Theme.color.muted
                             border.width: Theme.spacing.hairline
-                            height: root.oldNames.length * Theme.fileRowHeight + 4
+                            height: root.oldNames.length * Theme.fileRowHeight + 2 * oldColumn.rowsInset
                             // One focus scope around the name lines, so the frame binds live focus state with no counter to drift.
                             FocusScope {
                                 id: namesScope
                                 anchors.fill: parent
-                                anchors.margins: root.frameMargin
+                                anchors.topMargin: oldColumn.rowsInset
+                                anchors.bottomMargin: oldColumn.rowsInset
                                 anchors.leftMargin: root.frameSide
                                 anchors.rightMargin: root.frameSide
                                 Column {

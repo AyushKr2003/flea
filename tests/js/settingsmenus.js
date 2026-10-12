@@ -44,6 +44,9 @@ function runInventory(check) {
         for (var i = 0; i < rows.length; i++) {
             if (rows[i].separator === true)
                 continue
+            // The rename row names its count over several rows (pinned in menu.js); the switch carries the one-row wording.
+            if (shapes[s].selectionCount > 1 && rows[i].action === "rename")
+                continue
             built[rows[i].id || rows[i].action] = rows[i].label
             builtMark[rows[i].id || rows[i].action] = rows[i].glyph !== undefined ? rows[i].glyph : rows[i].mark
         }

@@ -126,15 +126,19 @@ Column {
         width: root.width - x - Theme.spacing.rowPaddingX - Theme.column.size
         topPadding: Theme.spacing.rowPaddingY
         spacing: root.barHeight
-        Rectangle {
+        // The fill is a sibling of the track and not its child, because opacity multiplies down into children.
+        Item {
             width: parent.width
             height: root.barHeight
-            color: Theme.color.muted
-            opacity: root.trackOpacity
+            Rectangle {
+                anchors.fill: parent
+                color: Theme.color.muted
+                opacity: root.trackOpacity
+            }
             Rectangle {
                 width: parent.width * Transfer.fraction(root.transfer)
                 height: parent.height
-                color: Theme.color.accent
+                color: Theme.color.accentFrame
             }
         }
         Row {
