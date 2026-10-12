@@ -7263,6 +7263,21 @@ c = p*a + m*(1 - a), so what the backdrop adds gives the alpha and the dark chan
 configured alpha, never two stacked. `tests/glass-boot.sh` reads the window the real entry made
 through the seam's `glass` reader, which exists once the first listing has answered.
 
+**Window Transparency and config reloads.** Omarchy's Window Transparency mode (`omarchy-hyprland-window-transparency`) lives in
+`$XDG_STATE_HOME/omarchy/toggles/hypr/window-opaque.lua` or `window-glassy.lua`, neither meaning transparent, its default, and
+`ui/Glass.qml` reads it as a file test, because `OMARCHY_PATH` is missing over ssh and from some launchers. The ground alpha takes
+the first row that applies: the user's own `[flea] background-alpha` in `~/.config/omarchy/shell.toml` (a value that is not a
+number reads as 1, as before the mode existed); opaque, which is 1; glassy, the theme's own value, else `Glass.glassAlpha`, which holds
+1 until the look pick, so Glassy bare draws what Transparent does; transparent, the theme's value, else 1. With no toggle file and no user value Flea draws exactly
+what it drew before. Hyprland reloads its config for a Window Transparency, Window Corners or Window Gaps change with no theme
+switch, and `ui/Theme.qml` listens for the `configreloaded` raw event of `Quickshell.Hyprland` (only inside Hyprland): it runs
+`Style.scheduleRefresh()`, so the corner radius follows, and `Glass.reread()`, so the mode does. A launch that decided on opaque
+holds 1 until the next launch, as before. `tests/glass-mode.sh` runs every precedence row, a reload under a running window, and the
+same reload through a socket speaking Hyprland's event protocol. `tests/theme-contrast.qml` holds muted and metadata text to 4.5 on
+the glass planes over a white and a black backdrop dimmed by glass.lua's blur brightness 0.75, and records each palette's floor, the
+lowest 8-bit alpha above which every step passes: it is 255 for 16 of the 24 palettes, so no translucent ground keeps those at 4.5
+until a look lifts the ink on glass, and a recorded floor only moves down.
+
 ### Plain text filenames
 
 Every filename in `Row.qml` uses `Text.PlainText`. `Text.AutoText` treats markup in a
@@ -9215,3 +9230,5 @@ The LocalSend lifecycle test moves one ceiling, re-derived with `wc -l`: `src/ba
 Open With's native menus case and the Permissions viewport follow their board: `tests/ui-menus.sh` expects the card to open on `Field` and Tab through `Applications`, `Always`, `Cancel` and `Open` back to `Field` (OpenWith.html rule 8, set by `82bc0976b`), and `permissions_viewport` in `tests/ui-permissions.sh` now waits for the new read-only `ipc windowSize` (the content the dialogs centre in) to equal hyprctl's size, while `permissions_point` names the control, its centre, hyprctl's size and the QML scene when a centre lies outside the viewport. `ui/Ipc.qml` takes two lines for `windowSize` and stays under its 984 ceiling in `tools/flea-file-budget`, and `tests/startup-units.txt` moves its `bytes` line from 1652296 to 1652557, the sum the probe's tool takes over them.
 
 The crumb device check lands a sample `devs` reply through `Messages.route` and reads its device with `ui/CrumbDrop.qml`'s own `destDev` binding, which moves `tests/js/drag.js` 481 to 493, re-derived with `wc -l`, while the link-walk bound test lives in the new `src/backend/extclass_tests.rs` so `src/backend/extclass.rs` stays under its cap.
+
+The glass prep moves one recorded ceiling, re-derived with `wc -l`: `ui/Theme.qml` 465 to 479 for the config-reload listener and its handler, and `tests/startup-units.txt` moves its `bytes` line from 1654071 to 1657143, the sum the probe's tool takes over `ui/Glass.qml` and `ui/Theme.qml` with the mode reader and the listener.

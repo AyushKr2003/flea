@@ -23,6 +23,12 @@ ShellRoot {
     readonly property string rootDir: Quickshell.env("BUTTONSYS_ROOT") || ""
     // The palettes tests/theme-contrast.sh reads: the 22 stock themes and the Cool Dawn and Sunset fixtures.
     readonly property int paletteCount: 24
+    // glass.lua's blur brightness: Hyprland dims the blurred backdrop to this share before the translucent ground composes over it.
+    readonly property real blurBrightness: 0.75
+    readonly property var backdrops: [{ name: "white", level: 1 }, { name: "black", level: 0 }]
+    readonly property int glassSteps: 255
+    // The lowest 8-bit glass alpha every palette passes at and above, taken over the whole sweep.
+    property int glassFloor: 0
     readonly property var sampleRow: ({ n: "contrast.txt", i: "text-x-generic", p: 420, d: false, s: 13, m: 1758835200, t: false, k: 0, v: 0 })
 
     property int checks: 0
@@ -85,6 +91,40 @@ ShellRoot {
         return Contrast.hexOf(Contrast.over(String(wash.color), wash.color.a * wash.opacity, surface))
     }
 
+    // The ground a glass plane draws at 8-bit alpha a over the dimmed backdrop, as a hex.
+    function glassGround(plane, a, backdrop) {
+        var g = Math.round(shell.glassSteps * backdrop.level * shell.blurBrightness) / shell.glassSteps
+        return Contrast.hexOf(Contrast.over(String(plane), a / shell.glassSteps, Contrast.hexOf([g, g, g])))
+    }
+    // The least ratio muted and metadata text reach on either plane over either backdrop, and where it is lowest.
+    function glassWorst(c, a) {
+        var worst = { ratio: Infinity, at: "" }
+        var roles = [["muted text", c.muted], ["metadata text", c.metadata]], planes = [["background", c.background], ["surface", c.surface]]
+        for (var r = 0; r < roles.length; r++)
+            for (var p = 0; p < planes.length; p++)
+                for (var b = 0; b < shell.backdrops.length; b++) {
+                    var got = Contrast.ratio(String(roles[r][1]), shell.glassGround(planes[p][1], a, shell.backdrops[b]))
+                    if (got < worst.ratio) worst = { ratio: got, at: roles[r][0] + " on the " + planes[p][0] + " over " + shell.backdrops[b].name }
+                }
+        return worst
+    }
+    // Muted text sits near 4.5 on the opaque ground, so no translucent ground holds it: the floor over white is 255/255 for 16 palettes (RESULT, 2026-10-12). A palette's recorded floor only moves down, when a look lifts the ink on glass.
+    readonly property var glassFloors: ({ "catppuccin": 253, "catppuccin-latte": 255, "ethereal": 240, "everforest": 255, "flexoki-light": 255,
+        "gruvbox": 255, "hackerman": 255, "kanagawa": 255, "last-horizon": 253, "lumon": 255, "lupine": 255, "matte-black": 253, "miasma": 255,
+        "nord": 255, "osaka-jade": 255, "retro-82": 255, "ristretto": 255, "rose-pine": 255, "solitude": 255, "tokyo-night": 255,
+        "vantablack": 249, "white": 254, "cool-dawn": 232, "sunset": 253 })
+    function glassSweep(name, c) {
+        // Walk down from opaque while every step still passes; the step before the first miss is this palette's floor.
+        var floor = shell.glassSteps
+        while (floor > 0 && shell.glassWorst(c, floor - 1).ratio >= Flea.Theme.textContrast) floor--
+        var worst = shell.glassWorst(c, floor)
+        shell.log("floor " + name + " " + floor + "/255 (" + (Math.round(floor / shell.glassSteps * 1000) / 1000) + "), lowest ratio there " + (Math.round(worst.ratio * 100) / 100) + " " + worst.at)
+        shell.glassFloor = Math.max(shell.glassFloor, floor)
+        shell.atLeast(name, "glass ink at opaque", "both planes over both backdrops", shell.glassWorst(c, shell.glassSteps).ratio, Flea.Theme.textContrast)
+        var recorded = shell.glassFloors[name]
+        shell.check(name + " glass floor " + floor + " is at or under the recorded " + recorded, recorded !== undefined && floor <= recorded, true)
+    }
+
     function sweep(entry) {
         var c = Flea.Theme.color, rgba = Probe.rgba, name = entry.name
         Flea.Theme.applyColors(entry.body)
@@ -120,6 +160,7 @@ ShellRoot {
         // A resting list row draws its metadata cells in the lifted ink and its file glyph in the unlifted step, so no glyph moves.
         shell.check(name + " resting row metadata ink", rgba(restRow.cellInk), rgba(c.metadata))
         shell.check(name + " resting row file glyph", rgba(restRow.markColor()), rgba(c.metadataFrame))
+        shell.glassSweep(name, c)
     }
 
     function run() {
@@ -130,6 +171,8 @@ ShellRoot {
         shell.check("a wash ground keeps the colour's own alpha", shell.groundOf({ color: Qt.rgba(1, 1, 1, 0.5), opacity: 0.5 }, "#000000"), "#404040")
         for (var i = 0; i < Palettes.PALETTES.length; i++)
             shell.sweep(Palettes.PALETTES[i])
+        var want = Math.round(Flea.Glass.glassAlpha * shell.glassSteps)
+        shell.log("floor all palettes " + shell.glassFloor + "/255 (" + (Math.round(shell.glassFloor / shell.glassSteps * 1000) / 1000) + "), glass alpha " + want + "/255")
         shell.finish()
     }
 

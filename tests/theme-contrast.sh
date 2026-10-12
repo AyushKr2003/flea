@@ -42,7 +42,8 @@ palettes=$(wc -l < "$list")
 [ "$palettes" -eq "$palettes_expected" ] || fail "the sweep reads $palettes palettes, not $palettes_expected: a stock theme was added or removed, update palettes_expected here and paletteCount in tests/theme-contrast.qml with it"
 
 run_timeout_s=120
-expected_checks=$((palettes * 19 + 4))
+# Per palette: 19 role checks and 2 glass ones (opaque holds, the floor is at or under its record), then the 4 sandbox checks.
+expected_checks=$((palettes * 21 + 4))
 config="$test_root/config"
 mkdir -p "$config" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
@@ -69,6 +70,8 @@ output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
 # Sample input: "  INFO qml: THEMECONTRAST ok nord muted text on surface 5.02 >= 4.5" once per check, and "THEMECONTRAST DONE checks=338 failed=0" once.
 passed=$(printf '%s\n' "$output" | grep -c 'THEMECONTRAST ok ')
 failed=$(printf '%s\n' "$output" | grep -c 'THEMECONTRAST FAIL')
+# The glass floors print on a red run too, since they are what a red glass check is read against.
+printf '%s\n' "$output" | grep -a 'THEMECONTRAST floor '
 if [ "$failed" -ne 0 ]; then
     fail "theme-contrast.qml: $failed roles are under their floor"
     printf '%s\n' "$output" | grep -a 'THEMECONTRAST FAIL'
