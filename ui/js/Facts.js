@@ -157,6 +157,58 @@ function archiveMore(meta, shown) {
     return Math.max(0, meta.entries - archiveEntries(meta, shown).length)
 }
 
+// TallPreviews: the kinds whose frame fills the column from its top down to the name. The shape follows the row's
+// kind and never its load state, so a tall row is tall while loading, ready, blank or failed.
+var TALL_STATES = [TEXT, CODE, ARCHIVE]
+
+function tall(st) {
+    return TALL_STATES.indexOf(st) >= 0
+}
+
+// The tall frame is the column less its margins, the name, the facts and the two gaps between them.
+function tallHeight(columnHeight, margin, nameHeight, factsHeight, gap) {
+    return Math.max(0, columnHeight - 2 * margin - nameHeight - factsHeight - 2 * gap)
+}
+
+var COMPACT_LINE = "%1 \u00b7 %2 \u00b7 %3"
+var COMPACT_BARE = "%1 \u00b7 %2"
+var LEADING_SEPARATOR = /^ \u00b7 /
+var LINES_ONE = "1 line"
+var LINES_MANY = "%1 lines"
+var ENTRIES_ONE = "1 entry"
+var ENTRIES_MANY = "%1 entries"
+
+// One pass, so a value that looks like a placeholder is kept whole.
+function fill(template, values) {
+    return template.replace(/%(\d)/g, function (whole, place) { return values[place - 1] })
+}
+
+// "132 lines" or "214 entries"; nothing while the count is not known, and a floor keeps its mark.
+function compactCount(st, meta) {
+    if (st === ARCHIVE) {
+        if (!meta || meta.archiveFailed === true || meta.entries === undefined) {
+            return ""
+        }
+        return meta.entries === 1 ? ENTRIES_ONE : fill(ENTRIES_MANY, [Format.count(meta.entries)])
+    }
+    var shown = lineCount(meta)
+    if (shown.length === 0) {
+        return ""
+    }
+    return meta.lines === 1 && !meta.partial ? LINES_ONE : fill(LINES_MANY, [shown])
+}
+
+// The tall kinds' one facts line, the Kind then the size then the count; the Kind comes apart from the tail so the Kind alone can elide.
+function compactLine(st, row, meta, kindName) {
+    if (!row) {
+        return { kind: "", tail: "" }
+    }
+    var count = compactCount(st, meta)
+    var line = fill(count ? COMPACT_LINE : COMPACT_BARE, [kindName, Format.size(row.s), count])
+    var tail = line.substring(kindName.length)
+    return { kind: kindName, tail: kindName ? tail : tail.replace(LEADING_SEPARATOR, "") }
+}
+
 // The rows the canvas draws for each state, in its own order, with the labels it uses verbatim.
 function facts(st, row, meta, kindName, extra) {
     return filled(stateRows(st, row, meta, kindName, extra))

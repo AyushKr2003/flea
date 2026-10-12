@@ -85,8 +85,9 @@ Item {
                                   { pages: root.pdfPages > 0 ? String(root.pdfPages) : "",
                                     owner: root.meta && root.meta.owner ? root.meta.owner : "" }) : [])
 
-    // The canvas's frame is 16 by 10, which is the one proportion every state shares.
+    // The canvas's frame is 16 by 10, the one proportion every state shares but a tall kind's, which fills the column down to the name.
     readonly property real frameRatio: 10 / 16
+    readonly property bool tallRow: root.previewState !== Facts.MULTI && Facts.tall(root.rowState)
     // RenderedPreviews: a Markdown row renders instead of listing its first lines, in a frame
     // tall from the column top down to the name, with no toggle; it always renders.
     readonly property bool isMarkdownRow: root.rowState === Facts.TEXT && root.row !== null
@@ -134,10 +135,7 @@ Item {
         Rectangle {
             id: frame
             width: parent.width
-            height: root.isMarkdownRow
-                ? Math.max(0, root.height - 2 * Theme.spacing.rowPaddingX - nameText.height
-                    - factsTable.height - 3 * Theme.spacing.gap)
-                : Math.round(width * root.frameRatio)
+            height: root.tallRow ? Facts.tallHeight(root.height, Theme.spacing.rowPaddingX, nameText.height, facts.height, Theme.spacing.gap) : Math.round(width * root.frameRatio)
             // The listing's own colour, so on glass the pane's ground under it is the fill; see ui/Glass.qml.
             color: Glass.on ? "transparent" : Theme.color.background
             border.width: Theme.spacing.hairline
@@ -414,9 +412,11 @@ Item {
             elide: Text.ElideRight
         }
 
-        Flea.FactsTable {
-            id: factsTable
+        Flea.PreviewFacts {
+            id: facts
             width: parent.width
+            compact: root.tallRow && ViewState.previewFacts === "compact"
+            line: Facts.compactLine(root.rowState, root.row, root.meta, root.kindName)
             rows: root.factRows
         }
     }
@@ -491,6 +491,7 @@ Item {
         ? (markdown ? markdown.loading : true) : lines.loading
     function archiveNames() { return root.meta && root.meta.names ? root.meta.names.map(function (e) { return e.n }).join("|") : "" }
     function failureText() { return root.failure }
+    function toggleFacts() { ViewState.changeKey("previewFacts", ViewState.previewFacts === "compact" ? "full" : "compact") }
 
     // A multi-selection describes a count, not a file, so it names the count instead of a name.
     function nameText() {

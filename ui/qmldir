@@ -104,6 +104,8 @@ FleaMark 1.0 FleaMark.qml
 Opener 1.0 Opener.qml
 Preview 1.0 Preview.qml
 PreviewArchive 1.0 PreviewArchive.qml
+PreviewFacts 1.0 PreviewFacts.qml
+PreviewFactsLine 1.0 PreviewFactsLine.qml
 PreviewMedia 1.0 PreviewMedia.qml
 QuickLookPrepare 1.0 QuickLookPrepare.qml
 QuickLookWarm 1.0 QuickLookWarm.qml

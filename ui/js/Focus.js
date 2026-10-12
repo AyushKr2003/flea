@@ -136,6 +136,7 @@ function act(action, root, menuId, paths) {
     case "historyBack": root.goBack(); return
     case "historyForward": root.goForward(); return
     case "togglePreview": root.togglePreviewColumn(); return
+    case "factsToggle": if (root.previewColumnItem && root.previewColumnItem.visible) root.previewColumnItem.toggleFacts(); return
     case "loadPreview": root.loadSelectionPreview(); return
     case "focusPreview": root.focusPreviewColumn(); return
     case "windowNew": root.newWindow(); return

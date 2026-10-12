@@ -461,6 +461,12 @@ action = "tabNew"
 char = "T"
 action = "tags"
 
+# Swaps the preview column's one compact facts line for the full table and back, remembered in ui.json as
+# previewFacts. It does nothing unless that column is on screen (ui/js/Focus.js), and plain i was bound to nothing.
+[[text]]
+char = "i"
+action = "factsToggle"
+
 [[text]]
 char = "w"
 action = "tabClose"
@@ -611,7 +617,7 @@ sheet = false
 move = ["cursorDown", "cursorUp", "cursorFirst", "cursorLast", "pageDown", "pageUp", "open",
         "parent", "pageForward", "historyBack", "historyForward", "focusNext", "focusPreview",
         "tabNew", "openTab", "tabClose", "tabNext", "tabPrevious", "tabMoveLeft", "tabMoveRight", "windowNew", "escape"]
-look = ["viewList", "viewColumns", "viewGrid", "togglePreview", "loadPreview", "preview",
+look = ["viewList", "viewColumns", "viewGrid", "togglePreview", "factsToggle", "loadPreview", "preview",
         "toggleHidden", "sidebar", "zoomIn", "zoomOut", "expand", "mute", "textSizeUp", "textSizeDown",
         "textSizeReset", "keymapSheet"]
 find = ["filter", "search", "reveal", "sortNext", "sortReverse", "pathBar", "reload"]
@@ -742,6 +748,11 @@ label = "undo"
 keys = "T"
 action = "tags"
 label = "tags"
+
+[[sheet]]
+keys = "i"
+action = "factsToggle"
+label = "facts"
 
 [[sheet]]
 keys = "^N"

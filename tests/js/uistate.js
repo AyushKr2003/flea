@@ -290,6 +290,12 @@ function run(check) {
     check("another window's sort never lands", JSON.stringify(sortApplied.state.sort), '{"key":"name","reverse":false}')
     check("while a preference beside it still does", sortApplied.state.hidden, true)
 
+    // TallPreviews: the facts mode is remembered like the view, so another window's `i` never flips this window's column.
+    check("previewFacts joins the window keys", UiState.isWindowKey("previewFacts"), true)
+    var factsApplied = UiState.applyExternal({ previewFacts: "compact" }, {}, '{"previewFacts":"full","hidden":true}')
+    check("another window's facts mode never lands, while a preference beside it does",
+          factsApplied.state.previewFacts + "|" + factsApplied.state.hidden, "compact|true")
+
     // xw4-r2 finding 3: rail, preview column and grid zoom stay per window, Finder's rule.
     check("rail is a window leaf", UiState.isWindowLeaf("places", "rail"), true)
     check("preview column is too", UiState.isWindowLeaf("preview", "column"), true)

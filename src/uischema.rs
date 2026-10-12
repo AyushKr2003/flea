@@ -48,6 +48,7 @@ pub const DEFAULTS: &str = r#"{
     "thumbNetwork": false, "thumbPhone": false, "thumbUsb": true,
     "ctrlZoom": true
   },
+  "previewFacts": "compact",
   "keys": "default",
   "display": { "textSize": { "mode": "system" }, "hyprlandIcons": false },
   "menu": { "hidden": ["delete", "openTerminal", "placeMenu", "runScript",
@@ -212,6 +213,8 @@ pub const SCHEMA: &[(&str, Rule)] = &[
     // rules 1 to 4 and ledger directive 59.
     ("shelf", Rule::Group(SHELF)),
     ("preview", Rule::Group(PREVIEW)),
+    // TallPreviews: the tall kinds' one compact facts line, or the full table `i` opens; ui/ViewState.qml reads it.
+    ("previewFacts", Rule::Word(&["compact", "full"])),
     // SettingsKeys.html's four-value chooser over ui/js/Keymap.js's shared tables. A stored name
     // this build cannot honour falls back to default, which is also what a fresh ui.json holds.
     ("keys", Rule::Word(&["default", "vim", "mac", "windows"])),
@@ -273,7 +276,7 @@ mod tests {
                 "view", "pickerView", "density", "columns", "columnsLimit", "columnWidths", "addressBar", "sort", "rememberSort", "folderSorts",
                 "dual", "foldersFirst", "groupByKind", "hidden", "hiddenLast", "highlightToday", "wrapAtEnds", "escapeUp", "openMode", "clickRename", "openFoldersWhileDragging", "keyHints", "startIn", "startFolder",
                 "lastPath", "lastTabs", "newTab", "trashAutoEmpty", "trashSweptOn", "places", "shelf",
-                "preview", "keys",
+                "preview", "previewFacts", "keys",
                 "display", "menu", "updates", "stateVersion"
             ]
         );
@@ -341,6 +344,8 @@ mod tests {
         assert_eq!(d.get("preview").and_then(|p| p.get("thumbUsb")).and_then(Json::as_bool), Some(true));
         // Decided 2026-10-03: the Markdown view is not a stored choice, so no leaf for it ships.
         assert!(d.get("preview").and_then(|p| p.get("markdownView")).is_none());
+        // TallPreviews: the tall kinds show one compact facts line until `i` opens the full table.
+        assert_eq!(d.get("previewFacts").and_then(Json::as_str), Some("compact"));
         assert_eq!(d.get("display").and_then(|p| p.get("textSize")).and_then(|t| t.get("mode")).and_then(Json::as_str), Some("system"));
         let display: Vec<&str> = d.get("display").and_then(Json::as_object).expect("display").iter().map(|(k, _)| k.as_str()).collect();
         assert_eq!(display, ["textSize", "hyprlandIcons"], "the compositor owns opacity, icons and shadows");
@@ -367,6 +372,18 @@ mod tests {
             // ui.json behaves as 0.2.1 did. placeMenu is the Places rows' own menu.
             ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions", "copyAs", "pasteAs", "invertSelection", "extThumbs", "run", "openAsText"]
         );
+    }
+
+    // The facts mode takes its two words, and a file holding any other word reads as compact.
+    #[test]
+    fn the_preview_facts_mode_takes_two_words_and_a_bad_one_reads_compact() {
+        let current = crate::uistate::from_file("{}");
+        let takes = |patch: &str| crate::uistate::patched(&current, &jsondoc::parse(patch).expect("patch parses"));
+        assert!(takes(r#"{"previewFacts":"compact"}"#).is_ok() && takes(r#"{"previewFacts":"full"}"#).is_ok());
+        assert!(takes(r#"{"previewFacts":"wide"}"#).expect_err("refused").contains("previewFacts"));
+        let word = |text: &str| crate::uistate::from_file(text).get("previewFacts").and_then(Json::as_str).map(str::to_owned);
+        assert_eq!(word(r#"{"previewFacts":"wide"}"#).as_deref(), Some("compact"));
+        assert_eq!(word(r#"{"previewFacts":"full"}"#).as_deref(), Some("full"));
     }
 
     // Each key a place, each value a sort order; past the cap the oldest entries go.

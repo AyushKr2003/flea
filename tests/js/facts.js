@@ -294,4 +294,39 @@ function run(check) {
           "214 entries \u00b7 3.4 GB unpacked|1 entry||0 entries|")
     check("and the Quick Look line groups a four-figure count",
           Facts.archiveLine({ entries: 1204, unpacked: 0, names: [] }), "1,204 entries")
+
+    // TallPreviews: the frame's shape follows the row's kind alone, and the facts fold into one line whose Kind elides alone.
+    var every = [Facts.TEXT, Facts.CODE, Facts.ARCHIVE, Facts.IMAGE, Facts.VIDEO, Facts.AUDIO, Facts.PDF,
+                 Facts.SYMLINK, Facts.MULTI, Facts.LOADING, Facts.ERROR, Facts.UNSUPPORTED]
+    check("text, code and an archive list are tall and every other kind keeps the 16 by 10 frame",
+          every.map(function (st) { return Facts.tall(st) }).join("|"),
+          "true|true|true|false|false|false|false|false|false|false|false|false")
+    function line(st, size, meta, kind) {
+        var l = Facts.compactLine(st, row("text-x-generic", size), meta, kind)
+        return l.kind + "|" + l.tail
+    }
+    check("code states its Kind, size and lines, the Kind apart from the tail that never elides",
+          line(Facts.CODE, 4100, { lines: 132 }, "Rust source code"), "Rust source code| \u00b7 4.1 kB \u00b7 132 lines")
+    check("a Markdown document reads the same shape",
+          line(Facts.TEXT, 6200, { lines: 48 }, "Markdown document"), "Markdown document| \u00b7 6.2 kB \u00b7 48 lines")
+    check("one line is a singular and none is a plural",
+          line(Facts.TEXT, 3, { lines: 1 }, "Plain text") + "#" + line(Facts.TEXT, 0, { lines: 0 }, "Plain text"),
+          "Plain text| \u00b7 3 B \u00b7 1 line#Plain text| \u00b7 0 B \u00b7 0 lines")
+    check("a count the backend stopped early keeps its floor and a four-figure count its group",
+          line(Facts.CODE, 4100, { lines: 5000, partial: true }, "Rust source code") + "#" + line(Facts.TEXT, 4100, { lines: 1204 }, "Plain text"),
+          "Rust source code| \u00b7 4.1 kB \u00b7 > 5,000 lines#Plain text| \u00b7 4.1 kB \u00b7 1,204 lines")
+    check("a count that is not there yet, or could not be read, leaves the line at Kind and size",
+          line(Facts.CODE, 4100, null, "Rust source code") + "#" + line(Facts.CODE, 4100, { linesFailed: true, lines: 0 }, "Rust source code"),
+          "Rust source code| \u00b7 4.1 kB#Rust source code| \u00b7 4.1 kB")
+    check("an archive states its entries, with a singular, an exact zero and nothing for a failed index",
+          line(Facts.ARCHIVE, 9000, { entries: 214 }, "Zip archive") + "#" + line(Facts.ARCHIVE, 9000, { entries: 1 }, "Zip archive")
+          + "#" + line(Facts.ARCHIVE, 9000, { entries: 0, archiveFailed: false }, "Zip archive")
+          + "#" + line(Facts.ARCHIVE, 9000, { entries: 0, archiveFailed: true }, "Zip archive"),
+          "Zip archive| \u00b7 9.0 kB \u00b7 214 entries#Zip archive| \u00b7 9.0 kB \u00b7 1 entry#Zip archive| \u00b7 9.0 kB \u00b7 0 entries#Zip archive| \u00b7 9.0 kB")
+    check("a Kind that looks like a placeholder is kept whole, and a missing Kind or row states what it can",
+          line(Facts.CODE, 4100, { lines: 2 }, "100% %2 source") + "#" + line(Facts.CODE, 4100, { lines: 2 }, "")
+          + "#" + JSON.stringify(Facts.compactLine(Facts.CODE, null, { lines: 2 }, "Rust source code")),
+          "100% %2 source| \u00b7 4.1 kB \u00b7 2 lines#|4.1 kB \u00b7 2 lines#{\"kind\":\"\",\"tail\":\"\"}")
+    check("the tall frame is the column less its margins, the name, the facts and the two gaps between them",
+          Facts.tallHeight(700, 12, 20, 18, 9) + "|" + Facts.tallHeight(40, 12, 20, 18, 9), "620|0")
 }
