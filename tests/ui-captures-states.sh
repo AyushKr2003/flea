@@ -13,9 +13,12 @@ heldcolumns_fade_wait() {
     sleep "$wait_s"
 }
 
-# The IPC seam is built when the pane first leaves loading (AGENTS.md "The first window"), so a held first listing has none and its absence proves the pane still reads loading.
+# A held first listing has no IPC seam yet (AGENTS.md "The first window"): only a live shell answers "Target not found." then.
 heldcolumns_expect_loading() {
-    [[ "$(ipc ready 2>/dev/null || true)" != true ]] || fail "heldcolumns: limit $1 left loading $2"
+    local answer
+    answer=$(ipc ready 2>&1 || true)
+    [[ "$answer" != true ]] || fail "heldcolumns: limit $1 left loading $2"
+    [[ "$answer" == *"Target not found."* ]] || fail "heldcolumns: limit $1 got no live answer $2, ipc ready said '${answer:-nothing}'"
 }
 
 # launch() waits for the seam in assert_theme, which a held first listing builds only at its 10 s deadline, after the reading shot.
@@ -86,6 +89,8 @@ case_cap_heldcolumns() {
         shot "heldcolumns-$n-reading"
         heldcolumns_expect_loading "$n" "after its reading shot"
         wait_pane_waiting heldcolumns
+        # The seam exists only now, so the theme of this launch, reading shot included, is checked here.
+        assert_theme
         [[ "$(ipc viewMode)" == "columns" ]] || fail "heldcolumns: limit $n opened in $(ipc viewMode), not columns"
         [[ "$(ipc stateMessage)" == "That folder is not responding." ]] || fail "heldcolumns: limit $n spoke $(ipc stateMessage)"
         heldcolumns_fade_wait
