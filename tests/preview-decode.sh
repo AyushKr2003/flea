@@ -81,6 +81,11 @@ magick -size 256x192 xc:gray40 "$photos/stl-cache.png" \
     || { echo "preview-decode.sh: stl cache generation failed"; exit 1; }
 printf 'not a png\n' > "$photos/bad.png" \
     || { echo "preview-decode.sh: bad-png fixture generation failed"; exit 1; }
+# Two more models, shown by the Columns preview: one with no thumbnail on offer, one whose thumbnail is still to come.
+printf 'solid columns-fixture\nendsolid columns-fixture\n' > "$photos/mount.stl" \
+    || { echo "preview-decode.sh: columns stl fixture generation failed"; exit 1; }
+cp "$photos/mount.stl" "$photos/pending.stl" \
+    || { echo "preview-decode.sh: pending stl fixture generation failed"; exit 1; }
 # The interim's own cache files: the small one draws at the original's pixels, the large one at 256 wide.
 cp "$photos/small.png" "$photos/smallcache.png" \
     || { echo "preview-decode.sh: small cache generation failed"; exit 1; }
@@ -290,6 +295,36 @@ else
             bad "the log carries no decode warning for bad.png, so the pattern may not match Qt's warning (log $log)"
         fi
     fi
+    # The Columns preview frame refuses a thumbnail-less model the same way, and settles on the sentence a refused decode shows.
+    # Sample input: 'PREVIEW COLMODEL source= seen=false status=3 note=no preview could be made ready=true' where status 3 is Image.Error.
+    colmodel=$(grep -a "PREVIEW COLMODEL " "$log" | head -1)
+    case "$colmodel" in
+        *"PREVIEW COLMODEL source= seen=false "*) ok "the Columns frame never gives mount.stl to its picture" ;;
+        *) bad "the Columns frame was given mount.stl as its source: '$colmodel' (log $log)" ;;
+    esac
+    colmodel_decodes=$(grep -a -c 'Error decoding: .*/mount\.stl' "$log")
+    if [ "$colmodel_decodes" -eq 0 ]; then
+        ok "the Columns preview asks Qt to decode no STL"
+    else
+        bad "Qt was asked to decode mount.stl $colmodel_decodes time(s) (log $log)"
+    fi
+    case "$colmodel" in
+        *" status=3 note=no preview could be made ready=true"*) ok "and the frame settles on the sentence a refused decode shows, ready for the swap" ;;
+        *) bad "the Columns frame did not settle on a refused decode: '$colmodel' (log $log)" ;;
+    esac
+    # A model whose thumbnail is still to come is not settled: the frame reads Null, shows no sentence, and the swap keeps waiting.
+    # Sample input: 'PREVIEW COLPENDING status=0 note= ready=false sawerror=false sawsentence=false' where status 0 is Image.Null.
+    colpending=$(grep -a "PREVIEW COLPENDING " "$log" | head -1)
+    case "$colpending" in
+        *" status=0 note= ready=false sawerror=false sawsentence=false") ok "a model with its thumbnail pending reads no Error and shows no sentence, so the swap keeps waiting" ;;
+        *) bad "the Columns frame settled on a model whose thumbnail is pending: '$colpending' (log $log)" ;;
+    esac
+    # Sample input: 'PREVIEW COLLAND status=1 source=stl-cache.png note= ready=true sawerror=false sawsentence=false' where status 1 is Image.Ready.
+    colland=$(grep -a "PREVIEW COLLAND " "$log" | head -1)
+    case "$colland" in
+        *" status=1 source=stl-cache.png note= ready=true sawerror=false sawsentence=false") ok "and the frame draws the thumbnail once it lands" ;;
+        *) bad "the Columns frame did not draw the thumbnail that landed: '$colland' (log $log)" ;;
+    esac
     # e81f-r3: the interim meta-row guards, one PREVIEW GUARD line each.
     if grep -a -q "PREVIEW GUARD1 PASS" "$log"; then
         ok "the interim refuses a meta reply for a row that drifted onto another file"

@@ -117,8 +117,10 @@ Item {
     readonly property Item pictureItem: playerLoader.visible && playerLoader.item ? playerLoader.item.contentItem : frameThumb
     readonly property Item linesItem: lines
     readonly property Item archiveItem: archivePane
-    // Ready is the decoded picture on screen; thumbShown is already true while it loads.
-    readonly property alias frameStatus: frameThumb.status
+    // A 3D model's original is never decoded: Qt has no plugin for it, and each attempt logs a warning.
+    readonly property bool originalRefused: Kinds.isModel(root.path)
+    // Ready is the decoded picture (thumbShown is true while it loads); a model with no thumbnail coming reads Error, which ui/js/PreviewSwap.js treats as settled.
+    readonly property int frameStatus: root.originalRefused && root.thumb.length === 0 && root.noThumbComing ? Image.Error : frameThumb.status
     // The two states whose picture is the thumbnail; audio's mark is what that state draws when it works.
     readonly property bool picturesFromThumb: root.previewState === Facts.IMAGE || root.previewState === Facts.VIDEO
 
@@ -528,7 +530,7 @@ Item {
         if (!root.visible) return ""
         if (root.thumb.length > 0)
             return Format.fileUri(root.thumb)
-        if (!root.manualHold && root.noThumbComing && root.previewState === Facts.IMAGE && root.path.length > 0)
+        if (!root.manualHold && root.noThumbComing && root.previewState === Facts.IMAGE && root.path.length > 0 && !root.originalRefused)
             return Format.fileUri(root.path)
         return ""
     }
