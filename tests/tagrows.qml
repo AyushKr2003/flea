@@ -121,6 +121,8 @@ ShellRoot {
         property var placesState: ({ showTags: true })
         property var placesEntries: [1, 2, 3, 4, 5, 6, 7]
         property int cursorIndex: -1
+        property int litIndex: -1
+        property bool cursorDrawn: true
         property bool focused: true
         function activate(index) { root.picked.push(index) }
     }
