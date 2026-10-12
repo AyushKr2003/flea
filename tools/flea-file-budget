@@ -98,7 +98,7 @@ tests/columnrow-geom.qml 426
 tests/dialog-board.qml 654
 tests/columnscost.qml 416
 tests/rowcost.qml 417
-tests/gridjump.qml 510
+tests/gridjump.qml 516
 tests/gridmark.qml 419
 tests/columnsfilter.qml 402
 tests/columnsfolder.qml 400

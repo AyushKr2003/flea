@@ -405,6 +405,7 @@ ShellRoot {
         s.push(function () {
             root.check(name + ": the wait holds while the reply is out", grid.landingWait, "landingWait=" + grid.landingWait)
             grid.contentY = grid.contentHeight / 2
+            root.check(name + ": a position write alone keeps the wait", grid.landingWait, "landingWait=" + grid.landingWait)
             act()
             root.check(name + ": the operator's scroll ends the wait", !grid.landingWait, "landingWait=" + grid.landingWait)
             mine.y = grid.contentY
@@ -437,6 +438,10 @@ ShellRoot {
         driver.mousePress(bar, at.x, at.y, Qt.LeftButton, Qt.NoModifier, -1)
         driver.mouseMove(bar, at.x, at.y + 30, -1, Qt.LeftButton, Qt.NoModifier)
         driver.mouseRelease(bar, at.x, at.y + 30, Qt.LeftButton, Qt.NoModifier, -1)
+    }
+    function wheelBar() {
+        var bar = grid.scrollBar
+        driver.mouseWheel(bar, bar.width / 2, bar.height / 2, Qt.NoButton, Qt.NoModifier, 0, -120, 1)
     }
 
     function build() {
@@ -492,6 +497,7 @@ ShellRoot {
         root.outcome("lost window", "lost")
         root.takeover("lost window, view drag", root.dragView)
         root.takeover("lost window, bar drag", root.dragBar)
+        root.takeover("lost window, bar wheel", root.wheelBar)
     }
 
     function finish() {
