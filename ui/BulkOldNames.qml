@@ -5,8 +5,8 @@ import qs.Commons
 Column {
     required property var oldNames
     // The dialog's own half-width gap and stack gap, bound by the card so both halves stay equal.
-    property int columnGap: 14
-    property int headGap: 4
+    required property int columnGap
+    required property int headGap
     width: (parent.width - columnGap) / 2
     spacing: headGap
     Text {

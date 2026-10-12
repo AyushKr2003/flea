@@ -1,4 +1,5 @@
 import QtQuick
+import "js/Format.js" as Format
 import "js/PathBar.js" as PathBar
 import "js/Picker.js" as Picker
 
@@ -50,7 +51,7 @@ Item {
         root.asked = ""
         var kind = PathBar.kindOfPeek(readFailed, mode)
         if (kind === "missing") {
-            root.picker.say(PathBar.fill(PathBar.MISSING_SENTENCE, path), true)
+            root.picker.say(Format.fill(PathBar.MISSING_SENTENCE, path), true)
         } else if (kind === "folder") {
             root.picker.open(path)
             root.entry.closeEdit()
@@ -78,7 +79,7 @@ Item {
         // A reply against another listing is stale; the leaf's own listing locates it again when it lands.
         if (root.leaf === "" || message.path !== root.leaf || message.directory !== root.leafParent) return
         if (message.index < 0) {
-            root.picker.say(PathBar.fill(PathBar.FILTERED_SENTENCE, root.leaf.substring(root.leaf.lastIndexOf("/") + 1)), true)
+            root.picker.say(Format.fill(PathBar.FILTERED_SENTENCE, root.leaf.substring(root.leaf.lastIndexOf("/") + 1)), true)
             root.leaf = ""
             return
         }

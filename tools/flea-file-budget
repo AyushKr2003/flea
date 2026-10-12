@@ -139,7 +139,7 @@ ui/PickerWindow.qml 797
 ui/Preview.qml 739
 ui/PreviewColumn.qml 585
 ui/PickerChrome.qml 426
-ui/DeviceMounts.qml 528
+ui/DeviceMounts.qml 529
 ui/PreviewMarkdown.qml 625
 ui/Row.qml 496
 ui/SettingsPanel.qml 543
@@ -170,7 +170,7 @@ ui/js/Drag.js 343
 ui/js/Format.js 305
 ui/js/Ops.js 480
 ui/js/Search.js 359
-ui/js/Mounts.js 301
+ui/js/Mounts.js 293
 ui/js/Picker.js 328
 ui/js/Settings.js 459
 ui/js/Scroll.js 304

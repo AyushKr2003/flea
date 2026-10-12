@@ -1,3 +1,4 @@
+.import "../../ui/js/Format.js" as Format
 .import "../../ui/js/PathBar.js" as PathBar
 .import "sourcefixture.js" as Source
 
@@ -59,14 +60,14 @@ function run(check) {
     check("the probe's reply reaches the selection's own handler",
         Source.source("ui/PickerWindow.qml").indexOf("message.id === win.markRequest || message.id === win.pathProbe") >= 0, true)
     // Whole sentences with a placeholder, filled through one helper that keeps a dollar in a name literal.
-    check("the missing sentence is whole", PathBar.fill(PathBar.MISSING_SENTENCE, "/x/y z"), "/x/y z does not exist or cannot be reached.")
-    check("the filter sentence is whole", PathBar.fill(PathBar.FILTERED_SENTENCE, "a.png"),
+    check("the missing sentence is whole", Format.fill(PathBar.MISSING_SENTENCE, "/x/y z"), "/x/y z does not exist or cannot be reached.")
+    check("the filter sentence is whole", Format.fill(PathBar.FILTERED_SENTENCE, "a.png"),
         "a.png is hidden by the file filter or the hidden files setting.")
-    check("a dollar in a name stays literal", PathBar.fill(PathBar.MISSING_SENTENCE, "/a$&b"), "/a$&b does not exist or cannot be reached.")
+    check("a dollar in a name stays literal", Format.fill(PathBar.MISSING_SENTENCE, "/a$&b"), "/a$&b does not exist or cannot be reached.")
     check("each sentence has one placeholder",
         PathBar.MISSING_SENTENCE.split("%1").length === 2 && PathBar.FILTERED_SENTENCE.split("%1").length === 2, true)
     check("the picker says both through the helper",
-        barSrc.indexOf("PathBar.fill(PathBar.MISSING_SENTENCE") >= 0 && barSrc.indexOf("PathBar.fill(PathBar.FILTERED_SENTENCE") >= 0, true)
+        barSrc.indexOf("Format.fill(PathBar.MISSING_SENTENCE") >= 0 && barSrc.indexOf("Format.fill(PathBar.FILTERED_SENTENCE") >= 0, true)
     // What a peek says a line names: a readable folder, a folder that refused the read, a file, or nothing.
     check("a readable folder", PathBar.kindOfPeek(false, 0), "folder")
     check("a folder that refused the read", PathBar.kindOfPeek(true, 16576), "folder")

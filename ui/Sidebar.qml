@@ -98,7 +98,7 @@ Item {
     }
 
     signal opened(string path)
-    // A locked LUKS container is a row: activating it opens the unlock dialog instead of running gio mount on the container, which only fails.
+    // A locked LUKS row opens the unlock dialog instead of running gio mount.
     signal unlockRequested(string device, string label, double size, string fstype)
     // Recent answers bounded newest-first history paths, which the pane opens through listpaths.
     signal recentRequested(var paths, var requester, var visits)
@@ -450,18 +450,10 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
 
-            Text {
+            RailHeading {
                 id: placesHeading
-                x: Style.spacing.rowPaddingX
-                topPadding: Math.ceil(font.pixelSize * 0.15)
-                bottomPadding: Style.spacing.rowGap
                 visible: root.homeEntries.length + root.trashEntries.length > 0
                 text: "PLACES"
-                color: Theme.color.muted
-                font.family: Theme.font.family
-                font.pixelSize: Theme.font.caption
-                font.letterSpacing: 1
-                textFormat: Text.PlainText
             }
             Repeater {
                 id: homeLeadRepeater
@@ -507,18 +499,11 @@ Item {
                 }
             }
 
-            Text {
+            RailHeading {
                 id: favouritesHeading
                 visible: root.userFavouriteEntries.length > 0
-                x: Style.spacing.rowPaddingX
-                topPadding: (placesHeading.visible ? Style.spacing.panelGap : 0) + Math.ceil(font.pixelSize * 0.15)
-                bottomPadding: Style.spacing.rowGap
                 text: "FAVORITES"
-                color: Theme.color.muted
-                font.family: Theme.font.family
-                font.pixelSize: Theme.font.caption
-                font.letterSpacing: 1
-                textFormat: Text.PlainText
+                topExtra: placesHeading.visible ? Style.spacing.panelGap : 0
             }
             Repeater {
                 id: favRepeater
@@ -552,16 +537,10 @@ Item {
                 width: rail.width
                 height: netHeading.implicitHeight + Style.spacing.rowGap
 
-                Text {
+                RailHeading {
                     id: netHeading
-                    x: Style.spacing.rowPaddingX
-                    topPadding: Math.ceil(font.pixelSize * 0.15)
+                    noBottom: true
                     text: "NETWORK"
-                    color: Theme.color.muted
-                    font.family: Theme.font.family
-                    font.pixelSize: Theme.font.caption
-                    font.letterSpacing: 1
-                    textFormat: Text.PlainText
                 }
 
                 // A hand-drawn plus, not a Text "+": at caption size the font glyph read as a Christian cross, not a plus. Sized off the heading's own font token.
@@ -613,18 +592,10 @@ Item {
             }
 
             // Self-hides with its list where lsblk reports no disk, and carries no add mark: nothing here is bookmarked.
-            Text {
+            RailHeading {
                 id: devHeading
                 visible: root.deviceEntries.length > 0
-                x: Style.spacing.rowPaddingX
-                topPadding: Math.ceil(font.pixelSize * 0.15)
-                bottomPadding: Style.spacing.rowGap
                 text: "DEVICES"
-                color: Theme.color.muted
-                font.family: Theme.font.family
-                font.pixelSize: Theme.font.caption
-                font.letterSpacing: 1
-                textFormat: Text.PlainText
             }
 
             Repeater {
