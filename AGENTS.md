@@ -7773,7 +7773,8 @@ the row's own muted role; the font is `Style.font.caption`, `font.bold: true`,
 `font.letterSpacing: 1.2`. The rotation itself is `Timer { interval: 2800 }` driving a
 `SequentialAnimation` of two `PropertyAnimation`s on opacity, 180 ms out (`Easing.OutQuad`) then
 260 ms in (`Easing.InQuad`), with the phrase index advanced by a `ScriptAction` in between, not a
-plain text swap. `ui/EmptyState.qml` now matches all four exactly; the file's own eight-phrase
+plain text swap. `ui/EmptyState.qml` keeps the order, the interval and the index swap, and its fades
+take Flea's OutCubic at `Motion.durMs` (140 ms out, 180 ms in), the curve every Flea transition uses; the file's own eight-phrase
 list stayed sentence case in its source, matching `activePhrases`' own authoring convention, with
 `.toUpperCase()` applied only at render time.
 

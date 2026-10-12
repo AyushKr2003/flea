@@ -120,7 +120,7 @@ Item {
 
         Behavior on scale {
             enabled: !Theme.reducedMotion
-            NumberAnimation { duration: Buttons.PRESS_MS; easing.type: Easing.OutQuad }
+            NumberAnimation { duration: Buttons.PRESS_MS; easing.type: Easing.OutCubic }
         }
 
         readonly property color frame: control.primary

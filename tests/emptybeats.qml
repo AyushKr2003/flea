@@ -59,7 +59,7 @@ ShellRoot {
             host.visible = false
             root.anchor = Date.now()
         }],
-        // Past one 2800 ms interval plus the 180 ms fade-out, so a Timer that ran while hidden would have swapped the phrase.
+        // Past one 2800 ms interval plus the 140 ms fade-out, so a Timer that ran while hidden would have swapped the phrase.
         [3500, function () {
             root.check("no beat while hidden", empty.messageIndex, 3)
             host.visible = true
@@ -77,7 +77,7 @@ ShellRoot {
             host.visible = true
             root.anchor = Date.now()
         }],
-        // Past one 2800 ms interval plus the 180 ms fade-out, so exactly one beat has landed.
+        // Past one 2800 ms interval plus the 140 ms fade-out, so exactly one beat has landed.
         [3500, function () {
             root.check("one beat in before the mid-rotation hide", empty.messageIndex, 7)
             root.hiddenIndex = empty.messageIndex

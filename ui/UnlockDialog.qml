@@ -302,7 +302,7 @@ FocusScope {
                     text: root.noteText
                     textFormat: Text.PlainText
                     wrapMode: Text.Wrap
-                    color: root.noteIsError ? Theme.color.error : Theme.color.muted
+                    color: root.noteIsError ? Theme.color.errorOnSurface : Theme.color.muted
                     font { family: Theme.font.family; pixelSize: Theme.font.caption }
                 }
                 Row {

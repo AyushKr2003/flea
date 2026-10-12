@@ -13,7 +13,7 @@ import tempfile
 import tarfile
 
 COUNTED_WORKER = 'ui/CountedWorker.qml'
-GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color', 'extern-variadic', 'variadic-libc', 'pane-function-value', 'worker-report')
+GATES = ('conflict-marker', 'fused-line', 'paneprops', 'del-printable', 'qml-undeclared-read', 'qml-duplicate-member', 'worker-announce', 'commons-color', 'extern-variadic', 'variadic-libc', 'pane-function-value', 'worker-report', 'easing')
 SUFFIXES = {'.rs', '.qml', '.js', '.sh'}
 # Bound alias propagation so pathological chains cannot keep a source gate running.
 ALIAS_FIXPOINT_CAP = 8
@@ -930,6 +930,23 @@ def commons_color(root, files):
     return scanned, errors
 
 
+# Every transition in ui/ runs on OutCubic; Linear stays for the fixed-rate publish smoothing.
+# Sample input: "easing.type: Easing.OutQuad" and "Easing.InQuad" are rejected; "Easing.OutCubic", "Easing.Linear" and a comment pass.
+def easing(root, files):
+    errors = []
+    scanned = 0
+    for file in files:
+        path = root / file
+        if not file.startswith('ui/') or path.suffix not in ('.qml', '.js') or not path.is_file():
+            continue
+        scanned += 1
+        code = masked(path.read_text(), path.suffix)
+        for m in re.finditer(r'(?<![\w.$])Easing\s*\.\s*(\w+)', code):
+            if m[1] not in ('OutCubic', 'Linear'):
+                errors.append(f'{location(file, code, m.start())}: Easing.{m[1]}, every transition uses Easing.OutCubic')
+    return scanned, errors
+
+
 # Sample input: extern "C" { fn fcntl(fd: c_int, cmd: c_int, arg: c_int) -> c_int; } is rejected;
 # the same declaration with a ... tail passes.
 def extern_variadic(root, files):
@@ -953,7 +970,7 @@ def extern_variadic(root, files):
 
 
 CHECKS = dict(zip(GATES, (conflict_marker, fused_line, paneprops, del_printable, qml_undeclared_read, qml_duplicate_member, worker_announce,
-                          commons_color, extern_variadic, variadic_libc, pane_function_value, worker_report)))
+                          commons_color, extern_variadic, variadic_libc, pane_function_value, worker_report, easing)))
 
 
 def negative_controls(root):
@@ -972,6 +989,7 @@ def negative_controls(root):
         'variadic-libc': ('src/sample.rs', 'extern "C" { fn fcntl(fd: i32, cmd: i32, arg: i32) -> i32; }\n'),
         'pane-function-value': ('ui/js/Sample.js', 'function f(pane, id) { return id !== pane.identityOf }\n'),
         'worker-report': ('RESULT.md', 'run notes\n'),
+        'easing': ('ui/Sample.qml', 'import QtQuick\nItem { NumberAnimation { easing.type: Easing.OutQuad } }\n'),
     }
     errors = []
     script = root / 'tests/staticgates.py'
@@ -1006,6 +1024,7 @@ def negative_controls(root):
                         'variadic-libc': 'non-variadic libc fcntl',
                         'pane-function-value': 'compared without its call',
                         'worker-report': 'worker report tracked at',
+                        'easing': 'every transition uses Easing.OutCubic',
                         'qml-duplicate-member': ('wire declared again (first at 2)' if file.endswith('.js') else 'Duplicate alias name')}[gate]
             if (result.returncode != 1 or expected not in diagnostic or file + ':' not in diagnostic
                     or 'STATICGATES FAIL gates=1' not in result.stdout):

@@ -352,7 +352,7 @@ FocusScope {
                     text: root.terminalError.length > 0 ? root.terminalError : root.footerText
                     textFormat: Text.PlainText
                     elide: Text.ElideRight
-                    color: root.terminalError.length > 0 ? Theme.color.error : Theme.color.foreground
+                    color: root.terminalError.length > 0 ? Theme.color.errorOnSurface : Theme.color.foreground
                     font.family: Theme.font.family
                     font.pixelSize: Theme.font.caption
                 }

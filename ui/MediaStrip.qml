@@ -115,7 +115,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             width: parent.width * root.shown
             height: Theme.spacing.hairline * 2
-            color: Theme.color.accent
+            color: Theme.color.accentFrame
         }
 
         Rectangle {
@@ -123,7 +123,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             width: root.handle
             height: root.handle
-            color: Theme.color.accent
+            color: Theme.color.accentFrame
         }
 
         // Seeks once, on release: seeking on every dragged frame would fight the player's own
