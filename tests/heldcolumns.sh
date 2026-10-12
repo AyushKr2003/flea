@@ -21,8 +21,10 @@ head -n 1 "$root/bin/flea" | grep -q '^#!/usr/bin/env python3$' || { echo 'FAIL 
 chmod +x "$root/bin/flea" || exit 1
 failed=0
 # The native case proves its reading shot is a loading shot by a 5 s bound from the held marker, so the bound has to stay in it: stamped, then the shot, then the check, all inside the case function.
-sed -n '/^case_cap_heldcolumns() {/,/^}/p' tests/ui-captures-states.sh \
-    | awk '/held_at=\$\(date \+%s%3N\)/ { a = 1 } a && /shot "heldcolumns-\$n-reading"/ { b = 1 } b && /\(\( \$\(date \+%s%3N\) - held_at < 5000 \)\)/ { c = 1 } END { exit !c }' \
+body=$(sed -n '/^case_cap_heldcolumns() {/,/^}/p' tests/ui-captures-states.sh)
+line_of() { grep -n -m1 -F -- "$1" <<<"$body" | cut -d: -f1; }
+stamp=$(line_of 'held_at=$(date +%s%3N)') shot=$(line_of 'shot "heldcolumns-$n-reading"') bound=$(line_of '(( $(date +%s%3N) - held_at < 5000 ))')
+[ -n "$stamp" ] && [ -n "$shot" ] && [ -n "$bound" ] && [ "$stamp" -lt "$shot" ] && [ "$shot" -lt "$bound" ] \
     || { echo 'FAIL heldcolumns: ui:cap_heldcolumns lost its 5 s bound from the held marker to the reading shot'; failed=1; }
 n=3
 run="$root/run$n"
