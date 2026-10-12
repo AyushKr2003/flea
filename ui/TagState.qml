@@ -52,12 +52,12 @@ Item {
         return Tags.tagEntries(asked ? Tags.statesFrom(asked.applied, asked.mixed) : {}, Theme.tag.fallback)
     }
 
-    // A selection reaching past the held window asks the backend what its rows carry; the answer redraws the open flyout.
-    function ask() {
+    // A selection past the held window asks what its rows carry (again: re-ask after a write); the answer redraws the flyout.
+    function ask(again) {
         var rows = Ops.targetIndices(root.pane)
         if (rows.length === 0 || root.filesFor(rows) !== null) return
         var key = root.selectionKey()
-        if ((root.asked !== null && root.asked.key === key) || (root.asking !== null && root.asking.key === key)) return
+        if (again !== true && ((root.asked !== null && root.asked.key === key) || (root.asking !== null && root.asking.key === key))) return
         root.askId += 1
         root.asking = { id: root.askId, key: key, listing: root.pane.backend.heldListing }
         root.pane.backend.send({ c: "tagstates", rows: rows, id: root.askId })
@@ -111,13 +111,25 @@ Item {
     function setTaggedDone(message) {
         var change = root.pending.length > 0 ? root.pending[0] : null
         root.pending = root.pending.slice(1)
-        root.asked = null
+        var flyoutUp = root.pane.menuVisible === true
+        // An open flyout keeps drawing its last read until the fresh one lands, so no box blanks between the two.
+        if (!flyoutUp) root.asked = null
         root.asking = null
         if (!change) return
         root.pane.backend.window(root.pane.held, root.pane.windowSize)
+        if (flyoutUp) root.ask(true)
         // The backend sends data and the UI words it: the changed sentence, the skipped one, or both.
         var line = Tags.doneLine(message.op, message.ok || 0, change.tag, message.skipped)
         if (line !== "") root.pane.message(line, false)
+    }
+
+    // A held window that lands while a flyout is up carries the tags just written; the menu's rows source follows it a turn later, so the redraw waits for that turn.
+    Connections {
+        target: root.pane
+        function onRowsChanged() {
+            var menu = root.pane.contextMenu()
+            if (menu.submenuOpen === true) Qt.callLater(function() { menu.refreshProviderRows() })
+        }
     }
 
     Connections {
@@ -128,6 +140,7 @@ Item {
         function onFailed(where, input) {
             if (where === "backend" || where === "read") {
                 root.pending = []
+                root.asked = null
                 root.asking = null
             } else if (where === "settags" || (where === "stale" && input === "settags")) {
                 root.pending = root.pending.slice(1)
