@@ -1,6 +1,7 @@
 pragma Singleton
 
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import QtQuick
 import qs.Commons
@@ -445,6 +446,19 @@ Singleton {
             // The OEM shell's applyTheme runs this beside the two reloads above, and without it a theme that moves decoration:rounding leaves every corner here on the old value.
             Style.scheduleRefresh();
         }
+    }
+
+    // Hyprland reloads its config for a Window Corners, Gaps or Transparency change with no theme switch, so Style's rounding and Glass's mode are read again then.
+    signal configReloaded()
+    function hyprEvent(name) {
+        if (name !== "configreloaded") return;
+        Style.scheduleRefresh();
+        root.configReloaded();
+    }
+    // The Hyprland singleton is only touched inside Hyprland, so a headless run has no socket to join.
+    Connections {
+        target: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") !== null ? Hyprland : null
+        function onRawEvent(event) { root.hyprEvent(event.name) }
     }
 
     // Read once, not watched: the Display section reports the compositor's scale and Flea owns no

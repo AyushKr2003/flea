@@ -161,7 +161,7 @@ ui/SettingsPanel.qml 547
 ui/SettingsRow.qml 409
 ui/Sidebar.qml 710
 ui/StatusBar.qml 472
-ui/Theme.qml 475
+ui/Theme.qml 489
 ui/TrashView.qml 468
 ui/UnlockDialog.qml 450
 ui/ViewState.qml 542

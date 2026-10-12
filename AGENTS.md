@@ -7282,6 +7282,21 @@ c = p*a + m*(1 - a), so what the backdrop adds gives the alpha and the dark chan
 configured alpha, never two stacked. `tests/glass-boot.sh` reads the window the real entry made
 through the seam's `glass` reader, which exists once the first listing has answered.
 
+**Window Transparency and config reloads.** Omarchy's Window Transparency mode (`omarchy-hyprland-window-transparency`) lives in
+`$XDG_STATE_HOME/omarchy/toggles/hypr/window-opaque.lua` or `window-glassy.lua`, neither meaning transparent, its default, and
+`ui/Glass.qml` reads it as a file test, because `OMARCHY_PATH` is missing over ssh and from some launchers. The ground alpha takes
+the first row that applies: the user's own `[flea] background-alpha` in `~/.config/omarchy/shell.toml` (a value that is not a
+number reads as 1, as before the mode existed); opaque, which is 1; glassy, the theme's own value, else `Glass.glassAlpha`, which holds
+1 until the look pick, so Glassy bare draws what Transparent does; transparent, the theme's value, else 1. With no toggle file and no user value Flea draws exactly
+what it drew before. Hyprland reloads its config for a Window Transparency, Window Corners or Window Gaps change with no theme
+switch, and `ui/Theme.qml` listens for the `configreloaded` raw event of `Quickshell.Hyprland` (only inside Hyprland): it runs
+`Style.scheduleRefresh()`, so the corner radius follows, and `Glass.reread()`, so the mode does. A launch that decided on opaque
+holds 1 until the next launch, as before. `tests/glass-mode.sh` runs every precedence row, a reload under a running window, and the
+same reload through a socket speaking Hyprland's event protocol. `tests/theme-contrast.qml` holds muted and metadata text to 4.5 on
+the glass planes over a white and a black backdrop dimmed by glass.lua's blur brightness 0.75, and records each palette's floor, the
+lowest 8-bit alpha above which every step passes: it is 255 for 16 of the 24 palettes, so no translucent ground keeps those at 4.5
+until a look lifts the ink on glass, and a recorded floor only moves down.
+
 ### Plain text filenames
 
 Every filename in `Row.qml` uses `Text.PlainText`. `Text.AutoText` treats markup in a
@@ -9271,3 +9286,5 @@ The Grid Enter port (ge1p) moves one ceiling and two pins, each re-derived: `ui/
 The stage5 dry join settles its pins, each re-derived: `startupObjectLimit` 630 (the probe total once cview's `Connections` went with the Grid cache resolution), `tests/startup-units.txt` bytes 1660488 over 1656568 (cgrid +184, menufill +1165, htrash +82, mountfail +1854, g3ui +47, ge1p +588), the `tools/flea-file-budget` rows by `wc -l` (`ui/GridArea.qml` 658, `ui/Ipc.qml` 986, `ui/FastScrollHandler.qml` 476, `ui/Sidebar.qml` 710, `ui/DeviceMounts.qml` 537, `ui/Theme.qml` 475, and `tests/gridjump.qml` 516 recorded again), and the `tests/staticgates-unqualified.tsv` allowances moved to the merged lines.
 
 The stage5 dry join's menufill and mountfail reds settle in the tests, with no ink moved: `tests/framegap.sh` expects 4660 checks, the 48 rows of the removed `menuCursorFrame` (proved by restoring the frame, which reads 4708), since the cue is now a fill with no frame side to measure and `tests/theme-contrast.qml` pins that a lit row draws no cursor frame; `tests/menu-card-sink.qml` checks the lit hint against a sentinel ink because `labelLit` and `mutedLit` lift to one grey on its fixture; `tests/hidden-release.qml` hears a refusal on `operationResult` error headlines, where `ui/WindowBody.qml` hands it to the status bar's error list, and checks that list.
+
+The glass prep moves one recorded ceiling, re-derived with `wc -l`: `ui/Theme.qml` 465 to 479 for the config-reload listener and its handler, and `tests/startup-units.txt` moves its `bytes` line from 1654071 to 1657143, the sum the probe's tool takes over `ui/Glass.qml` and `ui/Theme.qml` with the mode reader and the listener.
