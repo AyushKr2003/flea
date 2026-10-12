@@ -112,8 +112,8 @@ GridView {
     // Qt emits currentIndexChanged before it frees the old current item; positioning inside it leaves that item behind as a second delegate for its row.
     onCurrentIndexChanged: { root.prebuild.kick(); Qt.callLater(root.revealCursor) }
     function revealCursor() {
-        // StableModel.resize parks currentIndex on row 0 mid-change and a reveal queued then can run inside it; onResized places the view.
-        if (root.visible && !root.hiddenHeld && root.count > 0 && root.cursorView >= 0 && root.currentIndex === root.cursorView) {
+        // StableModel.resize parks currentIndex on row 0 mid-change, so onResized places the view; a far landing waits for its window, which onRowsChanged lands.
+        if (root.visible && !root.hiddenHeld && !root.landingWait && root.count > 0 && root.cursorView >= 0 && root.currentIndex === root.cursorView) {
             root.positionViewAtIndex(root.cursorView, GridView.Contain)
             root.keepLastRowClear(root.cursorView)
         }
@@ -159,7 +159,10 @@ GridView {
         parent: root
         flickable: root
         ctrlWheelAction: function (wheel) { return root.zoomWheel(wheel) }
+        onWheeled: root.endLanding(false)
     }
+    // movementStarted is the view's own drag or flick, never a positionViewAtIndex or contentY write, so the landing's moves do not end its wait.
+    onMovementStarted: root.endLanding(false)
 
     readonly property alias scrollBar: verticalScroll
     Flea.ViewportScrollBar {
@@ -168,6 +171,7 @@ GridView {
         anchors { top: parent.top; right: parent.right }
         flickable: root
         ctrlWheelAction: function (wheel) { return root.zoomWheel(wheel) }
+        onUserScrolled: root.endLanding(false)
     }
 
     Flea.SelectionBand {
@@ -332,16 +336,50 @@ GridView {
     readonly property var windowPlan: GridGeometry.windowFor(root.columns, root.visibleTileRows, root.pane.buffer, Theme.fileRowHeight, root.cellHeightPx, root.pane.refetchMargin)
     // A cursor landing past the held rows asks for its window now, ahead of the move Pane.showRow makes right after, so the first layout binds real rows.
     function askLanding() {
-        if (root.cursorView >= 0 && !root.hiddenHeld)
-            root.askWindow(GridGeometry.landingAsk(root.windowPlan, root.cursorView, root.visibleRange().first, root.pane.total, root.pane.held, root.pane.rows.length))
+        if (root.cursorView < 0 || root.hiddenHeld) return
+        var need = root.landingNeed()
+        // Set before the ask: a reply that beats this call lands the view in onRowsChanged.
+        root.landingWait = need !== null && root.owes()
+        root.landingStart = need === null ? -1 : need.start
+        root.askWindow(need)
+    }
+    // The window a far cursor landing owes, null for a step, a landing the held rows reach, or a view that may not ask.
+    function landingNeed() {
+        return GridGeometry.landingAsk(root.windowPlan, root.cursorView, root.visibleRange().first, root.pane.total, root.pane.held, root.pane.rows.length)
+    }
+    // Owed while the cursor's own row is not held; a landing inside the held rows has rows to bind and moves at once.
+    function owes() { return root.canAsk() && root.pane.rowFor(root.pane.cursorIndex) === null }
+    function windowOwed() { return root.owes() && root.landingNeed() !== null }
+    // The view move of a cursor landing, which Pane.showRow makes right after the ask: a far one waits for its rows, as one pass binds them where two would clear then bind.
+    function showCursor(view, context) {
+        if (!root.landingWait) root.positionViewAtIndex(view, GridView.Contain)
+    }
+    property bool landingWait: false
+    // Where the landing ask's window starts, so its own reply is told from another ask's.
+    property int landingStart: -1
+    // The wait ends on the ask's outcome, rows covering the cursor or not, or its refusal; a wheel, drag, flick or bar press ends it for an ask never answered.
+    function landIfReady() {
+        if (!root.landingWait || (root.windowOwed() && root.pane.held !== root.landingStart)) return
+        root.landingWait = false
+        root.revealCursor()
+    }
+    // A refused or unanswered window leaves the view where it is and frees the drift asks; the operator owns the view from here.
+    function endLanding(reveal) {
+        if (!root.landingWait) return
+        root.landingWait = false
+        if (reveal) root.revealCursor()
+        else coalesce.restart()
     }
     // No window while hidden, while a filter narrows rows already held, nor while a listing is out, whose windows are the directory asked for.
+    function canAsk() { return root.visible && root.pane.total !== 0 && root.pane.shown === null && !root.pane.listInFlight }
     function askWindow(ask) {
-        if (ask !== null && root.visible && root.pane.total !== 0 && root.pane.shown === null && !root.pane.listInFlight)
+        if (ask !== null && root.canAsk())
             root.pane.backend.window(ask.start, ask.count)
     }
 
     function requestIfDrifted() {
+        // The view is parked on the old rows until the landing window arrives; a drift ask from there would fetch the window it left.
+        if (root.landingWait) return
         var range = root.visibleRange()
         root.askWindow(GridGeometry.driftAsk(root.windowPlan, range.first, range.last, root.pane.held, root.pane.rows.length, root.pane.total))
     }
@@ -365,6 +403,7 @@ GridView {
         if (!root.visible) {
             coalesce.stop()
             settle.stop()
+            root.landingWait = false
             root.hiddenHeld = true
             root.buffered = false
             root.restoreY = -1
@@ -375,7 +414,7 @@ GridView {
             root.restoreCursorView()
     }
     // Count changes inside StableModel's layout, where a move refills every tile between the top and the cursor; resized follows it.
-    function modelResized() { root.placeCursor(); root.prebuild.landed() }
+    function modelResized() { root.landingWait = false; root.placeCursor(); root.prebuild.landed() }
     function placeCursor() {
         root.currentIndex = root.cursorView
         if (root.hiddenHeld && root.visible && root.count > 0)
@@ -445,8 +484,14 @@ GridView {
     }
 
     Connections {
+        target: root.pane.backend
+        ignoreUnknownSignals: true
+        function onFailed(where, input, message, mode) { if (where === "window") root.endLanding(true) }
+    }
+
+    Connections {
         target: root.pane
-        function onRowsChanged() { root.takeHeld() }
+        function onRowsChanged() { root.takeHeld(); root.landIfReady() }
         function onRenamingIndexChanged() { root.renameRetirement = null; root.queueRenameLayout() }
         function onRenameRequestChanged() { root.queueRenameLayout() }
         function onFilterQueryChanged() {

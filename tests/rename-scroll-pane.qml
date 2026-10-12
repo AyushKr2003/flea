@@ -90,7 +90,7 @@ QtObject {
     function selectOnly(index, context) { selectedAt = index; setCursor(index, context) }
     // The list, grid and columns branches of Pane.showRow; tests/rename-scroll.sh fails when Pane.qml stops carrying them.
     function showRow(view, context) {
-        if (mode === "grid") listArea.positionViewAtIndex(view, GridView.Contain)
+        if (mode === "grid") listArea.showCursor(view, context)
         else if (mode === "columns") columnsArea.activeColumn().showCursor(view, context)
         else listArea.showCursor(view, context)
         listArea.restartCoalesce()
