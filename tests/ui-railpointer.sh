@@ -225,17 +225,23 @@ railmotion_point() {
     # Hyprland's cursor move sends no pointer frame, so a one pixel seat nudge makes Qt hear the hover.
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null || railmotion_fail "cap_railmotion: ydotool mousemove failed"
 }
+# Scheduling slack added to each rail wait: it absorbs the frame and event-loop delay after a timer fires.
+railmotion_slack_ms=100
 # The rail's own times, read from the code that owns them: the dwell and the open and close slides in ui/js/Motion.js, the settle in ui/PaneRail.qml.
 railmotion_times() {
     local dwell settle open close
+    # Motion.js line "var dwellMs = 120", the dwell in ms.
     dwell=$(sed -nE 's/^var dwellMs = ([0-9]+).*/\1/p' "$flea_ui/js/Motion.js")
+    # Motion.js line "    open: 180,", the open slide in ms (a trailing comma).
     open=$(sed -nE 's/^ *open: ([0-9]+),.*/\1/p' "$flea_ui/js/Motion.js")
+    # Motion.js line "    close: 140", the close slide in ms (the last key, no comma).
     close=$(sed -nE 's/^ *close: ([0-9]+)$/\1/p' "$flea_ui/js/Motion.js")
+    # PaneRail.qml line "    readonly property int settleMs: 220", the settle in ms.
     settle=$(sed -nE 's/^ *readonly property int settleMs: ([0-9]+).*/\1/p' "$flea_ui/PaneRail.qml")
     [[ "$dwell" =~ ^[0-9]+$ && "$open" =~ ^[0-9]+$ && "$close" =~ ^[0-9]+$ && "$settle" =~ ^[0-9]+$ ]] \
         || fail "cap_railmotion: the rail times are not readable (dwell=$dwell open=$open close=$close settle=$settle)"
-    # The reveal is the dwell then the open slide, the hide the settle then the close slide; 100 ms covers the scheduling.
-    rail_reveal_ms=$((dwell + open + 100)); rail_hide_ms=$((settle + close + 100))
+    # The reveal is the dwell then the open slide, the hide the settle then the close slide, each plus the slack.
+    rail_reveal_ms=$((dwell + open + railmotion_slack_ms)); rail_hide_ms=$((settle + close + railmotion_slack_ms))
 }
 railmotion_wait() { sleep "$(printf '%d.%03d' $(($1 / 1000)) $(($1 % 1000)))"; }
 railmotion_walk() {
