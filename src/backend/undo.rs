@@ -77,15 +77,15 @@ pub(crate) fn born_differs(was: Option<(u64, u32)>, now: Option<(u64, u32)>) -> 
 // One reversible step. An operation is a list of these, reversed newest first.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Step {
-    // A rename or a move: the entry now lives at `to` and came from `from`.
-    Moved { from: PathBuf, to: PathBuf, before: ItemIdentity, after: ItemIdentity },
+    // A rename or a move: the entry now lives at `to` and came from `from`; rename_fat says a cross-device redo writes the names below the top as the card's Rename.
+    Moved { from: PathBuf, to: PathBuf, before: ItemIdentity, after: ItemIdentity, rename_fat: bool },
     // This operation created `path`, so reversing it removes that path.
     #[cfg_attr(not(test), allow(dead_code))]
     Created { path: PathBuf },
     // Paste as made `path` a link: undo removes it only while it is still that link.
     Linked { path: PathBuf, identity: ItemIdentity, source: PathBuf, kind: super::link::LinkKind },
-    // manifest_nonce keys the recording backend's in-memory manifest; a merge top refuses the whole-tree fallback instead.
-    Copied { from: PathBuf, to: PathBuf, source: ItemIdentity, created: ItemIdentity, manifest: Option<super::copymanifest::Handle>, manifest_nonce: Option<u64>, merge: bool },
+    // manifest_nonce keys the recording backend's in-memory manifest; a merge top refuses the whole-tree fallback instead; rename_fat says redo writes the names below the top as the card's Rename gave them.
+    Copied { from: PathBuf, to: PathBuf, source: ItemIdentity, created: ItemIdentity, manifest: Option<super::copymanifest::Handle>, manifest_nonce: Option<u64>, merge: bool, rename_fat: bool },
     // This operation made the empty directory `path`; reversing it removes it only while it is still
     // empty, because anything inside it now was put there by someone else, never by this operation.
     MadeDir { path: PathBuf, identity: ItemIdentity },
@@ -471,21 +471,21 @@ pub fn move_back(to: &std::path::Path, from: &std::path::Path) -> Result<(), Fle
 }
 
 pub fn copied(from: &std::path::Path, to: &std::path::Path, source: ItemIdentity) -> Result<Step, FleaError> {
-    Ok(Step::Copied { from: from.to_path_buf(), to: to.to_path_buf(), source, created: ItemIdentity::inspect(to)?, manifest: None, manifest_nonce: None, merge: false })
+    Ok(Step::Copied { from: from.to_path_buf(), to: to.to_path_buf(), source, created: ItemIdentity::inspect(to)?, manifest: None, manifest_nonce: None, merge: false, rename_fat: false })
 }
 
 // A failed or cancelled tree copy carries what it managed to create; a success keeps the plain step.
 pub fn copied_partial(from: &std::path::Path, to: &std::path::Path, source: ItemIdentity, manifest: Option<super::copymanifest::Handle>) -> Result<Step, FleaError> {
-    Ok(Step::Copied { from: from.to_path_buf(), to: to.to_path_buf(), source, created: ItemIdentity::inspect(to)?, manifest, manifest_nonce: None, merge: false })
+    Ok(Step::Copied { from: from.to_path_buf(), to: to.to_path_buf(), source, created: ItemIdentity::inspect(to)?, manifest, manifest_nonce: None, merge: false, rename_fat: false })
 }
 
 // A merge top journals what it created the same way, but never takes the whole-tree fallback.
 pub fn merged_partial(from: &std::path::Path, to: &std::path::Path, source: ItemIdentity, manifest: Option<super::copymanifest::Handle>) -> Result<Step, FleaError> {
-    Ok(Step::Copied { from: from.to_path_buf(), to: to.to_path_buf(), source, created: ItemIdentity::inspect(to)?, manifest, manifest_nonce: None, merge: true })
+    Ok(Step::Copied { from: from.to_path_buf(), to: to.to_path_buf(), source, created: ItemIdentity::inspect(to)?, manifest, manifest_nonce: None, merge: true, rename_fat: false })
 }
 
 pub fn moved(from: &std::path::Path, to: &std::path::Path, before: ItemIdentity) -> Result<Step, FleaError> {
-    Ok(Step::Moved { from: from.to_path_buf(), to: to.to_path_buf(), before, after: ItemIdentity::inspect(to)? })
+    Ok(Step::Moved { from: from.to_path_buf(), to: to.to_path_buf(), before, after: ItemIdentity::inspect(to)?, rename_fat: false })
 }
 
 pub(crate) fn reverse(step: &Step) -> Result<Option<(ItemIdentity, ItemIdentity)>, FleaError> {

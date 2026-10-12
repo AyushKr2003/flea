@@ -86,8 +86,8 @@ fn question_for(id: usize, paths: &[&Path], dest: &Path) -> Question {
             seen.insert(src.to_path_buf(), there);
         }
     }
-    let outer = Question { id, dest: dest.to_path_buf(), seen, menu: None };
-    combine(outer, walk(&owned(paths), dest))
+    let outer = Question { id, dest: dest.to_path_buf(), seen, menu: None, fat: None };
+    combine(outer, walk(&owned(paths), dest, None))
 }
 
 fn policy(word: &str, inner: &str, question: Question, dest: &Path) -> Policy {
@@ -393,3 +393,6 @@ fn move_merge_removes_only_sources_that_landed() {
 
 #[path = "mergefix_tests.rs"]
 mod fixes;
+
+#[path = "mergefat_tests.rs"]
+mod fat_names;

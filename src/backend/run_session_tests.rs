@@ -410,7 +410,7 @@ fn a_locate_after_a_partial_extension_finds_a_row_in_the_held_remainder() {
         };
         let moved = |old: &str, new: &str| {
             let identity = ItemIdentity::record(&std::fs::metadata(d.path().join(new)).expect("the renamed file stats"));
-            Step::Moved { from: d.path().join(old), to: d.path().join(new), before: identity.clone(), after: identity }
+            Step::Moved { from: d.path().join(old), to: d.path().join(new), before: identity.clone(), after: identity, rename_fat: false }
         };
         // Older entry: alpha's reversal finds its old name taken, so it fails after beta's reverts.
         ops.journal.push(Entry { op: "rename".to_string(), steps: vec![moved("alpha-old.txt", "alpha-new.txt"), moved("beta-old.txt", "beta-new.txt")] });

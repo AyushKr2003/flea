@@ -221,6 +221,8 @@ pub struct Durability {
     pub rclone: bool,
     pub file_failed: bool,
     pub batch_syncfs: bool,
+    // True when the card's Rename answer covers this FAT destination, so a tree writes each UTF-8 name below the top as fatnames::sanitize gives it and any other name as it is.
+    pub rename_fat: bool,
     // A failed settle stays failed, so later confirms keep every source.
     unsettled: bool,
     held: Vec<std::fs::File>,
@@ -248,7 +250,7 @@ impl Durability {
             Some(body) => batch_syncfs_for(dest, body, durable, rclone),
             None => false,
         };
-        Durability { durable, rclone, file_failed: false, batch_syncfs, unsettled: false, held: Vec::new(),
+        Durability { durable, rclone, file_failed: false, batch_syncfs, rename_fat: false, unsettled: false, held: Vec::new(),
             wave: Wave::default(), touched: HashSet::new(), last: None }
     }
 

@@ -68,29 +68,23 @@ pub(crate) fn advertise(conn: &mut Conn, registry: u32, globals: &[(&str, u32)])
     }
 }
 
-// Serialises the tests that borrow process-global Wayland names for a fake socket.
-pub(crate) static ENV_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-// Holds the gvfsprefetch env lock then ENV_GUARD, restores both names on drop even after a failed assert.
+// Holds the one lock every writer of the runtime dir takes (gvfs prefetch, TUI warm tests, this) and restores WAYLAND_DISPLAY and XDG_RUNTIME_DIR on drop.
 pub(crate) struct DisplayEnv {
-    _gvfs_env: Box<dyn Send>,
-    _gvfs_lock: std::sync::MutexGuard<'static, ()>,
-    _held: std::sync::MutexGuard<'static, ()>,
     old_display: Option<std::ffi::OsString>,
-    old_runtime: Option<std::ffi::OsString>,
+    // Fields drop in this order: the runtime dir comes back while the lock is still held.
+    _runtime: crate::gvfsprefetch::EnvGuard,
+    _lock: std::sync::MutexGuard<'static, ()>,
 }
 
 impl DisplayEnv {
     pub(crate) fn set(socket: Option<&Path>) -> DisplayEnv {
-        let (gvfs_lock, gvfs_env) = crate::gvfsprefetch::hold_env();
-        let held = ENV_GUARD.lock().unwrap_or_else(|e| e.into_inner());
+        let (lock, runtime) = crate::gvfsprefetch::hold_env();
         let old_display = std::env::var_os("WAYLAND_DISPLAY");
-        let old_runtime = std::env::var_os("XDG_RUNTIME_DIR");
         match socket {
             Some(path) => std::env::set_var("WAYLAND_DISPLAY", path),
             None => std::env::remove_var("WAYLAND_DISPLAY"),
         }
-        DisplayEnv { _gvfs_env: Box::new(gvfs_env), _gvfs_lock: gvfs_lock, _held: held, old_display, old_runtime }
+        DisplayEnv { old_display, _runtime: runtime, _lock: lock }
     }
 }
 
@@ -99,10 +93,6 @@ impl Drop for DisplayEnv {
         match self.old_display.take() {
             Some(old) => std::env::set_var("WAYLAND_DISPLAY", old),
             None => std::env::remove_var("WAYLAND_DISPLAY"),
-        }
-        match self.old_runtime.take() {
-            Some(old) => std::env::set_var("XDG_RUNTIME_DIR", old),
-            None => std::env::remove_var("XDG_RUNTIME_DIR"),
         }
     }
 }

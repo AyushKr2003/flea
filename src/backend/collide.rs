@@ -55,6 +55,8 @@ pub struct Question {
     pub(crate) dest: PathBuf,
     pub(crate) seen: HashMap<PathBuf, ItemIdentity>,
     pub(crate) menu: Option<MenuCapture>,
+    // The card's answer this question was asked under, so the merge walk that follows it compares the names the transfer will write.
+    pub(crate) fat: Option<super::fatnames::Choice>,
 }
 
 // A menu's selection as its question saw it: Copy to closes its dialog, which expires the live one, before the answer lands.
@@ -89,7 +91,7 @@ impl Ask {
             _ => HashMap::new(),
         };
         let inner = self.inner.as_deref().map(Collide::from_word);
-        let on_fat = self.fat.is_some() && super::fatnames::on_fat(dest);
+        let on_fat = super::fatnames::answered_on_fat(self.fat, dest);
         Policy { choice: self.word.as_deref().map(Collide::from_word), inner, fat: self.fat, on_fat,
                  seen: Arc::new(seen), ..Policy::default() }
     }
@@ -144,6 +146,11 @@ impl Policy {
             self.batch = paths.iter().map(PathBuf::from).collect();
         }
         self
+    }
+
+    // Rename on a FAT destination also covers the names inside the folders it copies: the walk below the top writes them under the same rule.
+    pub(crate) fn renames_inside(&self) -> bool {
+        super::fatnames::renames(self.fat, self.on_fat)
     }
 
     // A merge transfer folds folders together; every other choice copies or moves top-level items.
@@ -278,11 +285,11 @@ struct Shown {
 
 // The question itself, read-only: which sources would land on a name dest already holds, under their FAT-renamed names.
 fn ask(id: usize, paths: &[String], dest: &str, fat: Option<super::fatnames::Choice>) -> (Question, Vec<Shown>) {
-    let mut question = Question { id, dest: PathBuf::from(dest), seen: HashMap::new(), menu: None };
+    let mut question = Question { id, dest: PathBuf::from(dest), seen: HashMap::new(), menu: None, fat };
     let mut shown = Vec::new();
     // An unusable destination asks nothing: the transfer that follows answers its own error.
     let Ok(dest_path) = usable_dest(dest) else { return (question, shown) };
-    let on_fat = fat.is_some() && super::fatnames::on_fat(&dest_path);
+    let on_fat = super::fatnames::answered_on_fat(fat, &dest_path);
     let dest_real = dest_path.canonicalize().unwrap_or_else(|_| dest_path.clone());
     for raw in paths {
         let src = Path::new(raw);

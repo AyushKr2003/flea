@@ -266,11 +266,11 @@ fn every_step_kind_round_trips_with_exact_integers() {
     let entry = Entry {
         op: "mixed".to_string(),
         steps: vec![
-            Step::Moved { from: dir.join("a"), to: dir.join("b"), before: id.clone(), after: id.clone() },
+            Step::Moved { from: dir.join("a"), to: dir.join("b"), before: id.clone(), after: id.clone(), rename_fat: false },
             Step::Created { path: dir.join("c") },
             Step::Linked { path: dir.join("d"), identity: id.clone(), source: dir.join("e"),
                 kind: crate::backend::link::LinkKind::Hard },
-            Step::Copied { from: dir.join("f"), to: dir.join("g"), source: id.clone(), created: id.clone(), manifest: None, manifest_nonce: None, merge: false },
+            Step::Copied { from: dir.join("f"), to: dir.join("g"), source: id.clone(), created: id.clone(), manifest: None, manifest_nonce: None, merge: false, rename_fat: false },
             Step::MadeDir { path: dir.join("h"), identity: id.clone() },
             Step::MadeFile { path: dir.join("i"), identity: unborn.clone() },
             Step::Trashed(crate::backend::trash::Entry { original: dir.join("j"), uri: "trash:///j".to_string(), before: Vec::new(), trashed_at: String::new() }),

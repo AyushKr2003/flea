@@ -9,6 +9,7 @@ fn moved_step(from: &Path, to: &Path) -> Step {
         to: to.to_path_buf(),
         before: ItemIdentity::inspect(to).unwrap(),
         after: ItemIdentity::inspect(to).unwrap(),
+        rename_fat: false,
     }
 }
 

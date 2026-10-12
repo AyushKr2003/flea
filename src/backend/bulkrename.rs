@@ -111,7 +111,7 @@ fn move_one_with(from: &Path, to: &Path, before: ItemIdentity, inspect: impl Fn(
     confirm_dir(to);
     // The rename has landed, so an unreadable identity keeps the step with the one it moved with.
     let after = inspect(to).unwrap_or_else(|_| before.clone());
-    Ok(Step::Moved { from: from.to_path_buf(), to: to.to_path_buf(), before, after })
+    Ok(Step::Moved { from: from.to_path_buf(), to: to.to_path_buf(), before, after, rename_fat: false })
 }
 
 // Swaps and cycles ride through temp names in the same folder, so a to b and b to a works.

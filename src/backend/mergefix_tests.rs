@@ -36,7 +36,7 @@ fn walk_names_inner_files_for_the_one_folder_that_merges() {
     d.dir("to/trip");
     d.file("to/trip/a.txt", "there");
     d.file("to/x.txt", "z");
-    let rels: Vec<String> = walk(&owned(&[&trip, &loose]), &to).iter().map(|f| f.rel.clone()).collect();
+    let rels: Vec<String> = walk(&owned(&[&trip, &loose]), &to, None).iter().map(|f| f.rel.clone()).collect();
     assert_eq!(rels, vec!["a.txt".to_string(), "x.txt".to_string()], "one merging folder names its own inners: {:?}", rels);
 }
 
@@ -103,7 +103,7 @@ fn merge_undo_from_another_window_refuses_rather_than_removing_the_destination()
 fn a_merge_step_keeps_its_flag_through_the_shared_doc_and_a_plain_copy_carries_none() {
     let d = TestDir::new("merge-codec");
     let id = ItemIdentity::inspect(d.path()).unwrap();
-    let step = |merge| Step::Copied { from: d.join("a"), to: d.join("b"), source: id.clone(), created: id.clone(), manifest: None, manifest_nonce: Some(7), merge };
+    let step = |merge| Step::Copied { from: d.join("a"), to: d.join("b"), source: id.clone(), created: id.clone(), manifest: None, manifest_nonce: Some(7), merge, rename_fat: false };
     let doc = crate::backend::undoshare::Doc { undo: vec![Entry { op: "copy".into(), steps: vec![step(true), step(false)] }], redo: Vec::new(), push_gen: 0 };
     let text = crate::jsondoc::render(&crate::backend::undocodec::encode(&doc));
     assert_eq!(text.matches("\"merge\"").count(), 1, "only the merge top carries the flag: {text}");

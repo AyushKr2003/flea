@@ -63,17 +63,17 @@ fn link_kind(kind: &super::link::LinkKind) -> &'static str {
 
 fn step(step: &Step) -> Json {
     match step {
-        Step::Moved { from, to, before, after } => obj(vec![
+        Step::Moved { from, to, before, after, rename_fat } => obj(super::fatnames::mark_renamed(vec![
             ("k", s("m")), ("from", s(&from.to_string_lossy())), ("to", s(&to.to_string_lossy())),
             ("before", identity(before)), ("after", identity(after)),
-        ]),
+        ], *rename_fat)),
         Step::Created { path } => obj(vec![("k", s("c")), ("path", s(&path.to_string_lossy()))]),
         Step::Linked { path, identity: id, source, kind } => obj(vec![
             ("k", s("l")), ("path", s(&path.to_string_lossy())), ("id", identity(id)),
             ("src", s(&source.to_string_lossy())), ("kind", s(link_kind(kind))),
         ]),
         // Sample input: {"k":"cp","from":"/a","to":"/b","src":{...},"made":{...},"nonce":7}.
-        Step::Copied { from, to, source, created, manifest_nonce, merge, .. } => {
+        Step::Copied { from, to, source, created, manifest_nonce, merge, rename_fat, .. } => {
             let mut pairs = vec![
                 ("k", s("cp")), ("from", s(&from.to_string_lossy())), ("to", s(&to.to_string_lossy())),
                 ("src", identity(source)), ("made", identity(created)),
@@ -81,7 +81,7 @@ fn step(step: &Step) -> Json {
             if let Some(nonce) = manifest_nonce {
                 pairs.push(("nonce", n(nonce)));
             }
-            obj(super::mergeapply::mark_merge(pairs, *merge))
+            obj(super::fatnames::mark_renamed(super::mergeapply::mark_merge(pairs, *merge), *rename_fat))
         }
         Step::MadeDir { path, identity: id } => obj(vec![
             ("k", s("md")), ("path", s(&path.to_string_lossy())), ("id", identity(id)),
@@ -257,6 +257,7 @@ fn decode_step(value: &Json) -> Option<Step> {
             to: checked_path(get(pairs, "to")?)?,
             before: decode_identity(get(pairs, "before")?)?,
             after: decode_identity(get(pairs, "after")?)?,
+            rename_fat: super::fatnames::decode_renamed(pairs),
         }),
         "c" => Some(Step::Created { path: checked_path(get(pairs, "path")?)? }),
         "l" => {
@@ -282,6 +283,7 @@ fn decode_step(value: &Json) -> Option<Step> {
                 manifest: None,
                 manifest_nonce: get(pairs, "nonce").and_then(parse_u64),
                 merge: super::mergeapply::decode_merge(pairs),
+                rename_fat: super::fatnames::decode_renamed(pairs),
             })
         }
         "md" => Some(Step::MadeDir {
