@@ -72,10 +72,10 @@ function changedLine(op, ok, name) {
     return op === "remove" ? removedLine(ok, name) : statusLine(ok, name)
 }
 
-// The line when rows were skipped: a link row draws as its target, so the fragment counts links, like the done-lines of Ops.js.
+// The line when rows were skipped: the backend leaves out every row that is neither a file nor a folder, so the fragment counts items, not links.
 function skippedLine(names) {
-    if (names.length === 1) return fill("%1 link skipped", Format.count(names.length))
-    return fill("%1 links skipped", Format.count(names.length))
+    if (names.length === 1) return fill("%1 item skipped", Format.count(names.length))
+    return fill("%1 items skipped", Format.count(names.length))
 }
 
 // The whole answer line: the changed sentence, the skip fragment ahead of its undo hint, only the skip when nothing changed, and empty when neither holds.

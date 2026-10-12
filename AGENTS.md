@@ -8933,6 +8933,8 @@ The Network Tab ring moves three ceilings, each re-derived with `wc -l`: `ui/Net
 
 S2FIXA 2026-10-11 raises the first-frame `bytes` line in `tests/startup-units.txt` from 1,596,985 to 1,598,131 (no unit added): stage2 head `d197bdc5` already summed 1,597,661, 676 over the old pin, and this fix adds 470 more, 71 in `ui/Backend.qml` (the archive refusal names its archive) and 399 in `ui/js/Errors.js` (the archive sentence).
 
+S2FIXA round 1 raises the same line from 1,598,131 to 1,598,429 (no unit added): 148 in `ui/WindowBody.qml` and 99 in `ui/NetworkMounts.qml` (their `onPeeked` handlers drop a first-0 crumb device reply) and 51 in `ui/js/Errors.js` (the archive refusal sentence names what stopped).
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one

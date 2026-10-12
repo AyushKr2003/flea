@@ -153,8 +153,8 @@ Item {
         }
         // Issue 194's repair answers here. The chrome answers only the Tab request its own key
         // names and the columns view only ever reads the ancestors it asked for, so sharing the
-        // peek wire costs those readers nothing they would otherwise notice.
-        function onPeeked(path, hidden, total, rows, readFailed, mode) { root.repairPeeked(path, rows, readFailed) }
+        // peek wire costs those readers nothing they would otherwise notice; a first-0 reply is a crumb's device ask, never the repair's own.
+        function onPeeked(path, hidden, total, rows, readFailed, mode, hiddenLast, first) { if (first > 0) root.repairPeeked(path, rows, readFailed) }
     }
 
     function refreshDropbox(facts) {

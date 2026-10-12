@@ -29,13 +29,13 @@ function run(check) {
     check("an add answer says Tagged", Tags.changedLine("add", 2, "Blue"), "Tagged 2 items Blue \u00b7 z undoes")
     check("a remove answer says Removed", Tags.changedLine("remove", 2, "Blue"), "Removed Blue from 2 items \u00b7 z undoes")
     check("a clear answer says all tags", Tags.changedLine("clear", 1, ""), "Removed all tags from 1 item \u00b7 z undoes")
-    check("one skipped row counts one link", Tags.skippedLine(["c.lnk"]), "1 link skipped")
-    check("many skipped rows count links", Tags.skippedLine(["a.lnk", "b.lnk"]), "2 links skipped")
+    check("one skipped row counts one item", Tags.skippedLine(["c.lnk"]), "1 item skipped")
+    check("many skipped rows count items", Tags.skippedLine(["a.lnk", "b.lnk"]), "2 items skipped")
     check("a skip beside a change joins the fragment ahead of the undo hint", Tags.doneLine("add", 2, "Blue", ["c.lnk"]),
-        "Tagged 2 items Blue \u00b7 1 link skipped \u00b7 z undoes")
-    check("two skips beside a change count links", Tags.doneLine("add", 3, "Red", ["a.lnk", "b.lnk"]),
-        "Tagged 3 items Red \u00b7 2 links skipped \u00b7 z undoes")
-    check("a skip with no change says only the skip", Tags.doneLine("add", 0, "Blue", ["c.lnk"]), "1 link skipped")
+        "Tagged 2 items Blue \u00b7 1 item skipped \u00b7 z undoes")
+    check("two skips beside a change count items", Tags.doneLine("add", 3, "Red", ["a.lnk", "b.lnk"]),
+        "Tagged 3 items Red \u00b7 2 items skipped \u00b7 z undoes")
+    check("a skip with no change says only the skip", Tags.doneLine("add", 0, "Blue", ["c.lnk"]), "1 item skipped")
     check("a change with no skip says only the change", Tags.doneLine("remove", 2, "Blue", []), "Removed Blue from 2 items \u00b7 z undoes")
     check("an absent skip list says only the change", Tags.doneLine("add", 1, "Red", undefined), "Tagged 1 item Red \u00b7 z undoes")
     check("no change and no skip says nothing", Tags.doneLine("add", 0, "Red", undefined), "")
