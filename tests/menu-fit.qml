@@ -217,6 +217,18 @@ ShellRoot {
         return out
     }
 
+    // A row's needed width from its own parts, the sum ui/MenuRow.qml's wantedWidth takes; 0 when a row is unbuilt.
+    function neededWidth(rows) {
+        var widest = 0
+        for (var i = 0; i < rows.length; i++) {
+            var r = rows[i]
+            if (!r) return 0
+            if (r.separator) continue
+            widest = Math.max(widest, Math.ceil(r.markLeft + r.slot + r.labelLeft + r.label + r.labelRight + (r.hintWrap ? 0 : r.hint) + r.hintRight + r.status + r.chevron + r.chevronRight))
+        }
+        return widest
+    }
+
     function inside(item, area) {
         return item.x >= area.x && item.x + item.width <= area.x + area.width
             && item.y >= area.y && item.y + item.height <= area.y + area.height
@@ -368,14 +380,14 @@ ShellRoot {
         var tag = s.tag
         if (s.errored) shell.runErrored(s)
         var main = shell.readCard(menu.frameItem, menu.entries.length, menu.itemFor)
-        // The probe carries the frame's wanted width: an errored menu's frame width, else the token.
-        var st = JSON.parse(probe.state())
-        shell.check(tag + ": the probe states the frame wanted width", Math.abs(st.wanted - Math.max(Flea.Theme.menuWidth, main.wanted)) <= shell.roundingSlack, true)
-        shell.check(tag + ": the frame keeps the probe width inside the work area", Math.abs(menu.frameItem.width - Math.min(menu.workArea.width, st.wanted)) <= shell.roundingSlack, true)
-        if (s.errored && !s.narrow)
-            shell.check(tag + ": the probe width is the widened frame width", Math.abs(st.wanted - menu.frameItem.width) <= shell.roundingSlack, true)
+        // The probe carries each row's own parts; the frame is min(area, max(token, their sum)), not widestRow's answer.
+        var st = JSON.parse(probe.state()), need = shell.neededWidth(st.rows)
+        shell.check(tag + ": the probe states every row's parts", need > 0, true)
+        shell.check(tag + ": the frame is the parts' sum between the token and the work area", Math.abs(menu.frameItem.width - Math.min(menu.workArea.width, Math.max(Flea.Theme.menuWidth, need))) <= shell.roundingSlack, true)
+        if (menu.frameItem.width < menu.workArea.width)
+            shell.check(tag + ": the probe reports no elided frame label", st.rows.filter(function (r) { return r && !r.separator && r.labelTruncated }).length, 0)
         if (!s.all && !s.errored)
-            shell.check(tag + ": the probe width of rows that all fit keeps Theme.menuWidth", st.wanted, Flea.Theme.menuWidth)
+            shell.check(tag + ": the parts of rows that all fit stay under Theme.menuWidth", need <= Flea.Theme.menuWidth, true)
         var cards = [{ name: "frame", frame: menu.frameItem, read: main }]
         if (s.flyout)
             cards.push({ name: "flyout", frame: menu.submenuFrameItem,

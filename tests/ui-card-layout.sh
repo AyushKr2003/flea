@@ -223,10 +223,16 @@ OPENER
         menu_width=$(token_of menuWidth) || fail "cardsizes: menu width token observation failed"
         menu_state=$(ipc menuState) || fail "cardsizes: menu state observation failed"
         work_width=$(jq -er '.workArea.width | numbers' <<< "$menu_state") || fail "cardsizes: menu work area observation failed"
-        want_width=$(jq -er '.wanted | numbers' <<< "$menu_state") || fail "cardsizes: menu wanted width observation failed"
-        jq -en --argjson observed "$bw" --argjson token "$menu_width" --argjson wanted "$want_width" --argjson area "$work_width" --argjson rounding 1 \
-            '([$token, $wanted, $area] | all(type == "number" and . > 0)) and (($observed - ([[$token, $wanted] | max, $area] | min | round) | fabs) <= $rounding)' >/dev/null \
-            || fail "cardsizes: menu frame width $bw differs from token $menu_width with wanted $want_width clamped to work area $work_width"
+        # The needed width is the sum of what each row laid out for itself (ui/MenuRow.qml's wantedWidth rule, parts() as drawn), never widestRow's answer.
+        need_width=$(jq -er '[.rows[] | if . == null then error("row not built") elif .separator then empty else
+            (.markLeft + .slot + .labelLeft + .label + .labelRight + (if .hintWrap then 0 else .hint end) + .hintRight + .status + .chevron + .chevronRight | ceil) end] | max | numbers' <<< "$menu_state") \
+            || fail "cardsizes: menu row parts observation failed"
+        jq -en --argjson observed "$bw" --argjson token "$menu_width" --argjson needed "$need_width" --argjson area "$work_width" --argjson rounding 1 \
+            '([$token, $needed, $area] | all(type == "number" and . > 0)) and (($observed - ([[$token, $needed] | max, $area] | min | round) | fabs) <= $rounding)' >/dev/null \
+            || fail "cardsizes: menu frame width $bw differs from token $menu_width with needed $need_width clamped to work area $work_width"
+        jq -e --argjson observed "$bw" --argjson area "$work_width" \
+            '$observed >= $area or ([.rows[] | select(. != null and .separator == false and .labelTruncated == true)] | length == 0)' <<< "$menu_state" >/dev/null \
+            || fail "cardsizes: a menu row label is elided at frame width $bw under work area $work_width"
         shot "cardsizes-menu-$index-$viewport"
         key -k Escape >/dev/null || fail "cardsizes: context menu dismissal failed"
         cardsize_expect contextMenuVisible false
