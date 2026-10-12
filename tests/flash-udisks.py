@@ -257,6 +257,22 @@ check("OpenDevice flags travel as i", (seen.get("method"), getattr(flags_variant
 check("the descriptor answer carries ok", [status for status, _fds in taped.sent], [[helper.STATUS_OK]])
 os.close(seen["fd"])
 
+# A proxy the daemon never hands over still answers the socket, never a traceback.
+taped.sendmsg = lambda data, _anc: taped.sent.append(data)
+
+
+class RefusingProxy:
+    @classmethod
+    def new_for_bus_sync(cls, *args):
+        raise helper.GLib.Error("GDBus.Error:org.freedesktop.DBus.Error.NoReply: daemon is gone")
+
+
+helper.Gio.DBusProxy = RefusingProxy
+taped.sent.clear()
+check("a refused proxy answers error", (helper.cmd_open("sda", "", 0, ""), taped.sent[-1:]),
+      (1, [[helper.STATUS_ERROR]]))
+helper.Gio.DBusProxy = TapedProxy
+
 if failures:
     print("%d failed: %s" % (len(failures), failures))
     sys.exit(1)

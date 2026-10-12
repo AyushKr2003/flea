@@ -123,8 +123,19 @@ pub(crate) fn mounts_clean(dev: &str, mountinfo: &str, swaps: &str, sys: &Path, 
 fn rests_on(source: &str, dev: &str, sys: &Path, devdir: &Path) -> bool {
     let Some(rest) = source.strip_prefix("/dev/") else { return false };
     // The disk itself or one of its partitions by name, sda beside sda1 and nvme0n1 beside nvme0n1p1, when sysfs says nothing.
+    if rest == dev {
+        return true;
+    }
     let tail = rest.strip_prefix(dev).unwrap_or_default();
-    if rest == dev || (!tail.is_empty() && tail.starts_with(|c: char| c.is_ascii_digit() || c == 'p')) {
+    // A digit-ending disk takes pN partitions, so nvme0n10 and loop10 are other disks, the helper's on_drive rule.
+    let named = if tail.is_empty() {
+        false
+    } else if dev.ends_with(|c: char| c.is_ascii_digit()) {
+        tail.len() > 1 && tail.starts_with('p') && tail[1..].chars().all(|c| c.is_ascii_digit())
+    } else {
+        tail.chars().all(|c| c.is_ascii_digit())
+    };
+    if named {
         return true;
     }
     disks_of_source(source, sys, devdir).iter().any(|disk| disk == dev)

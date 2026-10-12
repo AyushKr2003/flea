@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 
 // Linux filename components hold at most 255 bytes, the same bound the TUI batch enforces.
 const NAME_BYTES: usize = 255;
+// The staged names swaps ride through, named in the error when one strands them.
+const TEMP_PREFIX: &str = ".flea-bulk-";
 
 // The landed steps with the batch counts, factored out so the worker outcome stays readable.
 pub(crate) type BulkOutcome = (Vec<Step>, Result<(usize, usize), FleaError>);
@@ -137,7 +139,7 @@ fn execute(items: Vec<Item>) -> (Vec<Step>, Result<usize, FleaError>) {
         let temp = loop {
             counter += 1;
             let candidate = item.source.parent().unwrap_or(Path::new("/"))
-                .join(format!(".flea-bulk-{}-{}-{}", std::process::id(), steps.len(), counter));
+                .join(format!("{TEMP_PREFIX}{}-{}-{}", std::process::id(), steps.len(), counter));
             if sources.contains(&candidate) || dests.contains(&candidate) {
                 continue;
             }
@@ -160,13 +162,29 @@ fn execute(items: Vec<Item>) -> (Vec<Step>, Result<usize, FleaError>) {
     }
     for item in &items {
         let (from, before) = live.get(&item.source).cloned().unwrap_or((item.source.clone(), item.before.clone()));
-        match move_one(&from, &item.dest, before) {
-            Ok(step) => steps.push(step),
-            Err(error) => return (steps, Err(error)),
+        match move_one(&from, &item.dest, before.clone()) {
+            Ok(step) => {
+                live.insert(item.source.clone(), (item.dest.clone(), before));
+                steps.push(step);
+            }
+            Err(error) => return (steps, Err(stranded_error(error, &live))),
         }
     }
     let ok = steps.len();
     (steps, Ok(ok))
+}
+
+// A failed second loop strands what is still staged, so the error names the temp leaves and the undo that restores them.
+fn stranded_error(mut error: FleaError, live: &BTreeMap<PathBuf, (PathBuf, ItemIdentity)>) -> FleaError {
+    let mut temps: Vec<String> = live.values()
+        .filter_map(|(at, _)| at.file_name().map(|n| n.to_string_lossy().to_string()))
+        .filter(|name| name.starts_with(TEMP_PREFIX)).collect();
+    temps.sort();
+    if temps.is_empty() {
+        return error;
+    }
+    error.msg = format!("{} Staged copies remain under {}. Undo restores them.", error.msg, temps.join(", "));
+    error
 }
 
 // Like rename, a batch answers inline on a local mount and on a worker past the deadline on a remote one.

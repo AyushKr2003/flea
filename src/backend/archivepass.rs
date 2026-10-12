@@ -110,7 +110,7 @@ pub fn unpacked_bytes(archive: &Path, formats: &Formats, cancel: &AtomicBool) ->
                 crate::backend::jail::kill_tree(&mut jailed);
                 return None;
             }
-            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+            Ok(None) => std::thread::sleep(PW_POLL),
             Err(_) => {
                 crate::backend::jail::kill_tree(&mut jailed);
                 return None;
@@ -149,7 +149,7 @@ pub fn answer_prompt(child: &mut Child, secret: &str) -> std::io::Result<()> {
 }
 
 // The archive jail around 7z; a secret rides its stdin, None leaves stdin closed. Ok(None) is a clean exit.
-pub fn run_boxed_cancellable_pw(
+pub fn run_boxed_cancellable_password(
     what: &str,
     inner: Vec<String>,
     read_only: &Path,

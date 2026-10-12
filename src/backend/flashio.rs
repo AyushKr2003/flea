@@ -13,7 +13,7 @@ extern "C" {
 // fcntl commands and the status flag, declared here rather than taking a crate.
 const F_GETFL: c_int = 3;
 const F_SETFL: c_int = 4;
-const O_DIRECT: c_int = 0o40000;
+pub(crate) const O_DIRECT: c_int = 0o40000;
 // The errno a write answers when the drive is full.
 const ENOSPC: i32 = 28;
 
