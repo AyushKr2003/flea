@@ -4,6 +4,7 @@ import QtQuick
 import QtTest
 import Quickshell
 import "flea/js/PreviewKeys.js" as PreviewKeys
+import "flea/js/Swap.js" as Swap
 
 // Sample output: "QLHOLD STEP move frames=31 frozen=0 bare=0 loading=9 holds=0 empty=0 caps=1" is one step, judged once it settles.
 // The hold is the window between Space and the card's first frame; no frame in it may draw the card without its content.
@@ -18,11 +19,12 @@ ShellRoot {
         { name: "wheel", file: "d-large.png", act: "wheel" },
         { name: "move", file: "d-large.png", to: "e-large.png" },
         { name: "reopen", file: "d-large.png" },
+        { name: "minshow", file: "b-mid.jpg", act: "press" },
         { name: "stall", file: "b-mid.jpg" },
         { name: "text", file: "f-notes.txt", act: "press" },
         { name: "pdf", file: "h-page.pdf", act: "press" }
     ]
-    // Past the 150 ms cap, so a cap counted from before show() is overdue by the time it returns.
+    // Past the cap, so a cap counted from before show() is overdue by the time it returns.
     readonly property int stallMs: 400
     readonly property int pollMs: 20
     readonly property int quietPolls: 8
@@ -51,6 +53,10 @@ ShellRoot {
     property var before: ({ empty: 0, caps: 0, holds: 0 })
     property double openedAt: 0
     property int landedMs: 0
+    // The early loading state's own clock: when it drew (Preview.loadingSince), when content became ready after it, and when the card landed.
+    property double earlySince: 0
+    property double readyAt: 0
+    property double landedAt: 0
 
     function log(line) { console.log("QLHOLD " + line) }
     function fail(why) { root.failures++; root.log("FAIL " + root.cur().name + ": " + why) }
@@ -110,6 +116,14 @@ ShellRoot {
         }
     }
 
+    // The three moments the minimum show is judged from, read at the instant each property flips.
+    Connections {
+        target: root.stage === 2 ? root.pv() : null
+        function onRevealedEarlyChanged() { if (root.pv().revealedEarly) root.earlySince = root.pv().loadingSince }
+        function onLookReadyChanged() { if (root.pv().lookReady && root.earlySince > 0 && root.readyAt === 0) root.readyAt = Date.now() }
+        function onLandedChanged() { if (root.pv().landed) root.landedAt = Date.now() }
+    }
+
     // A cold compile inside show() runs after Preview's own handler and before the loaders start; the cap must not count it.
     Connections {
         target: root.stallArmed ? root.pv() : null
@@ -122,11 +136,11 @@ ShellRoot {
             while (Date.now() < until) {}
         }
     }
-    // Preview's reveal cap: its one Timer that is neither followSettle nor stripHideTimer.
+    // Preview's reveal cap, found by its objectName among the Timers.
     function capTimer() {
-        var p = root.pv(), r = p.resources
+        var r = root.pv().resources
         for (var i = 0; i < r.length; i++)
-            if (String(r[i]).indexOf("QQmlTimer") === 0 && r[i].interval !== p.followSettleMs && r[i].interval !== p.stripHideMs) return r[i]
+            if (String(r[i]).indexOf("QQmlTimer") === 0 && r[i].objectName === "revealCap") return r[i]
         return null
     }
 
@@ -139,12 +153,20 @@ ShellRoot {
     function moveNow() {
         var cap = root.capTimer()
         if (!cap || !cap.running) return false
+        if (root.pv().revealed) root.fail("the card revealed before the move, so the move was not inside the cap")
+        if (cap.interval !== Swap.CAP_MS) root.fail("the reveal cap is " + cap.interval + " ms, want Swap.CAP_MS " + Swap.CAP_MS)
         root.capFlips = 0
         root.capWatch = cap
         PreviewKeys.act("cursorDown", root.pane())
         root.capWatch = null
         if (root.capFlips !== 0) root.fail("a move during the hold restarted the reveal cap, want the open's deadline kept")
         return true
+    }
+
+    function clock() {
+        root.earlySince = 0
+        root.readyAt = 0
+        root.landedAt = 0
     }
 
     function open() {
@@ -157,6 +179,7 @@ ShellRoot {
         root.quiet = 0
         root.reopened = false
         root.moved = false
+        root.clock()
         root.before = p ? { empty: p.lookEmptyFrames, caps: p.revealCaps, holds: root.swapCount("holds") } : { empty: 0, caps: 0, holds: 0 }
         root.pane().listArea.forceActiveFocus()
         root.stallArmed = s.name === "stall"
@@ -186,11 +209,15 @@ ShellRoot {
         var empty = p.lookEmptyFrames - root.before.empty
         var holds = root.swapCount("holds") - root.before.holds
         root.log("STEP " + s.name + " frames=" + root.frames + " frozen=" + root.frozen + " bare=" + root.bare + " loading=" + root.loading
-            + " holds=" + holds + " empty=" + empty + " caps=" + root.caps() + " early=" + root.early() + " landedMs=" + root.landedMs + (s.name === "stall" ? " capInShow=" + root.capInShow + " capAfterShow=" + root.capAfterShow : ""))
+            + " holds=" + holds + " empty=" + empty + " caps=" + root.caps() + " early=" + root.early() + " landedMs=" + root.landedMs + " stoodMs=" + (root.earlySince > 0 ? root.landedAt - root.earlySince : 0) + " readyMs=" + (root.earlySince > 0 ? root.readyAt - root.earlySince : 0) + (s.name === "stall" ? " capInShow=" + root.capInShow + " capAfterShow=" + root.capAfterShow : ""))
         if (empty !== 0) root.fail(empty + " frame(s) drew the card or dim during the hold, want 0")
         if (root.frozen !== 0) root.fail(root.frozen + " frame(s) revealed a held picture before the content landed, want 0")
         if (root.bare !== 0) root.fail(root.bare + " frame(s) revealed the card with neither content nor the loading state, want 0")
         if (s.name === "move" && holds !== 0) root.fail("a move during the hold took " + holds + " picture(s), want 0")
+        if (root.earlySince > 0 && root.landedAt - root.earlySince < Swap.MIN_SHOW_MS)
+            root.fail("the loading state stood " + (root.landedAt - root.earlySince) + " ms before the content landed, want at least Swap.MIN_SHOW_MS " + Swap.MIN_SHOW_MS)
+        if (s.name === "minshow" && !(root.readyAt > 0 && root.readyAt - root.earlySince < Swap.MIN_SHOW_MS))
+            root.fail(root.earlySince <= 0 ? "the early loading state never drew, so the wait went untested" : root.readyAt <= 0 ? "the content never reported ready, so the wait went untested" : "the content was ready " + (root.readyAt - root.earlySince) + " ms after the reveal, so it did not land inside the minimum and the wait went untested")
         if (s.name === "stall" && root.capAfterShow !== true) root.fail(root.capAfterShow === null ? "found no reveal cap Timer" : "the reveal cap was not counting once show() returned")
         if (s.name === "stall" && root.capInShow !== false) root.fail(root.capInShow === null ? "found no reveal cap Timer" : "the reveal cap was already counting inside show(), so a compile there eats into it")
         if (s.name === "stall" && root.caps() !== 0) root.fail("the cap revealed a picture that landed inside its cap counted from show(), want 0 caps")
@@ -241,6 +268,7 @@ ShellRoot {
                 // Space, Escape, Space: the reopen lands inside the close fade of a card that drew.
                 if (root.cur().name === "reopen" && !root.reopened) {
                     root.reopened = true
+                    root.clock()
                     root.openedAt = Date.now()
                     PreviewKeys.act("escape", pane)
                     PreviewKeys.open(pane)
