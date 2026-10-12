@@ -141,11 +141,18 @@ ShellRoot {
     // The rename editor's frame against the cell that hosts it (a row, a column row, a tile) and the viewport that clips it.
     function measureRename(tag) {
         var host = pane.renameEditor()
-        if (!host) return false
+        // A churn that lost the editor fails here with the churn message, since a lost host never reaches the check below.
+        if (!host) {
+            if (!root.churned) return false
+            root.churned = false
+            root.renameMeasured = false
+            root.check(false, tag + " list editor did not survive a pool churn")
+            return true
+        }
         // The error toggle below queues the tile's height update, so the editor lives one more tick for it to land.
         if (root.renameMeasured) {
             root.renameMeasured = false
-            // A prebuild create pools and reuses the shown rows, within a frame and again one frame on; the open editor stays on its row.
+            // A prebuild create pools and reuses the shown rows; the open editor stays on its row.
             if (root.churned) root.check(pane.renamingIndex === root.extensionIndex() && pane.renameEditor() !== null, tag + " list editor did not survive a pool churn")
             root.churned = false
             return true
