@@ -236,8 +236,7 @@ Item {
                 return
             var next = ExtThumbs.thumbReply(pane.thumbState, row, file, pane.thumbCap, pane.storageKnown, pane.storageClass, ViewState.preview)
             pane.thumbState = next.state
-            // A lost prefetch is visible work again, so the settled view re-plans it in full, never as a prefetch.
-            // The re-plan never prefetches, so this cannot ask twice in one rest.
+            // A lost prefetch is visible work again: the settled view re-plans it in full and never as a prefetch, so it asks once per rest.
             if (next.missed && pane.listArea) pane.listArea.restartSettle()
         }
 
