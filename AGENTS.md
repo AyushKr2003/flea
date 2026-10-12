@@ -8931,6 +8931,8 @@ The release-line join of the approved fix, bench, search, picker and Flash strip
 
 The Network Tab ring moves three ceilings, each re-derived with `wc -l`: `ui/NetworkDialog.qml` 447 to 457 for the ids, `tabHandle` and `onTabbed` lines that put Cancel, the primary and Install Dropbox in the form's walk after the TLS box, with Escape moved from the form to the card's content so a focused button closes the dialog too, and `ui/NetworkForm.qml` 406 to 413 for the `trailing` prop, the joined ring, the pass-over step and the button labels in `focusName`, and `tests/button-members.qml` 445 to 485 for the trailing-walk checks that Tab from TLS reaches each button and wraps to the first chip, Backtab returns, an unavailable button is passed over and `focusName` names the focused button.
 
+drp4 2026-10-11 raises the first-frame `bytes` line in `tests/startup-units.txt` from 1,596,985 to 1,598,921 (+1,936, no unit added): +1,260 are the recorded hover-open destination in `ui/FileDrag.qml` (`dropDest`, `dropDestDev`) and `ui/RowDrag.qml` (`lit()` and `landing()`, the recorded address `refuseDrop()` and `dropped()` read), both loaded by the first window; the other 676 were already over the old pin on the DRP3 head `4d1132c3`.
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one

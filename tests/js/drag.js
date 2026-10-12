@@ -361,6 +361,14 @@ function run(check) {
     check("cap_drops Columns parent row reads a move", Drag.feedbackLine(capColumn, "deep", 56),
         "Move 1 item to deep · ctrl at lift copies")
 
+    // The two sentences ui:cap_dropmods waits on in the second window, from a plain and a ctrl lift made in the first (one device).
+    check("cap_dropmods b1 reads a move over sub2 before ctrl",
+          Drag.feedbackLine(Drag.feedbackFor("another-flea\n0\nmove\n/cap-dropmods\n56\n1\n0", ["file:///cap-dropmods/b1.txt"], "", Qt.MoveAction), "sub2", 56),
+          "Move 1 item to sub2 · ctrl at lift copies")
+    check("cap_dropmods b2 reads a copy over sub2 before shift",
+          Drag.feedbackLine(Drag.feedbackFor("another-flea\n0\ncopy\n/cap-dropmods\n56\n1\n0", ["file:///cap-dropmods/b2.txt"], "", Qt.CopyAction), "sub2", 56),
+          "Copy 1 item to sub2")
+
     // Drops.html specimens e and f specify this exact move hint, including when Ctrl is read.
     var boardHover = Drag.feedbackFor("another-flea\n0\nmove\n/source\n56\n1\n0", ["file:///source/a.txt"], "", Qt.CopyAction)
     check("Drops040 cross-window move status matches the approved board",
