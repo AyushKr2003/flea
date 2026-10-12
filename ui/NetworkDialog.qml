@@ -203,8 +203,8 @@ Item {
         return root.retrying ? "Retry" : "Connect and save"
     }
     function formMetrics() { return Math.round(card.padding) + "|" + Math.round(body.spacing) }
-    // "contentY|contentHeight|height" of the scrolling body, so a test sees the clamp and the scroll.
-    function bodyScroll() { return Math.round(body.contentY) + "|" + Math.round(body.contentHeight) + "|" + Math.round(body.height) }
+    // "contentY|contentHeight|height" of the scroller between the pinned title and buttons, so a test sees the clamp and the scroll.
+    function bodyScroll() { return Math.round(body.contentY) + "|" + Math.round(body.contentHeight) + "|" + Math.round(body.scrollItem.height) }
     function formMetricTargets() { return Style.space(16) + "|" + Style.space(12) }
 
     // Dialogs rule 6: the title says what you are doing, so it survives a chip swap; the two entry
