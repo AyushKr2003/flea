@@ -47,8 +47,7 @@ function run(check) {
 
     var recent = fresh("/")
     recent.recentMode = "results"
-    var recentRun = Source.block(Source.source("ui/js/RecentMode.js"), "function run(pane, paths, visits)", "ui/js/RecentMode.js")
-    check("Recent answers its own empty slot as it opens", /pane\.fsName = ""[\s\S]*pane\.fsAnswered = true/.test(recentRun), true)
+    // tests/js/recentmode.js pins that Recent opens with its empty slot answered.
     recent.fsAnswered = true
     answer(recent, "/", "btrfs")
     check("Recent refuses a line and keeps its empty slot answered", recent.fsName + "|" + recent.fsAnswered, "|true")
