@@ -40,7 +40,5 @@ function pathLeaves(paths) {
     return out
 }
 
-// What a second password request is told while a card is open, one template filled once.
-function cardBusySentence(verb) {
-    return "Another password card is open. Answer it, then %1 again.".replace("%1", verb)
-}
+// What a second password request is told while a card is open, one sentence for compress and extract alike.
+var CARD_BUSY = "Another archive is waiting for its password. Enter it, then try again."

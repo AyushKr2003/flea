@@ -6,10 +6,10 @@ function run(check) {
     var calls = []
     var root = { slowOp: function(op, path, msg) { calls.push([op, path, msg]) },
         renamed: function() {}, made: function() {}, linked: function() {} }
-    Messages.route(root, {t: "slow", op: "rename", path: "/hung/a.txt", msg: "/hung is slow. The rename continues and will finish on its own."})
+    Messages.route(root, {t: "slow", op: "rename", path: "/hung/a.txt", msg: "/hung is slow. The rename will finish on its own."})
     check("a slow line reaches the slow handler with its op, path and sentence",
           JSON.stringify(calls),
-          JSON.stringify([["rename", "/hung/a.txt", "/hung is slow. The rename continues and will finish on its own."]]))
+          JSON.stringify([["rename", "/hung/a.txt", "/hung is slow. The rename will finish on its own."]]))
     calls = []
     Messages.route(root, {t: "slow"})
     check("a slow line with no fields still reaches the handler rather than throwing",

@@ -1,6 +1,7 @@
 .pragma library
 
 .import "DropDev.js" as DropDev
+.import "Menu.js" as Menu
 
 // Every line the backend sends, turned into the signal the front end listens for. Split out of
 // ui/Backend.qml, which owns the socket, the requests and the signals themselves: the routing is a
@@ -14,7 +15,8 @@ function route(root, message) {
         var landed = sized(message)
         root.rows(message.start, landed, message.ms, message.kinds || [], message.listing || 0, message.gen || 0)
     } else if (message.t === "error") {
-        root.failed(message.where, message.path, message.msg, message.mode || 0)
+        // The backend names an empty clipboard by code, so the one sentence lives in Menu.EMPTY_CLIPBOARD.
+        root.failed(message.where, message.path, message.code === "emptyclipboard" ? Menu.EMPTY_CLIPBOARD : message.msg, message.mode || 0)
     } else if (message.t === "localsendpeers") {
         root.localSendPeers(message.peers || [], message.reason || "")
     } else if (message.t === "localsendsent") {

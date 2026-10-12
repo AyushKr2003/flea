@@ -9050,6 +9050,8 @@ tbn1 2026-10-12 moves one ceiling, re-derived with `wc -l`: `tests/js/tabs.js` 7
 
 S2FIXA 2026-10-11 raises the first-frame `bytes` line in `tests/startup-units.txt` from 1,629,680 to 1,630,201 (no unit added), the sum the probe takes over the same units: 71 in `ui/Backend.qml` (the archive refusal names its archive) and 450 in `ui/js/Errors.js` (the archive refusal sentence names what stopped).
 
+The Q8 copy pass of 0.3.10 moves the first-frame `bytes` line in `tests/startup-units.txt` from 1596965 to 1597296 (+331, no unit added): `ui/Pane.qml` names the no-window sentence once in `noWindowSentence` and shows `Menu.EMPTY_CLIPBOARD` for an empty Paste as, both of which the first window already loads. The round 1 fix fills the "Could not open" refusal in `ui/js/Places.js` in one pass, so a favourite label holding `%2` or `$&` prints literally, for the remaining +32.
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one

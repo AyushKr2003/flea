@@ -136,7 +136,7 @@ mod tests {
             assert_eq!(field_str(&line, "t").as_deref(), Some("clip"));
             assert_eq!(field_str(&line, "op").as_deref(), Some("set"));
             assert!(line.contains(r#""ok":false"#));
-            assert!(line.contains(if op == "move" { "the clipboard operation is copy or cut" } else { "absolute" }));
+            assert!(line.contains(if op == "move" { "the clipboard operation must be copy or cut" } else { "absolute" }));
         }
         let (tx, _rx) = std::sync::mpsc::channel();
         request_clear(tx, String::new(), Vec::new());

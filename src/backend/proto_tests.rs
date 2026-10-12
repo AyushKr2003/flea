@@ -322,6 +322,11 @@ fn emits_an_error_line_naming_operation_and_path() {
         error_line_with_mode(&e, 0),
         r#"{"t":"error","where":"scan","path":"/root","msg":"permission denied"}"#
     );
+    // A typed cause rides after msg, the same way.
+    assert_eq!(
+        error_line_with_code(&e, "emptyclipboard"),
+        r#"{"t":"error","where":"scan","path":"/root","msg":"permission denied","code":"emptyclipboard"}"#
+    );
 }
 
 #[test]
@@ -344,8 +349,8 @@ fn a_jump_request_carries_both_client_sources_and_a_bare_one_carries_none() {
 #[test]
 fn slow_names_its_op_path_and_sentence() {
     assert_eq!(
-        slow_line("rename", "/hung/a.txt", "/hung is slow. The rename continues and will finish on its own."),
-        r#"{"t":"slow","op":"rename","path":"/hung/a.txt","msg":"/hung is slow. The rename continues and will finish on its own."}"#
+        slow_line("rename", "/hung/a.txt", "/hung is slow. The rename will finish on its own."),
+        r#"{"t":"slow","op":"rename","path":"/hung/a.txt","msg":"/hung is slow. The rename will finish on its own."}"#
     );
 }
 

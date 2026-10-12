@@ -735,7 +735,7 @@ FocusScope {
             menu[root.cursorRow ? "openAt" : "openBackground"](root.listSlot.mapToItem(null, root.listSlot.width / 2, root.listSlot.height / 2))
         if (!menu.clipboardAvailable) {
             menu.close()
-            root.message("There is nothing to paste; y copies and x cuts.", false)
+            root.message(Menu.EMPTY_CLIPBOARD, false)
             return
         }
         menu.openSubmenuFor("pasteAs")
@@ -1146,12 +1146,13 @@ FocusScope {
 
     // Opening an executable file asks once, in the window's one card; see ui/WindowBody.qml.
     // A null host is a loud refusal, never a call into nothing; every product pane names one.
+    readonly property string noWindowSentence: "This pane has no window, so nothing was done."
     function askRunCard(info) {
-        if (!root.overlayParent) { root.message("The run card has no window to open in.", true); return }
+        if (!root.overlayParent) { root.message(root.noWindowSentence, true); return }
         root.overlayParent.askRunCard(root, info)
     }
     function runText(path) {
-        if (!root.overlayParent) { root.message("The run card has no window to open in.", true); return }
+        if (!root.overlayParent) { root.message(root.noWindowSentence, true); return }
         root.overlayParent.runLane().openText(path, root)
     }
     // Without a path Open with opens over the cursor; with one the card snapshots the row that path still names.

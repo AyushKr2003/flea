@@ -346,7 +346,7 @@ fn a_menu_question_captures_the_selection_its_transfer_runs_on_after_the_menu_cl
     assert!(asked.contains(r#""total":1,"names":[{"n":"photo.png""#), "the menu's own selection is what is asked about: {}", asked);
     let mut out = Vec::new();
     crate::backend::opsdispatch::start_menu_transfer(&mut out, &mut ops, "copy", 5, &dest, Ask { word: Some("keep".into()), id: 99, inner: None, fat: None });
-    assert!(String::from_utf8_lossy(&out).contains("Menu selection expired"), "a transfer naming another question gets no capture");
+    assert!(String::from_utf8_lossy(&out).contains(crate::backend::menu_actions::SELECTION_CHANGED), "a transfer naming another question gets no capture");
     out.clear();
     crate::backend::opsdispatch::start_menu_transfer(&mut out, &mut ops, "copy", 5, &dest, Ask { word: Some("keep".into()), id: 7, inner: None, fat: None });
     assert!(String::from_utf8_lossy(&out).contains(r#""t":"transferstarted""#), "{}", String::from_utf8_lossy(&out));

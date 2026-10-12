@@ -5,8 +5,8 @@ use crate::paths::percent_decode_bytes;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 
-// The whole sentence undo refuses with when something already stands where the trashed item was.
-pub(crate) const RESTORE_TAKEN: &str = "something already stands where that item was, so undo left it in the Trash";
+// The whole sentence undo refuses with when an item already has the trashed item's name.
+pub(crate) const RESTORE_TAKEN: &str = "an item with that name is already there, so undo left it in the Trash";
 
 // None means this entry is not one the home Trash proves, so gio restores it exactly as before.
 pub(crate) fn restore_from_home(entry: &Entry) -> Option<Result<(), String>> {

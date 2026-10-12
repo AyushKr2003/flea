@@ -1,5 +1,5 @@
 // Dispatch for the five write operations: one runs at a time, because the status bar has one sticky slot for it.
-use crate::backend::iomount::{internal_failure, mount_body, mount_key, slow_sentence, slow_write_with, CALL_DEADLINE, SlowWrite};
+use crate::backend::iomount::{internal_failure, mount_body, mount_key, slow_sentence, slow_write_with, CALL_DEADLINE, SlowWrite, SLOW_MKDIR, SLOW_RENAME};
 use crate::backend::ops;
 use crate::backend::opsreq::{
     duplicated_line, made_line, op_err, renamed_line, run_duplicate_checked, run_transfer_checked, run_trash, trashed_line,
@@ -229,7 +229,7 @@ fn forget_pending(ops: &mut Ops, id: usize) {
 
 pub(crate) fn menu_sources(ops: &Ops, id: usize) -> Result<Option<Vec<super::menu_actions::Selected>>, String> {
     if id == 0 { return Ok(None); }
-    ops.menuactions.as_ref().ok_or_else(|| "Menu selection expired; reopen the menu.".to_string())
+    ops.menuactions.as_ref().ok_or_else(|| super::menu_actions::SELECTION_CHANGED.to_string())
         .and_then(|menu| menu.selection(id)).map(Some)
 }
 
@@ -280,7 +280,7 @@ pub(crate) fn start_duplicate(out: &mut impl Write, ops: &mut Ops, path: &str, m
 
 // Rename answers on the calling thread; rclone directory compatibility may copy before removing its source.
 pub(crate) fn do_menu_rename(out: &mut impl Write, ops: &mut Ops, path: &str, to: &str, id: usize) -> Vec<PathBuf> {
-    let checked = ops.menuactions.as_ref().ok_or_else(|| "Menu selection expired; reopen the menu.".to_string())
+    let checked = ops.menuactions.as_ref().ok_or_else(|| super::menu_actions::SELECTION_CHANGED.to_string())
         .and_then(|menu| menu.selected_path(id, Path::new(path)))
         .and_then(|item| item.current());
     if let Err(error) = checked {
@@ -317,7 +317,7 @@ where
     match slow_write_with(&key, &body, "rename", deadline, work) {
         SlowWrite::Ready(result) => land_rename(out, ops, result),
         SlowWrite::Slow { mount, rx } => {
-            writeln!(out, "{}", slow_line("rename", path, &slow_sentence(&mount, "rename"))).ok();
+            writeln!(out, "{}", slow_line("rename", path, &slow_sentence(&mount, SLOW_RENAME))).ok();
             out.flush().ok();
             // The pending id is only a number: the slot stays with whatever holds it, so a transfer beside this write keeps its id and its cancel.
             let id = ops.claim_id();
@@ -378,7 +378,7 @@ where
     match slow_write_with(&key, &body, "mkdir", deadline, work) {
         SlowWrite::Ready(result) => land_mkdir(out, ops, result),
         SlowWrite::Slow { mount, rx } => {
-            writeln!(out, "{}", slow_line("mkdir", parent, &slow_sentence(&mount, "mkdir"))).ok();
+            writeln!(out, "{}", slow_line("mkdir", parent, &slow_sentence(&mount, SLOW_MKDIR))).ok();
             out.flush().ok();
             // The pending id is only a number: the slot stays with whatever holds it, so a transfer beside this write keeps its id and its cancel.
             let id = ops.claim_id();
@@ -961,7 +961,7 @@ mod tests {
         assert!(matches!(&message, OpMsg::MenuDeleteDone { .. }));
         report_op(&mut buf, &mut o, message);
         assert!(o.live.running().is_none());
-        assert!(text(&buf).contains("expired"));
+        assert!(text(&buf).contains(crate::backend::menu_actions::SELECTION_CHANGED));
     }
 
     #[test]
@@ -996,7 +996,7 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&foreign).unwrap(), "foreign");
         buf.clear();
         do_menu_rename(&mut buf, &mut o, &first.to_string_lossy(), "wrong", 4);
-        assert!(text(&buf).contains("expired"));
+        assert!(text(&buf).contains(crate::backend::menu_actions::SELECTION_CHANGED));
         assert!(!d.join("wrong").exists());
     }
 
@@ -1594,7 +1594,7 @@ mod tests {
         let waited = started.elapsed();
         let line = text(&buf);
         assert!(line.contains(r#""t":"slow""#), "a held rename answers slow, never an error: {}", line);
-        assert!(line.contains("is slow"), "the slow line carries its sentence: {}", line);
+        assert!(line.contains(" is slow. The rename will finish on its own."), "the slow line carries its sentence: {}", line);
         assert!(line.contains(r#""op":"rename""#), "the slow line names its op: {}", line);
         assert!(waited >= crate::backend::iomount::CALL_DEADLINE, "the slow line waits out the deadline: {:?}", waited);
         assert!(waited < crate::backend::iomount::CALL_DEADLINE + SLOW_MARGIN, "the slow line answers at the deadline: {:?}", waited);
@@ -1634,6 +1634,7 @@ mod tests {
         do_mkdir_with(&mut buf, &mut o, &parent, SHORT_DEADLINE, work);
         let line = text(&buf);
         assert!(line.contains(r#""t":"slow""#), "a held mkdir answers slow, never an error: {}", line);
+        assert!(line.contains(" is slow. The new folder will finish on its own."), "the mkdir line is its own sentence: {}", line);
         assert!(line.contains(r#""op":"mkdir""#), "the slow line names its op: {}", line);
         assert!(o.journal.is_empty(), "nothing is journalled until the held write lands");
         drop(release);
@@ -2138,7 +2139,7 @@ mod tests {
         let msg = rx.recv_timeout(LAND_BOUND).expect("the delete answers through the op channel");
         let mut late = out();
         report_op(&mut late, &mut o, msg);
-        assert!(text(&late).contains("expired"), "a delete elsewhere reaches the menu's own expiry: {}", text(&late));
+        assert!(text(&late).contains(crate::backend::menu_actions::SELECTION_CHANGED), "a delete elsewhere reaches the menu's own expiry: {}", text(&late));
         assert!(!text(&late).contains("already running"), "a delete elsewhere is never the gate: {}", text(&late));
         assert!(o.live.running().is_none(), "the expired delete frees the slot it claimed");
         // A compress naming the held mount waits before any tool runs.

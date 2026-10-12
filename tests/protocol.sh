@@ -772,11 +772,11 @@ collide_fixture
 # A snapshot publishes from the menu worker and answers nothing, so its step alone waits a fixed second; the app takes it when the menu opens.
 out=$(backend_steps "$(printf '{"c":"list","path":"%s/from","first":10}' "$CO")" 'wait:"t":"rows"' '{"c":"menuaction","op":"snapshot","id":4,"rows":[2]}' 'do:sleep 1' \
   "$(printf '{"c":"collisions","id":7,"menuId":4,"dest":"%s/to"}' "$CO")" 'wait:"t":"collisions"' '{"c":"menuaction","op":"close","id":4}' \
-  "$(printf '{"c":"transfer","op":"copy","menuId":4,"dest":"%s/to"}' "$CO")" 'wait:Menu selection expired' \
+  "$(printf '{"c":"transfer","op":"copy","menuId":4,"dest":"%s/to"}' "$CO")" 'wait:Selected items changed' \
   "$(printf '{"c":"transfer","op":"copy","menuId":4,"dest":"%s/to","collide":"keep","collideId":7}' "$CO")" 'wait:"t":"transferdone"' \
   "$(printf '{"c":"collisions","id":8,"menuId":4,"dest":"%s/to"}' "$CO")" 'wait:"id":8')
 check "a menu question names the menu's own selection" '"id":7,"total":1,"names":[{"n":"photo.png"' "$(echo "$out" | grep -oE '"id":7,"total":[0-9]+,"names":\[\{"n":"[^"]+"')"
-check "the close expired the live selection in this same process" "1" "$(echo "$out" | grep -c '"where":"transfer","path":"","msg":"Menu selection expired; reopen the menu."')"
+check "the close expired the live selection in this same process" "1" "$(echo "$out" | grep -c '"where":"transfer","path":"","msg":"Selected items changed; reopen the menu."')"
 check "and its transfer runs on what it captured after the menu closed" '"ok":1,"failed":0,"skipped":0' "$(echo "$out" | grep -oE '"ok":[0-9]+,"failed":[0-9]+,"skipped":[0-9]+')"
 check "keeping both beside the name that was there" "yours" "$(cat "$CO/to/photo copy.png" 2>/dev/null)"
 check "a menu selection that is not there asks nothing" '{"t":"collisions","id":8,"total":0,"names":[],"mergeable":false}' "$(echo "$out" | grep '"id":8')"
