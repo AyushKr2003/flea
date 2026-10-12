@@ -22,8 +22,14 @@ printf '9\n' > "$test_root/active-pid" || exit 1
 cat > "$test_root/bin/hyprctl" <<'EOF'
 #!/usr/bin/env bash
 case "$1" in
+  cursorpos) echo "230, 100" ;;
   activewindow) [[ -s "$XDG_RUNTIME_DIR/active-fail" ]] && exit 1; printf '{"class":"com.thisisgm.flea","pid":%s}' "$(cat "$XDG_RUNTIME_DIR/active-pid")" ;;
-  *) [[ -s "$XDG_RUNTIME_DIR/clients-fail" ]] && exit 1; cat "$XDG_RUNTIME_DIR/clients.json" ;;
+  *) [[ -s "$XDG_RUNTIME_DIR/clients-fail" ]] && exit 1
+     if [[ -s "$XDG_RUNTIME_DIR/clients-fail-second" ]]; then
+       printf 'call\n' >> "$XDG_RUNTIME_DIR/clients-calls"
+       [[ $(wc -l < "$XDG_RUNTIME_DIR/clients-calls") -ge 2 ]] && exit 1
+     fi
+     cat "$XDG_RUNTIME_DIR/clients.json" ;;
 esac
 EOF
 chmod +x "$test_root/bin/hyprctl" || exit 1
@@ -42,6 +48,7 @@ case "$pid:$method" in
   9:rowCentre) echo "200 $((40 + arg * 20))" ;;
   5:path) echo /fix/dir ;;
   9:path) echo /fix/dir-two ;;
+  9:statusActivityState) cat "$XDG_RUNTIME_DIR/activity9.json" ;;
   5:lastMessage) echo 'Copied 1 item · z undoes' ;;
   9:lastMessage) echo 'Opened' ;;
   *) exit 1 ;;
@@ -130,7 +137,7 @@ reset_logs
 printf 'DROPMODSBOX PASS barepress=armed-and-cleared\n'
 # The drag line is matched whole: a move line carries its " · ctrl at lift copies" tail, so a suffix match never saw it.
 actstate="$test_root/activity.json"
-ipc() { [[ "$1" == statusActivityState ]] && cat "$actstate"; }
+ipc() { case "$1" in statusActivityState) cat "$actstate" ;; columnNames) cat "$test_root/column-$2" ;; esac; }
 cap_dropmods_wait_s=1
 printf '%s' '{"activities":[{"id":0,"text":"Move 1 item to sub · ctrl at lift copies","running":false}]}' > "$actstate"
 cap_dropmods_before="[]"
@@ -164,6 +171,16 @@ out=$( fail() { printf '%s' "$*"; exit 9; }; cap_dropmods_probe_clear_of 50 50 )
 out=$( fail() { printf '%s' "$*"; exit 9; }; cap_dropmods_probe_clear_of 200 200 )
 [[ $? -eq 9 && "$out" == "cap_dropmods: the parked probe covers the source point 200,200, so the press would miss the row" ]] || fail "a covered point read '$out'"
 printf 'DROPMODSBOX PASS probe_clear_of=names-missing-doubled-unreadable\n'
+# One reading serves both checks: a hyprctl whose second call fails can no longer reach the cover message, and it makes one call.
+printf 1 > "$test_root/clients-fail-second"
+: > "$test_root/clients-calls"
+out=$( fail() { printf '%s' "$*"; exit 9; }; cap_dropmods_probe_clear_of 200 200 )
+[[ $? -eq 9 && "$out" == "cap_dropmods: the parked probe covers the source point 200,200, so the press would miss the row" ]] || fail "a point inside the probe read '$out' when only the second hyprctl call fails"
+[[ $(wc -l < "$test_root/clients-calls") -eq 1 ]] || fail "probe_clear_of called hyprctl $(wc -l < "$test_root/clients-calls") times, want one reading"
+: > "$test_root/clients-calls"
+( cap_dropmods_probe_clear_of 50 50 ) || fail "a point outside the probe was refused when only the second hyprctl call fails"
+: > "$test_root/clients-fail-second"
+printf 'DROPMODSBOX PASS probe_clear_of=one-reading\n'
 # A hold marks the status activities first, and the target wait reads the line the drag names, new activities only.
 printf '%s' '{"activities":[{"id":3,"text":"Move 1 item to Photos · ctrl at lift copies","running":false}]}' > "$actstate"
 cap_dropmods_before="[]"
@@ -279,4 +296,42 @@ printf '[Trash Info]\nPath=case/Pasted%%20image%%202026-10-12%%20at%%2010.14.32.
 printf 'DROPMODSBOX PASS trash_chain=runner-trap-survives\n'
 HOME=$real_home
 unset -f stat
-printf 'DROPMODSBOX DONE checks=14 failed=0\n'
+# A hover line is read from the window it names: window 9 says its row line, the newest-window stub says another.
+printf '%s' '{"activities":[{"id":7,"text":"Move 1 item to sub2 · ctrl at lift copies","running":false}]}' > "$test_root/activity9.json"
+cap_dropmods_wait_s=1
+cap_dropmods_before="[]"
+( cap_dropmods_wait_line "Move 1 item to sub2 · ctrl at lift copies" 9 ) || fail "window 9 did not give its own hover line"
+( fail() { exit 9; }; cap_dropmods_wait_line "Move 1 item to sub2 · ctrl at lift copies" ) >/dev/null 2>&1
+[[ $? -eq 9 ]] || fail "the newest-window stub was credited with the line of window 9"
+cap_dropmods_mark 9
+[[ "$cap_dropmods_before" == "[7]" ]] || fail "mark of window 9 read '$cap_dropmods_before', want [7]"
+( fail() { exit 9; }; cap_dropmods_wait_line "Move 1 item to sub2 · ctrl at lift copies" 9 ) >/dev/null 2>&1
+[[ $? -eq 9 ]] || fail "a line already present at the mark of window 9 was taken for a new drag"
+cap_dropmods_before="[]"
+printf '%s' '{"activities":[{"id":8,"text":"Move 1 item to dir-two · ctrl at lift copies","running":false}]}' > "$test_root/activity9.json"
+out=$( fail() { printf '%s' "$*"; exit 9; }; cap_dropmods_wait_line "Move 1 item to sub2 · ctrl at lift copies" 9 )
+[[ $? -eq 9 && "$out" == *"status lines: Move 1 item to dir-two · ctrl at lift copies; pointer 230, 100, window 9 box 30"* ]] || fail "a hover on the wrong target read '$out'"
+printf 'DROPMODSBOX PASS hover_line=read-by-pid-names-pointer\n'
+# A file that never landed names where a file of that name did.
+cap_dropmods_file_s=1
+mkdir -p "$test_root/two/sub2" || exit 1
+: > "$test_root/two/b1.txt"
+out=$( fail() { printf '%s' "$*"; exit 9; }; cap_dropmods_wait_file "$test_root/two/sub2/b1.txt" "$test_root/two" )
+[[ $? -eq 9 && "$out" == *"never landed (a file of that name exists at: $test_root/two/b1.txt )" ]] || fail "a copy that landed one folder up read '$out'"
+: > "$test_root/two/sub2/b1.txt"
+( cap_dropmods_wait_file "$test_root/two/sub2/b1.txt" "$test_root/two" ) || fail "a landed file was not found"
+printf 'DROPMODSBOX PASS wait_file=names-where-it-landed\n'
+# The child column draws the folder under the cursor: a name is waited for in the slot it will be dragged from, and a miss shows what the slot drew.
+cap_drops_column_s=1
+printf '%s' 'inner|p1.txt|p2.txt' > "$test_root/column-child"
+printf '%s' 'deep|Photos|a.txt' > "$test_root/column-parent"
+( cap_drops_wait_column child p1.txt && [[ "$cap_drops_names" == "inner|p1.txt|p2.txt" ]] ) || fail "the child column's own names were not found"
+( cap_drops_wait_column parent deep && [[ "$cap_drops_names" == "deep|Photos|a.txt" ]] ) || fail "the parent column's own names were not found"
+printf '%s' '' > "$test_root/column-child"
+out=$( fail() { printf '%s' "$*"; exit 9; }; cap_drops_wait_column child p1.txt )
+[[ $? -eq 9 && "$out" == "cap_drops: the child column never listed p1.txt (it drew: )" ]] || fail "an empty child column read '$out'"
+printf '%s' 'p1.txt.bak|xp1.txt' > "$test_root/column-child"
+( fail() { exit 9; }; cap_drops_wait_column child p1.txt ) >/dev/null 2>&1
+[[ $? -eq 9 ]] || fail "a name that only contains p1.txt was taken for p1.txt"
+printf 'DROPMODSBOX PASS wait_column=whole-name-in-its-slot\n'
+printf 'DROPMODSBOX DONE checks=18 failed=0\n'
