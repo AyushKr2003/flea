@@ -750,4 +750,34 @@ mod tests {
         assert_eq!(map.len(), 2, "both widths survive");
         assert!(map.iter().any(|(k, _)| k == "size"), "size survives date landing");
     }
+
+    fn volume_of(doc: &Json) -> Option<f64> {
+        doc.get("preview").and_then(|p| p.get("volume")).and_then(Json::as_f64)
+    }
+
+    // preview.volume is the media level, 0 to 100, and 100 is the full-scale output a file without the key plays at.
+    #[test]
+    fn a_preview_volume_survives_a_write_and_a_file_without_one_reads_full_scale() {
+        assert_eq!(volume_of(&from_file("{}")), Some(100.0));
+        for level in ["0", "37", "100"] {
+            let patch = jsondoc::parse(&format!(r#"{{"preview":{{"volume":{}}}}}"#, level)).expect("patch parses");
+            let written = patched(&from_file("{}"), &patch).expect("a whole level lands");
+            let expected = level.parse::<f64>().ok();
+            assert_eq!(volume_of(&written), expected, "the patched document holds {}", level);
+            assert_eq!(volume_of(&from_file(&text(&written))), expected, "{} reads back after the file is written", level);
+        }
+    }
+
+    #[test]
+    fn a_preview_volume_that_is_not_a_whole_level_reads_full_scale_and_a_patch_for_it_is_refused() {
+        for bad in ["101", "-1", "37.5", r#""loud""#] {
+            let stored = format!(r#"{{"preview":{{"volume":{},"thumbSize":"large"}}}}"#, bad);
+            let read = from_file(&stored);
+            assert_eq!(volume_of(&read), Some(100.0), "{} falls back to full scale", bad);
+            assert_eq!(read.get("preview").and_then(|p| p.get("thumbSize")).and_then(Json::as_str), Some("large"));
+            let patch = jsondoc::parse(&format!(r#"{{"preview":{{"volume":{}}}}}"#, bad)).expect("patch parses");
+            let message = patched(&from_file("{}"), &patch).expect_err("a patch from Flea must be whole");
+            assert!(message.contains("volume"), "got {}", message);
+        }
+    }
 }

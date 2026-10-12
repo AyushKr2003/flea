@@ -66,6 +66,8 @@ SettingsHint 1.0 SettingsHint.qml
 SettingsRuler 1.0 SettingsRuler.qml
 SettingsSegment 1.0 SettingsSegment.qml
 MediaStrip 1.0 MediaStrip.qml
+MediaTrack 1.0 MediaTrack.qml
+MediaVolume 1.0 MediaVolume.qml
 MenuRow 1.0 MenuRow.qml
 MenuEdgeFade 1.0 MenuEdgeFade.qml
 RenameField 1.0 RenameField.qml
