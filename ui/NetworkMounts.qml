@@ -151,9 +151,8 @@ Item {
                 root.refreshDropboxAccount()
             }
         }
-        // Issue 194's repair answers here. The chrome answers only the Tab request its own key
-        // names and the columns view only ever reads the ancestors it asked for, so sharing the
-        // peek wire costs those readers nothing they would otherwise notice; a first-0 reply is a crumb's device ask, never the repair's own.
+        // Issue 194's repair shares the peek wire with a crumb's first-0 device ask, so the two race on one signal;
+        // a first-0 reply is never the repair's, and landing it would repair on the crumb's answer.
         function onPeeked(path, hidden, total, rows, readFailed, mode, hiddenLast, first) { if (first > 0) root.repairPeeked(path, rows, readFailed) }
     }
 

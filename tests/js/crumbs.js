@@ -158,14 +158,14 @@ function run(check) {
     askRoot.dest = "/media/other"
     destChanged()
     check("a destination change under a drag asks for the new one", asked.join(","), "/media/usb|0,/media/other|0")
-    // A crumb made before its pane marks nothing asked, so the pane's arrival still gets its ask.
+    // askDev with no pane sends nothing and marks nothing asked, so the call that does have one still asks.
     var late = { dest: "/media/usb", destDev: 0, asked: "", containsDrag: true, crumb: {}, pane: null }
     late.askDev = new Function("root", "return function () {" + Source.block(dropSrc, "function askDev()", "ui/CrumbDrop.qml") + "}")(late)
     late.askDev()
-    check("a crumb with no pane yet asks nothing and marks nothing asked", late.asked + "|" + asked.length, "|2")
+    check("askDev with no pane asks nothing and marks nothing asked", late.asked + "|" + asked.length, "|2")
     late.pane = peekPane
     late.askDev()
-    check("and asks once its pane arrives", asked.slice(2).join(","), "/media/usb|0")
+    check("and the next askDev call with a pane asks once", asked.slice(2).join(","), "/media/usb|0")
     var landBody = Source.block(dropSrc, "function landDev(path, first, readFailed, dev)", "ui/CrumbDrop.qml")
     function landed(dest, path, first, readFailed, dev) {
         var root = { dest: dest, destDev: 0 }
@@ -191,10 +191,16 @@ function run(check) {
     function emit(handler, first) {
         handler.apply(null, declared.map(function (name) { return { path: "/p", hidden: false, total: 0, rows: [], readFailed: false, mode: 0, hiddenLast: false, first: first, dev: 1 }[name] }))
     }
-    emit(chromeHandler, 0)
-    emit(repairHandler, 0)
-    check("a crumb's first-0 reply reaches neither the bar's completion nor the mount repair", seen.length, 0)
-    emit(chromeHandler, 200)
-    emit(repairHandler, 512)
-    check("while their own replies still do", seen.join(","), "chrome /p,repair /p")
+    // Firsts the real askers send: TabBar tabDropPeekFirst, Pane.windowSize floor (1 row + 2 minBuffer), NetworkMounts 512 (:319, :605) and 1 (:828).
+    var tabFirst = Number(/readonly property int tabDropPeekFirst: *(\d+)/.exec(Source.source("ui/TabBar.qml"))[1])
+    var winFirst = 1 + 2 * Number(/readonly property int minBuffer: *(\d+)/.exec(Source.source("ui/Pane.qml"))[1])
+    var askers = [["chrome Tab completion at tabDropPeekFirst", chromeHandler, tabFirst], ["chrome Tab completion at windowSize", chromeHandler, winFirst],
+                  ["repair at 512", repairHandler, 512], ["repair at 1", repairHandler, 1]]
+    askers.forEach(function (asker) {
+        seen.length = 0
+        emit(asker[1], asker[2])
+        var own = seen.length
+        emit(asker[1], 0)
+        check(asker[0] + " lands its own reply and drops a first-0 reply", own + "|" + (seen.length - own), "1|0")
+    })
 }
