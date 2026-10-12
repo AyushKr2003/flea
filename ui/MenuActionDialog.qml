@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import "." as Flea
 import "js/Format.js" as Format
+import "js/PropertyFacts.js" as PropertyFacts
 
 // Menu-only actions share the existing card, field and button language.
 FocusScope {
@@ -13,6 +14,8 @@ FocusScope {
     property int requestId: 0
     property string folder: ""
     property var facts: ({})
+    // A folder's walk as the card knows it, null for anything else; the Size and Contains lines read it as it moves.
+    property var walk: null
     property string errorText: ""
     property bool busy: false
     property bool committing: false
@@ -21,6 +24,8 @@ FocusScope {
     readonly property bool inputAction: action === "newFile" || action === "moveTo" || action === "copyTo"
     readonly property bool deletionActive: action === "deletePermanently" && committing
     readonly property bool canSubmit: !busy && inputAction && field.text.length > 0
+    // The lines that change in place while the folder counts; the model names them and is not rebuilt as the count moves.
+    readonly property var liveLines: facts.ok ? ({size: PropertyFacts.size(facts.bytes, walk), contains: PropertyFacts.contains(walk)}) : ({})
     readonly property string title: ({moveTo: "Move to", copyTo: "Copy to", properties: "Properties", newFile: "New File", deletePermanently: "Delete permanently"})[action] || ""
     readonly property var cardItem: card
     readonly property var confirmationItem: confirmation
@@ -38,6 +43,7 @@ FocusScope {
         requestId = identity
         folder = parentPath
         focusHolder = holder
+        walk = null
         facts = ({})
         errorText = ""
         checkPending = false
@@ -54,11 +60,13 @@ FocusScope {
     // Two dialogs share the one request id, so this one answers only for the ops it asked for:
     // routing an Open with reply in here closed a Properties card that had just opened over it.
     readonly property var ownedOps: ["properties", "prepareDelete", "refreshDelete", "checkDelete",
-                                     "delete", "validate", "newFile", ""]
+                                     "delete", "validate", "newFile", "contents", ""]
     function receive(message) {
         if ((!opened && !deletionActive) || message.id !== requestId || message.op === "close") return
         if (root.ownedOps.indexOf(message.op === undefined ? "" : message.op) < 0) return
         if (deletionActive && message.op !== "delete") return
+        // A late count after the card left Properties changes nothing; a refused one ends as the floor already counted.
+        if (message.op === "contents") { if (walk) walk = PropertyFacts.next(walk, message); return }
         busy = false
         committing = false
         if (!message.ok) {
@@ -80,7 +88,12 @@ FocusScope {
             return
         }
         if (message.op === "delete") { deleted(Object.assign({count: facts.count}, message)); finish(); return }
-        if (message.op === "properties") { facts = message; return }
+        if (message.op === "properties") {
+            walk = message.directory ? PropertyFacts.begin(message) : null
+            facts = message
+            if (walk) requested({c: "menuaction", op: "contents", id: requestId})
+            return
+        }
         if (message.op === "validate") { approved(message); close(); return }
         if (message.op === "newFile") created(message.path)
         close()
@@ -234,7 +247,8 @@ FocusScope {
                     model: root.action === "properties" && root.facts.ok ? [
                         ["Path", root.facts.path],
                         ["Type", root.facts.kind],
-                        ["Size", Format.size(root.facts.bytes) + " (" + root.facts.bytes + " bytes)"],
+                        ["Size", "", "size"],
+                        ...(root.facts.directory ? [["Contains", "", "contains"]] : []),
                         ["Modified", Format.date(root.facts.modified)],
                         ["Permissions", root.facts.mode],
                         ["Owner", (root.facts.owner || "Unknown") + " (uid " + root.facts.uid + ")"],
@@ -246,7 +260,15 @@ FocusScope {
                         required property var modelData
                         width: body.holderWidth
                         Text { width: parent.width; text: parent.modelData[0]; textFormat: Text.PlainText; color: Theme.color.muted; font { family: Theme.font.family; pixelSize: Theme.font.caption } }
-                        Text { width: parent.width; text: parent.modelData[1]; textFormat: Text.PlainText; wrapMode: Text.WrapAnywhere; color: Theme.color.foreground; font { family: Theme.font.family; pixelSize: Theme.font.body } }
+                        Text {
+                            readonly property var line: parent.modelData.length > 2 ? root.liveLines[parent.modelData[2]] : null
+                            width: parent.width
+                            text: line ? PropertyFacts.styled(line, Theme.color.muted) : parent.modelData[1]
+                            textFormat: line ? Text.StyledText : Text.PlainText
+                            wrapMode: Text.WrapAnywhere
+                            color: Theme.color.foreground
+                            font { family: Theme.font.family; pixelSize: Theme.font.body }
+                        }
                     }
                 }
                 Text {

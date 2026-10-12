@@ -17,6 +17,7 @@ src/backend/searchsession.rs 397
 src/backend/tagsreq_tests.rs 383
 src/backend/copyfile_tests.rs 694
 src/backend/durable.rs 803
+src/backend/dirsize.rs 412
 src/backend/durable_tests.rs 1305
 src/backend/jump_tests.rs 487
 src/backend/renamecompat.rs 706
@@ -24,7 +25,7 @@ src/backend/gvfslist.rs 513
 src/backend/imagesize.rs 473
 src/backend/iomount.rs 613
 src/backend/localsend.rs 406
-src/backend/menu_actions.rs 641
+src/backend/menu_actions.rs 644
 src/backend/menu_registry.rs 564
 src/backend/meta.rs 551
 src/backend/metareq.rs 416

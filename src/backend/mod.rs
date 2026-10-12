@@ -65,6 +65,8 @@ pub mod picker;
 pub mod menu_actions;
 mod menu_slot;
 pub(crate) mod menu_registry;
+mod menucontents;
+mod walkmounts;
 mod menudelete;
 pub mod trashbrowse;
 pub mod trashdelete;
