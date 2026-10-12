@@ -86,7 +86,7 @@ tests/js/tap.js 401
 tests/js/uistate.js 370
 tests/js/watch.js 540
 tests/js/xwwatch.js 299
-tests/js/tabs.js 710
+tests/js/tabs.js 797
 tests/js/search.js 336
 tests/button-members.qml 488
 tests/chromering.qml 413
@@ -133,7 +133,7 @@ ui/NetworkDialog.qml 457
 ui/NetworkForm.qml 413
 ui/NetworkMounts.qml 901
 ui/OpenWithDialog.qml 613
-ui/Pane.qml 1214
+ui/Pane.qml 1215
 ui/PaneMenuActions.qml 490
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
@@ -147,7 +147,7 @@ ui/Row.qml 496
 ui/SettingsPanel.qml 543
 ui/SettingsRow.qml 409
 ui/Sidebar.qml 729
-ui/StatusBar.qml 463
+ui/StatusBar.qml 471
 ui/Theme.qml 443
 ui/TrashView.qml 468
 ui/UnlockDialog.qml 441
@@ -176,7 +176,7 @@ ui/js/Mounts.js 298
 ui/js/Picker.js 328
 ui/js/Settings.js 461
 ui/js/Scroll.js 304
-ui/js/Tabs.js 720
+ui/js/Tabs.js 738
 ui/js/UiState.js 435
 ui/TabBar.qml 640
 ui/boot/fleatab.qml 50

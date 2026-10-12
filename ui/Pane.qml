@@ -414,6 +414,7 @@ FocusScope {
     property var history: []
     property var forwardHistory: []
     property var tabs: null
+    property int tabCountNotice: -1
     readonly property bool canGoBack: trashHost.opened || root.recentMode.length > 0 || root.history.length > 0
     readonly property bool canGoUp: root.path.length > 1 || root.recentMode.length > 0 || Nav.climbsFromListing(root)
 
