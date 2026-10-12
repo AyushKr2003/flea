@@ -289,6 +289,31 @@ ShellRoot {
         root.reset()
     }
 
+    function hover(index, x, y) { var p = root.at(index, x, y); driver.mouseMove(grid, p.x, p.y, 1, Qt.NoButton, Qt.NoModifier) }
+
+    // Hover lights a tile on its icon box and painted caption only; a pointer on the bare margin of its cell lights nothing, and moving off the margin onto the icon lights it.
+    function hoverProbe(index, tag) {
+        var t = root.tile(index), icon = t.thumbItem, text = t.captionItem
+        var iconBox = icon.mapToItem(t, 0, 0), box = text.mapToItem(t, 0, 0)
+        var painted = Math.min(text.width, text.contentWidth)
+        var iconAt = [iconBox.x + icon.width / 2, iconBox.y + icon.height / 2]
+        var captionAt = [box.x + text.width / 2, box.y + 3]
+        var marginAt = [iconBox.x - 3, iconBox.y + icon.height / 2]
+        root.expect(tag + " is not the cursor", t.cursor, false)
+        root.expect(tag + " caption paints a width", painted > 0, true)
+        root.gestures += 4
+        root.hover(index, marginAt[0], marginAt[1])
+        root.expect(tag + " margin is not hovered", t.hovered, false)
+        root.hover(index, iconAt[0], iconAt[1])
+        root.expect(tag + " icon box is hovered after the margin", t.hovered, true)
+        root.hover(index, marginAt[0], marginAt[1])
+        root.expect(tag + " margin is not hovered after the icon", t.hovered, false)
+        root.hover(index, captionAt[0], captionAt[1])
+        root.expect(tag + " caption is hovered", t.hovered, true)
+        root.hover(index, 2, 2)
+        root.expect(tag + " corner is not hovered after the caption", t.hovered, false)
+    }
+
     // A tile that renames keeps every press on its editor row, the text field and the cell beside it: no band, no background menu, and its own handlers stay off.
     function renameProbe(index) {
         var pane = root.stubPane, menu = root.stubMenu, t = root.tile(index)
@@ -374,6 +399,7 @@ ShellRoot {
         var c = grid.columns
         root.expect("the grid has middle columns", c >= 4, true)
         root.sweep("unscrolled", false)
+        root.hoverProbe(root.plainIndex, "plain")
 
         // Scrolled past a tile row, viewport and content coordinates differ: a tile's icon still owns its menu, a margin still owns the band and the background menu.
         grid.contentY = Math.round(grid.cellHeight * 1.25)
@@ -383,6 +409,7 @@ ShellRoot {
         for (p = 0; p < scrolled.length; p++)
             root.probe(scrolled[p][0], scrolled[p][1], scrolled[p][2], scrolled[p][3], scrolled[p][4], true)
         root.sweep("scrolled", true)
+        root.hoverProbe(2 * c + 2, "scrolled plain")
         root.renameProbe(2 * c + 2)
         root.listPresses()
         root.report()
@@ -392,7 +419,7 @@ ShellRoot {
         for (var f = 0; f < root.failures.length; f++)
             console.log("GRIDBARE FAIL " + root.failures[f])
         if (root.failures.length === 0)
-            console.log("GRIDBARE PASS gestures=" + root.gestures + " icon=hit caption=short,wrapped margin=band")
+            console.log("GRIDBARE PASS gestures=" + root.gestures + " icon=hit caption=short,wrapped margin=band hover=icon,caption")
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
 }

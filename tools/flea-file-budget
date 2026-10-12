@@ -104,6 +104,7 @@ tests/rename-grid-bottom.qml 438
 tests/rename-grid-bottom.js 344
 tests/ring-bounds.qml 678
 tests/search-live.qml 419
+tests/gridbare.qml 425
 tests/sidebar-flows.qml 473
 tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
@@ -113,7 +114,7 @@ ui/ColumnsArea.qml 539
 ui/ColumnPane.qml 438
 ui/ContextMenu.qml 751
 ui/ConvertDialog.qml 446
-ui/GridArea.qml 481
+ui/GridArea.qml 484
 ui/Ipc.qml 966
 tests/gridprebuild.qml 458
 tests/columnsprebuild.qml 416

@@ -184,7 +184,7 @@ GridView {
         property int markRow: -1
         // Built ahead of a landing past the shown rows: parked and unparented until the landing adopts it.
         property bool prebuilt: false
-        // Where a press, tap or drag reaches this tile; hover keeps the whole cell.
+        // Where hover, a press, a tap or a drag reaches this tile: its icon box and painted caption.
         readonly property QtObject pressMask: QtObject { function contains(point: point): bool { return root.hitsTile(cell, point) } }
         Component.onCompleted: if (!root.prebuild.built(cell)) cursorMark.place(cell)
         Component.onDestruction: root.prebuild.gone(cell)
@@ -209,10 +209,14 @@ GridView {
         onRenameCommitted: function(newName) { root.pane.commitRename(newName) }
         onRenameAbandoned: root.pane.renamingIndex = -1
 
-        HoverHandler {
-            id: hover
-            // Disabled while pooled, so a reused tile starts unhovered as a new one does.
-            enabled: cell.live && root.pane.selectionBand === null
+        Item {
+            anchors.fill: parent
+            containmentMask: cell.pressMask
+            HoverHandler {
+                id: hover
+                // Disabled while pooled, so a reused tile starts unhovered as a new one does.
+                enabled: cell.live && root.pane.selectionBand === null
+            }
         }
 
         Item {
