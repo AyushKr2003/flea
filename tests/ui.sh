@@ -565,7 +565,8 @@ terminal_shown='["delete","moveto","copyto","properties","permissions","copyAs",
 # DEFAULTS' twelve less placeMenu, runScript and extThumbs; an exact-row-list case seeds this.
 menu_shipped='["delete","openTerminal","moveto","copyto","properties","permissions","copyAs","pasteAs","invertSelection"]'
 
-launch() {
+# launch() without its IPC wait, for a case that reads the window before the seam exists.
+launch_window() {
     local start_path="$1"
     kill_flea
     cat "$flea_log" >> "$run_log" 2>/dev/null || true
@@ -577,8 +578,12 @@ launch() {
         setsid nohup "$flea_bin" --gui "$start_path" >"$flea_log" 2>&1 </dev/null &
     omarchy-drive wait window flea --timeout 15 >/dev/null
     omarchy-drive focus flea >/dev/null
+}
+
+launch() {
+    launch_window "$1"
     assert_window
-    printf 'LAUNCH path=%q pid=%s\n' "$start_path" "$(flea_pid)"
+    printf 'LAUNCH path=%q pid=%s\n' "$1" "$(flea_pid)"
 }
 
 wait_listing() {
