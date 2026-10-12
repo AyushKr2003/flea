@@ -169,7 +169,7 @@ sys.exit(0 if r.get('pickerView')==sys.argv[2] else 1)
 PY
             then echo 'FAIL remembered view was not persisted for restart'; failures=$((failures+1)); fi
         fi
-        warnings=$(printf '%s\n' "$output" | grep -E 'TypeError|ReferenceError|Unable to assign|Cannot anchor to an item' || true)
+        warnings=$(printf '%s\n' "$output" | grep -E 'TypeError|ReferenceError|Unable to assign|Cannot anchor to an item|Binding loop detected' || true)
         if [ -n "$warnings" ]; then printf 'FAIL picker binding warning: %s\n' "$warnings"; failures=$((failures+1)); fi
     done
 done
