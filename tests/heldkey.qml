@@ -164,25 +164,13 @@ ShellRoot {
     Component { id: gridView; Flea.GridArea { pane: root.stubPane; menu: menuStub.createObject(root) } }
     Component { id: columnsView; Flea.ColumnsArea { pane: root.stubPane; menu: menuStub.createObject(root) } }
 
-    // The ListView or GridView that draws the pane's own listing: the view itself, or the columns view's active column.
-    function listingView() {
-        if (root.which !== "columns") return viewLoader.item
-        var found = null
-        function walk(o) {
-            if (found || !o) return
-            if (o.viewport !== undefined && o.pane === root.stubPane) { found = o.viewport; return }
-            for (var i = 0; o.children && i < o.children.length; i++) walk(o.children[i])
-        }
-        walk(viewLoader.item)
-        return found
-    }
     // The pane's own showRow, through the real view: the cursor scrolls as it steps.
     function showRowTo(view, context) {
         if (root.which === "columns") {
             var col = viewLoader.item.activeColumn()
             if (col) col.showCursor(view, context)
         } else {
-            root.listingView().positionViewAtIndex(view, root.which === "grid" ? GridView.Contain : ListView.Contain)
+            viewLoader.item.positionViewAtIndex(view, root.which === "grid" ? GridView.Contain : ListView.Contain)
         }
         viewLoader.item.restartCoalesce()
     }
@@ -221,38 +209,63 @@ ShellRoot {
         while (Date.now() - s < ms) {}
     }
 
+    // Qt's default key repeat: 250 ms after the press, then every 25 ms; the sweep ends in the release at 2 s.
+    readonly property int repeatDelayMs: 250
+    readonly property int repeatIntervalMs: 25
+    readonly property int sweepMs: 2000
+    // Delivery may run late by one frame's load plus this slack, and by what a turn dearer than the interval piles up over the sweep.
+    readonly property int gapSlackMs: 40
+    readonly property int turnCostMs: 10
+    readonly property int repeatCount: Math.floor((sweepMs - repeatDelayMs) / repeatIntervalMs) + 1
+    readonly property int gapBoundMs: gapSlackMs + loadMs + Math.max(0, loadMs + turnCostMs - repeatIntervalMs) * repeatCount
+
     property int sent: 0
     property int steps: 0
     property int worstGap: 0
     property int releaseCursor: -1
     property int stride: 1
     property int afterRows: 0
+    property double sweepStart: 0
 
-    // Press, then wall-clock repeats every 25 ms after 250 ms for 2 s, then the release marker in the same order.
-    function run() {
+    // The press, then each repeat and the release as its own event-loop turn at its due time, a busy frame before each.
+    // Focus.handleKey is the one handler the window's key item calls; offscreen has no key injection, so the Timer is the delivery.
+    function startSweep() {
         var p = root.stubPane
         root.stride = root.which === "grid" ? p.cursorStride : 1
         p.cursorIndex = 0
         root.showRowTo(0, 0)
         if (root.oneStep(false) !== root.stride) root.failures.push("the press did not take one step")
-        var t0 = Date.now(), n = 0
-        for (;;) {
-            root.busy(root.loadMs)
-            var el = Date.now() - t0
-            var horizon = el < 2000 ? el : 2000
-            while (250 + 25 * n <= horizon) {
-                var due = 250 + 25 * n
-                if (root.oneStep(true) !== root.stride) root.failures.push("repeat " + n + " did not take its step")
-                else root.steps += 1
-                root.sent += 1
-                var gap = Date.now() - t0 - due
-                if (gap > root.worstGap) root.worstGap = gap
-                n += 1
-            }
-            if (el >= 2000) break
+        root.sweepStart = Date.now()
+        root.armNext()
+    }
+    function armNext() {
+        var due = root.sent < root.repeatCount ? root.repeatDelayMs + root.repeatIntervalMs * root.sent : root.sweepMs
+        keyTurn.interval = Math.max(1, due - (Date.now() - root.sweepStart))
+        keyTurn.restart()
+    }
+    function keyEvent() {
+        var due = root.sent < root.repeatCount ? root.repeatDelayMs + root.repeatIntervalMs * root.sent : root.sweepMs
+        var gap = Date.now() - root.sweepStart - due
+        if (gap > root.worstGap) root.worstGap = gap
+        root.busy(root.loadMs)
+        var p = root.stubPane
+        if (root.sent < root.repeatCount) {
+            if (root.oneStep(true) !== root.stride) root.failures.push("repeat " + root.sent + " did not take its step")
+            else root.steps += 1
+            root.sent += 1
+            root.armNext()
+            return
         }
         root.releaseCursor = p.cursorIndex
         if (root.releaseCursor !== root.stride * (root.sent + 1)) root.failures.push("the cursor is not on its sent row")
+        if (root.worstGap > root.gapBoundMs) root.failures.push("a key arrived " + root.worstGap + " ms late, over the " + root.gapBoundMs + " ms bound")
+        root.phase = 3
+    }
+
+    Timer {
+        id: keyTurn
+        repeat: false
+        onTriggered: root.keyEvent()
     }
 
     function finish() {
@@ -277,8 +290,8 @@ ShellRoot {
                 root.land("/probe/a", 2000, root.rowsFor("a_", 2000))
             } else if (root.phase === 1) {
                 root.phase = 2
-                root.run()
-            } else {
+                root.startSweep()
+            } else if (root.phase === 3) {
                 if (root.stubPane.cursorIndex !== root.releaseCursor) {
                     root.afterRows = (root.stubPane.cursorIndex - root.releaseCursor) / root.stride
                     root.failures.push("the cursor moved after the release")
