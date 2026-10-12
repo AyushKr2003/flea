@@ -254,31 +254,83 @@ fn aged(d: &TestDir, name: &str, w: u16, secs: u64) -> PathBuf {
     src
 }
 
+// One extraction with the caps and the clock given and a counter of its own at zero, so its publish scans.
+fn ensure_with(dir: &Path, src: &Path, copies: usize, bytes: u64, now: SystemTime) -> Option<Extracted> {
+    let publishes = AtomicU32::new(0);
+    ensure_bounded(dir, src, &Bound { copies, bytes, now, publishes: &publishes })
+}
+
+// An hour on, so every copy a test wrote is older than STALE_TEMP; the clock is a parameter because a copy's ctime cannot be set.
+fn later() -> SystemTime {
+    SystemTime::now() + Duration::from_secs(3600)
+}
+
+// Two files written in the same clock tick share a ctime, and the order under test is the ctime's.
+fn tick() {
+    std::thread::sleep(Duration::from_millis(20));
+}
+
 #[test]
-fn the_cache_holds_its_count_by_dropping_the_oldest_raw_and_never_the_copy_just_made() {
+fn a_copy_written_under_a_minute_ago_survives_a_pass_at_the_bound_even_for_the_oldest_raw() {
+    let d = TestDir::new("rawprev-evict-young");
+    let cache = d.join("cache");
+    let (new, oldest) = (aged(&d, "n.cr2", 300, 3_000), aged(&d, "o.cr2", 100, 1_000));
+    let first = ensure_with(&cache, &new, 1, 1, SystemTime::now()).expect("a preview");
+    let second = ensure_with(&cache, &oldest, 1, 1, SystemTime::now()).expect("a preview");
+    assert!(first.file.exists() && second.file.exists(), "a copy written moments ago was evicted for being over the bound");
+}
+
+#[test]
+fn the_cache_holds_its_count_by_dropping_the_copy_written_longest_ago_not_the_oldest_raw() {
     let d = TestDir::new("rawprev-evict-count");
     let cache = d.join("cache");
-    let (old, mid, new) = (aged(&d, "o.cr2", 100, 1_000), aged(&d, "m.cr2", 200, 2_000), aged(&d, "n.cr2", 300, 3_000));
-    for src in [&new, &mid] {
-        ensure_bounded(&cache, src, 2, u64::MAX).expect("a preview");
+    // Written first, newest RAW; written second, oldest RAW; written last, in between.
+    let (first, second, last) = (aged(&d, "a.cr2", 100, 3_000), aged(&d, "b.cr2", 200, 1_000), aged(&d, "c.cr2", 300, 2_000));
+    for src in [&first, &second] {
+        ensure_with(&cache, src, usize::MAX, u64::MAX, later()).expect("a preview");
+        tick();
     }
-    // The oldest RAW arrives last: it is the copy just made, so it stays and the older of the others goes.
-    let got = ensure_bounded(&cache, &old, 2, u64::MAX).expect("a preview");
-    assert!(got.file.exists(), "the copy just made was evicted");
-    assert!(copy_path(&cache, &new).exists(), "the newest RAW's copy went");
-    assert!(!copy_path(&cache, &mid).exists(), "the older RAW's copy stayed over the bound");
+    let got = ensure_with(&cache, &last, 2, u64::MAX, later()).expect("a preview");
+    assert!(got.file.exists() && copy_path(&cache, &second).exists(), "a newer copy went");
+    assert!(!copy_path(&cache, &first).exists(), "the copy written longest ago stayed over the bound");
     assert_eq!(std::fs::read_dir(&cache).unwrap().count(), 2);
 }
 
 #[test]
-fn the_cache_holds_its_bytes_and_keeps_a_lone_copy_larger_than_the_bound() {
+fn the_cache_holds_its_bytes_by_the_same_order() {
     let d = TestDir::new("rawprev-evict-bytes");
     let cache = d.join("cache");
-    let (a, b) = (aged(&d, "a.cr2", 100, 1_000), aged(&d, "b.cr2", 200, 2_000));
-    let first = ensure_bounded(&cache, &a, usize::MAX, 1).expect("a preview");
-    assert!(first.file.exists(), "a lone copy over the byte bound was dropped");
-    let second = ensure_bounded(&cache, &b, usize::MAX, 1).expect("a preview");
-    assert!(second.file.exists() && !first.file.exists(), "the older copy stayed over the byte bound");
+    let (a, b) = (aged(&d, "a.cr2", 100, 2_000), aged(&d, "b.cr2", 200, 1_000));
+    let first = ensure_with(&cache, &a, usize::MAX, u64::MAX, later()).expect("a preview");
+    tick();
+    let one = std::fs::metadata(&first.file).unwrap().len();
+    let second = ensure_with(&cache, &b, usize::MAX, one, later()).expect("a preview");
+    assert!(second.file.exists() && !first.file.exists(), "the copy written longest ago stayed over the byte bound");
+}
+
+#[test]
+fn a_scan_runs_on_the_first_publish_and_then_once_per_32() {
+    let d = TestDir::new("rawprev-evict-pace");
+    let cache = d.join("cache");
+    // The counter starts at 1, past the first publish's scan, so publishes 1 to 31 add copies and the 32nd scans.
+    let publishes = AtomicU32::new(1);
+    for n in 1..=SCAN_EVERY {
+        let src = aged(&d, &format!("p{n}.cr2"), 100 + n as u16, 1_000);
+        let bound = Bound { copies: 2, bytes: u64::MAX, now: later(), publishes: &publishes };
+        ensure_bounded(&cache, &src, &bound).expect("a preview");
+        let held = std::fs::read_dir(&cache).unwrap().count();
+        if n < SCAN_EVERY {
+            assert_eq!(held, n as usize, "publish {n} scanned");
+        } else {
+            assert_eq!(held, 2, "the 32nd publish did not scan");
+        }
+        tick();
+    }
+    // A process that has published nothing scans on its first.
+    let e = TestDir::new("rawprev-evict-first");
+    let fresh_cache = e.join("cache");
+    ensure_with(&fresh_cache, &aged(&e, "x.cr2", 100, 1_000), 0, u64::MAX, later());
+    assert_eq!(std::fs::read_dir(&fresh_cache).unwrap().count(), 0, "the first publish did not scan");
 }
 
 #[test]
@@ -286,13 +338,13 @@ fn a_stale_temp_is_swept_and_a_recent_one_and_a_foreign_file_are_left() {
     let d = TestDir::new("rawprev-evict-temp");
     let cache = d.join("cache");
     std::fs::create_dir_all(&cache).unwrap();
-    let stale = d.file("cache/dead.123.0.tmp", "x");
-    let recent = d.file("cache/live.124.0.tmp", "x");
+    let temp = d.file("cache/dead.123.0.tmp", "x");
     let foreign = d.file("cache/notes.txt", "x");
-    set_mtime(&stale, 1_000);
-    ensure_bounded(&cache, &aged(&d, "t.cr2", 100, 2_000), 8, u64::MAX).expect("a preview");
-    assert!(!stale.exists(), "a dead writer's temp stayed");
-    assert!(recent.exists() && foreign.exists(), "a live temp or a foreign file was removed");
+    ensure_with(&cache, &aged(&d, "t.cr2", 100, 2_000), 8, u64::MAX, SystemTime::now()).expect("a preview");
+    assert!(temp.exists(), "a temp written moments ago was swept");
+    ensure_with(&cache, &aged(&d, "u.cr2", 200, 2_000), 8, u64::MAX, later()).expect("a preview");
+    assert!(!temp.exists(), "a dead writer's temp stayed");
+    assert!(foreign.exists(), "a foreign file was removed");
 }
 
 #[test]

@@ -6,7 +6,7 @@ use crate::backend::rawtiff::facts_from_slice;
 use crate::backend::regfile::open_regular;
 use crate::backend::thumbcache::uri_for;
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, SystemTime};
@@ -31,16 +31,28 @@ const DAC: u8 = 0xCC;
 const EOI: u8 = 0xD9;
 const SOS: u8 = 0xDA;
 const APP1: u8 = 0xE1;
-// The copies in the cache stay within this many files and bytes; the oldest RAW goes first, because a copy carries its RAW's mtime.
+// The copies in the cache stay within this many files and bytes, oldest written first, and may sit over for a moment: see evict.
 const MAX_COPIES: usize = 4096;
 const MIB: u64 = 1_048_576;
 const MAX_BYTES: u64 = 512 * MIB;
-// A temp this old belongs to a writer that died, since a live copy of a preview takes seconds.
+// A temp this old belongs to a writer that died, since a live copy of a preview takes seconds; a copy this young is still being read by whoever made it.
 const STALE_TEMP: Duration = Duration::from_secs(60);
+// A scan lists and stats the whole directory, so one publish in this many pays for it; the first publish of a process is one.
+const SCAN_EVERY: u32 = 32;
 const TEMP_SUFFIX: &str = ".tmp";
 const COPY_SUFFIX: &str = ".jpg";
 // Two threads of this process can extract the same file at once, so each writes a temp of its own.
 static NEXT_TEMP: AtomicU32 = AtomicU32::new(0);
+// Publishes this process has made, which paces the eviction scans.
+static PUBLISHES: AtomicU32 = AtomicU32::new(0);
+
+// What one extraction holds the cache to: the caps, the clock the ages are read against, and the counter that paces the scans.
+struct Bound<'a> {
+    copies: usize,
+    bytes: u64,
+    now: SystemTime,
+    publishes: &'a AtomicU32,
+}
 
 // The copy and what a caller needs to draw it: stored pixels plus the turn a viewer applies, as imagesize reads them.
 pub struct Extracted {
@@ -61,16 +73,18 @@ fn copy_path(dir: &Path, src: &Path) -> PathBuf {
 
 // None when the file is no RAW, holds no JPEG preview, or dir cannot be written; a fresh copy costs no walk and no write.
 pub fn ensure_in(dir: &Path, src: &Path) -> Option<Extracted> {
-    ensure_bounded(dir, src, MAX_COPIES, MAX_BYTES)
+    ensure_bounded(dir, src, &Bound { copies: MAX_COPIES, bytes: MAX_BYTES, now: SystemTime::now(), publishes: &PUBLISHES })
 }
 
-fn ensure_bounded(dir: &Path, src: &Path, copies: usize, bytes: u64) -> Option<Extracted> {
+fn ensure_bounded(dir: &Path, src: &Path, bound: &Bound) -> Option<Extracted> {
     // Read before the bytes, so a RAW rewritten mid-copy leaves a stamp that no longer matches and extracts again.
     let stamp = std::fs::metadata(src).ok()?.modified().ok()?;
     let file = copy_path(dir, src);
     if !fresh(&file, stamp) {
         publish(dir, &file, src, stamp)?;
-        evict(dir, &file, copies, bytes);
+        if bound.publishes.fetch_add(1, Ordering::Relaxed) % SCAN_EVERY == 0 {
+            evict(dir, bound);
+        }
     }
     let h = imagesize::header(&file)?;
     Some(Extracted { file, width: h.width, height: h.height, orientation: h.orientation })
@@ -83,11 +97,18 @@ fn fresh(file: &Path, stamp: SystemTime) -> bool {
         .unwrap_or(false)
 }
 
-// Stale temps go, then the oldest copies until the count and the bytes are within the bound; keep is the copy just made and stays whatever its mtime.
-fn evict(dir: &Path, keep: &Path, copies: usize, bytes: u64) {
+// When a file was last written: its ctime, because a copy's mtime is pinned to its RAW's and says nothing about when it was made.
+fn written(meta: &std::fs::Metadata) -> SystemTime {
+    let secs = u64::try_from(meta.ctime()).unwrap_or(0);
+    SystemTime::UNIX_EPOCH + Duration::new(secs, u32::try_from(meta.ctime_nsec()).unwrap_or(0))
+}
+
+// Stale temps go, then the copies written longest ago until the count and the bytes are within the bound. A copy written less
+// than STALE_TEMP ago is never removed, because the thread that made it is still reading it or handing it to a thumbnailer, so
+// the cache may stand over its cap for up to a minute and the scan pacing adds fewer than SCAN_EVERY copies on top.
+fn evict(dir: &Path, bound: &Bound) {
     let Ok(listing) = std::fs::read_dir(dir) else { return };
-    let now = SystemTime::now();
-    let mut kept: Vec<(SystemTime, PathBuf, u64)> = Vec::new();
+    let mut old: Vec<(SystemTime, PathBuf, u64)> = Vec::new();
     let (mut count, mut total) = (0usize, 0u64);
     for entry in listing.flatten() {
         let path = entry.path();
@@ -96,22 +117,22 @@ fn evict(dir: &Path, keep: &Path, copies: usize, bytes: u64) {
             continue;
         }
         let name = entry.file_name().to_string_lossy().into_owned();
-        let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+        let stale = bound.now.duration_since(written(&meta)).is_ok_and(|age| age > STALE_TEMP);
         if name.ends_with(TEMP_SUFFIX) {
-            if now.duration_since(modified).is_ok_and(|age| age > STALE_TEMP) {
+            if stale {
                 let _ = std::fs::remove_file(&path);
             }
         } else if name.ends_with(COPY_SUFFIX) {
             count += 1;
             total += meta.len();
-            if path != keep {
-                kept.push((modified, path, meta.len()));
+            if stale {
+                old.push((written(&meta), path, meta.len()));
             }
         }
     }
-    kept.sort();
-    for (_, path, size) in kept {
-        if count <= copies && total <= bytes {
+    old.sort();
+    for (_, path, size) in old {
+        if count <= bound.copies && total <= bound.bytes {
             break;
         }
         let _ = std::fs::remove_file(&path);
