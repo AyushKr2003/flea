@@ -347,10 +347,10 @@ menus_dialog_keys() {
         first=Field
         forward=(Cancel Submit)
         probe=menuDialogState
-        # OpenWith.html rule 8 gives its own card a wider cycle: search, list, always box, buttons.
+        # OpenWith.html rule 8: the card opens on its search and cycles search, list, always box, buttons.
         if [[ "$action" == openWith ]]; then
-            first=Applications
-            forward=(Always Cancel Open Field)
+            first=Field
+            forward=(Applications Always Cancel Open)
             probe=openWithState
         fi
         menus_file_menu a.txt key
