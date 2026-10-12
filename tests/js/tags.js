@@ -114,10 +114,17 @@ function run(check) {
 
     // Nav.js drops canTag at the request and only the fs line brings it back; under a loading mark that line meets the old path.
     var fsBody = Source.block(Source.source("ui/PaneWire.qml"), "function onFsInfo(fs, free, path, storageClass, tagable, systemVolume)", "ui/PaneWire.qml")
-    var out = { path: "", listingPath: "/fx/v/work", listInFlight: true, recentMode: "", fsName: "", fsFree: 0,
-                storageClass: "", storageKnown: false, systemVolume: false, canTag: false, extVerdict: "", listArea: null }
-    new Function("pane", "root", "ExtThumbs", "ViewState", "return function (fs, free, path, storageClass, tagable, systemVolume) {" + fsBody + "}")(
-        out, { pane: out }, { verdict: function () { return "" } }, { preview: "" })("tmpfs", 64100000, "/fx/v/work", "", true, false)
+    var fsLine = new Function("pane", "root", "ExtThumbs", "ViewState", "return function (fs, free, path, storageClass, tagable, systemVolume) {" + fsBody + "}")
+    function fsLineAt(listInFlight, path) {
+        var out = { path: "", listingPath: "/fx/v/work", listInFlight: listInFlight, recentMode: "", fsName: "", fsFree: 0,
+                    storageClass: "", storageKnown: false, systemVolume: false, canTag: false, extVerdict: "", listArea: null }
+        fsLine(out, { pane: out }, { verdict: function () { return "" } }, { preview: "" })("tmpfs", 64100000, path, "", true, false)
+        return out.canTag + "|" + out.storageKnown
+    }
     check("the fs line of the listing still out brings the tag verdict, so the Tags row is offered at the first menu",
-          out.canTag + "|" + out.storageKnown, "true|true")
+          fsLineAt(true, "/fx/v/work"), "true|true")
+    check("the fs line of a listing no longer out is refused, so a late answer for a settled listing path brings no verdict",
+          fsLineAt(false, "/fx/v/work"), "false|false")
+    check("the fs line for a path that is neither the pane's nor the listing's is refused even while a listing is out",
+          fsLineAt(true, "/fx/v/other"), "false|false")
 }
