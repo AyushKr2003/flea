@@ -130,7 +130,7 @@ ui/ContextMenu.qml 781
 ui/ConvertDialog.qml 453
 ui/GridArea.qml 658
 tests/gridbare.qml 426
-ui/Ipc.qml 986
+ui/Ipc.qml 985
 tests/gridjump.qml 516
 tests/gridprebuild.qml 458
 tests/columnsprebuild.qml 416
@@ -162,7 +162,7 @@ ui/SettingsPanel.qml 547
 ui/SettingsRow.qml 409
 ui/Sidebar.qml 710
 ui/StatusBar.qml 472
-ui/Theme.qml 489
+ui/Theme.qml 472
 ui/TrashView.qml 468
 ui/UnlockDialog.qml 450
 ui/ViewState.qml 542

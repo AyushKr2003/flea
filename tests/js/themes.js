@@ -1,6 +1,5 @@
 .import "../../ui/js/Palette.js" as Palette
 .import "../../ui/js/Contrast.js" as Contrast
-.import "../../ui/js/Buttons.js" as Buttons
 .import "sourcefixture.js" as Source
 
 // The stock themes installed under /usr/share/omarchy/themes, read live rather than fixtured, so a
@@ -45,9 +44,6 @@ function roles(body) {
     var hued = saturation(urgent) > 0.2
     var error = hued ? Contrast.ensureRatio(urgent, background, Math.max(TEXT_MIN, Contrast.ratio(muted, background))) : foreground
     var errorOnSurface = hued ? Contrast.ensureRatio(urgent, surface, Math.max(TEXT_MIN, Contrast.ratio(muted, surface))) : foreground
-    // ui/Theme.qml: a lit menu row washes the surface with the foreground, and its hint and danger label are lifted there.
-    var lit = Contrast.hexOf(Contrast.over(foreground, Contrast.washAlpha(foreground, surface, MARK_MIN, Buttons.WASH_HOVER), surface))
-    var mutedLit = Contrast.ensureRatio(muted, lit, TEXT_MIN)
     return { foreground: foreground, background: background, accent: accent, urgent: urgent,
              // ui/Theme.qml's rule: the palette's muted or a darkened foreground, lifted to the frame floor for frames, then to the text floor on both grounds for text.
              mutedFrame: mutedFrame,
@@ -63,8 +59,7 @@ function roles(body) {
              // for the foreground; every other red is lifted to AA the way symlink and executable are.
              error: error,
              // ui/Theme.qml's status bar role: the same red lifted on the surface it is drawn on.
-             errorOnSurface: errorOnSurface,
-             lit: lit, mutedLit: mutedLit, errorLit: Contrast.ensureRatio(error, lit, Math.max(TEXT_MIN, Contrast.ratio(mutedLit, lit))) }
+             errorOnSurface: errorOnSurface }
 }
 
 // Qt.darker(c, 1.4) in the value channel, which is ui/Theme.qml's fallback when a palette sets no
@@ -208,8 +203,6 @@ function run(check) {
                 Contrast.ratio(r.error, r.background), Contrast.ratio(r.muted, r.background))
         atLeast(check, name, "error on surface is never dimmer than a caption",
                 Contrast.ratio(r.errorOnSurface, r.surface), Contrast.ratio(r.muted, r.surface))
-        atLeast(check, name, "lit error is never dimmer than the lit caption",
-                Contrast.ratio(r.errorLit, r.lit), Contrast.ratio(r.mutedLit, r.lit))
 
         // The cursor's edge borders the unselected ground, which is what a low-chroma theme breaks.
         atLeast(check, name, "cursor edge on the unselected ground", Contrast.ratio(r.accent, r.background), EDGE_MIN)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Applies each of the 24 palettes (the 22 stock themes, the Cool Dawn and Sunset fixtures) to the real ui/Theme.qml and holds its text, frame and cursor-fill roles to their floors; offscreen, no display or lock.
+# Applies each of the 24 palettes (the 22 stock themes, the Cool Dawn and Sunset fixtures) to the real ui/Theme.qml and holds its text and frame roles to their floors and a cursor row to the plain hover wash; offscreen, no display or lock.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -42,8 +42,8 @@ palettes=$(wc -l < "$list")
 [ "$palettes" -eq "$palettes_expected" ] || fail "the sweep reads $palettes palettes, not $palettes_expected: a stock theme was added or removed, update palettes_expected here and paletteCount in tests/theme-contrast.qml with it"
 
 run_timeout_s=120
-# Per palette: 35 role and wash checks and 2 glass ones (opaque holds, the floor is at or under its record), then the 5 sandbox checks.
-expected_checks=$((palettes * 37 + 5))
+# Per palette: 18 role, wash and cursor-recipe checks and 2 glass ones (opaque holds, the floor is at or under its record), then the 4 one-off checks (3 sandbox, the sunset frame/text split).
+expected_checks=$((palettes * 20 + 4))
 config="$test_root/config"
 mkdir -p "$config" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
@@ -67,7 +67,7 @@ output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     XDG_RUNTIME_DIR="$test_root/runtime" BUTTONSYS_ROOT="$test_root" BUTTONSYS_TIMEOUT_S="$run_timeout_s" \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_QPA_UPDATE_IDLE_TIME=1 QT_FORCE_STDERR_LOGGING=1 \
     timeout "$run_timeout_s" qs -p "$config" 2>&1 ) 2>/dev/null )
-# Sample input: "  INFO qml: THEMECONTRAST ok nord muted text on surface 5.02 >= 4.5" once per check, and "THEMECONTRAST DONE checks=893 failed=0" once.
+# Sample input: "  INFO qml: THEMECONTRAST ok nord muted text on surface 5.02 >= 4.5" once per check, and "THEMECONTRAST DONE checks=484 failed=0" once.
 passed=$(printf '%s\n' "$output" | grep -c 'THEMECONTRAST ok ')
 failed=$(printf '%s\n' "$output" | grep -c 'THEMECONTRAST FAIL')
 # The glass floors print on a red run too, since they are what a red glass check is read against.
@@ -92,4 +92,4 @@ if [ "$verdict" -ne 0 ]; then
     exit 1
 fi
 printf '%s\n' "$output" | grep -aE 'THEMECONTRAST (ok|info) '
-printf 'THEMECONTRAST PASS %s checks over %s palettes, text at 4.5, frames at 3, the lit menu row clear\n' "$passed" "$palettes"
+printf 'THEMECONTRAST PASS %s checks over %s palettes, text at 4.5, frames at 3, the cursor row a plain wash\n' "$passed" "$palettes"

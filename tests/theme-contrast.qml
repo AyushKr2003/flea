@@ -2,14 +2,14 @@
 
 import QtQuick
 import Quickshell
+import qs.Commons
 import "flea" as Flea
 import "flea/js/Contrast.js" as Contrast
-import "flea/js/Tags.js" as Tags
 import "button-probe.js" as Probe
 import "qml-probe.js" as QmlProbe
 import "palettes.js" as Palettes
 
-// tests/theme-contrast.sh's harness: each palette is applied to the real Theme, and the text, frame and lit-row roles it derives are held to their floors.
+// tests/theme-contrast.sh's harness: each palette is applied to the real Theme, and the text and frame roles it derives are held to their floors, and a cursor row draws the plain hover wash.
 ShellRoot {
     id: shell
 
@@ -24,9 +24,8 @@ ShellRoot {
     readonly property string rootDir: Quickshell.env("BUTTONSYS_ROOT") || ""
     // The palettes tests/theme-contrast.sh reads: the 22 stock themes and the Cool Dawn and Sunset fixtures.
     readonly property int paletteCount: 24
-    // Alpha tolerance for a drawn wash against its role, and the step under it that must already fall short of the floor.
+    // Alpha tolerance for a drawn wash against its role.
     readonly property real alphaEpsilon: 0.0001
-    readonly property real alphaBelow: 0.02
     // glass.lua's blur brightness: Hyprland dims the blurred backdrop to this share before the translucent ground composes over it.
     readonly property real blurBrightness: 0.75
     readonly property var backdrops: [{ name: "white", level: 1 }, { name: "black", level: 0 }]
@@ -36,8 +35,6 @@ ShellRoot {
     readonly property var sampleRow: ({ n: "contrast.txt", i: "text-x-generic", p: 420, d: false, s: 13, m: 1758835200, t: false, k: 0, v: 0 })
 
     property int checks: 0
-    // Palettes whose lit Red swatch differs from its plain one: only there can the lit swatch check tell the two apart.
-    property int litSwatchDiffers: 0
     property int ticks: 0
     property var failures: []
 
@@ -68,44 +65,49 @@ ShellRoot {
         Column {
             Flea.Row { id: restRow; width: 800; row: shell.sampleRow; kindNames: []; hiddenCols: []; clipMark: "" }
             Flea.MenuRow { id: litRow; width: 400; current: true; entry: ({ label: "Open", glyph: "folder-open", action: "open", hint: "enter" }) }
-            Flea.MenuRow { id: litDangerRow; width: 400; current: true; entry: ({ label: "Move to Trash", glyph: "trash", action: "trash", danger: true, hint: "d" }) }
             Flea.DialogButton { id: secondaryButton; label: "Cancel" }
-            Flea.MenuRow { id: litNamedRow; width: 400; current: true; entry: ({ label: "Convert", glyph: "image", action: "convert", labelColor: Flea.Theme.color.foreground }) }
-            Flea.MenuRow { id: litTagRow; width: 400; current: true; entry: ({ label: "Red", glyph: "tag", action: "tag", tagRow: ({ swatch: "Red", fallback: false, state: Tags.APPLIED, digit: "1" }) }) }
-            Flea.MenuRow { id: pickedRow; width: 400; picked: true; entry: ({ label: "Name", glyph: "file", action: "name" }) }
-            Flea.MenuRow { id: restingRow; width: 400; entry: ({ label: "Copy", glyph: "copy", action: "copy", hint: "y" }) }
+            // The same entries as a cursor row, a picked row and a resting row: the pairs the recipe check compares.
+            Flea.MenuRow { id: restKeyRow; width: 400; entry: ({ label: "Open", glyph: "folder-open", action: "open", hint: "enter" }) }
+            Flea.MenuRow { id: litDangerRow; width: 400; current: true; entry: ({ label: "Move to Trash", glyph: "trash", action: "trash", danger: true, hint: "d" }) }
+            Flea.MenuRow { id: restDangerRow; width: 400; entry: ({ label: "Move to Trash", glyph: "trash", action: "trash", danger: true, hint: "d" }) }
+            Flea.MenuRow { id: litSubRow; width: 400; current: true; entry: ({ label: "Open With", glyph: "folder-open", action: "openWith", submenu: [{ label: "x" }] }) }
+            Flea.MenuRow { id: restSubRow; width: 400; entry: ({ label: "Open With", glyph: "folder-open", action: "openWith", submenu: [{ label: "x" }] }) }
+            Flea.MenuRow { id: pickedRow; width: 400; picked: true; current: true; entry: ({ label: "Name", glyph: "file", action: "name" }) }
         }
     }
 
-    // The fill of the first tag swatch under a row.
-    function swatchOf(item) {
+    // The first item under a node whose property key reads value (an objectName, a glyph name or a drawn string).
+    function findNamed(item, key, value) {
         var stack = [item]
         while (stack.length > 0) {
             var node = stack.pop()
-            if (node.swatch !== undefined && node.tagColors !== undefined) return String(node.color)
+            if (node[key] === value && node.color !== undefined) return node
             for (var i = 0; i < node.children.length; i++) stack.push(node.children[i])
         }
-        return ""
-    }
-    // The first Text under an item carrying a string.
-    function textDrawn(item, text) {
-        var stack = [item]
-        while (stack.length > 0) {
-            var o = stack.pop()
-            if (o.text === text) return o
-            for (var i = 0; i < o.children.length; i++) stack.push(o.children[i])
-        }
         return null
     }
-    // The first item named for a glyph that carries a colour: the ink the row draws that mark in.
-    function glyphDrawn(item, glyph) {
-        var stack = [item]
-        while (stack.length > 0) {
-            var o = stack.pop()
-            if (o.name === glyph && o.color !== undefined) return o
-            for (var i = 0; i < o.children.length; i++) stack.push(o.children[i])
+    // A colour as opaque hex, so a wash's colour reads apart from its alpha.
+    function solid(color) { return Contrast.hexOf(Contrast.parse(String(color))) }
+    // A row's wash as v0.3.9 drew it, in every palette: a cursor row is the foreground at the hover lift, a picked row the selected accent fill whole, a resting row nothing, no frame object on either, and a cursor row keeps every ink a resting row has.
+    function cursorRecipe(name, fg) {
+        var cursor = shell.findNamed(litRow, "objectName", "menuWash"), picked = shell.findNamed(pickedRow, "objectName", "menuWash"), rest = shell.findNamed(restKeyRow, "objectName", "menuWash")
+        var selected = Style.selectedAccentFill
+        shell.check(name + " cursor wash is the foreground", cursor !== null && shell.solid(cursor.color) === shell.solid(fg), true)
+        shell.check(name + " cursor wash is the hover lift", cursor !== null && Math.abs(cursor.color.a * cursor.opacity - Flea.Theme.washHover) < shell.alphaEpsilon, true)
+        shell.check(name + " resting row draws no wash", rest !== null && rest.opacity === 0, true)
+        shell.check(name + " picked wash is the selected accent fill", picked !== null && String(picked.color) === String(selected), true)
+        shell.check(name + " picked wash is drawn at opacity 1", picked !== null && picked.opacity === 1, true)
+        shell.check(name + " cursor and picked rows draw no cursor frame", shell.findNamed(litRow, "objectName", "menuCursorFrame") === null && shell.findNamed(pickedRow, "objectName", "menuCursorFrame") === null, true)
+        var pairs = [[litRow, restKeyRow, "text", "Open"], [litRow, restKeyRow, "text", "enter"], [litRow, restKeyRow, "name", "folder-open"],
+                     [litDangerRow, restDangerRow, "text", "Move to Trash"], [litDangerRow, restDangerRow, "name", "trash"], [litSubRow, restSubRow, "name", "chevron-right"]]
+        var same = true, drawn = 0
+        for (var i = 0; i < pairs.length; i++) {
+            var asLit = shell.findNamed(pairs[i][0], pairs[i][2], pairs[i][3]), atRest = shell.findNamed(pairs[i][1], pairs[i][2], pairs[i][3])
+            if (asLit === null || atRest === null) continue
+            drawn += 1
+            same = same && String(asLit.color) === String(atRest.color)
         }
-        return null
+        shell.check(name + " cursor row label, hint, mark, danger and chevron take the resting ink", same && drawn === pairs.length, true)
     }
     // The ground a wash draws over a surface: the colour's own alpha times the item's opacity (Contrast.parse drops the alpha of #AARRGGBB).
     function groundOf(wash, surface) {
@@ -150,51 +152,18 @@ ShellRoot {
         var c = Flea.Theme.color, rgba = Probe.rgba, name = entry.name
         Flea.Theme.applyColors(entry.body)
         var bg = String(c.background), surface = String(c.surface), fg = String(c.foreground)
-        // The ground a lit menu row draws on: the wash the row itself draws, over the card's surface.
+        // The ground a cursor row draws on: the plain hover wash the row itself draws, over the card's surface.
         var wash = Probe.find(litRow, "menuWash")
-        shell.check(name + " lit row draws its wash", wash !== null && wash.visible, true)
-        var lit = wash === null ? surface : shell.groundOf(wash, surface)
+        shell.check(name + " cursor row draws its wash", wash !== null && wash.visible, true)
+        shell.cursorRecipe(name, fg)
         shell.atLeast(name, "muted text", "background", Contrast.ratio(String(c.muted), bg), Flea.Theme.textContrast)
         shell.atLeast(name, "muted text", "surface", Contrast.ratio(String(c.muted), surface), Flea.Theme.textContrast)
         shell.atLeast(name, "metadata text", "background", Contrast.ratio(String(c.metadata), bg), Flea.Theme.textContrast)
         shell.atLeast(name, "metadata text", "surface", Contrast.ratio(String(c.metadata), surface), Flea.Theme.textContrast)
         shell.atLeast(name, "muted frame", "background", Contrast.ratio(String(c.mutedFrame), bg), Flea.Theme.frameContrast)
-        // The cursor is one fill, pointer and keyboard alike: at least a graphical object off the menu surface, and the label, glyph and hints read on it.
-        shell.atLeast(name, "cursor wash", "surface", Contrast.ratio(lit, surface), Flea.Theme.frameContrast)
-        shell.check(name + " cursor wash is never under the hover wash", Flea.Theme.washCursor >= Flea.Theme.washHover, true)
-        shell.atLeast(name, "lit row label", "wash", Contrast.ratio(String(c.labelLit), lit), Flea.Theme.textContrast)
-        shell.atLeast(name, "lit row glyph", "wash", Contrast.ratio(String(c.markLit), lit), Flea.Theme.frameContrast)
-        shell.atLeast(name, "lit row hint", "wash", Contrast.ratio(String(c.mutedLit), lit), Flea.Theme.textContrast)
-        shell.atLeast(name, "lit row danger label", "wash", Contrast.ratio(String(c.errorLit), lit), Flea.Theme.textContrast)
         // The error ink is never the quieter of the two beside a caption, on each ground it draws on.
         shell.atLeast(name, "error against the caption", "background", Contrast.ratio(String(c.error), bg), Contrast.ratio(String(c.muted), bg))
         shell.atLeast(name, "status error against the caption", "surface", Contrast.ratio(String(c.errorOnSurface), surface), Contrast.ratio(String(c.muted), surface))
-        shell.atLeast(name, "lit danger label against the hint", "wash", Contrast.ratio(String(c.errorLit), lit), Contrast.ratio(String(c.mutedLit), lit))
-        // The lit row draws no frame object at all; the fill is its whole cue.
-        shell.check(name + " lit row draws no cursor frame", Probe.find(litRow, "menuCursorFrame") === null, true)
-        // A Tags flyout row on the cursor wash: its box edge and every swatch stand 3:1 off the wash, and the row draws the lit swatch colours.
-        var tagBox = litTagRow.tagItem !== null && litTagRow.tagItem.children.length > 0 ? litTagRow.tagItem.children[0] : null
-        shell.atLeast(name, "lit tag row box edge", "wash", tagBox ? Contrast.ratio(String(tagBox.border.color), lit) : 0, Flea.Theme.frameContrast)
-        var swatches = Object.keys(Flea.Theme.tag.menuLitColors)
-        for (var k = 0; k < swatches.length; k++)
-            shell.atLeast(name, "tag swatch " + swatches[k], "wash", Flea.Theme.tag.menuLitColors[swatches[k]] ? Contrast.ratio(String(Flea.Theme.tag.menuLitColors[swatches[k]]), lit) : 99, Flea.Theme.frameContrast)
-        if (Flea.Theme.tag.menuLitColors.Red && String(Flea.Theme.tag.menuLitColors.Red) !== String(Flea.Theme.tag.menuColors.Red)) shell.litSwatchDiffers += 1
-        shell.check(name + " a lit tag row draws the lit swatch colours", litTagRow.tagItem !== null && (!Flea.Theme.tag.menuLitColors.Red || shell.swatchOf(litTagRow) === String(Flea.Theme.tag.menuLitColors.Red)), true)
-        // Not gated: the picked row's fill beside the cursor wash, both over the surface, for the ruling on a pick list.
-        var pickedWash = Probe.find(pickedRow, "menuWash")
-        if (pickedWash !== null) shell.log("info " + name + " picked fill over cursor wash " + (Math.round(Contrast.ratio(shell.groundOf(pickedWash, surface), lit) * 1000) / 1000) + " (picked fill on surface " + (Math.round(Contrast.ratio(shell.groundOf(pickedWash, surface), surface) * 1000) / 1000) + ", cursor wash on surface " + (Math.round(Contrast.ratio(lit, surface) * 1000) / 1000) + ")")
-        var hint = shell.textDrawn(litRow, "enter"), label = shell.textDrawn(litRow, "Open"), danger = shell.textDrawn(litDangerRow, "Move to Trash")
-        // The wash and the glyph as the lit row draws them, so a row left on the hover alpha or the unlifted mark is red even where the roles pass.
-        var drawnAlpha = wash === null ? 0 : wash.color.a * wash.opacity
-        shell.check(name + " lit row wash draws the cursor alpha", Math.abs(drawnAlpha - Flea.Theme.washCursor) < shell.alphaEpsilon, true)
-        shell.check(name + " cursor alpha is the least that stands off the surface", drawnAlpha - Flea.Theme.washHover < shell.alphaEpsilon || Contrast.ratio(Contrast.hexOf(Contrast.over(fg, drawnAlpha - shell.alphaBelow, surface)), surface) < Flea.Theme.frameContrast, true)
-        var glyph = shell.glyphDrawn(litRow, "folder-open")
-        shell.check(name + " lit row glyph draws the lifted ink", glyph ? rgba(glyph.color) : "none", rgba(c.markLit))
-        shell.check(name + " lit row label draws the lifted ink", label ? rgba(label.color) : "none", rgba(c.labelLit))
-        var named = shell.textDrawn(litNamedRow, "Convert")
-        shell.check(name + " lit row naming its own label ink draws the lifted ink", named ? rgba(named.color) : "none", rgba(c.labelLit))
-        shell.check(name + " lit row hint draws the lifted ink", hint ? rgba(hint.color) : "none", rgba(c.mutedLit))
-        shell.check(name + " lit row danger label draws the lifted ink", danger ? rgba(danger.color) : "none", rgba(c.errorLit))
         // A secondary dialog button's rest frame is the frame role; the sunset fixture sets a muted that the frame and text lifts take apart, so a frame left on muted is red there.
         shell.check(name + " secondary dialog button frame draws mutedFrame", Probe.read(secondaryButton).frameColor, rgba(c.mutedFrame))
         if (name === "sunset") shell.check("sunset: the frame role and the text role differ", rgba(c.mutedFrame) !== rgba(c.muted), true)
@@ -212,7 +181,6 @@ ShellRoot {
         shell.check("a wash ground keeps the colour's own alpha", shell.groundOf({ color: Qt.rgba(1, 1, 1, 0.5), opacity: 0.5 }, "#000000"), "#404040")
         for (var i = 0; i < Palettes.PALETTES.length; i++)
             shell.sweep(Palettes.PALETTES[i])
-        shell.check("some palette lifts its lit Red swatch, so the lit swatch check can go red", shell.litSwatchDiffers > 0, true)
         var want = Math.round(Flea.Glass.glassAlpha * shell.glassSteps)
         shell.log("floor all palettes " + shell.glassFloor + "/255 (" + (Math.round(shell.glassFloor / shell.glassSteps * 1000) / 1000) + "), glass alpha " + want + "/255")
         shell.finish()
