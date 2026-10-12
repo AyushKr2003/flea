@@ -792,8 +792,7 @@ class Session:
         self.log.close()
 
 
-# The shipped menu.hidden (src/uischema.rs DEFAULTS) hides Properties, so the context menu of a default launch holds no
-# such row; op.size.recursive's session shows it and hides the rest as shipped.
+# The shipped menu.hidden (src/uischema.rs DEFAULTS) hides Properties; op.size.recursive's session shows it and hides the rest.
 MENU_HIDDEN = ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions",
                "copyAs", "pasteAs", "invertSelection", "extThumbs", "run", "openAsText"]
 SIZE_UI = {"menu": {"hidden": [a for a in MENU_HIDDEN if a != "properties"]}}
@@ -1248,6 +1247,7 @@ LISTING_CAP_S = 10  # s a listing may take to land before a key is judged lost
 NAV_STEPS = 6  # keys a walk back to the source or the destination may spend
 TAKE_CAP_S = 5.0  # s the clipboard may take to hold the copied or cut paths
 HARNESS_FAULTS_STOP = 3  # consecutive harness faults after which an op series stops
+ROW_SCAN_CAP = 64  # rows row_index reads off the pane before it calls a row missing
 
 
 class HarnessFault(RuntimeError):
@@ -1255,8 +1255,7 @@ class HarnessFault(RuntimeError):
 
 
 def listing_landed(sess, cap_s=None):
-    """Wait until the pane has no listing in flight (listInFlight, ui/Ipc.qml); a key pressed before it is refused as
-    "A directory is already loading." (ui/js/Nav.js)."""
+    """Wait until the pane has no listing in flight (listInFlight), since a key pressed before is refused (ui/js/Nav.js)."""
     cap_s = LISTING_CAP_S if cap_s is None else cap_s
     t0 = time.monotonic()
     while sess.ipc("listInFlight").strip().lower() != "false":
@@ -1278,9 +1277,8 @@ def same_dir(a, b):
 
 
 def row_index(sess, name):
-    """The listing index of the row called name, or None; the pane lists a symlink to a folder among the files, after
-    every folder, so a row is found by its name and never by a position."""
-    for i in range(min(sess.ipc_int("total") or 0, 64)):
+    """The listing index of the row called name, or None: a symlink to a folder is listed after the folders, so find it by name."""
+    for i in range(min(sess.ipc_int("total") or 0, ROW_SCAN_CAP)):
         if sess.ipc("visibleRowName", i) == name:
             return i
     return None
@@ -1300,8 +1298,7 @@ def enter_row(sess, name):
 
 
 def reach(sess, want, base, via, kids):
-    """Walk the pane to the folder want. base holds the two folders, via is the row name of want under base, kids are
-    their real paths: from either folder Backspace climbs to base, from base Enter on the row via goes down."""
+    """Walk the pane to want: from a folder in kids Backspace climbs to base (Nav.js parent cuts the pane path), Enter on via goes down."""
     base_real = os.path.realpath(base)
     for _ in range(NAV_STEPS):
         here = sess.ipc("path")
@@ -1326,8 +1323,8 @@ def listed_total(sess, count, cap_s=None):
         time.sleep(0.1)
 
 
-def clipboard_holds(sess, count, moving, cap_s=None):
-    """Wait until the pane clipboard (fileClipboard, ui/Ipc.qml) holds count paths of the right verb."""
+def clipboard_holds(sess, paths, moving, cap_s=None):
+    """Wait until the pane clipboard (fileClipboard) holds exactly these paths, real, with the right verb."""
     cap_s = TAKE_CAP_S if cap_s is None else cap_s
     t0, got = time.monotonic(), None
     while True:
@@ -1335,12 +1332,13 @@ def clipboard_holds(sess, count, moving, cap_s=None):
             got = json.loads(sess.ipc("fileClipboard"))
         except ValueError:
             got = None
-        if isinstance(got, dict) and len(got.get("paths") or []) == count and bool(got.get("moving")) == moving:
+        held = sorted(os.path.realpath(p) for p in got.get("paths") or []) if isinstance(got, dict) else None
+        if held == sorted(os.path.realpath(p) for p in paths) and bool(got.get("moving")) == moving:
             return
         if time.monotonic() - t0 >= cap_s:
-            raise HarnessFault("the clipboard holds %s paths (moving %s), not %d (moving %s)" % (
-                len(got.get("paths") or []) if isinstance(got, dict) else "no reading",
-                got.get("moving") if isinstance(got, dict) else "-", count, moving))
+            raise HarnessFault("the clipboard holds %s paths (moving %s), not the %d of this sample (moving %s)" % (
+                len(held) if held is not None else "no reading", got.get("moving") if held is not None else "-",
+                len(paths), moving))
         time.sleep(0.1)
 
 
@@ -1377,9 +1375,8 @@ def series_op(sess, spec, n):
                 sess.settle(2.0, 10)
                 listed_total(sess, o["count"])  # the pane lists what the tool just put there
                 for c in (("ctrl", "a"), o["take"]):
-                    sess.keys.chord(*c)
-                    time.sleep(0.25)
-                clipboard_holds(sess, o["count"], o["take"] == ("ctrl", "x"))
+                    nav_key(sess, *c)
+                clipboard_holds(sess, [os.path.join(real_src, n) for n in os.listdir(real_src)], o["take"] == ("ctrl", "x"))
                 reach(sess, real_dst, base, "a-dst", kids)
                 listed_total(sess, 0)  # the destination is clear in the pane and on the disk
                 if os.listdir(real_dst):
@@ -3316,8 +3313,7 @@ def selftest():
     check("op_fields_unread", op_state_fields(bar(), None),
           {"errors_before": 0, "errors_after": None, "activity_after": None, "notice_before": "", "notice_after": None,
            "refused": None})
-    # Whole samples of an op against a scripted bar and a pane that follows the keys: ipc answers statusActivityState in
-    # call order, the last answer repeating, and path, total, cursor, visibleRowName and fileClipboard off the pane.
+    # Whole samples of an op: statusActivityState follows the script in call order, the rest is read off a pane that follows the keys.
     with tempfile.TemporaryDirectory() as td:
         os.makedirs(os.path.join(td, "ops"))
         with open(os.path.join(td, "ops", "large.bin"), "wb") as f:
@@ -3326,9 +3322,12 @@ def selftest():
         class FakePane:
             """The pane of the sample's folders: a symlink to a folder is listed among the files, so after b-src."""
 
-            def __init__(self, base, cwd, link_enters=True, stale=False):
+            def __init__(self, base, cwd, link_enters=True, stale=False, late=0, ghost=None, resolves=False):
                 self.base, self.cwd, self.cursor, self.sel, self.clip = base, cwd, 0, [], {"paths": [], "moving": False}
                 self.link_enters, self.stale, self.pastes = link_enters, stale, []
+                self.busy, self.late, self.ghost, self.resolves = 0, late, ghost, resolves
+                if ghost:
+                    self.clip = {"paths": [ghost], "moving": False}
 
             def rows(self):
                 names = sorted(os.listdir(self.cwd))
@@ -3337,6 +3336,8 @@ def selftest():
 
             def key(self, chord):
                 rows = self.rows()
+                if self.busy:
+                    return
                 if chord == ("home",):
                     self.cursor = 0
                 elif chord == ("end",):
@@ -3344,25 +3345,28 @@ def selftest():
                 elif chord == ("down",):
                     self.cursor = min(self.cursor + 1, max(len(rows) - 1, 0))
                 elif chord == ("backspace",):
-                    self.cwd, self.cursor = os.path.dirname(self.cwd), 0
+                    self.cwd, self.cursor = os.path.dirname(os.path.realpath(self.cwd) if self.resolves else self.cwd), 0
                 elif chord == ("enter",) and rows:
                     row = os.path.join(self.cwd, rows[self.cursor])
                     if os.path.isdir(row) and (self.link_enters or not os.path.islink(row)):
                         self.cwd, self.cursor = row, 0
                 elif chord == ("ctrl", "a"):
                     self.sel = [] if self.stale else [os.path.join(self.cwd, n) for n in rows]
-                elif chord in (("ctrl", "c"), ("ctrl", "x")):
+                elif chord in (("ctrl", "c"), ("ctrl", "x")) and not self.ghost:
                     self.clip = {"paths": list(self.sel), "moving": chord == ("ctrl", "x")}
                 elif chord == ("ctrl", "v"):
                     self.pastes.append((os.path.realpath(self.cwd), len(self.clip["paths"])))
 
-            def ipc(self, fn, *a):
+            def ipc(self, name, *a):
                 rows = self.rows()
+                if name == "listInFlight" and self.busy:
+                    self.busy -= 1
+                    return "true"
                 return {"path": lambda: self.cwd, "listInFlight": lambda: "false", "total": lambda: str(len(rows)),
                         "cursor": lambda: str(self.cursor), "fileClipboard": lambda: json.dumps(self.clip),
-                        "visibleRowName": lambda: rows[int(a[0])] if int(a[0]) < len(rows) else ""}[fn]()
+                        "visibleRowName": lambda: rows[int(a[0])] if int(a[0]) < len(rows) else ""}[name]()
 
-        def op_session(script, link_enters=True, stale=False, count=1):
+        def op_session(script, **pane_kw):
             """A session whose statusActivityState follows script and whose pane follows the keys; a-dst is a symlink."""
             seq, sent = list(script), []
             base = os.path.join(td, "base")
@@ -3371,7 +3375,7 @@ def selftest():
                 os.makedirs(d, exist_ok=True)
             if not os.path.lexists(os.path.join(base, "a-dst")):
                 os.symlink(usb, os.path.join(base, "a-dst"))
-            pane = FakePane(base, os.path.join(base, "b-src"), link_enters, stale)
+            pane = FakePane(base, os.path.join(base, "b-src"), **pane_kw)
             ses = object.__new__(Session)
             ses.view, ses.taken, ses.known = "list", [], set()
             ses.ctx = {"roots": [], "op_base": base, "root": td, "tag": "t"}
@@ -3390,7 +3394,7 @@ def selftest():
             ses.pane = pane
             return ses, sent
 
-        def fill(src, dst, count=1):
+        def fill(dst, count=1):
             """The reflink of a sample: count files into the source folder."""
             for j in range(count):
                 with open(os.path.join(dst, "f%d" % j), "w") as f:
@@ -3403,7 +3407,8 @@ def selftest():
         def run_op(script, finish, caps=None, op="op.copy.large", n=1, **pane_kw):
             ses, sent = op_session(script, **pane_kw)
             count = OPS[op]["count"]
-            patches = dict(empty_dir=lambda *a: (sent.append(("empty_dir",)), wipe(*a)), reflink=lambda s, d: fill(s, d, count),
+            patches = dict(empty_dir=lambda *a: (sent.append(("empty_dir",)), wipe(*a)),
+                           reflink=lambda s, d: (fill(d, count), setattr(ses.pane, "busy", ses.pane.late)),
                            wait_until=lambda pred, cap: finish)
             patches.update(caps or {})
             with mock.patch.dict(globals(), patches), mock.patch.object(time, "sleep", lambda secs: None):
@@ -3440,9 +3445,7 @@ def selftest():
         # A cancel that does not take is named on the row.
         rows, sent = run_op([bar(), bar(), bar("running")], None, {"ISOLATE_CANCEL_CAP_S": 0})
         check("series_op_cancel_that_stays", ("cancel_failed" in rows[0], rows[0]["cancel_escs"]), (True, 1))
-        # Every sample of a cross-fs move starts in the source and pastes in the destination: the symlinked a-dst is listed
-        # among the files, after b-src, and the old closing keys (Backspace, End, Enter) and opening keys (Home, Enter) read it
-        # as the other folder. The old line: tools/flea-field-instant series_op, the "backspace, home, enter" after the take.
+        # Every sample of a cross-fs move starts in the source and pastes in the destination, though a-dst is listed after b-src.
         real_dst, real_src = os.path.realpath(os.path.join(td, "base", "a-dst")), os.path.realpath(os.path.join(td, "base", "b-src"))
         with mock.patch.dict(OPS["op.move.cross-fs"], count=3):
             rows, sent = run_op([bar()], 0.5, op="op.move.cross-fs", n=3)
@@ -3461,7 +3464,7 @@ def selftest():
         # A pane that starts a sample one level up or inside the destination is walked back before anything is taken.
         ses, sent = op_session([bar()])
         ses.pane.cwd = os.path.join(td, "base", "a-dst")
-        patches = dict(empty_dir=wipe, reflink=lambda s_, d: fill(s_, d, 1), wait_until=lambda pred, cap: 0.5)
+        patches = dict(empty_dir=wipe, reflink=lambda s_, d: fill(d, 1), wait_until=lambda pred, cap: 0.5)
         with mock.patch.dict(globals(), patches), mock.patch.object(time, "sleep", lambda secs: None):
             rows = run_series(ses, {"type": "op", "op": "op.copy.large"}, 1)
         check("series_op_walks_back_from_the_destination", (rows[0].get("error"), ses.pane.pastes), (None, [(real_dst, 1)]))
@@ -3474,12 +3477,26 @@ def selftest():
         rows, sent = run_op([bar()], 0.5, stale=True)
         check("series_op_empty_take_is_a_harness_fault",
               (rows[0].get("harness_fault"), "refused" in rows[0], ("ctrl", "v") in sent,
-               rows[0].get("error", "").startswith("HarnessFault: the clipboard holds 0 paths (moving False), not 1")),
+               rows[0].get("error", "").startswith("HarnessFault: the clipboard holds 0 paths (moving False), not the 1")),
               (True, False, False, True))
         # The series stops after HARNESS_FAULTS_STOP consecutive faults.
         rows, sent = run_op([bar()], 0.5, stale=True, n=5, caps={"TAKE_CAP_S": 0})
         check("series_op_stops_after_repeated_harness_faults", (len(rows), all(r.get("harness_fault") for r in rows)),
               (HARNESS_FAULTS_STOP, True))
+        # The take keys wait for a listing still landing after the fill: sent blind, Ctrl+A is swallowed and the take is lost.
+        rows, sent = run_op([bar()], 0.5, late=2)
+        check("series_op_take_waits_for_a_late_listing", (rows[0].get("error"), run_op.last.pane.pastes), (None, [(real_dst, 1)]))
+        # A clipboard of the right size that holds other paths is a harness fault, never a timed paste.
+        rows, sent = run_op([bar()], 0.5, ghost=os.path.join(td, "elsewhere", "f0"))
+        check("series_op_foreign_clipboard_is_a_harness_fault",
+              (rows[0].get("harness_fault"), "first_ms" in rows[0], ("ctrl", "v") in sent,
+               rows[0].get("error", "").startswith("HarnessFault: the clipboard holds 1 paths (moving False), not the 1")),
+              (True, False, False, True))
+        # A pane that climbs out of a-dst by its resolved path lands outside base: a named fault, not a silent skew of every sample.
+        rows, sent = run_op([bar()], 0.5, n=2, resolves=True)
+        check("series_op_resolved_climb_is_a_named_fault",
+              ([r.get("harness_fault") for r in rows], rows[1].get("error", "").startswith("HarnessFault: the pane is at "),
+               "first_ms" in rows[1]), ([None, True], True, False))
         # A listing that never lands is a harness fault, not a key sent into a loading pane.
         ses, sent = op_session([bar()])
         ses.ipc = lambda fn, *a: "true" if fn == "listInFlight" else ""
@@ -3489,28 +3506,35 @@ def selftest():
         except HarnessFault as e:
             landed = str(e)
         check("listing_that_never_lands_is_a_harness_fault", (landed, sent), ("the listing did not land in 0 s", []))
-    # op.size.recursive has an instrument: the session shows the Properties row that menu.hidden ships hidden, and hides
-    # nothing else differently from the shipped default (src/uischema.rs DEFAULTS).
+    # op.size.recursive has an instrument: its session shows Properties and hides nothing else differently from the shipped default.
     with open(os.path.join(REPO, "src", "uischema.rs")) as f:
+        # Sample input: '  "menu": { "hidden": ["delete", "openTerminal", "placeMenu", "runScript",' then more names to '] }'.
         shipped = re.search(r'"menu": \{ "hidden": \[([^\]]*)\]', f.read()).group(1)
     shipped = re.findall(r'"([^"]+)"', shipped)
     check("menu_hidden_is_the_shipped_default", MENU_HIDDEN, shipped)
     check("size_ui_shows_only_properties", ([a for a in MENU_HIDDEN if a not in SIZE_UI["menu"]["hidden"]],
                                             len(SIZE_UI["menu"]["hidden"])), (["properties"], len(shipped) - 1))
+    with open(os.path.join(REPO, "ui", "js", "Nav.js")) as f:
+        # Sample input: 'var here = pane.path', 'var cut = here.lastIndexOf("/")', 'pane.open(cut <= 0 ? "/" : here.substring(0, cut))'.
+        nav = f.read()
+    check("flea_backspace_climbs_the_pane_path_lexically",
+          'var here = pane.path\n    var cut = here.lastIndexOf("/")\n    pane.pendingSelect = here\n'
+          '    pane.open(cut <= 0 ? "/" : here.substring(0, cut))' in nav, True)
     ops_plan = {sp["op"]: sp.get("ui") for sp in parts(PLAN_FX, 20)["p6-ops"]}
     check("size_session_carries_the_ui_patch", (ops_plan["op.size.recursive"], ops_plan["op.copy.many"], ops_plan["op.archive"]),
           (SIZE_UI, None, None))
     check("size_patch_reaches_the_session", dict(ui_patch("list", "/x"), **SIZE_UI)["menu"], SIZE_UI["menu"])
     # The report names a harness fault as one, beside the other error rows, and counts it in no verdict.
     with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tf:
+        tf.write(json.dumps({"journey": "nav.list.down", "row": 1, "view": "list", "first_ms": 5.0, "fixture": "local"}) + "\n")
         tf.write(json.dumps({"journey": "op.move.cross-fs", "row": 6, "view": "list", "fixture": "local",
                              "error": "HarnessFault: the clipboard holds 0 paths", "harness_fault": True}) + "\n")
     buf = io.StringIO()
     with redirect_stdout(buf):
         report([tf.name])
     os.unlink(tf.name)
-    check("rep_harness_fault_named", "- harness fault op.move.cross-fs list local: HarnessFault: the clipboard holds 0 paths"
-          in buf.getvalue(), True)
+    check("rep_harness_fault_named", ("- harness fault op.move.cross-fs list local: HarnessFault: the clipboard holds 0 paths"
+                                      in buf.getvalue(), "Verdicts: TARGET 1\n" in buf.getvalue()), (True, True))
     # The fling floor: medians and ranges from fixed arrays, a failed run counted out of n.
     floor = fling_floor([17.0, 18.0, 16.5, None, 17.5], [20.1, 21.0, 19.8, 22.4, 20.5])
     check("fling_floor_wheel", floor["first_wheel_ms"], {"n": 4, "median": 17.2, "min": 16.5, "max": 18.0})
@@ -3906,7 +3930,7 @@ def selftest():
     print("isolation cases: Esc count over running, cancelling and queued errors, refused pastes marked, an unclear bar is an error row")
     print("op navigation cases: every sample of a move or copy pastes in a-dst whatever the symlink sorts as, the old blind keys paste in b-src and take nothing from a-dst, "
           "a pane left in a-dst is walked back, an unreachable a-dst, an empty take and a listing that never lands are harness fault rows, "
-          "a series stops after repeated faults, op.size.recursive shows the Properties row, the report names a harness fault")
+          "a series stops after repeated faults, a take waits for a late listing, a foreign clipboard of the right size is a fault, a resolved climb is named, Backspace climbs the pane path as Nav.js cuts it, op.size.recursive shows the Properties row, the report names a harness fault")
     print("fling floor cases: medians and ranges from fixed arrays, the client wheel line on the harness clock, the floor beside the fling rows, "
           "a floor kept past trailing text, a named file that gives none says why, calibrate survives any probe error")
     print("load cases: the probe is read per sample and per paced key, a load that stops reads inactive from there, a renewed load is awaited before the input and waits out its gap, a renewal swaps its batch inside a marked root, the c probe reads the fields ui/Ipc.qml writes, the gate names an inactive load group")
