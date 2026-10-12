@@ -16,9 +16,9 @@ src/backend/tags.rs 401
 src/backend/searchsession.rs 397
 src/backend/tagsreq_tests.rs 383
 src/backend/copyfile_tests.rs 694
-src/backend/durable.rs 803
+src/backend/durable.rs 809
 src/backend/dirsize.rs 422
-src/backend/durable_tests.rs 1305
+src/backend/durable_tests.rs 1396
 src/backend/jump_tests.rs 487
 src/backend/renamecompat.rs 706
 src/backend/gvfslist.rs 513
