@@ -884,7 +884,7 @@ case_trash() {
     printf 'alpha\n' > "$payload/alpha.txt"
     printf 'beta\n' > "$payload/beta.txt"
     wait_listing 2
-    trash_trap_own "$trash_files" "$payload" "trash" beta.txt
+    trash_trap_own "$trash_files" "$payload" "trash" alpha.txt beta.txt
     trash_move alpha.txt 0 1
     trash_move beta.txt 1 0
     trash_wait '.count == 2'

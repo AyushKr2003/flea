@@ -110,6 +110,16 @@ menus_visit() {
     wait_listing "$count"
 }
 
+# Registers the trash entry made for ORIGINAL so the EXIT trap removes it from a mount-top trash, where GLib trashes off HOME's device.
+menus_trash_own() {
+    local original="$1" uri trash
+    # Sample list row: "trash:///trash.txt<TAB>/owned/fixture/trash.txt".
+    uri=$(/usr/bin/gio trash --list | awk -F'\t' -v path="$original" '$2 == path { print $1; exit }')
+    [[ "$uri" == trash:///* && "${uri#trash:///}" != */* ]] || fail "menus: no trash entry for $original"
+    trash=$(sandbox_trash_files_dir "$original") || fail "menus: no GLib trash directory for $original"
+    trash_trap_own "$trash" "$menu_box" menus "${uri#trash:///}"
+}
+
 menus_point() {
     local centre="$1" button="${2:-left}" cx cy wx wy ww wh
     read -r cx cy <<< "$centre"
@@ -347,10 +357,10 @@ menus_dialog_keys() {
         first=Field
         forward=(Cancel Submit)
         probe=menuDialogState
-        # OpenWith.html rule 8 gives its own card a wider cycle: search, list, always box, buttons.
+        # OpenWith.html rule 8: the card opens on its search and cycles search, list, always box, buttons.
         if [[ "$action" == openWith ]]; then
-            first=Applications
-            forward=(Always Cancel Open Field)
+            first=Field
+            forward=(Applications Always Cancel Open)
             probe=openWithState
         fi
         menus_file_menu a.txt key
@@ -441,6 +451,7 @@ menus_actions() {
     wait_listing 4
     menus_expect trashState ".count == $menus_trashed" "$preset Trash updates private count"
     trash_guard_store "$menus_trashed"
+    menus_trash_own "$directory/trash.txt"
     [[ ! -e "$directory/trash.txt" ]] || fail "menus: $preset Trash left its source"
     menus_equal "$preset Trash reaches the real private GIO provider" "$directory/trash.txt" "$(tail -n 1 "$menu_box/gio-trash.log")"
 
@@ -683,8 +694,9 @@ case_menuscoverage() (
         menus_expect selectionCount '. == 2' "Ctrl-click creates two selected items before menu eligibility"
         menus_expect dualState ".panes[.focused].selected == [$first_index,$second_index]" "selected identities are a.txt and b.txt"
         click_row "$(row_index_of a.txt)" right
-        # Permissions takes the whole selection (board Permissions040), so two regular files enable it; the four single-item rows stay disabled.
-        menus_expect menuState '.opened and .hasRow and .snapshotReady and (.snapshotId > 0) and (.entries as $entries | ["rename","duplicate","openWith","properties"] | all(.[]; . as $action | any($entries[]; .action == $action and .disabled)))' "multi-selection single-item rows stay disabled"
+        # Permissions (board Permissions040) and bulk rename take the whole selection, so two regular files enable both; the three single-item rows stay disabled.
+        menus_expect menuState '.opened and .hasRow and .snapshotReady and (.snapshotId > 0) and (.entries as $entries | ["duplicate","openWith","properties"] | all(.[]; . as $action | any($entries[]; .action == $action and .disabled)))' "multi-selection single-item rows stay disabled"
+        menus_expect menuState 'any(.entries[]; .action == "rename" and (.disabled == false) and .label == "Rename 2 items\u2026")' "two files offer bulk rename by count"
         menus_expect menuState 'any(.entries[]; .action == "permissions" and (.disabled == false) and (.errored | not))' "two regular files keep Permissions enabled without error"
         key -k Escape >/dev/null
         # permissionsEntry refuses the whole selection for one row that is neither a regular file nor a directory.
@@ -698,7 +710,7 @@ case_menuscoverage() (
             menus_expect dualState "(.panes[.focused].selected | sort) == ([$first_index,$second_index] | sort)" "Permissions pair holds the a.txt and $target identities"
             click_row "$first_index" right
             if [[ "$target" == folder ]]; then
-                menus_expect menuState '.opened and .hasRow and .snapshotReady and (.snapshotId > 0) and (.entries as $entries | ["rename","duplicate","openWith","properties"] | all(.[]; . as $action | any($entries[]; .action == $action and .disabled))) and any(.entries[]; .action == "permissions" and (.disabled == false) and (.errored | not))' "a file and a directory keep Permissions enabled without error in the several-items menu"
+                menus_expect menuState '.opened and .hasRow and .snapshotReady and (.snapshotId > 0) and (.entries as $entries | ["duplicate","openWith","properties"] | all(.[]; . as $action | any($entries[]; .action == $action and .disabled))) and any(.entries[]; .action == "rename" and (.disabled == false) and .label == "Rename 2 items\u2026") and any(.entries[]; .action == "permissions" and (.disabled == false) and (.errored | not))' "a file and a directory keep Permissions enabled without error in the several-items menu"
             else
                 menus_expect menuState '.opened and .hasRow and .snapshotReady and (.snapshotId > 0) and any(.entries[]; .action == "permissions" and .disabled and .errored and .hint == "symlink")' "one symlink disables and errors Permissions for the whole selection"
             fi
@@ -730,7 +742,8 @@ case_menuscoverage() (
     menus_hidden_copy_as
     printf 'MENUS_NATIVE_CHECKS=%s\n' "$menus_checks"
     printf 'MENUS_UNVERIFIED new-file/new-folder, archive/convert, provider states, hidden-row persistence, work-area/scale matrix, partial deletion failure, directory Permissions scope, concurrent windows\n'
-    trash_cleanup 0
+    # trash_cleanup clears the EXIT trap first, so exiting lets the trap remove the registered entries and then run it.
+    exit 0
 )
 
 # Qt 6.12 throttles frame-synchronous hover to 100 ms, so a list step (j, k) lands the late hover before c opens the menu with its Copy as flyout.
