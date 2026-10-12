@@ -194,12 +194,16 @@ fn list_into(path: &Path, walk: &mut Walk<'_>, folders: &mut Vec<PathBuf>) {
         // A known mount point on another device is entered first, so a hang in the stat that crosses into it is charged to that mount.
         let known_dev = if file_type.is_dir() { walk.dev_of.and_then(|f| f(&entry.path())) } else { None };
         let crossing = known_dev.is_some_and(|dev| !same_device(walk.start_dev, dev));
-        if crossing {
-            if let Some(entering) = walk.progress.as_ref().and_then(|p| p.entering) {
-                entering(&entry.path());
-            }
+        let entering = walk.progress.as_ref().and_then(|p| p.entering).filter(|_| crossing);
+        if let Some(entering) = entering {
+            entering(&entry.path());
         }
-        let meta = match entry.metadata() {
+        let stat = entry.metadata();
+        // The crossing stat has returned, so the folder being listed owns the next entry again.
+        if let Some(entering) = entering {
+            entering(path);
+        }
+        let meta = match stat {
             Ok(m) => m,
             Err(_) => {
                 walk.tally.partial = true;
