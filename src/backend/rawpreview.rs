@@ -119,10 +119,21 @@ fn evict(dir: &Path, bound: &Bound) {
     evict_between(dir, bound, || {});
 }
 
-// Used since the scan read it, or no longer a regular file: either way the scan's verdict on the copy is out of date.
+// A copy gone before its turn counts as removed, while one served since the scan is spared.
 fn removed_if_unused(path: &Path, seen: SystemTime) -> bool {
-    let Ok(meta) = std::fs::symlink_metadata(path) else { return false };
-    meta.file_type().is_file() && last_used(&meta) <= seen && std::fs::remove_file(path).is_ok()
+    let meta = match std::fs::symlink_metadata(path) {
+        Ok(m) => m,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return true,
+        Err(_) => return false,
+    };
+    if !meta.file_type().is_file() || last_used(&meta) > seen {
+        return false;
+    }
+    match std::fs::remove_file(path) {
+        Ok(()) => true,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
+        Err(_) => false,
+    }
 }
 
 // The hook runs between the scan and the first removal, which is where a serve or a re-publish lands in a test.

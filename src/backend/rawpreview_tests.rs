@@ -344,6 +344,23 @@ fn a_copy_served_between_the_scan_and_its_removal_survives_the_pass() {
 }
 
 #[test]
+fn a_copy_gone_before_its_removal_still_leaves_the_count() {
+    let d = TestDir::new("rawprev-evict-gone");
+    let cache = d.join("cache");
+    let (a, b) = (aged(&d, "a.cr2", 100, 2_000), aged(&d, "b.cr2", 200, 1_000));
+    for src in [&a, &b] {
+        ensure_with(&cache, src, usize::MAX, u64::MAX, later()).expect("a preview");
+        tick();
+    }
+    let publishes = AtomicU32::new(0);
+    let bound = Bound { copies: 1, bytes: u64::MAX, now: later(), publishes: &publishes };
+    evict_between(&cache, &bound, || std::fs::remove_file(copy_path(&cache, &a)).unwrap());
+    assert!(!copy_path(&cache, &a).exists(), "the hook did not delete the copy");
+    assert!(copy_path(&cache, &b).exists(), "a gone copy kept its count and evicted the next copy");
+    assert_eq!(std::fs::read_dir(&cache).unwrap().count(), 1, "the count kept a gone copy");
+}
+
+#[test]
 fn the_cache_holds_its_bytes_by_the_same_order() {
     let d = TestDir::new("rawprev-evict-bytes");
     let cache = d.join("cache");
