@@ -310,3 +310,53 @@ fn a_deletion_stamp_reads_as_seconds_since_the_epoch() {
     assert_eq!(stamp_secs("2026-10-07T16:00:00"), Some(1_791_388_800));
     assert_eq!(stamp_secs("2026-10-07 16:00:00"), None, "a stamp without the T is no stamp");
 }
+
+// Counts gio spawns and their order, never wall time: the announce must come between the trash and the settle list, once per batch.
+#[test]
+fn the_outcome_is_announced_after_the_trash_and_before_the_settle_list_with_no_spawn_per_item() {
+    let d = crate::backend::testdir::TestDir::new("trash-announce-order");
+    let can = d.dir("can");
+    let items: Vec<PathBuf> = (0..5).map(|n| d.file(&format!("f{n}.txt"), "x")).collect();
+    let events = Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+    let (seen, moved) = (Rc::clone(&events), items.clone());
+    let _stand = StandIn::hold(Rc::new(move |args: &[&str]| {
+        if args.contains(&"--list") {
+            seen.borrow_mut().push("list".to_string());
+        } else {
+            seen.borrow_mut().push("trash".to_string());
+            for p in &moved {
+                std::fs::rename(p, can.join(p.file_name().unwrap())).unwrap();
+            }
+        }
+        Some(ok_output())
+    }));
+    let log = Rc::clone(&events);
+    let (ok, failed, reason) = trash_announcing(&items, None, &mut |n, f, r| {
+        log.borrow_mut().push(format!("announce {n} {f} {r:?}"));
+    }).expect("a batch is not an error");
+    assert_eq!((ok.len(), failed, reason.as_str()), (5, 0, ""));
+    assert_eq!(*events.borrow(), ["list", "trash", "announce 5 0 \"\"", "list"], "one spawn per stage for five items, announce before the settle list");
+}
+
+#[test]
+fn an_announced_failure_words_itself_as_the_final_result_does() {
+    let d = crate::backend::testdir::TestDir::new("trash-announce-failure");
+    let kept = d.file("kept.txt", "stays");
+    let _stand = StandIn::hold(Rc::new(move |_args: &[&str]| Some(ok_output())));
+    let said = Rc::new(std::cell::RefCell::new(None::<(usize, usize, String)>));
+    let log = Rc::clone(&said);
+    let (entries, failed, reason) = trash_announcing(std::slice::from_ref(&kept), None, &mut |n, f, r| {
+        *log.borrow_mut() = Some((n, f, r.to_string()));
+    }).expect("a present path is not an error");
+    assert!(entries.is_empty());
+    assert_eq!(said.borrow().clone(), Some((0, failed, reason)), "the announce and the result agree");
+}
+
+// timeout's own exit is 124 on the first signal; after the kill-after it dies with its group, which std reports as signal 9 and no code.
+#[test]
+fn a_gio_that_outlives_the_first_signal_still_reads_as_taking_too_long() {
+    let said = |raw: i32| failure_reason(&Some(std::process::Output { status: std::process::ExitStatus::from_raw(raw), stdout: Vec::new(), stderr: Vec::new() }));
+    assert_eq!(said(124 << 8), "Trash took too long to answer", "exit 124");
+    assert_eq!(said(9), "Trash took too long to answer", "killed by signal 9 after the kill-after");
+    assert_eq!(said(1 << 8), "gio trash failed", "an ordinary failure with no stderr keeps its own words");
+}

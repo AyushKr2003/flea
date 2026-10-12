@@ -2,7 +2,7 @@
 use crate::backend::iomount::{internal_failure, mount_body, mount_key, slow_sentence, slow_write_with, CALL_DEADLINE, SlowWrite, SLOW_MKDIR, SLOW_RENAME};
 use crate::backend::ops;
 use crate::backend::opsreq::{
-    duplicated_line, made_line, op_err, renamed_line, run_duplicate_checked, run_transfer_checked, run_trash, trashed_line,
+    duplicated_line, made_line, op_err, renamed_line, run_duplicate_checked, run_transfer_checked, run_trash,
     transferdone_line, transferitem_line, transferprogress_line, transferstarted_line, undone_line, usable_dest,
     LinkOutcome, OpMsg,
 };
@@ -40,6 +40,8 @@ pub(crate) struct Ops {
     pub live: Arc<super::opscancel::Live>,
     // Slow writes still running past their slow lines; a second write on the same mount waits.
     pub pending: Vec<SlowClaim>,
+    // Trash batches announced but not yet journaled: undo and redo wait on them, every other write runs.
+    pub settling: Vec<(usize, String)>,
     // Detached jobs, so a quit cancels each one; they run alongside by design.
     pub detached: Arc<super::opscancel::DetachedJobs>,
     pub tx: Sender<OpMsg>,
@@ -48,7 +50,7 @@ pub(crate) struct Ops {
 impl Ops {
     pub fn new(tx: Sender<OpMsg>) -> Ops {
         Ops { journal: Journal::new(), permissions: super::permissions::Permissions::default(), picker: None, menuactions: None, trashbrowser: None,
-               transfer_retry: (0, Vec::new()), question: None, asked: 0, next_id: 1, live: Arc::new(super::opscancel::Live::new()), pending: Vec::new(), detached: Arc::new(super::opscancel::DetachedJobs::new()), tx }
+               transfer_retry: (0, Vec::new()), question: None, asked: 0, next_id: 1, live: Arc::new(super::opscancel::Live::new()), pending: Vec::new(), settling: Vec::new(), detached: Arc::new(super::opscancel::DetachedJobs::new()), tx }
     }
 
     // Production shares one undo history across every backend in the session; tests keep new().
@@ -198,8 +200,8 @@ pub(crate) fn pending_on(ops: &Ops, body: &str, path: &str) -> bool {
 
 // Undo and redo wait while any slow write is pending, naming its path, so no reversal races the late journal.
 fn pending_busy(out: &mut impl Write, ops: &Ops, where_: &str) -> bool {
-    if let Some(held) = ops.pending.first() {
-        let denied = op_err(where_, &held.path, "an operation is already running");
+    if let Some(path) = ops.pending.first().map(|held| held.path.clone()).or_else(|| super::trashland::settling_path(ops)) {
+        let denied = op_err(where_, &path, "an operation is already running");
         writeln!(out, "{}", error_line(&denied)).ok();
         out.flush().ok();
         return true;
@@ -250,9 +252,9 @@ pub(crate) fn start_trash(out: &mut impl Write, ops: &mut Ops, paths: Vec<String
     if pending_busy_for(out, ops, "trash", &sources, &[]) {
         return;
     }
-    ops.claim_transfer();
+    let (id, _) = ops.claim_transfer();
     let tx = ops.tx.clone();
-    thread::spawn(move || run_trash(paths, tx, selection));
+    thread::spawn(move || run_trash(id, paths, tx, selection));
 }
 
 pub(crate) fn start_duplicate(out: &mut impl Write, ops: &mut Ops, path: &str, menu_id: usize) {
@@ -817,11 +819,7 @@ pub(crate) fn report_op(out: &mut impl Write, ops: &mut Ops, msg: OpMsg) {
             ops.transfer_retry = (id, retry);
             writeln!(out, "{}", line).ok();
         }
-        OpMsg::Trashed { ok, failed, entry, reason } => {
-            ops.journal.push(entry);
-            ops.live.finished();
-            writeln!(out, "{}", trashed_line(ok, failed, &reason)).ok();
-        }
+        landed @ (OpMsg::TrashAnnounced { .. } | OpMsg::Trashed { .. }) => super::trashland::land(out, ops, landed),
         OpMsg::Linked { ok, failed, skipped, entry, note, first_err, dest } => {
             ops.journal.push(entry);
             ops.live.finished();
@@ -1089,7 +1087,7 @@ mod tests {
         report_op(
             &mut buf,
             &mut o,
-            OpMsg::Trashed { ok: 1, failed: 0, entry: Entry { op: "trash".to_string(), steps: vec![Step::Created { path: "/x".into() }] }, reason: String::new() },
+            OpMsg::Trashed { id: 1, ok: 1, failed: 0, entry: Entry { op: "trash".to_string(), steps: vec![Step::Created { path: "/x".into() }] }, reason: String::new(), announced: false },
         );
         assert!(o.live.running().is_none(), "the cap would otherwise refuse every operation for the rest of the session");
         assert_eq!(o.journal.len(), 1);

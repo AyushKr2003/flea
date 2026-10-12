@@ -37,7 +37,7 @@ src/backend/opsdispatch.rs 2258
 src/backend/opsreq.rs 610
 src/backend/opsreq/tests.rs 487
 src/backend/permissions.rs 699
-src/backend/run.rs 1105
+src/backend/run.rs 1107
 src/backend/run_session_tests.rs 525
 src/backend/ops.rs 423
 src/backend/thumbs.rs 495
@@ -45,7 +45,7 @@ src/backend/thumbspec.rs 410
 src/backend/dirsizeworker.rs 573
 src/backend/watch.rs 550
 src/backend/thumbreq.rs 448
-src/backend/undo.rs 675
+src/backend/undo.rs 705
 src/backend/undo_tests.rs 423
 src/backend/undoshare.rs 414
 src/backend/undoshare_tests.rs 550

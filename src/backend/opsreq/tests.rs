@@ -77,7 +77,7 @@ fn menu_workers_refuse_replacement_sources_before_helpers_or_mutations() {
     assert!(!ok && err.contains("changed") && entry.steps.is_empty());
     assert!(path.is_absolute() && path.starts_with(d.path()));
     let (tx, rx) = channel();
-    run_trash(vec![path.to_string_lossy().into()], tx, Some(captured.clone()));
+    run_trash(1, vec![path.to_string_lossy().into()], tx, Some(captured.clone()));
     let results: Vec<_> = rx.iter().collect();
     assert!(results.iter().any(|message| matches!(message, OpMsg::Meta { line } if line.contains("changed"))));
     assert!(results.iter().any(|message| matches!(message, OpMsg::Trashed { ok: 0, failed: 1, entry, .. } if entry.steps.is_empty())));
