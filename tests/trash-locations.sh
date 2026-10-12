@@ -93,6 +93,13 @@ XDG_DATA_HOME="$data_real"
 got=$(sandbox_trash_files_dir "$second_root/item.txt" "$home_same") || fail "third-device item refused"
 [[ "$got" != "$data_real/Trash/files" && "$got" == */.Trash*/files ]] || fail "third-device item gave $got"
 ok "item off the data home's device and HOME's: $got"
+# A folder moved away is judged by its nearest existing ancestor, as when a Restore finds its parent gone.
+want=$got
+got=$(sandbox_trash_files_dir "$second_root/gone/deeper/item.txt" "$home_same") || fail "moved-away folder on a third device refused"
+[[ "$got" == "$want" ]] || fail "moved-away folder on a third device gave $got, not $want"
+got=$(sandbox_trash_files_dir "$test_root/gone/deeper/item.txt" "$home_same") || fail "moved-away folder on HOME's device refused"
+[[ "$got" == "$XDG_DATA_HOME/Trash/files" ]] || fail "moved-away folder on HOME's device gave $got"
+ok "item under a missing folder follows the nearest existing ancestor: $want"
 # An item whose own device differs from its folder's (a nested volume) goes to gio, never into the data home Trash, though its folder shares the data home's device.
 printf 'body\n' > "$second_root/nested.txt" || fail "no nested-volume item"
 stat() {

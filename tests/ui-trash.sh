@@ -646,6 +646,8 @@ trash_restore_failures() {
     trash_guard "$original"
     mkdir "$trash_box/missing-parent" || fail "trash: missing-parent fixture creation failed"
     printf 'missing parent survivor\n' > "$original"
+    # The restore under test may fail, and a mount-top entry left behind would outlive this case.
+    trash_trap_own "$trash_files" "$trash_box" "trash" leaf.txt
     trash_guard_store 0
     /usr/bin/gio trash -- "$original" || fail "trash: owned missing-parent setup failed"
     trash_wait '.opened and .total == 1 and (.busy == false)'
