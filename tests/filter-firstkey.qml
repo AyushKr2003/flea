@@ -17,8 +17,7 @@ ShellRoot {
     property var cycleSync: []
     property var cycleMade: []
     property var cycleGone: []
-    property var keyTags: ({})
-    property int tagSeq: 0
+    property var keyLive: null
     property var missingMarks: []
     property var applyMs: []
     property var shownMs: []
@@ -183,29 +182,23 @@ ShellRoot {
         return out
     }
 
-    // Names every live object, so a key that destroys N delegates and creates N still shows as made plus gone.
-    function tagLive() {
-        var tags = {}
+    // Remembers every live object by identity, so a key that destroys N delegates and creates N still shows as made plus gone.
+    function snapLive() {
+        var seen = new Map()
         var items = root.liveList()
-        for (var i = 0; i < items.length; i++) {
-            root.tagSeq += 1
-            items[i].objectName = "firstkey" + root.tagSeq
-            tags[items[i].objectName] = true
-        }
-        root.keyTags = tags
+        for (var i = 0; i < items.length; i++) seen.set(items[i], true)
+        root.keyLive = seen
     }
     function countMadeGone() {
+        var now = new Map()
         var made = 0
-        var seen = {}
-        var fresh = []
         var items = root.liveList()
-        // A tagged object counts by its tag, an untagged one by identity, so new delegates sharing a name all count.
         for (var i = 0; i < items.length; i++) {
-            if (root.keyTags[items[i].objectName] === true) seen[items[i].objectName] = true
-            else if (fresh.indexOf(items[i]) < 0) { fresh.push(items[i]); made += 1 }
+            now.set(items[i], true)
+            if (!root.keyLive.has(items[i])) made += 1
         }
         var gone = 0
-        for (var tag in root.keyTags) if (seen[tag] !== true) gone += 1
+        root.keyLive.forEach(function (flag, object) { if (!now.has(object)) gone += 1 })
         root.cycleMade.push(made)
         root.cycleGone.push(gone)
     }
@@ -260,7 +253,7 @@ ShellRoot {
 
     function typeKey() {
         var p = root.stubPane
-        root.tagLive()
+        root.snapLive()
         var t0 = Date.now()
         Filter.shown(p.rows, p.held, p.filterQuery + root.keys[root.keyIdx])
         root.shownMs.push(Date.now() - t0)

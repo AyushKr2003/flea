@@ -125,9 +125,10 @@ function run(check) {
     var rebuilt = countedReasons(counter)(newBig)
     check("the counted copy answers what the real pass answers", sameReasons(rebuilt, gotBig), true)
     check("one pass makes one to four map ops per name", counter.ops >= newBig.length && counter.ops <= 4 * newBig.length, true)
+    // A name read twice is a second pass over the input, which the map count cannot see.
     var reads = 0
     var counting = newBig.map(function (s) { return { toString: function () { reads += 1; return s } } })
-    BulkRename.reasons(counting)
+    check("the counting names give the same reasons", sameReasons(BulkRename.reasons(counting), wantBig), true)
     check("one pass reads each name once", reads, newBig.length)
     check("the dialog's column gap stays the literal 14, not a text size scaled token",
         Source.source("ui/BulkRenameDialog.qml").indexOf("readonly property int columnGap: 14\n") >= 0, true)
