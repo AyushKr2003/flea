@@ -35,7 +35,9 @@ ShellRoot {
     property var seen: []
     property var unitsAtKey: null
     property double keyAt: 0
-    property double keyReturnedAt: 0
+    // Opens judged so far on this leg, and the first open's cap stamp: the first open builds the kind, the second finds it built.
+    property int opened: 0
+    property int firstCapSeq: -1
 
     function log(line) { console.log("QLFK " + line) }
     function fail(why) { root.failures++; root.log("FAIL " + root.leg + ": " + why) }
@@ -159,19 +161,21 @@ ShellRoot {
         root.stageAt = Date.now()
         root.keyAt = Date.now()
         root.press(Qt.Key_Space, 1)
-        root.keyReturnedAt = Date.now()
         root.log("KEYRETURNED " + root.leg + " active=" + (root.pv() !== null && root.pv().active) + " keyMs=" + (Date.now() - root.keyAt))
         if (root.pv() === null || !root.pv().active) root.fail("Space returned without Quick Look open")
     }
 
-    // The reveal cap counts from the key: its Timer started inside the key's turn, before the first Loader item stood, so the loading mark is CAP_MS from the key. A fast local source reveals with no loading frame and no cap.
-    // Sample output: "CAP pdf startedAt=+0 items=0 caps=0 early=false" is a cap armed in the key with no Loader item built.
+    // The cap counts from the key for a kind already built (armed before show() returns its build) and from after the kind's first build (armed after it, so the compile is outside the cap); openSeq orders the two with no clock.
+    // Sample output: "CAP pdf open=1 cold seq=2 shownSeq=1 caps=0 early=false" is a first open whose cap armed after show() returned.
     function judgeCap(state) {
         var cap = state.revealCapStart
-        root.log("CAP " + root.leg + " startedAt=" + (cap ? "+" + (cap.at - root.keyAt) : "none") + " items=" + (cap ? cap.items : "none") + " caps=" + state.revealCaps + " early=" + state.revealedEarly)
-        if (!cap) { root.fail("the open never started the reveal cap"); return }
-        if (cap.at < root.keyAt || cap.at > root.keyReturnedAt) root.fail("the reveal cap started at +" + (cap.at - root.keyAt) + " ms, outside the key's turn of " + (root.keyReturnedAt - root.keyAt) + " ms")
-        if (cap.items !== 0) root.fail("the reveal cap started after " + cap.items + " Loader item(s) were built, not before the first")
+        var cold = root.opened === 1
+        root.log("CAP " + root.leg + " open=" + root.opened + (cold ? " cold" : " warm") + " seq=" + (cap ? cap.seq : "none") + " shownSeq=" + state.shownSeq + " caps=" + state.revealCaps + " early=" + state.revealedEarly)
+        if (!cap) { root.fail("open " + root.opened + " never started the reveal cap"); return }
+        if (cold && cap.seq < state.shownSeq) root.fail("a kind's first build was inside the reveal cap: it armed at " + cap.seq + ", before show() returned at " + state.shownSeq)
+        if (!cold && cap.seq > state.shownSeq) root.fail("a warm open's reveal cap armed at " + cap.seq + ", after show() returned at " + state.shownSeq + ", not from the key")
+        if (!cold && cap.seq <= root.firstCapSeq) root.fail("the second open read the first open's cap stamp " + cap.seq)
+        if (cold) root.firstCapSeq = cap.seq
         if (state.revealedEarly || state.revealCaps !== 0) root.fail("a fast source drew the loading frame: caps=" + state.revealCaps + " early=" + state.revealedEarly)
     }
 
@@ -259,6 +263,7 @@ ShellRoot {
             if (look === null || !look.revealed) return
             var state = look.openState()
             root.log("OPENED " + root.leg + " revealed=" + look.revealed + " landed=" + state.landed + " early=" + state.revealedEarly + " lookEmptyFrames=" + state.lookEmptyFrames + " ms=" + (Date.now() - root.keyAt) + " libs=" + root.libs() + " pss=" + root.pssKb())
+            root.opened++
             root.judgeCap(state)
             root.stage = 5
             root.stageAt = Date.now()
@@ -267,6 +272,8 @@ ShellRoot {
         }
         if (root.stage === 5) {
             if (root.pv().visible) return
+            if (root.pv().openState().revealCapStart !== null) root.fail("close left the reveal cap stamp of open " + root.opened)
+            if (root.opened < 2) { root.openIt(); return }
             root.finish()
             return
         }
