@@ -181,6 +181,8 @@ Item {
         onTriggered: { root.requestThumbs(); root.requestDirSizes() }
     }
     onRowsChanged: if (root.pane !== null) settle.restart()
+    // A column with no pane is a peek the user is not working in, so it keeps fewer unseen rows than the pane's cacheRows: 4 (ui/Pane.qml).
+    readonly property int bareCacheRows: 2
     // No pane yet: the column's own rows are the listing, the same fallback its model uses.
     readonly property int rowTotal: root.pane ? root.pane.shownTotal : root.rows.length
     // The count a hidden column keeps its rows for, -1 once another reached it; the model compares counts, so no handler order builds a row.
@@ -225,7 +227,7 @@ Item {
                                   warm: root.pane !== null && view.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: Math.floor((view.height + view.cacheBuffer) / Theme.fileRowHeight) + 1 }
         clip: true
         // The pane's cache rows, as ui/List.qml takes them: Qt's default 320 px builds about 12 unseen rows into every landing.
-        cacheBuffer: Theme.fileRowHeight * (root.pane ? root.pane.cacheRows : 2)
+        cacheBuffer: Theme.fileRowHeight * (root.pane ? root.pane.cacheRows : root.bareCacheRows)
         boundsBehavior: Flickable.StopAtBounds
         onContentYChanged: if (root.pane !== null) { coalesce.start(); settle.restart() }
         onCountChanged: root.prebuild.landed()
