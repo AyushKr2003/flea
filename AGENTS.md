@@ -724,7 +724,7 @@ staying, and `close()` calls `cancel()` so nothing queued runs. Space's own open
 dim wait for the content's first frame (`lookReady`, which sets `landed`), and `revealed` is `landed || revealedEarly`.
 The hold ends early over the loading state, shown at once (`heldOff`) for every kind, when the `revealCap` single-shot
 fires at `Swap.CAP_MS` (66 ms) counted from the key for a kind already built, armed in `load()` before `show()` builds the Loader items (the cap
-once started after `show()` returned, so the key turn added to the 66 ms and the mark drew a frame late), and from after `show()` for a kind's first build, so a cold PDF compile is not inside it (`builtKinds` tells them apart, `close()` and an open that arms nothing clear `revealCapStart`), or when a press or the wheel lands anywhere on the overlay: the top `holdShield` takes it, through
+once started after `show()` returned, so the key turn added to the 66 ms and the mark drew a frame late), and from after `show()` for a kind's first build, so a cold PDF compile is not inside it (`builtKinds` tells them apart, `close()` clears `revealCapStart`, and so does an open that arms nothing while no cap runs), or when a press or the wheel lands anywhere on the overlay: the top `holdShield` takes it, through
 its own release, so no click reaches a card that never drew. That early loading state stands `Swap.MIN_SHOW_MS` from
 `loadingSince`: `revealIfReady` asks `Swap.showLeft`, and content ready sooner lands when the `minShow` timer ends, while
 content ready before the reveal lands at once. A move during the hold takes no picture and keeps the open's cap;
@@ -9216,4 +9216,4 @@ Open With's native menus case and the Permissions viewport follow their board: `
 
 The crumb device check lands a sample `devs` reply through `Messages.route` and reads its device with `ui/CrumbDrop.qml`'s own `destDev` binding, which moves `tests/js/drag.js` 481 to 493, re-derived with `wc -l`, while the link-walk bound test lives in the new `src/backend/extclass_tests.rs` so `src/backend/extclass.rs` stays under its cap.
 
-The Quick Look reveal cap starting at the key moves one ceiling, re-derived with `wc -l`: `ui/Preview.qml` 839 to 863, for arming `revealCap` before `show()` for a warm kind and after it for a kind's first build (`builtKinds`, `armRevealCap`, `kindFor`), and the `revealCapStart` and `shownSeq` stamps, ordered by `openSeq`, that `tests/quicklook-firstkind.qml` reads and `close()` clears.
+The Quick Look reveal cap starting at the key moves one ceiling, re-derived with `wc -l`: `ui/Preview.qml` 839 to 862, for arming `revealCap` before `show()` for a warm kind and after it for a kind's first build (`builtKinds`, `armRevealCap`, `kindFor`), and the `revealCapStart` and `shownSeq` stamps, ordered by `openSeq`, that `tests/quicklook-firstkind.qml` reads and `close()` clears.

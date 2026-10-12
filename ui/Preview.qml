@@ -373,8 +373,7 @@ Item {
         var isPdf = Kinds.quickLookKind(newIcon, newPath) === Kinds.PDF
         var swapItem = root.ensureSwap()
         var show = function () {
-            // A warm kind counts from the key, before show() builds the Loader items; a kind's first build (a PDF's compile above all) is outside the cap, which starts once show() returns.
-            // A move during the hold keeps the open's deadline.
+            // A warm kind counts from the key, before show() builds the Loader items; a kind's first build (a PDF's compile above all) is outside the cap, which starts once show() returns; a move during the hold keeps the open's deadline.
             var kindKey = root.kindFor(newPath, newIcon, newThumb, newRow)
             var arm = (!root.active || !root.revealed) && !revealCap.running
             var warm = root.builtKinds[kindKey] === true
