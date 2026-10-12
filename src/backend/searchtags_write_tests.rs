@@ -173,7 +173,7 @@ fn a_write_during_the_first_read_is_not_lost() {
     let mut index = Index::new();
     let rels = ["red-holiday.txt", "plain-holiday.txt"];
     for rel in rels {
-        index.push(rel.to_string(), false);
+        index.push(rel, false);
     }
     let index = Arc::new(Mutex::new(index));
     let pass = Pass::new(rels.len(), Bound::new(d.path(), ""));

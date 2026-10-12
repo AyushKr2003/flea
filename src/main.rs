@@ -125,19 +125,6 @@ pub(crate) fn flash_picker(args: &[String]) -> bool {
     args.get(1).map(String::as_str) == Some("flash") && args.get(2).map(String::as_str) == Some("choose")
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_path_named_flash_still_opens() {
-        let bare = ["flea".to_string(), "flash".to_string()];
-        assert!(!flash_picker(&bare), "a bare flash is a path, not the picker");
-        let picker = ["flea".to_string(), "flash".to_string(), "choose".to_string()];
-        assert!(flash_picker(&picker), "flash choose runs the picker");
-    }
-}
-
 fn main() {
     // args() panics on a non-UTF-8 argument and a Linux filename is any bytes, so refuse instead.
     let args: Vec<String> = match std::env::args_os().map(|a| a.into_string()).collect() {
@@ -386,5 +373,18 @@ fn main() {
             eprintln!("{}", paths::missing_ui_message());
             exit(2);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_path_named_flash_still_opens() {
+        let bare = ["flea".to_string(), "flash".to_string()];
+        assert!(!flash_picker(&bare), "a bare flash is a path, not the picker");
+        let picker = ["flea".to_string(), "flash".to_string(), "choose".to_string()];
+        assert!(flash_picker(&picker), "flash choose runs the picker");
     }
 }
