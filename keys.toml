@@ -609,7 +609,7 @@ sheet = false
 # narrows or orders what is already listed. Change writes something, or opens the surface that does.
 [sheetgroups]
 move = ["cursorDown", "cursorUp", "cursorFirst", "cursorLast", "pageDown", "pageUp", "open",
-        "parent", "pageForward", "historyBack", "historyForward", "focusNext", "focusPreview",
+        "parent", "pageForward", "historyBack", "historyForward", "focusNext", "focusPrevious", "focusPreview",
         "tabNew", "openTab", "tabClose", "tabNext", "tabPrevious", "tabMoveLeft", "tabMoveRight", "windowNew", "escape"]
 look = ["viewList", "viewColumns", "viewGrid", "togglePreview", "loadPreview", "preview",
         "toggleHidden", "sidebar", "zoomIn", "zoomOut", "expand", "mute", "textSizeUp", "textSizeDown",
@@ -1717,9 +1717,9 @@ mods = "shift"
 key = "Tab"
 keys = "shift-tab"
 action = "focusPrevious"
-label = "focusPrevious"
+label = "focus back"
 frontend = "all"
-context = "rail,menu,panel,preview,pdf,media"
+context = "listing,rail,menu,panel,preview,pdf,media"
 
 [[preset]]
 name = "all"
@@ -1727,9 +1727,9 @@ mods = "shift"
 key = "Backtab"
 keys = "shift-backtab"
 action = "focusPrevious"
-label = "focusPrevious"
+label = "focus back"
 frontend = "all"
-context = "rail,menu,panel,preview,pdf,media"
+context = "listing,rail,menu,panel,preview,pdf,media"
 
 [[preset]]
 name = "all"

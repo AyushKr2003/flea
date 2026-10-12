@@ -275,16 +275,17 @@ ShellRoot {
             } },
             // FIELDS-24: the fill is the track's sibling, so the track's quarter opacity never reaches it.
             { name: "flasher-run", act: function () { shell.accentFrameWas = Flea.Theme.color.accentFrame; Flea.Theme.color.accentFrame = shell.sentinel }, record: function () {
-                var bars = shell.findAll(flashRow, function (o) { return shell.isType(o, "Rectangle") && o.height === flashRow.barHeight })
-                var track = bars.filter(function (o) { return shell.rgba(o.color) === shell.rgba(Flea.Theme.color.muted) })[0]
-                var fill = bars.filter(function (o) { return o !== track })[0]
-                var effective = 1
-                for (var up = fill; up; up = up.parent) effective *= up.opacity
-                shell.check("flasher: the fill is not a descendant of the track", shell.findAll(track, function (o) { return o === fill }).length, 0)
-                shell.check("flasher: the fill's effective opacity is 1", shell.round3(effective), 1)
-                shell.check("flasher: the fill takes accentFrame and not accent", [shell.rgba(fill.color), shell.rgba(Flea.Theme.color.accent) !== shell.rgba(fill.color)], [shell.rgba(shell.sentinel), true])
-                shell.check("flasher: a half-done transfer fills half the track", shell.round3(fill.width / track.width), 0.5)
-                Flea.Theme.color.accentFrame = shell.accentFrameWas
+                try {
+                    var bars = shell.findAll(flashRow, function (o) { return shell.isType(o, "Rectangle") && o.height === flashRow.barHeight })
+                    var track = bars.filter(function (o) { return shell.rgba(o.color) === shell.rgba(Flea.Theme.color.muted) })[0]
+                    var fill = bars.filter(function (o) { return o !== track })[0]
+                    var effective = 1
+                    for (var up = fill; up; up = up.parent) effective *= up.opacity
+                    shell.check("flasher: the fill is not a descendant of the track", shell.findAll(track, function (o) { return o === fill }).length, 0)
+                    shell.check("flasher: the fill's effective opacity is 1", shell.round3(effective), 1)
+                    shell.check("flasher: the fill takes accentFrame and not accent", [shell.rgba(fill.color), shell.rgba(Flea.Theme.color.accent) !== shell.rgba(fill.color)], [shell.rgba(shell.sentinel), true])
+                    shell.check("flasher: a half-done transfer fills half the track", shell.round3(fill.width / track.width), 0.5)
+                } finally { Flea.Theme.color.accentFrame = shell.accentFrameWas }
             } },
             // Each dialog's ground and card report the pointer, so one that crosses them onto a row takes the cursor on its first move.
             { name: "pointer-openwith", act: function () {

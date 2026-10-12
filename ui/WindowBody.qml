@@ -64,9 +64,12 @@ Rectangle {
     function focusPane(side) {
         if (!dualMode) return
         focusSide = side
+        // The keyboard rail is the left pane's, so leaving it behind hands that pane its list back: Shift+Tab from the right then lands on the left list, not the rail.
+        if (side === 1) primaryPane.focusView = Focus.LIST
         currentPane.forceActiveFocus()
         Qt.callLater(view.rememberDual)
     }
+    function switchToLeftRail() { focusPane(0); primaryPane.focusView = Focus.RAIL }
     function rememberPaths() {
         // Path and tab changes in one turn share the deferred navigation patch.
         if (initialized && !dualMode && primaryPane.path)
@@ -289,7 +292,7 @@ Rectangle {
         railPane: view.currentPane
         onFocusRequested: view.focusPane(0)
         onSwitchPane: view.focusPane(1)
-        onSwitchToRail: { view.focusPane(0); primaryPane.focusView = Focus.RAIL }
+        onSwitchToRail: view.switchToLeftRail()
         onPathChanged: view.rememberPaths()
         onListingStateChanged: if (primaryPane.listingState !== "loading") ipcLoader.active = true
         onListInFlightChanged: { if (!primaryPane.listInFlight) view.queueTabStrip() }
@@ -361,7 +364,7 @@ Rectangle {
                 statusBar: bar
                 onFocusRequested: view.focusPane(1)
                 onSwitchPane: view.focusPane(0)
-                onSwitchToRail: { view.focusPane(0); primaryPane.focusView = Focus.RAIL }
+                onSwitchToRail: view.switchToLeftRail()
         onPathChanged: view.rememberPaths()
                 onClipboardChanged: if (primaryPane.clipboard !== clipboard) primaryPane.clipboard = clipboard
                 onMessage: function(text, error) { bar.say(text, error) }
