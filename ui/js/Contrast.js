@@ -79,6 +79,25 @@ function ensureRatio(fgHex, bgHex, minRatio) {
     return stepped(hexOf(best), bgHex, need, toward)
 }
 
+// Bisection steps: 16 halvings leave under 1.5e-5 of alpha, below one 8-bit step.
+var WASH_BISECTIONS = 16
+
+// The least alpha, never under floor, at which fgHex washed over surfaceHex stands `need` off the surface once drawn in 8 bits; 1 when even the whole foreground cannot.
+function washAlpha(fgHex, surfaceHex, need, floor) {
+    var lo = floor
+    var hi = 1
+    if (ratio(hexOf(over(fgHex, lo, surfaceHex)), surfaceHex) >= need)
+        return lo
+    for (var i = 0; i < WASH_BISECTIONS; i++) {
+        var mid = (lo + hi) / 2
+        if (ratio(hexOf(over(fgHex, mid, surfaceHex)), surfaceHex) >= need)
+            hi = mid
+        else
+            lo = mid
+    }
+    return hi
+}
+
 // Rounding to 8 bits can land just under the ratio asked for, 2.99 for 3 on 20 of the 22 stock palettes.
 function stepped(hex, bgHex, need, toward) {
     var c = parse(hex)

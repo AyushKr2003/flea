@@ -105,7 +105,7 @@ function run(check) {
     check("TagSwatch names its fallback border", swatchSrc.indexOf("readonly property int fallbackBorder: 2") >= 0 && swatchSrc.indexOf("? root.fallbackBorder : 0") >= 0, true)
     check("every caller passes tagColors", ["TagSlot", "TagMenuMark", "TagRailSection"].every(function (f) {
         var src = Source.source("ui/" + f + ".qml")
-        return src.indexOf("tagColors: Theme.tag.") >= 0 && src.indexOf("palette:") < 0 }), true)
+        return /tagColors: .*Theme\.tag\./.test(src) && src.indexOf("palette:") < 0 }), true)
     var headingSrc = Source.source("ui/RailHeading.qml")
     check("RailHeading names its lead and tracking", headingSrc.indexOf("headingLead: 0.15") >= 0 && headingSrc.indexOf("headingTracking: 1") >= 0
         && headingSrc.indexOf("* root.headingLead") >= 0 && headingSrc.indexOf("letterSpacing: root.headingTracking") >= 0, true)
