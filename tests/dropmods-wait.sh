@@ -118,8 +118,8 @@ done
 # One definition of the sentence wait, shared by both cases.
 [ "$(grep -h '^cap_[a-z_]*wait_target()' tests/ui-captures-drops.sh tests/ui-captures-dropmods.sh | wc -l)" = 1 ] \
     && ok "the sentence wait is defined once" || bad "the sentence wait is defined more than once"
-[ "$(grep -c 'cap_drops_wait_target' tests/ui-captures-dropmods.sh)" = 2 ] \
-    && ok "cap_dropmods waits through the shared helper" || bad "cap_dropmods does not call the shared wait twice"
+[ "$(grep -c 'cap_drops_wait_target' tests/ui-captures-dropmods.sh)" = 4 ] \
+    && ok "cap_dropmods waits through the shared helper" || bad "cap_dropmods does not call the shared wait four times, both legs in each window"
 
 # Leg 1 runs with the setting on: a steer before the shot and another before the release each restart the 700 ms rest that opens Photos.
 seq=$(sed -n '/^case_cap_drops()/,/^}/p' tests/ui-captures-drops.sh | sed -n '/cap_drops_wait_target "Move 1 item to Photos/,/cap_drops_release/{p;/cap_drops_release/q}' | grep -v '^ *#' | awk '{print $1}' | paste -sd, -)
@@ -149,7 +149,7 @@ out=$(undo true)
 : > "$box/keys"
 rm -f "$gone"
 out=$(undo true)
-[ "$out" = "FAIL: cap_drops: the drop never landed $gone, so z has no drop to undo" ] && [ ! -s "$box/keys" ] \
+[[ "$out" == "FAIL: cap_drops: the drop never landed $gone, so z has no drop to undo (said "* ]] && [ ! -s "$box/keys" ] \
     && ok "a drop that never landed fails before z, which would undo another leg" || bad "a missing drop must fail before z, got: $out / $(cat "$box/keys")"
 
 : > "$box/keys"
