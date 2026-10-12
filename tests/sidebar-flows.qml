@@ -455,6 +455,8 @@ ShellRoot {
             rail.cursorIndex = root.railHome
             pane.focusView = "rail"
             check("lit-place: a focused rail draws the cursor frame on the cursor row, apart from the lit one", [root.railIndices("frame"), root.railLit()], [[root.railHome], [root.railRecent]])
+            rail.cursorIndex = root.railTrash
+            check("lit-place: the cursor on Trash, not lit, draws its frame and the IPC does not read it as current", [root.railIndices("frame"), root.railLit(), root.ipc(true).trashRail().current], [[root.railTrash], [root.railRecent], false])
             rail.cursorIndex = root.railRecent
             check("lit-place: the cursor on the lit row draws both", [root.railIndices("frame"), root.railLit()], [[root.railRecent], [root.railRecent]])
             pane.focusView = "list"
@@ -471,6 +473,10 @@ ShellRoot {
         function () {
             if (!pane.trash.opened) return false
             check("lit-place: an open Trash lights the Trash row alone, and the IPC reads it as current with the list holding focus", [pane.sidebar.litIndex, root.railLit(), root.ipc(true).trashRail().current], [root.railTrash, [root.railTrash], true])
+            pane.sidebar.cursorIndex = root.railHome
+            pane.focusView = "rail"
+            check("lit-place: an open Trash with the rail cursor off it is still current over the IPC", [root.railIndices("frame"), root.railLit(), root.ipc(true).trashRail().current], [[root.railHome], [root.railTrash], true])
+            pane.focusView = "list"
             pane.trash.close()
             return true
         },
