@@ -3,7 +3,12 @@ use std::path::{Component, PathBuf};
 
 // An empty FLEA_UI would resolve the entry against the working directory, so it is no candidate.
 fn env_ui_dir() -> Option<PathBuf> {
-    let value = std::env::var("FLEA_UI").ok()?;
+    ui_dir_from(std::env::var("FLEA_UI").ok())
+}
+
+// Split so a test names the value without writing this process's environment.
+fn ui_dir_from(value: Option<String>) -> Option<PathBuf> {
+    let value = value?;
     if value.is_empty() {
         return None;
     }
@@ -121,14 +126,11 @@ mod tests {
         );
     }
 
-    // Both cases sit in one test because FLEA_UI is process wide and cargo runs tests in threads.
     #[test]
     fn an_empty_flea_ui_is_not_a_candidate() {
-        std::env::set_var("FLEA_UI", "");
-        assert_eq!(env_ui_dir(), None);
-        std::env::set_var("FLEA_UI", "/usr/share/flea/ui");
-        assert_eq!(env_ui_dir(), Some(PathBuf::from("/usr/share/flea/ui")));
-        std::env::remove_var("FLEA_UI");
+        assert_eq!(ui_dir_from(Some(String::new())), None);
+        assert_eq!(ui_dir_from(None), None);
+        assert_eq!(ui_dir_from(Some("/flea-test/ui".into())), Some(PathBuf::from("/flea-test/ui")));
     }
 
     #[test]

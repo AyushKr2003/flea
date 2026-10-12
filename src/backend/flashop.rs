@@ -24,7 +24,8 @@ pub fn handle_flashimage(out: &mut dyn std::io::Write, path: &str) {
 // Lists every eligible drive with the refusals the image causes, then drops the daemon's system disks.
 pub fn handle_flashtargets(out: &mut dyn std::io::Write, image: &str) {
     let (exe, ui) = crate::backend::flasheligible::roots_for_production();
-    let roots = crate::backend::flasheligible::Roots { sys: Path::new("/sys"), dev: Path::new("/dev"), exe: &exe, ui: &ui };
+    let loop_root = crate::backend::flasheligible::seam_root();
+    let roots = crate::backend::flasheligible::Roots { sys: Path::new("/sys"), dev: Path::new("/dev"), exe: &exe, ui: &ui, loop_root: loop_root.as_deref() };
     let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
     let swaps = std::fs::read_to_string("/proc/swaps").unwrap_or_default();
     let (image_path, image_bytes) = flash_measure(image);
@@ -136,7 +137,8 @@ pub(crate) fn run_flash_on(req: FlashReq, cancel: Arc<AtomicBool>, tx: &std::syn
     let mut meter = Meter::new(id, tx, probe.known, total, probe.bytes);
     // Layers 1 to 4 against fresh sysfs, then layer 2 asked again, before the helper opens anything.
     meter.beat("prepare", 0, 0, true);
-    let roots = crate::backend::flasheligible::Roots { sys: host.sys, dev: host.dev, exe: host.exe, ui: host.ui };
+    let loop_root = crate::backend::flasheligible::seam_root();
+    let roots = crate::backend::flasheligible::Roots { sys: host.sys, dev: host.dev, exe: host.exe, ui: host.ui, loop_root: loop_root.as_deref() };
     let mountinfo = std::fs::read_to_string(host.mountinfo).unwrap_or_default();
     let swaps = std::fs::read_to_string(host.swaps).unwrap_or_default();
     let chosen = crate::backend::flasheligible::Chosen { dev: &req.dev, seq: req.seq, serial: &req.serial, bytes: req.bytes };

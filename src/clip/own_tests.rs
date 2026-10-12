@@ -1,6 +1,6 @@
 use super::*;
 use crate::backend::testdir::TestDir;
-use crate::clip::testutil::{advertise, expect, watchdog, DisplayEnv, WATCHDOG_MS};
+use crate::clip::testutil::{advertise, expect, watchdog, WATCHDOG_MS};
 use std::sync::mpsc::{channel, RecvTimeoutError};
 
 extern "C" {
@@ -19,13 +19,12 @@ fn an_owner_without_a_clipboard_manager_returns_its_cause() {
     let dir = TestDir::new("clip-owner-no-manager");
     let socket = dir.join("wayland");
     let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
-    let _env = DisplayEnv::set(Some(&socket));
     let executable = std::env::current_exe().unwrap();
     let quoted = executable.to_str().unwrap().replace('\'', "'\\''");
     // Keep the readiness pipe open on fd 3 while hiding libtest's stdout; the child's errors stay on stderr.
     let script = dir.script("owner", &format!(
-        "#!/bin/sh\n{}=1 exec '{}' --exact clip::own::tests::an_owner_without_a_clipboard_manager_returns_its_cause --nocapture 3>&1 >/dev/null\n",
-        CHILD, quoted));
+        "#!/bin/sh\n{}=1 WAYLAND_DISPLAY='{}' exec '{}' --exact clip::own::tests::an_owner_without_a_clipboard_manager_returns_its_cause --nocapture 3>&1 >/dev/null\n",
+        CHILD, socket.to_str().unwrap().replace('\'', "'\\''"), quoted));
     let compositor = std::thread::spawn(move || -> std::io::Result<()> {
         use crate::clip::protocol::{CALLBACK_DONE, DISPLAY, DISPLAY_GET_REGISTRY, DISPLAY_SYNC, REGISTRY_BIND, SEAT_VERSION};
         let stream = crate::clip::testutil::accept(&listener, watchdog())?;

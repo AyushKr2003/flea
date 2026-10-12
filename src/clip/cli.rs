@@ -48,7 +48,7 @@ pub fn clear(token: &str) -> i32 {
         eprintln!("flea: the token names the copy to clear");
         return 2;
     }
-    match control::clear(token) {
+    match control::clear(token, None) {
         Ok(cleared) => {
             println!("{}", reply::reply_clear(Ok(cleared)));
             0
