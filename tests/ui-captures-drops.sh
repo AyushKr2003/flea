@@ -7,6 +7,29 @@ cap_drops_fat_skip() {
     printf 'CAP SKIP fat-card: needs a FAT mount, driven by the controller\n'
     return 0
 }
+# The EXIT trap a hold chains: release the button, then run the trap that was set before the press.
+cap_drops_exit_chain() {
+    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true
+    [[ -n "${cap_drops_saved_trap:-}" ]] || return 0
+    # trap -p prints: trap -- 'command' EXIT, so the quoted command is the third word.
+    eval "set -- $cap_drops_saved_trap"
+    eval "${3:-:}"
+}
+# A press arms the release ahead of whatever EXIT trap exists, which keeps running after it.
+cap_drops_arm() {
+    [[ "${cap_drops_armed:-0}" == "1" ]] && return 0
+    cap_drops_saved_trap=$(trap -p EXIT)
+    trap cap_drops_exit_chain EXIT
+    cap_drops_armed=1
+}
+# Put back the EXIT trap the press found; a trap a case installed over the chain since is left alone.
+cap_drops_disarm() {
+    if [[ "${cap_drops_armed:-0}" == "1" && "$(trap -p EXIT)" == *cap_drops_exit_chain* ]]; then
+        if [[ -n "$cap_drops_saved_trap" ]]; then eval "$cap_drops_saved_trap"; else trap - EXIT; fi
+    fi
+    cap_drops_armed=0
+    cap_drops_saved_trap=""
+}
 # Press the pointer onto a window-relative point and hold it; the caller shots, then releases.
 cap_drops_press() {
     [[ "$#" -eq 2 ]] || fail "cap_drops: press needs x and y, got $#"
@@ -19,11 +42,7 @@ cap_drops_press() {
     pointer_glide "$((wx + $1))" "$((wy + $2))" || fail "cap_drops: pointer move failed"
     sleep 0.2
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x40 >/dev/null 2>&1 || fail "cap_drops: pointer press failed"
-    # A case trap already owns EXIT, so it keeps owning the hold; only a bare press arms the fallback.
-    if [[ -n "$(trap -p EXIT)" ]]; then cap_drops_own_trap=0; else
-        trap 'YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true' EXIT
-        cap_drops_own_trap=1
-    fi
+    cap_drops_arm
 }
 # Steer a held press onto a window-relative point through the same uinput glide as the press.
 cap_drops_steer() {
@@ -33,16 +52,12 @@ cap_drops_steer() {
 # Release a held press without failing, so a failure path never leaves the button down.
 cap_drops_abandon() {
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true
-    # Only the fallback trap is cleared here; a case trap outlives the hold.
-    if [[ "${cap_drops_own_trap:-0}" == "1" ]]; then trap - EXIT; fi
-    cap_drops_own_trap=0
+    cap_drops_disarm
 }
 # Release a held press and settle; a drop that collided is cancelled before it can act.
 cap_drops_release() {
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || fail "cap_drops: pointer release failed"
-    # Only the fallback trap is cleared here; a case trap outlives the hold.
-    if [[ "${cap_drops_own_trap:-0}" == "1" ]]; then trap - EXIT; fi
-    cap_drops_own_trap=0
+    cap_drops_disarm
     settle
     if [[ "$(ipc collideState | jq -r .opened)" == "true" ]]; then key -k Escape >/dev/null; settle; fi
 }

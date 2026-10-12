@@ -57,10 +57,10 @@ run_probe() {
 }
 
 verdict=0
-run_probe list 48 views || verdict=1
+run_probe list 51 views || verdict=1
 run_probe dual 9 dual || verdict=1
 if [ "$verdict" -ne 0 ]; then
     rg 'CURSORBACK' "$test_root"/*/qs.log
     exit 1
 fi
-printf 'CURSORBACK STATUS checks=57\n'
+printf 'CURSORBACK STATUS checks=60\n'
