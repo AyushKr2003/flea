@@ -224,11 +224,12 @@ ShellRoot {
                 shell.check("every name is foreground at the body size, in the tag's order", words.map(function (o) { return [o.text, String(o.color), o.font.pixelSize] }),
                     [["Red", String(Flea.Theme.color.foreground), Flea.Theme.font.body], ["Blue", String(Flea.Theme.color.foreground), Flea.Theme.font.body], ["work", String(Flea.Theme.color.foreground), Flea.Theme.font.body]])
                 shell.check("the tags run left to right on one line", words.map(function (o) { return o.mapToItem(null, 0, 0).x }).every(function (x, i, all) { return i === 0 || x > all[i - 1] }), true)
-                if (marks.length === 2 && words.length === 3) shell.check("a swatch sits one gap left of its name and the next tag starts two gaps on",
+                if (marks.length === 2 && words.length === 3) shell.check("a swatch sits 6 px left of its name at text size 14 and the next tag starts 16 px on, as Properties040 draws",
                     [words[0].mapToItem(null, 0, 0).x - marks[0].mapToItem(null, 0, 0).x - marks[0].width,
-                     marks[1].mapToItem(null, 0, 0).x - words[0].mapToItem(null, 0, 0).x - words[0].contentWidth,
-                     words[2].mapToItem(null, 0, 0).x - words[1].mapToItem(null, 0, 0).x - words[1].contentWidth],
-                    [Flea.Theme.spacing.gap, 2 * Flea.Theme.spacing.gap, 2 * Flea.Theme.spacing.gap])
+                     marks[1].mapToItem(null, 0, 0).x - words[0].mapToItem(null, 0, 0).x - words[0].width,
+                     words[2].mapToItem(null, 0, 0).x - words[1].mapToItem(null, 0, 0).x - words[1].width],
+                    [Flea.Theme.space(5), Flea.Theme.space(14), Flea.Theme.space(14)])
+                if (marks.length > 0) shell.check("the Properties swatch is the board's 10 px square, smaller than the 14 px rail swatch", [marks[0].width, marks[0].height], [10, 10])
                 if (marks.length > 0) shell.check("the Tags value starts at the label's left edge", Math.round(marks[0].mapToItem(null, 0, 0).x - shell.labelOf("Tags").mapToItem(null, 0, 0).x), 0)
                 dialog.close()
             }

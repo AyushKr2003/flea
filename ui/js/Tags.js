@@ -8,6 +8,9 @@ var NAMES = ["Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Gray"]
 // The board's tag swatch square, in px.
 var SWATCH_SIZE = 14
 
+// The smaller swatch Properties040's Tags pair draws beside its 14 px text, in px.
+var PAIR_SWATCH_SIZE = 10
+
 // The digit each name answers to, "" when no digit names it.
 function keyFor(name) {
     var at = NAMES.indexOf(name)

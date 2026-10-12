@@ -329,15 +329,16 @@ FocusScope {
                         Flow {
                             visible: pair.tagged
                             width: parent.width
-                            spacing: 2 * Theme.spacing.gap
+                            spacing: Theme.spacing.tagPairGap
                             Repeater {
                                 model: pair.tagged ? root.facts.tags : []
                                 Row {
                                     id: tagItem
                                     required property string modelData
-                                    spacing: Theme.spacing.gap
-                                    // A name Flea does not know is plain text with no swatch.
+                                    spacing: Theme.spacing.tagNameGap
+                                    // A name Flea does not know is plain text with no swatch; a digit fallback keeps the 14 px square its digit needs.
                                     Flea.TagSwatch {
+                                        size: Theme.tag.fallback ? Tags.SWATCH_SIZE : Tags.PAIR_SWATCH_SIZE
                                         visible: Tags.NAMES.indexOf(tagItem.modelData) >= 0
                                         anchors.verticalCenter: parent.verticalCenter
                                         swatch: tagItem.modelData
