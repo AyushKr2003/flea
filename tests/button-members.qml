@@ -304,13 +304,14 @@ ShellRoot {
     }
     // The picker's answers are A's control; its marks wear no frame.
     function answers() {
-        var cancel = answerRow.focusItems()[0]
-        var accept = answerRow.focusItems()[1]
+        var cancel = answerRow.focusItems()[1]
+        var accept = answerRow.focusItems()[2]
         var accentFrame = Probe.rgba(Flea.Theme.color.accentFrame)
         var muted = Probe.rgba(Flea.Theme.color.muted)
         var foreground = Probe.rgba(Flea.Theme.color.foreground)
         shell.check("Cancel and Open are the one control", [cancel.label, accept.label, cancel.primary, accept.primary], ["Cancel", "Open", false, true])
         shell.check("the answers sit inside the answer row", [cancel.height <= answerRow.height, accept.height <= answerRow.height], [true, true])
+        shell.check("the answer row is a hairline, the row padding twice and the 30 px control", answerRow.height, Flea.Theme.spacing.hairline + 2 * Flea.Theme.spacing.rowPaddingX + shell.rulingHeight)
         var focused = shell.readings.accept.focus
         var frame = Probe.find(accept, "buttonFrame")
         var box = frame ? frame.mapToItem(answerRow, 0, 0) : null
@@ -351,8 +352,8 @@ ShellRoot {
         var grid = all[3]
         shell.check("the shown view's mark is lit in the foreground and the other muted", [shell.markInk(list), shell.markInk(grid)], [foreground, muted])
         shell.check("the view marks stay out of the Tab walk", [list.activeFocusOnTab, grid.activeFocusOnTab], [false, false])
-        var filter = answerRow.focusItems()[2]
-        shell.check("the filter trigger is as tall as the answers, in its own frame", [filter.height, Probe.bordered(filter) > 0], [answerRow.focusItems()[0].height, true])
+        var filter = answerRow.focusItems()[0]
+        shell.check("the filter trigger is as tall as the answers, in its own frame", [filter.height, Probe.bordered(filter) > 0], [shell.rulingHeight, true])
     }
     // Back, Up, List view, Grid view.
     function markItems() {
@@ -433,8 +434,8 @@ ShellRoot {
         var chip = form.chipFor("SFTP")
         var steps = []
         steps = steps.concat(shell.seriesFor("member", chip, function (on) { if (chip.available !== undefined) chip.available = on }, function () { return form.protocol === "SMB" ? 0 : 1 }))
-        var cancel = answerRow.focusItems()[0]
-        var accept = answerRow.focusItems()[1]
+        var cancel = answerRow.focusItems()[1]
+        var accept = answerRow.focusItems()[2]
         steps = steps.concat(shell.seriesFor("cancel", cancel, function (on) { if (cancel.available !== undefined) cancel.available = on }, function () { return shell.cancels }))
         steps = steps.concat(shell.seriesFor("accept", accept, function (on) { picker.canAccept = on }, function () { return shell.accepts }))
         steps = steps.concat(shell.seriesFor("plain", plain, function (on) { plain.available = on }, function () { return shell.plains }))
@@ -442,11 +443,10 @@ ShellRoot {
             shell.check("the harness draws at the reference text size", Flea.Theme.baseSize, shell.pinnedSize)
             shell.check("the harness runs with motion on, so the press scale is drawn", Flea.Theme.reducedMotion, false)
             var muted = Probe.rgba(Flea.Theme.color.muted)
-            var answerSizes = [shell.rulingHeight, answerRow.height - Flea.Theme.spacing.hairline - 2 * Flea.Theme.spacing.rowPaddingX, Flea.Theme.font.body]
             shell.ladder("member", muted, muted, Probe.rgba(Flea.Theme.color.accent))
-            shell.ladder("cancel", Probe.rgba(Flea.Theme.color.foreground), muted, Probe.rgba(Flea.Theme.color.foreground), answerSizes)
+            shell.ladder("cancel", Probe.rgba(Flea.Theme.color.foreground), muted, Probe.rgba(Flea.Theme.color.foreground))
             shell.ladder("plain", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground))
-            shell.ladder("accept", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground), answerSizes)
+            shell.ladder("accept", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground))
             shell.members()
             shell.trailingWalk()
             shell.boxes()

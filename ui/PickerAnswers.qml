@@ -6,8 +6,10 @@ import "js/Picker.js" as Picker
 // The one row under the listing in every mode: the filter at the left, Cancel and the answer at the right.
 Item {
     id: root
+    objectName: "pickerAnswers"
     required property var picker
     readonly property alias filterItem: filter
+    readonly property alias cancelItem: cancelButton
     anchors.left: parent.left
     anchors.right: parent.right
     height: Theme.spacing.hairline + 2 * Theme.spacing.rowPaddingX + cancelButton.height
@@ -62,7 +64,7 @@ Item {
         }
     }
 
-    function focusItems() { return [cancelButton, acceptButton].concat(filter.visible ? [filter] : []) }
+    function focusItems() { return (filter.visible ? [filter] : []).concat([cancelButton, acceptButton]) }
     function controls() {
         return root.focusItems().map(function(item) { return root.picker.control(item.name, item, item.available) })
     }

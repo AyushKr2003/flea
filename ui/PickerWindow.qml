@@ -785,11 +785,12 @@ ShellRoot {
             return [point.x, point.y, item.width, item.height]
         }
         function stepFocus(from, back) {
-            var items = answers.focusItems().concat(chrome.focusItems(), [places.focusItem, win.viewItem()], save.focusItems())
+            var items = chrome.focusItems().concat([places.focusItem, win.viewItem()], save.focusItems(), answers.focusItems())
                 .filter(function(item) { return item.visible && item.enabled && item.activeFocusOnTab })
             if (!items.length) return
             var at = items.indexOf(from)
-            var next = items[(at + (back ? -1 : 1) + items.length) % items.length]
+            // No origin lands on Cancel: a submission or a lost backend disables Filter and Open, and Filter is still enabled when this runs.
+            var next = from ? items[(at + (back ? -1 : 1) + items.length) % items.length] : (items.indexOf(answers.cancelItem) >= 0 ? answers.cancelItem : items[0])
             if (next === list && shares.item && shares.item.active) shareFocus.forceActiveFocus(Qt.TabFocusReason)
             else next.forceActiveFocus(Qt.TabFocusReason)
         }

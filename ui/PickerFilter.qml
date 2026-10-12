@@ -14,6 +14,8 @@ Item {
     readonly property bool available: root.enabled
     // The board draws the chevron in the foreground at four fifths.
     readonly property real chevronAlpha: 0.8
+    // The chevron's box is the body text plus two pixels, the board's 16 px at base size 14.
+    readonly property real chevronSize: Theme.font.body + 2
     // Built at the first open, so a picker that never opens it holds no menu.
     property Item menu: null
 
@@ -40,7 +42,7 @@ Item {
         if (!root.enabled) return
         if (!root.menu) {
             root.menu = Qt.createComponent("ContextMenu.qml").createObject(root.picker.contentItem)
-            root.menu.railChosen.connect(function(action) { root.picker.filterIndex = parseInt(action) })
+            root.menu.railChosen.connect(function(action) { if (root.enabled) root.picker.filterIndex = parseInt(action) })
         }
         var entries = root.chips.map(function(chip) { return {label: chip.label, action: String(chip.index), mark: "", hint: ""} })
         // The menu is as tall as its rows and padding, so its bottom edge is the trigger's top.
@@ -75,7 +77,7 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: Theme.spacing.gap
         anchors.verticalCenter: parent.verticalCenter
-        width: Theme.font.body + 2
+        width: root.chevronSize
         height: width
         maxSize: width
         name: "chevron-down"

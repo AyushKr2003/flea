@@ -137,10 +137,10 @@ ShellRoot {
         return cut <= 0 ? "/" : String(path).substring(0, cut)
     }
 
-    // The 0.3.10 answer row: the title strip, the row under the listing, the filter dropdown and its menu.
-    // The objects under the window at open on the tree before this change, same request, per view; the change must not grow them.
+    // The objects under the window at open on the tree before the 0.3.10 answer row, same request, per view; the row must not grow them.
     readonly property var objectCeiling: ({list: 423, grid: 405})
     readonly property int markedFiles: 3
+    property int walkAt: 0
     function titleLine() {
         var line = root.named("pickerTitleLine")
         return line ? line.children.filter(function(item) { return item.visible }) : []
@@ -177,6 +177,12 @@ ShellRoot {
             if (scenario === "answers") {
                 root.check("a portal caller is named after a middot on the title line",
                     texts.map(function(item) { return item.text }).join("").replace(/\u00a0/g, " "), "All Files \u00b7 Requested by org.chromium.Chromium")
+                root.check("the requester is a Text of its own, apart from the caller's title", [texts[0].text, root.named("pickerRequester").text], ["All Files", "Requested by org.chromium.Chromium"])
+                // A long identity elides inside the strip's right inset rather than running past it.
+                var requester = root.named("pickerRequester")
+                requester.text = "Requested by " + "org.example.".repeat(40)
+                root.check("a long requester elides", requester.truncated, true)
+                root.check("a long requester stays inside the strip's inset", root.at(requester, requester.width, 0).x <= ask.width - Flea.Theme.spacing.rowPaddingX + 1, true)
                 root.check("the middot is muted caption and the requester is foreground caption", [Qt.colorEqual(texts[1].color, Flea.Theme.color.muted), Qt.colorEqual(texts[2].color, Flea.Theme.color.foreground), texts[1].font.pixelSize, texts[2].font.pixelSize], [true, true, Flea.Theme.font.caption, Flea.Theme.font.caption])
                 root.check("the trigger is the menu's width", trigger.width, Flea.Theme.menuWidth)
                 root.check("the trigger is the control height", trigger.height, accept.height)
@@ -185,13 +191,14 @@ ShellRoot {
                 root.check("no menu object exists before the first open", menu === null, true)
                 console.log("PICKER_HUNT objects " + root.objectsUnder(win.contentItem))
                 root.check("the picker's object count at open stays within the earlier tree's", root.objectsUnder(win.contentItem) <= root.objectCeiling[win.viewMode], true)
-                trigger.forceActiveFocus(Qt.TabFocusReason)
-                root.stage = 51
+                win.focusView()
+                root.stage = 50
                 root.stamp = Date.now()
                 return
             }
             // No filters: no trigger, no menu, and the buttons keep the places they have with one.
-            root.check("a host caller names no requester", texts.map(function(item) { return item.text }).join(""), "Picker hunt")
+            root.check("a host caller's title is drawn as it came", texts[0].text, "X \u00b7 Firefox")
+            root.check("a title that imitates a requester gets no requester text", [texts.length, root.named("pickerRequester").visible, root.named("pickerRequester").text], [1, false, ""])
             root.check("a request with no filters draws no trigger", trigger === null || !trigger.visible, true)
             root.check("the answer area is one row 14 padded with a hairline rule", root.near(root.typed("PickerAnswers").height, 1 + 2 * Flea.Theme.spacing.rowPaddingX + accept.height), true)
             // A folder or an empty listing drops Open to 0.55; a file keeps it live.
@@ -202,8 +209,15 @@ ShellRoot {
             root.finish()
             return
         }
+        if (stage === 50) {
+            if (!win.viewItem().activeFocus) { if (Date.now() - root.stamp > root.settleWaitMs) root.check("the listing holds focus before Tab", false, true); return }
+            root.press(Qt.Key_Tab)
+            root.stage = 51
+            root.stamp = Date.now()
+            return
+        }
         if (stage === 51) {
-            if (!trigger.activeFocus) { if (Date.now() - root.stamp > root.settleWaitMs) root.check("Tab focus reaches the trigger", trigger.activeFocus, true); return }
+            if (!trigger.activeFocus) { if (Date.now() - root.stamp > root.settleWaitMs) root.check("Tab from the listing reaches the trigger", trigger.activeFocus, true); return }
             root.press(Qt.Key_Space)
             root.stage = 52
             root.stamp = Date.now()
@@ -248,6 +262,11 @@ ShellRoot {
         if (stage === 54) {
             if (!menu.opened) { if (Date.now() - root.stamp > root.settleWaitMs) root.check("Down opens the menu", "closed", "open"); return }
             root.check("the cursor starts on All files when it is current", menu.cursor, 3)
+            // A menu already open when the backend goes away takes no choice, as the chips took none.
+            win.backendUnavailable = true
+            menu.railChosen("1", "filter")
+            win.backendUnavailable = false
+            root.check("a choice is refused while the backend is unavailable", win.filterIndex, -1)
             root.press(Qt.Key_Escape)
             root.stage = 55
             root.stamp = Date.now()
@@ -268,7 +287,24 @@ ShellRoot {
                 return
             }
             root.check("three marked files make the answer read Open 3", accept.label, "Open 3")
-            root.finish()
+            root.check("the walk starts on the trigger", trigger.activeFocus, true)
+            root.stage = 57
+            root.stamp = Date.now()
+            return
+        }
+        // Tab runs top to bottom, left to right: Filter, Cancel, Open, round to the chrome (Back is off with no history), the rail, the listing.
+        if (stage === 57) {
+            var stops = [{label: "Cancel", item: root.cancelButton()}, {label: "Open 3", item: accept}, {label: "Up", item: root.named("pickerUp")},
+                {label: "the rail", item: root.typed("PickerPlaces").focusItem}, {label: "the listing", item: win.viewItem()}]
+            if (root.walkAt > 0 && !stops[root.walkAt - 1].item.activeFocus) {
+                if (Date.now() - root.stamp > root.settleWaitMs) { root.check("Tab reaches " + stops[root.walkAt - 1].label, false, true); root.finish() }
+                return
+            }
+            if (root.walkAt > 0) root.check("Tab reaches " + stops[root.walkAt - 1].label, stops[root.walkAt - 1].item.activeFocus, true)
+            if (root.walkAt === stops.length) { root.finish(); return }
+            root.press(Qt.Key_Tab)
+            root.walkAt++
+            root.stamp = Date.now()
         }
     }
 

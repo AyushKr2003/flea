@@ -8928,6 +8928,8 @@ The Network Tab ring moves three ceilings, each re-derived with `wc -l`: `ui/Net
 
 The picker answer row moves one test ceiling, re-derived with `wc -l`: `tests/button-members.qml` 488 to 491 for mounting `ui/PickerAnswers.qml` in the picker host and reading Cancel, Open and the filter trigger from the answer row instead of the chrome.
 
+The picker answer row's test, `tests/picker-040.qml`, joins the ceiling table at 603, re-derived with `wc -l`: 567 lines for the answer row, the title line, the filter dropdown and its menu, and 36 more for the requester's own Text and its elision, the Tab walk through Filter, Cancel, Open, Up, the rail and the listing, the Tab that reaches the trigger from the listing, and the refused choice while the backend is unavailable. `ui/PickerWindow.qml` moves 797 to 798 for the line that says why `stepFocus(null)` lands on Cancel, `tests/picker-hunt.qml` 448 to 447 for the one shared `answerOpen` finder, and `tests/button-members.qml` keeps 491.
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one

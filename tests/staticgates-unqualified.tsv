@@ -1538,9 +1538,9 @@ ui/PermissionsDialog.qml	542	root	Declared QML id; component context access is v
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	25	root	Declared QML id; component context access is valid at runtime.
-ui/PickerAnswers.qml	21	root	Declared QML id; component context access is valid at runtime.
+ui/PickerAnswers.qml	23	root	Declared QML id; component context access is valid at runtime.
+ui/PickerChrome.qml	73	root	Declared QML id; component context access is valid at runtime.
 ui/PickerChrome.qml	74	root	Declared QML id; component context access is valid at runtime.
-ui/PickerChrome.qml	75	root	Declared QML id; component context access is valid at runtime.
 ui/PickerGrid.qml	62	root	Declared QML id; component context access is valid at runtime.
 ui/PickerGrid.qml	63	root	Declared QML id; component context access is valid at runtime.
 ui/PickerGrid.qml	65	root	Declared QML id; component context access is valid at runtime.
@@ -3039,9 +3039,9 @@ ui/PermissionsDialog.qml	542	root	Declared QML id; component context access is v
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	23	root	Declared QML id; component context access is valid at runtime.
 ui/PermissionsHeadings.qml	25	root	Declared QML id; component context access is valid at runtime.
-ui/PickerAnswers.qml	21	root	Declared QML id; component context access is valid at runtime.
+ui/PickerAnswers.qml	23	root	Declared QML id; component context access is valid at runtime.
+ui/PickerChrome.qml	73	root	Declared QML id; component context access is valid at runtime.
 ui/PickerChrome.qml	74	root	Declared QML id; component context access is valid at runtime.
-ui/PickerChrome.qml	75	root	Declared QML id; component context access is valid at runtime.
 ui/PickerGrid.qml	62	root	Declared QML id; component context access is valid at runtime.
 ui/PickerGrid.qml	63	root	Declared QML id; component context access is valid at runtime.
 ui/PickerGrid.qml	65	root	Declared QML id; component context access is valid at runtime.

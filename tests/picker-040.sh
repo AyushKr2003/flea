@@ -47,6 +47,7 @@ for view in list grid; do
 import json,sys
 request=dict(mode=sys.argv[1],multiple=sys.argv[2]=='true',folder=sys.argv[3],name='new.txt' if sys.argv[4]=='probe' else 'a.txt',title='Picker hunt')
 if sys.argv[4] in ('path','far'):request['filters']=[dict(label='Text',globs=['*.txt'],mimes=[])]
+if sys.argv[4]=='single':request.update(title='X \u00b7 Firefox')
 if sys.argv[4]=='answers':request.update(title='All Files',app='org.chromium.Chromium',current='Pictures',filters=[dict(label=name,globs=[glob],mimes=[]) for name,glob in (('Text','*.txt'),('Pictures','*.png'),('Data','*.dat'))])
 print(json.dumps(request))
 PY

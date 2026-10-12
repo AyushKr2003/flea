@@ -457,11 +457,14 @@ def test_filters():
         filtered.key("-k", "Return")
         filtered.until(step, lambda state, total=total: state["total"] == total)
     check("SP04 filter trigger owns focus", filtered.control("Filter")["focused"])
-    for _ in range(8):
-        if filtered.state()["listFocus"]: break
-        before = filtered.state()["controls"]
+    # Tab runs top to bottom, left to right: chrome, rail, listing, then the answer row's Filter, Cancel, Open, and round to the chrome again.
+    live = {item["name"]: item["enabled"] for item in filtered.state()["controls"]}
+    for name in [name for name in ("Cancel", "Open", "Back", "Parent folder") if live[name]]:
         filtered.key("-k", "Tab")
-        filtered.until("Tab advances", lambda state: state["listFocus"] or state["controls"] != before)
+        filtered.until(f"Tab reaches {name}", lambda state, name=name: any(item["name"] == name and item["focused"] for item in state["controls"]))
+    filtered.key("-k", "Tab")
+    filtered.until("Tab reaches the rail", lambda state: state["railFocus"])
+    filtered.key("-k", "Tab")
     filtered.until("Tab enters listing", lambda state: state["listFocus"])
     filtered.key("-k", "End")
     filtered.until("last window loads", lambda state: state["cursor"] == 150 and state["held"] > 0 and state["cursorName"] == "zz-last.png")

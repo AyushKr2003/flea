@@ -5,8 +5,7 @@ import "." as Flea
 import "js/Format.js" as Format
 import "js/Picker.js" as Picker
 
-// The picker's two chrome strips: what was asked for on top, where the list is standing underneath.
-// The answers and the filter stand under the listing, see ui/PickerAnswers.qml.
+// The picker's two chrome strips: what was asked for on top, where the list is standing underneath; the answers are ui/PickerAnswers.qml.
 Item {
     id: root
     // Its Jump dropdown hangs below the strip, so the chrome rises over the places and the listing while it shows.
@@ -113,7 +112,7 @@ Item {
                 textFormat: Text.PlainText
             }
 
-            // Only a portal identity is drawn, so an application the desktop cannot name gets no line.
+            // Only a portal identity is drawn, in a Text of its own that the caller's title never reaches.
             Text {
                 Layout.alignment: Qt.AlignBaseline
                 visible: requester.visible
@@ -126,12 +125,15 @@ Item {
 
             Text {
                 id: requester
+                objectName: "pickerRequester"
                 Layout.alignment: Qt.AlignBaseline
+                Layout.fillWidth: true
                 visible: text.length > 0
                 text: Picker.subtitle(root.req)
                 color: Theme.color.foreground
                 font.family: Theme.font.family
                 font.pixelSize: Theme.font.caption
+                elide: Text.ElideRight
                 textFormat: Text.PlainText
             }
         }
