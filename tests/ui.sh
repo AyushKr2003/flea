@@ -540,7 +540,9 @@ fixture_home_make() {
 }
 
 assert_window() {
-    local count class deadline=$(( $(date +%s%3N) + 15000 ))
+    # A window behind a heavy writeback sets its title within async_wait_ms, the bound every other async answer gets.
+    local count class deadline
+    deadline=$(( $(date +%s%3N) + async_wait_ms ))
     # The window can map before its title is set, and more so behind a heavy writeback: wait for the title, never a sleep.
     while :; do
         count=$(omarchy-drive windows --json | jq '[.windows[] | select(.title == "Flea")] | length')

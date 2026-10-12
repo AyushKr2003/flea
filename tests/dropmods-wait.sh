@@ -102,20 +102,21 @@ out=$(run "$(target "$copy_line")" eval "d_text='$copy_line'; abandon() { echo r
 [ "$(grep -c 'cap_drops_wait_abort=cap_dropmods_abandon' tests/ui-captures-dropmods.sh)" = 1 ] \
     && ok "cap_dropmods names its release for the shared wait" || bad "cap_dropmods does not name its release for the shared wait"
 
-# Sample input, case_cap_drops: the four hover waits, in order, are the lines that wait on a drag target.
+# Sample input, case_cap_drops: the five hover waits, in order, are the lines that wait on a drag target.
 calls=()
 while IFS= read -r line; do calls+=("${line# }"); done < <(sed -n '/^case_cap_drops()/,/^}/p' tests/ui-captures-drops.sh | grep -E '^    cap_drops_wait_' | grep -Ev '^    cap_drops_wait_(settled|rename|column) ')
 photos_line='Move 1 item to Photos · ctrl at lift copies'
 crumb_line='Move 1 item to outer/ · ctrl at lift copies'
 columns_line='Move 1 item to deep · ctrl at lift copies'
-sentences=("$photos_line" "$photos_line" "$crumb_line" "$columns_line")
+held_line='Move 1 item to a folder · ctrl at lift copies'
+sentences=("$photos_line" "$photos_line" "$crumb_line" "$columns_line" "$held_line")
 # Another target's sentence for each leg, never its own.
-others=("$crumb_line" "$crumb_line" "$columns_line" "$photos_line")
-legs=("the Photos row" "the Photos row held for the hover open" "the parent crumb" "the Columns parent row")
-[ "${#calls[@]}" = 4 ] && ok "the case waits on four drag targets" || bad "case_cap_drops has ${#calls[@]} hover waits, not 4"
+others=("$crumb_line" "$crumb_line" "$columns_line" "$photos_line" "$columns_line")
+legs=("the Photos row" "the Photos row held for the hover open" "the parent crumb" "the Columns parent row" "the Columns held row p2.txt")
+[ "${#calls[@]}" = 5 ] && ok "the case waits on five drag targets" || bad "case_cap_drops has ${#calls[@]} hover waits, not 5"
 
 # Each target's own wait, run as the case writes it, over a floor that is dark by design because a row, a crumb or a column took the drag above it.
-for i in 0 1 2 3; do
+for i in 0 1 2 3 4; do
     out=$(run "${calls[$i]:-true}" eval "d_floor=false d_text='${sentences[$i]}'")
     [ "$out" = landed ] && ok "${legs[$i]} lands on its own sentence over a dark floor" || bad "${legs[$i]} must land on '${sentences[$i]}' over a dark floor, got: $out"
     out=$(run "${calls[$i]:-true}" eval "d_floor=true d_text='${others[$i]}'")
