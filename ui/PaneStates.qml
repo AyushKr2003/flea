@@ -64,6 +64,7 @@ Item {
         }
         onWheel: function (wheel) { wheel.accepted = root.pane.listInFlight }
         // Passive, and above the rows, so it sees a press a row grabs and always sees its release, even when the row was rebuilt meanwhile.
+        // A platform drag can take the release and leave this handler active, so ui/FileDrag.qml liftEnded clears the hold itself.
         PointHandler {
             acceptedButtons: Qt.AllButtons
             onActiveChanged: root.pane.pointerHeld = active
