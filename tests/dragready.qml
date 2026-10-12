@@ -32,8 +32,7 @@ Item {
         }
         return null
     }
-    // The lift handler builds with the row: RowDrag declares its DragHandler directly (no Loader stands in RowDrag, pinned below),
-    // and the grid delegate holds RowDrag outside any Loader.
+    // The lift handler builds with the row: RowDrag declares its DragHandler directly (no Loader in RowDrag, pinned below) and the grid delegate holds RowDrag outside any Loader.
     function liftBuiltIn() {
         var drag = Source.source("ui/RowDrag.qml")
         if (drag.indexOf("DragHandler {") < 0) return false
