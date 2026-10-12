@@ -42,7 +42,7 @@ palettes=$(wc -l < "$list")
 [ "$palettes" -eq "$palettes_expected" ] || fail "the sweep reads $palettes palettes, not $palettes_expected: a stock theme was added or removed, update palettes_expected here and paletteCount in tests/theme-contrast.qml with it"
 
 run_timeout_s=120
-expected_checks=$((palettes * 23 + 4))
+expected_checks=$((palettes * 35 + 4))
 config="$test_root/config"
 mkdir -p "$config" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
@@ -66,7 +66,7 @@ output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     XDG_RUNTIME_DIR="$test_root/runtime" BUTTONSYS_ROOT="$test_root" BUTTONSYS_TIMEOUT_S="$run_timeout_s" \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_QPA_UPDATE_IDLE_TIME=1 QT_FORCE_STDERR_LOGGING=1 \
     timeout "$run_timeout_s" qs -p "$config" 2>&1 ) 2>/dev/null )
-# Sample input: "  INFO qml: THEMECONTRAST ok nord muted text on surface 5.02 >= 4.5" once per check, and "THEMECONTRAST DONE checks=338 failed=0" once.
+# Sample input: "  INFO qml: THEMECONTRAST ok nord muted text on surface 5.02 >= 4.5" once per check, and "THEMECONTRAST DONE checks=844 failed=0" once.
 passed=$(printf '%s\n' "$output" | grep -c 'THEMECONTRAST ok ')
 failed=$(printf '%s\n' "$output" | grep -c 'THEMECONTRAST FAIL')
 if [ "$failed" -ne 0 ]; then

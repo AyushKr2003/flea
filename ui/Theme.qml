@@ -51,7 +51,7 @@ Singleton {
     readonly property real textContrast: 4.5
     readonly property real frameContrast: 3
     // Tag swatch colours lifted on the listing and the menu ground plus the digit fallback, filled once per theme load by Contrast.tagTheme.
-    property var tag: ({ colors: {}, menuColors: {}, fallback: false })
+    property var tag: ({ colors: {}, menuColors: {}, menuLitColors: {}, fallback: false })
     // The board's fixed tag slot width, once a tagged row has been seen in the folder.
     readonly property int tagSlotWidth: 88
 
@@ -379,7 +379,10 @@ Singleton {
         root.color.markLit = Contrast.ensureRatio(root.color.mutedFrame, lit, root.frameContrast);
         root.color.mutedLit = Contrast.ensureRatio(root.color.muted, lit, root.textContrast);
         root.color.errorLit = Contrast.ensureRatio(root.color.error, lit, Math.max(root.textContrast, Contrast.ratio(String(root.color.mutedLit), lit)));
-        root.tag = Contrast.tagTheme(found, bg, surface);
+        var tags = Contrast.tagTheme(found, bg, surface);
+        // The Tags flyout's swatches on a lit row stand 3:1 off the cursor wash, not the surface.
+        tags.menuLitColors = Contrast.tagTheme(found, bg, lit).menuColors;
+        root.tag = tags;
         // A body that parsed to nothing left every role on its fallback, so the flag says so rather
         // than reporting that the read happened: text() returns "" for a file that is not there.
         root.ready = Palette.isPalette(found);
