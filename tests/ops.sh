@@ -172,10 +172,13 @@ elapsed=$(( $(date +%s%3N) - began ))
 progress=$(grep '"t":"transferprogress"' "$D/out" | grep -vc '"phase":"writing"')
 # One window, from PROGRESS_EVERY in src/backend/opsreq.rs.
 progress_every_ms=150
-# The line sent at once and the closing line, which the per-window count leaves out.
+# A window sends the item's own line and at most one owed line beside it.
+progress_per_window=2
+# The first window has no owed line and the closing line takes its place, so the edge adds two.
 progress_edge_lines=2
-bound=$(( elapsed / progress_every_ms + progress_edge_lines ))
-check "progress lines stay within one per window of the copy plus the edge lines" "yes" "$([ "$progress" -le "$bound" ] && echo yes || echo "no: $progress lines in $elapsed ms, bound $bound")"
+bound=$(( elapsed / progress_every_ms * progress_per_window + progress_edge_lines ))
+echo "ops.sh: many-file copy sent $progress progress lines in $elapsed ms, bound $bound"
+check "progress lines stay within the owed line and the item's own per window of the copy plus the edge lines" "yes" "$([ "$progress" -le "$bound" ] && echo yes || echo "no: $progress lines in $elapsed ms, bound $bound")"
 check "every item still answers its own terminal line" "$items" "$(seen '"t":"transferitem"')"
 check "done counts every item ok" "1" "$(seen "\"t\":\"transferdone\",\"id\":1,\"ok\":$items,\"failed\":0")"
 check "every copy landed" "$items" "$(find "$D/many-dest" -type f | wc -l | tr -d ' ')"

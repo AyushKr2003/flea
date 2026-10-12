@@ -49,8 +49,7 @@ impl Pace {
         }
     }
 
-    // One byte report of the item in flight: what to put on the wire now, or None while the window is open.
-    // The bytes skipped items left unreported go first, under the item that ended last, and the item keeps its own bytes and total.
+    // What to put on the wire now, or None while the window is open: the bytes skipped items left unreported go first, under the item that ended last, then the item's own.
     pub(super) fn sample(&self, now: Instant, index: usize, done: u64, total: u64) -> Option<Sampled> {
         self.live.set((index, done));
         if self.last.get().is_some_and(|last| now.saturating_duration_since(last) < PROGRESS_EVERY) {

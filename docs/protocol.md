@@ -1836,8 +1836,9 @@ A selection event supersedes any exit read begun before it, while an exit read b
 
 Example: `{"t":"transferprogress","id":12,"index":0,"name":"a.txt","bytes":40000000,"total":120000000}`
 
-Throttled to at most one line per 150 ms for the whole operation, not per item: the first sample goes out
-at once and a run of small files shares one window, so a fast copy of a thousand small files sends a few
+Throttled to one window per 150 ms for the whole operation, not per item: the first sample goes out
+at once and a run of small files shares one window, and a window sends the item's own line with at most
+one owed line beside it (below), so a fast copy of a thousand small files sends a few
 lines (plus one `transferitem` per item, below), and a single large file sends one per window as it
 always did. A thousand small files once sent a progress line and an item line each, so the card model
 was written 2002 times; the throttle cuts the progress lines from 1000 to 2 and the writes to 1004. An item

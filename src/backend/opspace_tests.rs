@@ -155,3 +155,21 @@ fn an_item_that_ends_short_counts_whole_on_both_sides_so_a_later_skipped_item_is
     client.sampled(1, 50, 0);
     assert_eq!(client.shown(), 100 + 50, "the card shows what an unthrottled one shows");
 }
+
+#[test]
+fn a_window_after_skipped_items_puts_the_owed_line_on_the_wire_once_beside_the_items_own() {
+    let pace = Pace::new();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let settled = AtomicU64::new(0);
+    pace.report(&tx, 1, (0, "a"), (10, 10), &settled);
+    pace.ended(0, "a");
+    pace.report(&tx, 1, (1, "b"), (10, 10), &settled);
+    pace.ended(1, "b");
+    std::thread::sleep(PROGRESS_EVERY + Duration::from_millis(20));
+    pace.report(&tx, 1, (2, "c"), (10, 10), &settled);
+    let lines: Vec<_> = rx.try_iter().map(|m| match m {
+        OpMsg::Progress { index, bytes, total, .. } => (index, bytes, total),
+        _ => panic!("only progress lines are sent"),
+    }).collect();
+    assert_eq!(lines, vec![(0, 10, 10), (1, 10, 0), (2, 10, 10)]);
+}
