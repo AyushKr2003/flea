@@ -175,7 +175,6 @@ ui/js/Nav.js 328
 ui/js/Markdown.js 155
 ui/js/MdBlocks.js 444
 ui/js/FigureWorker.mjs 619
-ui/js/Markdown.js 155
 ui/js/MdDocument.js 341
 ui/js/MdLeaf.js 309
 ui/js/MdHtml.js 307
@@ -195,6 +194,13 @@ ui/boot/fleatab.qml 50
 tests/unlock-stdin.qml 485"
 
 status=0
+
+# A file listed twice hands the ceiling lookup two numbers and breaks its comparison.
+duplicated=$(printf '%s\n' "$known_over_cap" | awk '{ print $1 }' | sort | uniq -d)
+if [ -n "$duplicated" ]; then
+  echo "DUPLICATE ceiling: $duplicated"
+  status=1
+fi
 
 budget_for() {
   case "$1" in

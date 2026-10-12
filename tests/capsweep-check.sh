@@ -33,6 +33,8 @@ used.update(re.findall(r'\bxwdrag_qs "\$[ab]id" (\w+)', capture))
 # Sample input: xwdrag_qs "$(xwdrag_qsid "$pid")" themeLoaded
 used.update(re.findall(r'\bxwdrag_qs "\$\(xwdrag_qsid "\$\w+"\)" (\w+)', capture))
 assert not used - readers, f"missing read-only IPC readers: {used - readers}"
+# Sample input:     [[ ! -e "$dir/New Folder" ]] || fail 'capsweep: New Folder existed before the menu'
+assert re.search(r"\[\[ ! -e \"\$dir/New Folder\" \]\] \|\| fail [^\n]*\n\s+menus_choose newFolder\n", capture), "the New Folder case must prove the folder absent before the menu makes it"
 # Sample input: SECONDS + 30 in end=$((SECONDS + 30)), timeout 180 python3, ydotool click 0x40: a bound or code with no name.
 bare = re.findall(r'SECONDS \+ \d+|\btimeout \d+|\bydotool click 0x\w+', capture)
 assert not bare, f"unnamed bounds or button codes in the sweep: {bare}"
@@ -85,6 +87,26 @@ sweep_shot successful > "$scratch/success.log"
 [[ "$(cat "$scratch/success.log")" == 'SWEEP sweep-successful 1320x820' ]] || fail 'per-shot line is wrong'
 [[ "$(cat "$scratch/manifest.tsv")" == $'sweep-successful\t1320x820' ]] || fail 'manifest is wrong'
 printf 'CAPSWEEP_CHECK refusal-controls=4 success=1\n'
+# The collision card's focus walk ends on replace, and a walk that comes round without it fails by name instead of looping.
+. "$repo/tests/ui-captures-collide.sh"
+walk_run() {
+    local focuses=("$@")
+    : > "$scratch/walk.asked"
+    : > "$scratch/walk.shots"
+    (
+        cap_collide_park() { :; }
+        key() { :; }
+        menus_expect() { :; }
+        ipc() { local asked; asked=$(wc -l < "$scratch/walk.asked"); printf 'x\n' >> "$scratch/walk.asked"; printf '{"focus":"%s"}\n' "${focuses[asked % ${#focuses[@]}]}"; }
+        shot() { printf '%s\n' "$1" >> "$scratch/walk.shots"; [[ $(wc -l < "$scratch/walk.shots") -lt 20 ]] || { printf 'WALK_UNBOUNDED\n' >&2; exit 3; }; }
+        cap_collide_card walk
+    ) 2>&1
+}
+walk_out=$(walk_run cancel skip replace) || fail "a focus walk that reaches replace was refused: $walk_out"
+[[ "$(wc -l < "$scratch/walk.shots")" -eq 4 ]] || fail 'the focus walk did not shoot the rest and each button once'
+if walk_out=$(walk_run cancel skip); then fail 'a focus walk that never reaches replace was accepted'; fi
+[[ "$walk_out" == *"came round to cancel before it reached replace"* ]] || fail "a looping focus walk did not fail by name: $walk_out"
+printf 'CAPSWEEP_CHECK focus-walk=2\n'
 # Run the real state composer with native side effects stubbed, to catch invalid default JSON.
 fixture_root="$scratch"
 sweep_root="$scratch/suite"

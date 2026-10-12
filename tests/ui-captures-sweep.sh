@@ -357,6 +357,7 @@ sweep_dialogs() {
     key -k Escape >/dev/null
     menus_expect menuDialogState '.opened | not' 'New File closed'
     click_background
+    [[ ! -e "$dir/New Folder" ]] || fail 'capsweep: New Folder existed before the menu'
     menus_choose newFolder
     sweep_wait renameEditorLive true
     [[ -d "$dir/New Folder" ]] || fail 'capsweep: New Folder missing after menu'

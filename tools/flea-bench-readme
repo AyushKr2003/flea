@@ -273,6 +273,7 @@ def resolve_flea_label(explicit, blocks, cargo_toml):
         text = open(cargo_toml, encoding="utf-8").read()
     except OSError:
         text = ""
+    # Sample input, the Cargo.toml line: version = "0.3.9" answers "0.3.9-tree-build".
     m = re.search(r"^version\s*=\s*\"([^\"]+)\"", text, re.M)
     if m:
         return "%s-tree-build" % m.group(1)

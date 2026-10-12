@@ -8,9 +8,7 @@ import "flea" as Flea
 import "flea/js/Unlock.js" as Unlock
 import "unlock-stdin-find.js" as Find
 
-// tests/unlock-stdin.sh's harness: the real UnlockDialog against a stub udisksctl, canary S3cr3t-canary-1006; attempts 1 and 2 refuse, 3 unlocks.
-// Reaching a wrong phase proves stdin closed: the stub recorder is a cat that exits only on EOF.
-// Phases 4 and up arm the stub by mode: a child that cannot start, a hung or late unlock, a hung or failed mount, a refused lock.
+// tests/unlock-stdin.sh's harness: the real UnlockDialog against a stub udisksctl, canary S3cr3t-canary-1006; attempts 1 and 2 refuse, 3 unlocks, phases 4 and up arm the stub by failure mode, and a wrong phase proves stdin closed (the recorder cat exits only on EOF).
 UnlockSteps {
     id: shell
 
