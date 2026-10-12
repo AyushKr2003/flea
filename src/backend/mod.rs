@@ -9,6 +9,7 @@ pub mod archivepass;
 pub mod archivespec;
 pub mod archivereq;
 pub mod archivework;
+pub mod appicon;
 pub mod mime;
 pub mod fsinfo;
 pub mod fsname;
