@@ -2,6 +2,7 @@
 .import "../../ui/js/DragOut.js" as DragOut
 .import "../../ui/js/Crumbs.js" as Crumbs
 .import "../../ui/js/DropDev.js" as DropDev
+.import "../../ui/js/Messages.js" as Messages
 .import "dragfixture.js" as Fixture
 .import "sourcefixture.js" as Source
 
@@ -357,9 +358,15 @@ function run(check) {
     check("cap_drops names the crumb above the leaf by its own text, slash included", capCrumbs[capCrumbs.length - 2].text, "outer/")
     var capCrumb = Drag.feedbackFor(Drag.markerPayload([0], false, "/cap-drops/deep/outer/inner", 56), ["file:///cap-drops/deep/outer/inner/note.txt"])
     var capDest = capCrumbs[capCrumbs.length - 2].path
-    var capDevs = {}
-    capDevs[capDest] = 56
-    check("cap_drops crumb reads a move, because its device is the lift's", Drag.feedbackLine(capCrumb, capCrumbs[capCrumbs.length - 2].text, DropDev.devFor(capDevs, capDest)),
+    // The backend answers each asked ancestor on the lift's device (one volume); the devs line lands through Messages and CrumbDrop's own binding reads it.
+    var capReply = {t: "devs", devs: {}}
+    DropDev.askPaths("/home/gm/cap-drops/deep/outer/inner").forEach(function (asked) { capReply.devs[asked] = 56 })
+    var capRoot = {pathDevs: {}, dest: capDest}
+    capRoot.pane = {backend: capRoot}
+    Messages.route(capRoot, JSON.parse(JSON.stringify(capReply)))
+    var capBind = Source.slice(Source.source("ui/CrumbDrop.qml"), "destDev:", "\n").substring("destDev:".length)
+    var capDev = new Function("root", "DropDev", "return (" + capBind + ")")(capRoot, DropDev)
+    check("cap_drops crumb reads a move, because its device is the lift's", Drag.feedbackLine(capCrumb, capCrumbs[capCrumbs.length - 2].text, capDev),
         "Move 1 item to outer/ · ctrl at lift copies")
     var capColumn = Drag.feedbackFor(Drag.markerPayload([0], false, "/cap-drops/Photos", 56), ["file:///cap-drops/Photos/p1.txt"])
     check("cap_drops Columns parent row reads a move", Drag.feedbackLine(capColumn, "deep", 56),
