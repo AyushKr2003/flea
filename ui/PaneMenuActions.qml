@@ -278,7 +278,8 @@ Loader {
             pane.message("Selected items changed; reopen the menu.", true)
             return
         }
-        activationUsed = true
+        // A tag toggle repeats inside one open menu; every other choice closes it, so one activation is all it gets.
+        activationUsed = action.indexOf("tags:") !== 0
         providerValidated = false
         pendingAction = action
         pendingActivation = true

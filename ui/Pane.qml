@@ -223,7 +223,8 @@ FocusScope {
     function menuSelectionIdentity() {
         if (root.rowsIdentity.rows !== root.rows) {
             root.rowsIdentity.rows = root.rows
-            root.rowsIdentity.text = JSON.stringify(root.rows)
+            // A tag write changes only a row's tg, which names no file, so a menu opened before it still names the same rows.
+            root.rowsIdentity.text = JSON.stringify(root.rows, function (key, value) { return key === "tg" ? undefined : value })
         }
         return JSON.stringify([root.path, root.held, root.selectionVersion, root.cursorIndex, root.total,
             root.listInFlight]) + "\n" + root.rowsIdentity.text
