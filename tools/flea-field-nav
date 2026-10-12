@@ -31,8 +31,9 @@ region, the right 40 percent of the content region, refined per entrant with exp
 The ql column times Quick Look on a 4096 byte Markdown document that opens with a 40-row table (ql_md_table_first)
 against a tableless one of the same size (ql_md_plain), each in a launch of its own so every sample is a first open,
 the key to settled_ms, the last change before 2 s of quiet, which is the completed preview and not a loading frame;
-a byte-identical twin (ql_md_plain_b) is the negative control. report prints SHIP when the table range overlaps the
-plain one or its p95 is lower, else HOLD.
+a byte-identical twin (ql_md_plain_b) is the negative control. report prints INCOMPLETE with no twin rows, INVALID when
+the twin control reports INSTRUMENT-NOISE, else SHIP when p95(table) <= p95(plain) + the control's own gap
+|p95(plain) - p95(twin)|, else HOLD.
 An entrant without the preview feature gets a "no feature" row, never a silent gap.
 The NAV key table's copies live under .flea-local/ref/apps/ and are close to the installed
 versions; every chord is checked on the operator's box with explore before measuring, and a
@@ -614,14 +615,19 @@ def ranges_overlap(a, b):
 
 
 def ql_verdict(rows, arm):
-    """Lines for one arm: p95 and range of the table document against the plain one and the plain twin; SHIP when the table range overlaps the plain one or its p95 is lower."""
+    """Lines for one arm: p95 and range of the table document against the plain one and the plain twin. INCOMPLETE with no twin rows, INVALID when the twin control reports INSTRUMENT-NOISE, else SHIP when p95(table) <= p95(plain) + the control's own gap |p95(plain) - p95(twin)|, else HOLD."""
     t, p, w = (ql_values(rows, arm, k) for k in QL_KINDS)
     if not (t and p):
         return []
     def cell(v):
         return "p95 %.1f range [%.1f..%.1f] n=%d" % (p95(v), min(v), max(v), len(v))
-    ship = p95(t) <= p95(p) or ranges_overlap(t, p)
-    out = ["ql settled %s: %s %s | %s %s | %s" % (arm, QL_TABLE, cell(t), QL_PLAIN, cell(p), "SHIP" if ship else "HOLD")]
+    if not w:
+        word = "INCOMPLETE"
+    elif not ranges_overlap(p, w):
+        word = "INVALID"
+    else:
+        word = "SHIP" if p95(t) <= p95(p) + abs(p95(p) - p95(w)) else "HOLD"
+    out = ["ql settled %s: %s %s | %s %s | %s" % (arm, QL_TABLE, cell(t), QL_PLAIN, cell(p), word)]
     if w:
         out.append("ql control %s: %s %s | %s %s | %s" % (arm, QL_PLAIN, cell(p), QL_TWIN, cell(w),
                                                          "ok" if ranges_overlap(p, w) else "INSTRUMENT-NOISE"))
@@ -1098,7 +1104,15 @@ def selftest():
     check("ql_control_same", (same[0].endswith("SHIP"), same[1].endswith("ok")), (True, True))
     check("ql_faster_ships", ql_verdict(ql_rows(-30), "a")[0].endswith("SHIP"), True)
     check("ql_delay_holds", ql_verdict(ql_rows(50), "a")[0].endswith("HOLD"), True)
-    check("ql_noise_flagged", ql_verdict([dict(r, settled_ms=r["settled_ms"] + 90) if r["column"].endswith(QL_TWIN) else r for r in ql_rows(0)], "a")[1].endswith("INSTRUMENT-NOISE"), True)
+    noisy = ql_verdict([dict(r, settled_ms=r["settled_ms"] + 90) if r["column"].endswith(QL_TWIN) else r for r in ql_rows(0)], "a")
+    check("ql_noise_flagged", (noisy[0].endswith("INVALID"), noisy[1].endswith("INSTRUMENT-NOISE")), (True, True))
+    no_twin = ql_verdict([r for r in ql_rows(-30) if not r["column"].endswith(QL_TWIN)], "a")
+    check("ql_no_twin_incomplete", (no_twin[0].endswith("INCOMPLETE"), len(no_twin)), (True, 2))
+    # The control's own gap widens the margin: a twin 4 ms off the plain p95 lets a table 4 ms over pass and holds one 5 ms over.
+    def gap_rows(table_add):
+        return [{"arm": "a", "column": "preview." + k, "settled_ms": 100.0 + i + add, "first_ms": 20.0}
+                for i in range(10) for k, add in ((QL_TABLE, table_add), (QL_PLAIN, 0), (QL_TWIN, 4))]
+    check("ql_gap_margin", (ql_verdict(gap_rows(4), "a")[0].endswith("SHIP"), ql_verdict(gap_rows(5), "a")[0].endswith("HOLD")), (True, True))
     check("ql_missing_none", ql_verdict([], "a"), [])
     # Report smoke: cursor medians read off per-step firsts, the ratio to Strata and the status against the next arm print.
     import io
@@ -1238,6 +1252,17 @@ def selftest():
         globals().update(saved_fns)
         S.require_idle, S.fixture_facts, S.monitor = saved_s[:3]
         S.UI_TOKENS[:] = saved_s[3]
+    # run_ql hands run_preview the kind's own folder, the entrant's Quick Look mode and the (kind, kind.md) pair.
+    calls = []
+    saved_rp = globals()["run_preview"]
+    globals()["run_preview"] = lambda arm, fixture, ctx, keys, view, mode, kinds, opts, table=None: calls.append((fixture, mode, kinds, table)) or []
+    try:
+        for ent, want_mode in (("flea", "quicklook"), ("dolphin", "none")):
+            del calls[:]
+            run_ql({"id": "x", "entrant": ent}, "/q", None, None, "list", QL_KINDS, None)
+            check("ql_run_" + ent, calls, [(os.path.join("/q", k), want_mode, [k], [(k, k + ".md")]) for k in QL_KINDS])
+    finally:
+        globals()["run_preview"] = saved_rp
     # The ql column hands run_ql the qltable root and rotates the document order each round.
     seen = []
     def fake_ql(arm, qroot, ctx, keys, view, kinds, opts):
