@@ -147,6 +147,47 @@ ShellRoot {
         return { ruleToField: shell.round3(fieldTop - ruleBottom), fieldToInk: Math.round(inkTop - fieldBottom) }
     }
 
+    // One dialog's status slot steps: one card height and one button row at rest, busy and short errors; a 300-character error is drawn whole and grows only the card.
+    function slotSteps(d) {
+        var rest, slot, longError = new Array(301).join("e")
+        // The card height, and Cancel's and the primary's x and width in the card's coordinates.
+        var geometry = function () {
+            var c = d.cancel.mapToItem(d.card, 0, 0)
+            var p = d.primary.mapToItem(d.card, 0, 0)
+            return { card: shell.round3(d.card.height), buttons: [c.x, d.cancel.width, p.x, d.primary.width].map(shell.round3) }
+        }
+        var line = function (text) { return shell.findAll(d.card, function (o) { return shell.isType(o, "Text") && o.text === text })[0] }
+        var check = function (state, grows) {
+            var now = geometry()
+            if (!grows)
+                shell.check(d.name + " slot " + state + ": the card height is the rest height", now.card, rest.card)
+            shell.check(d.name + " slot " + state + ": Cancel and the primary keep their rest x and width", now.buttons, rest.buttons)
+        }
+        var steps = [
+            { name: "slot-" + d.name + "-rest", act: d.open, record: function () { rest = geometry() } },
+            { name: "slot-" + d.name + "-busy", act: function () { d.busy(true) }, record: function () { check("busy", false) } },
+            { name: "slot-" + d.name + "-error", act: function () { d.busy(false); d.error(d.oneLine) }, record: function () {
+                check("error", false)
+                slot = line(d.oneLine).height
+            } }
+        ]
+        // A fixed sentence that takes both slot lines at this dialog's width still keeps the card.
+        if (d.twoLines)
+            steps.push({ name: "slot-" + d.name + "-two", act: function () { d.error(d.twoLines) }, record: function () {
+                check("two-line error", false)
+                shell.check(d.name + " slot two-line error: the line draws two lines whole", [line(d.twoLines).lineCount, line(d.twoLines).truncated], [2, false])
+            } })
+        steps.push({ name: "slot-" + d.name + "-long", act: function () { d.error(longError) }, record: function () {
+            check("long error", true)
+            var whole = line(longError)
+            var growth = shell.round3(d.card.height - rest.card)
+            shell.check(d.name + " slot long error: the whole error is drawn, past two lines", [whole.lineCount > 2, whole.truncated, whole.height >= whole.implicitHeight], [true, false, true])
+            shell.check(d.name + " slot long error: the card grows by the status line's growth only", [growth > 0, growth], [true, shell.round3(whole.height - slot)])
+            d.close()
+        } })
+        return steps
+    }
+
     // The mark a strip control draws, in the strip's coordinates, with the opacity and ink it reaches the screen with.
     function mark(item) {
         var glyph = shell.findAll(item, function (o) { return shell.isType(o, "Glyph") })[0]
@@ -341,7 +382,20 @@ ShellRoot {
             } },
             { name: "back-click", act: function () { driver.mouseClick(view.backItem, view.backItem.width / 2, view.backItem.height / 2, Qt.LeftButton, Qt.NoModifier, shell.noDelay) },
               record: function () { shell.check("strip: a click on Back goes back", shell.backRequests, 1) } }
-        ]
+        ].concat(shell.slotSteps({ name: "convert", card: convert.cardItem, cancel: convert.cancelItem, primary: convert.submitItem,
+                                    open: function () { convert.open("photo.png", holder) }, busy: function (on) { convert.busy = on },
+                                    error: function (text) { convert.errorText = text }, oneLine: "The converter wrote nothing.",
+                                    twoLines: "Backend stopped; conversion outcome unknown. Check the output.",
+                                    close: function () { convert.errorText = ""; convert.opened = false } }),
+                  shell.slotSteps({ name: "openwith", card: openWith.cardItem, cancel: openWith.closeItem, primary: openWith.submitItem,
+                                    open: function () {
+                                        openWith.open("openWith", 7, "", parking)
+                                        openWith.receive({ op: "applications", id: 7, ok: true, path: "/dialog-board/notes.txt", kind: "Plain text document",
+                                                           mime: "text/plain", applications: [{ id: "a.desktop", label: "Alpha", icon: "a", default: true }],
+                                                           installed: [{ id: "a.desktop", label: "Alpha", icon: "a" }] })
+                                    }, busy: function (on) { openWith.committing = on },
+                                    error: function (text) { openWith.errorText = text }, oneLine: "The application could not be opened.",
+                                    close: function () { openWith.close() } }))
     }
 
     // The sandbox proof first: every path the product resolves lies under the marked root before anything is assigned.
