@@ -4,6 +4,7 @@ use crate::backend::archivework::{run_boxed_cancellable_capped, Work};
 use crate::backend::convert;
 use crate::backend::fontinfo::cache::{cached, entry, is_png, key, prune, root as cache_root, WORK_TAG};
 use crate::backend::fontinfo::{self, Facts};
+use crate::backend::iomount;
 use crate::backend::mime::Db;
 use crate::backend::opsreq::{op_err, OpMsg};
 use crate::error::FleaError;
@@ -157,12 +158,19 @@ fn look(ask: &Ask, mime: &Db, aliases: &Aliases, root: &Path, program: &str, run
         return Err("only TrueType and OpenType fonts are drawn".to_string());
     }
     // Absolute and canonical, so magick can never read the font as an option and the jail binds the file itself.
-    let font = std::fs::canonicalize(&ask.path).map_err(|e| crate::error::io_message(&e))?;
-    let meta = std::fs::metadata(&font).map_err(|e| crate::error::io_message(&e))?;
-    if !meta.is_file() {
-        return Err("that is not a regular file".to_string());
-    }
-    let facts = fontinfo::read(&font);
+    let (font, meta, facts) = iomount::call(&ask.path, &iomount::mount_body(), "font", {
+        let path = ask.path.clone();
+        move || {
+            let font = std::fs::canonicalize(&path).map_err(|e| crate::error::io_message(&e))?;
+            let meta = std::fs::metadata(&font).map_err(|e| crate::error::io_message(&e))?;
+            if !meta.is_file() {
+                return Err("that is not a regular file".to_string());
+            }
+            let facts = fontinfo::read(&font);
+            Ok((font, meta, facts))
+        }
+    })
+    .map_err(|e| e.msg)??;
     let key = key(&font, &meta, ask);
     if let Some(files) = cached(root, &key) {
         return Ok((facts, files));

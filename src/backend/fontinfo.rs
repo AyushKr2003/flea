@@ -1,5 +1,4 @@
-// A font's facts from its own tables, with no decoder: family and style from `name`, the glyph count from `maxp`.
-// The sample image job is fontinfo/render.rs; the wire lines are in render.rs.
+// A font's facts from its own tables, with no decoder: family and style from `name`, glyphs from `maxp`; the sample job and wire lines are fontinfo/render.rs.
 use std::fs::File;
 use std::io::{Read, Seek};
 use std::path::Path;
@@ -48,7 +47,7 @@ fn bytes_at<R: Read + Seek>(r: &mut R, len: u64, off: u64, n: u64) -> Option<Vec
     Some(buf)
 }
 
-// Every offset is checked against len, so a hostile table never reads past the file or allocates beyond the caps.
+// Sample input: bytes 00 01 00 00 | 00 02 ... (sfnt version, table count), then 16 bytes per table, then the tables; every offset is checked against len.
 pub fn parse<R: Read + Seek>(r: &mut R, len: u64) -> Facts {
     let face = match bytes_at(r, len, 0, 16).and_then(|h| (be32(&h, 0) == Some(TTC_TAG) && be32(&h, 8)? > 0).then(|| be32(&h, 12))) {
         Some(first) => u64::from(first.unwrap_or(0)),
@@ -74,7 +73,7 @@ pub fn parse<R: Read + Seek>(r: &mut R, len: u64) -> Facts {
     Facts { family: pick([16, 1]), style: pick([17, 2]), glyphs }
 }
 
-// The best record for one name id: Windows Unicode English, Windows Unicode, Unicode, then Mac ASCII.
+// Sample input: a name table, 00 00 | 00 01 | 00 12 (format, count, storage), then 12 bytes per record: 00 03 00 01 04 09 00 01 00 0A 00 00, and the UTF-16BE text "Inter".
 fn name_for(table: &[u8], id: u16) -> Option<String> {
     let count = usize::from(be16(table, 2)?);
     let storage = usize::from(be16(table, 4)?);
@@ -87,10 +86,12 @@ fn name_for(table: &[u8], id: u16) -> Option<String> {
         }
         let (size, off) = (usize::from(be16(table, at + 8)?), usize::from(be16(table, at + 10)?));
         let Some(raw) = table.get(storage + off..storage + off + size) else { continue };
+        // Best first: Windows Unicode English, Windows Unicode, Windows Symbol, Unicode, then Mac ASCII.
         let rank = match (platform, encoding) {
             (3, 1 | 10) => if lang == ENGLISH_US { 0 } else { 1 },
-            (0, _) => 2,
-            (1, 0) => 3,
+            (3, 0) => 2,
+            (0, _) => 3,
+            (1, 0) => 4,
             _ => continue,
         };
         if best.as_ref().is_some_and(|(r, _)| *r <= rank) {
@@ -103,7 +104,8 @@ fn name_for(table: &[u8], id: u16) -> Option<String> {
         } else {
             None
         };
-        let text: String = text?.trim().chars().take(MAX_TEXT_CHARS).collect();
+        let Some(text) = text else { continue };
+        let text: String = text.trim().chars().take(MAX_TEXT_CHARS).collect();
         if !text.is_empty() {
             best = Some((rank, text));
         }

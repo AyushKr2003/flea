@@ -131,6 +131,17 @@ fn the_job_the_runner_gets_names_the_canonical_font_and_the_ask() {
 }
 
 #[test]
+fn a_font_on_a_stuck_mount_is_refused_without_a_job() {
+    let d = TestDir::new("fontstuck");
+    let rig = Rig::new();
+    let path = font(&d, "Stuck.ttf");
+    let _stuck = crate::backend::iomount::test_hold_stuck(crate::backend::iomount::mount_key(&path, &crate::backend::mountinfo::read_body()));
+    let line = rig.run(&ask(&path), &d.join("cache"));
+    assert!(crate::json::field_str(&line, "err").is_some_and(|e| e.ends_with("is not responding.")), "{}", line);
+    assert_eq!(rig.jobs.get(), 0, "a stuck mount runs no job");
+}
+
+#[test]
 fn a_file_that_is_not_a_ttf_otf_or_ttc_is_refused_before_any_job() {
     let d = TestDir::new("fontmime");
     let rig = Rig::new();

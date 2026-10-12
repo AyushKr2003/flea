@@ -42,3 +42,23 @@ fn a_stale_work_folder_of_a_killed_run_goes_and_a_fresh_one_stays() {
     assert!(fresh.exists());
     assert!(other.exists(), "another job's folder is not ours to reap");
 }
+
+#[test]
+fn a_name_with_a_multibyte_char_across_the_hex_digits_is_left_alone_without_a_panic() {
+    let d = TestDir::new("fontutf8");
+    let root = d.dir("cache");
+    let odd = format!("{}\u{e9}x.png", "a".repeat(31));
+    assert_eq!(odd.len(), KEY_HEX_LEN + 2 + LOOK_SUFFIX.len(), "the name is exactly a look's length");
+    d.file(&format!("cache/{}", odd), "mine");
+    prune(&root);
+    assert!(root.join(&odd).exists());
+}
+
+#[test]
+fn the_name_matcher_accepts_exactly_what_entry_writes_for_each_sample() {
+    let key = "0123456789abcdef0123456789abcdef";
+    for i in 0..SAMPLES {
+        assert!(is_look_name(entry(Path::new("/c"), key, i).file_name().expect("name").as_bytes()), "sample {}", i);
+    }
+    assert!(!is_look_name(entry(Path::new("/c"), key, SAMPLES).file_name().expect("name").as_bytes()), "one past the samples is not ours");
+}

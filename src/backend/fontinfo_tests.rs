@@ -106,6 +106,25 @@ fn a_mac_record_with_bytes_past_ascii_is_left_out() {
 }
 
 #[test]
+fn an_undecodable_record_is_skipped_and_the_next_one_still_answers() {
+    let names = name_table(&[(1, 0, 0, 1, &[b'C', 0xE9]), (3, 1, 0x409, 1, &utf16("Cafe"))]);
+    assert_eq!(facts(&sfnt(0, 0x0001_0000, &[(b"name", names)])).family.as_deref(), Some("Cafe"));
+    let names = name_table(&[(3, 1, 0x407, 1, &[0, b'A', 0]), (3, 1, 0x409, 1, &utf16("Cafe"))]);
+    assert_eq!(facts(&sfnt(0, 0x0001_0000, &[(b"name", names)])).family.as_deref(), Some("Cafe"), "an odd UTF-16 record too");
+}
+
+#[test]
+fn a_symbol_record_names_a_font_that_has_no_other_and_ranks_after_unicode_encoding_1() {
+    let names = name_table(&[(3, 0, 0x409, 1, &utf16("Symbol Face"))]);
+    assert_eq!(facts(&sfnt(0, 0x0001_0000, &[(b"name", names)])).family.as_deref(), Some("Symbol Face"));
+    for records in [[(3, 0, 0x409, 1, utf16("Symbol Face")), (3, 1, 0x407, 1, utf16("Unicode Face"))],
+                    [(3, 1, 0x407, 1, utf16("Unicode Face")), (3, 0, 0x409, 1, utf16("Symbol Face"))]] {
+        let rows: Vec<Record> = records.iter().map(|(p, e, l, i, t)| (*p, *e, *l, *i, t.as_slice())).collect();
+        assert_eq!(facts(&sfnt(0, 0x0001_0000, &[(b"name", name_table(&rows))])).family.as_deref(), Some("Unicode Face"));
+    }
+}
+
+#[test]
 fn a_collection_reads_its_first_face() {
     let first = sfnt(20, 0x0001_0000, &[(b"maxp", maxp(11)), (b"name", win(1, "First"))]);
     let second_at = first.len();
