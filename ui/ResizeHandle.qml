@@ -29,6 +29,8 @@ Item {
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton
         cursorShape: Qt.SplitHCursor
+        // A row's DragHandler under the Dual divider would otherwise take the grab on its first move.
+        preventStealing: true
         onPressed: function (mouse) { root.note("press"); root.pressed(mouse) }
         onPositionChanged: function (mouse) { if (zone.pressed) root.note("move"); root.moved(mouse) }
         onReleased: { root.note("release"); root.released() }

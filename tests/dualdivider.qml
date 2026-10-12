@@ -1,5 +1,6 @@
 //@ pragma ShellId flea-dualdivider-test
 import QtQuick
+import QtTest
 import Quickshell
 import "flea" as Flea
 
@@ -144,6 +145,31 @@ ShellRoot {
         }
     }
 
+    // A real pointer drag over the second listing's rows: a row's DragHandler passes its threshold on the first move and must not take the grab from the handle.
+    function pointerStep(r) {
+        return function () {
+            var h = root.handles()[0]
+            var zone = root.zoneOf(h)
+            var lifts = root.walk(root.panes().right, "RowDrag")
+            var y = 100
+            var under = lifts.filter(function (l) { var t = l.mapFromItem(h, 4, y); return t.x >= 0 && t.x < l.width && t.y >= 0 && t.y < l.height })
+            root.check(under.length > 0, r.name + " a row lift sits under the handle at y " + y + ", of " + lifts.length)
+            var cancels = 0
+            var count = function () { cancels++ }
+            zone.canceled.connect(count)
+            var leftBefore = root.leftWidth()
+            keys.mousePress(h, 4, y, Qt.LeftButton, Qt.NoModifier, -1)
+            keys.mouseMove(h, 4 + 40, y, -1, Qt.LeftButton, Qt.NoModifier)
+            keys.mouseMove(h, 4 + root.handleDrag, y, -1, Qt.LeftButton, Qt.NoModifier)
+            root.check(cancels === 0, r.name + " a real drag over a row is not canceled, cancels " + cancels)
+            root.check(h.hot && root.near(h.lineX, root.handleDrag), r.name + " the real drag is live at the end, lineX " + h.lineX)
+            keys.mouseRelease(h, 4 + root.handleDrag, y, Qt.LeftButton, Qt.NoModifier, -1)
+            zone.canceled.disconnect(count)
+            root.check(root.near(root.leftWidth(), leftBefore + root.handleDrag), r.name + " the real drag grew the left listing " + root.leftWidth() + " from " + leftBefore)
+            Flea.ViewState.changeLeaf("dual", {split: 5000})
+        }
+    }
+
     function dragStep(r) {
         return function () {
             var h = root.handles()[0]
@@ -261,7 +287,7 @@ ShellRoot {
         var list = []
         for (var i = 0; i < root.rails.length; i++) {
             var r = root.rails[i]
-            list.push(root.railStep(r), root.autoStep(r), root.defaults(r), root.clickStep(r), root.cancelStep(r), root.dragStep(r),
+            list.push(root.railStep(r), root.autoStep(r), root.defaults(r), root.clickStep(r), root.cancelStep(r), root.pointerStep(r), root.dragStep(r),
                 root.clampStep(r, 1), root.clampStep(r, -1), root.doubleClickStep(r), root.storedStep(r), root.storedCheck(r), root.sharedCheck(r), root.focusStep(r), root.focusCheck(r))
         }
         list.push(root.narrowStep, root.narrowCheck, root.single, root.singleCheck)
@@ -296,6 +322,7 @@ ShellRoot {
         id: window
         implicitWidth: 1100
         implicitHeight: 700
+        TestEvent { id: keys }
         Item {
             id: frame
             height: parent.height
