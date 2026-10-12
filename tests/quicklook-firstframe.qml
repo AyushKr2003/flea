@@ -312,7 +312,10 @@ ShellRoot {
             }
             var pane = root.pane()
             Fresh.trace(root)
-            if (Date.now() - root.stageAt > root.watchdogMs) {
+            // A 1 MiB parse takes 5 to 20 s as the host loads, so stage 4 is held to the worker's silence, which the pane's own fallback times at 10 s, never to speed;
+            // a parse that lands past the watchdog is left by stage 4 on this same poll.
+            var workerLive = root.stage === 4 && root.doc() !== null && root.doc().fallbackFires === 0
+            if (!workerLive && Date.now() - root.stageAt > root.watchdogMs) {
                 var at = pane ? pane.rowFor(pane.cursorIndex) : null
                 root.fail("stage " + root.stage + " stalled in step " + (root.step + 1) + " reads=" + (root.prepare ? root.prepare.reads : -1)
                     + " prepared=" + (root.prepare ? root.prepare.preparedPath : "") + " quiet=" + root.quiet
