@@ -274,7 +274,7 @@ case_dualdivider() {
         column_drag_absolute "$(( wx + div + 4 ))" "$y" "$drag" 4
         # Nothing re-lays while the pointer is down; the handle log says whether a press, move, release or cancel reached the divider.
         local trace="" event
-        for event in press move release cancel; do trace+=" $event=$(grep -ac "RESIZE divider $event" "$flea_log")"; done
+        for event in press move release cancel; do trace+=" $event=$(grep -acw "RESIZE divider $event" "$flea_log" || true)"; done
         printf 'DUALDIVIDER %s events%s\n' "$rail" "$trace"
         read -r moved0 moved1 <<< "$(dual_list_width 0) $(dual_list_width 1)"
         (( moved0 == w0 && moved1 == w1 )) || fail "dualdivider: $rail: the listings moved during the drag ($w0/$w1 to $moved0/$moved1), divider events:$trace"
