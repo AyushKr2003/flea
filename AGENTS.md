@@ -9217,3 +9217,5 @@ Open With's native menus case and the Permissions viewport follow their board: `
 The crumb device check lands a sample `devs` reply through `Messages.route` and reads its device with `ui/CrumbDrop.qml`'s own `destDev` binding, which moves `tests/js/drag.js` 481 to 493, re-derived with `wc -l`, while the link-walk bound test lives in the new `src/backend/extclass_tests.rs` so `src/backend/extclass.rs` stays under its cap.
 
 The home Trash cancel fix moves one ceiling, re-derived with `wc -l`: `src/backend/copyfile.rs` 732 to 734 (the file grows from 719 lines, 13 under its old ceiling, to 734) for the test-only hook that raises the copy's own cancel after its first chunk lands, so a mid-copy cancel in `place_copy` is deterministic.
+
+The FIN port moves one ceiling, re-derived with `wc -l`: `src/backend/copyfile.rs` 734 to 737, the lines the merged cancel check in `place_copy` and its test hook add to the file.

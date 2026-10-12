@@ -44,6 +44,8 @@ pub(crate) struct Session {
     pub(crate) last_matches: Vec<usize>,
     // Scored but unranked matches past the head, ranked on scroll; a patch drops them because it moves row ids.
     pub(crate) pending_rest: Option<Vec<(i32, usize)>>,
+    // Directories patched while the walk ran, applied at its landing; see src/backend/searchpatch.rs.
+    pub(crate) pending_patches: std::collections::BTreeSet<PathBuf>,
     pub(crate) folder_n: usize,
     pub last_answered_gen: usize,
     pub(crate) standing: Option<(usize, String, usize)>,
@@ -94,9 +96,9 @@ impl Session {
         session
     }
 
-    // True while the walk is still running.
+    // True while the walk is still running; a cancelled walk is over even before its thread has stopped.
     pub(crate) fn walking(&self) -> bool {
-        !self.walk_done.load(Ordering::Relaxed)
+        !self.walk_done.load(Ordering::Relaxed) && !self.probes.cancel.load(Ordering::Relaxed)
     }
 
     // The standing query for the landing re-run; None unless it was answered while walking.
@@ -320,13 +322,6 @@ impl Session {
         Some(rows)
     }
 
-    // Patches the index for a backend write under the scope; false when outside it or its mount does not answer.
-    pub(crate) fn patch_after_write(&mut self, path: &Path) -> bool {
-        let Ok(rel) = path.strip_prefix(&self.scope) else { return false };
-        // A file two levels down patches its own directory, so the next query sees it with no walk.
-        self.patch(rel.parent().unwrap_or(Path::new("")))
-    }
-
     // Patches one directory's entries when the open folder's watch reports it; false when its mount does not answer.
     pub(crate) fn patch_open_dir(&mut self, path: &Path) -> bool {
         let Ok(rel) = path.strip_prefix(&self.scope) else { return false };
@@ -336,23 +331,6 @@ impl Session {
         };
         // A reported file patches its own directory; a reported directory patches itself.
         self.patch(if is_dir { rel } else { rel.parent().unwrap_or(Path::new("")) })
-    }
-
-    // One bounded directory patch; a patch repacks the index and moves every row id the held state names.
-    fn patch(&mut self, rel: &Path) -> bool {
-        // A change under the scope can move every folder size above it, whether or not the index takes the patch.
-        self.sizes.forget();
-        let mut index = self.index.lock().unwrap();
-        if !index.patch_dir(&self.scope, rel, self.hidden, &self.body) {
-            return false;
-        }
-        // A finished tag pass follows its rows to their new ids and queues the added ones; an unfinished one starts over.
-        let added = self.tags.carry(&index);
-        drop(index);
-        self.last_query.clear();
-        self.pending_rest = None;
-        self.tags.read_added(added, &self.index);
-        true
     }
 
     // True when the last batch is old enough for an update push while the walk grows.

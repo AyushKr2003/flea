@@ -361,7 +361,7 @@ mod tests {
         use crate::backend::opsreq::OpMsg;
         use crate::backend::undo::{Entry, Step};
         let identity = || crate::backend::undo::ItemIdentity::from_parts(1, 2, 0o100000, 3, (4, 5), (6, 7), None);
-        let moved = || Step::Moved { from: PathBuf::from("/scope/a.txt"), to: PathBuf::from("/scope/sub/b.txt"), before: identity(), after: identity() };
+        let moved = || Step::Moved { from: PathBuf::from("/scope/a.txt"), to: PathBuf::from("/scope/sub/b.txt"), before: identity(), after: identity(), rename_fat: false };
         let both = vec![PathBuf::from("/scope/a.txt"), PathBuf::from("/scope/sub/b.txt")];
         let merged = OpMsg::MergeDone {
             id: 1, ok: 1, failed: 0, skipped: 0, cancelled: false,
