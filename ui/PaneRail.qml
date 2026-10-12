@@ -4,13 +4,14 @@ import "js/Focus.js" as Focus
 import "js/Eject.js" as Eject
 import "js/RailKeys.js" as RailKeys
 import "js/RailMenu.js" as RailMenu
+import "js/Motion.js" as Motion
 
 // The pane's rail, and the two ways it comes and goes. With Auto-hide sidebar off it is part of the
 // pane and Show sidebar governs it, which is 0.2.1's behaviour. Directive 77, the requirement:
 // hovering over the left side shows it, like every other autohide feature in every other file
 // manager. So with the switch on the rail is withdrawn at every width, the pointer at the
 // window's left edge reveals it over the pane rather than reflowing it, and it withdraws a moment
-// after the pointer or the keyboard leaves.
+// after the pointer or the keyboard leaves. It slides in and out on x, and is built once.
 Item {
     id: root
 
@@ -25,8 +26,11 @@ Item {
     // An overlay owes the pane no width, so the listing never reflows as the rail comes and goes.
     // This item is that width, and the rail itself draws past it.
     readonly property real inset: root.overlay ? 0 : rail.width
-    readonly property real railWidth: rail.active ? rail.width : 0
-    readonly property var item: root.held ? null : rail.item
+    // Zero whenever the rail is withdrawn, though an auto-hide Sidebar stays built through the slide and after it.
+    readonly property real railWidth: root.hidden ? 0 : rail.width
+    readonly property var item: root.hidden ? null : rail.item
+    // Where the sliding rail stands, which tests and railState read.
+    readonly property real railX: rail.x
 
     function focusPress(p) {
         var pane = root.pane
@@ -59,15 +63,29 @@ Item {
         // Past the signal that ended it, where the unload the hold was keeping would destroy the sender mid-emission.
         Qt.callLater(function () { if (!root.releasing) root.releaseHold = false })
     }
-    readonly property bool wanted: edge.hovered || root.over || root.menuHere || root.releasing
-                                   || (root.pane !== null && root.pane.focusView === Focus.RAIL)
+    // The pointer has rested on the edge for the dwell, and stays so until it leaves the strip.
+    property bool edgeShown: false
+    // The Sidebar is built by the first strip entry or Tab and then kept, so later reveals spawn nothing and keep cursor and scroll.
+    property bool built: false
+    readonly property bool pointerWanted: root.edgeShown || root.over || root.menuHere || root.releasing
+    readonly property bool focusWanted: root.pane !== null && root.pane.focusView === Focus.RAIL
+    readonly property bool wanted: root.pointerWanted || root.focusWanted
+    // 0 withdrawn to 1 shown; the rail's x follows it, and a reversal starts from where it stands.
+    property real slide: root.revealed ? 1 : 0
+    Behavior on slide {
+        enabled: !Theme.reducedMotion
+        NumberAnimation { duration: root.revealed ? Motion.durMs.open : Motion.durMs.close; easing.type: Easing.OutCubic }
+    }
 
     onWantedChanged: {
         if (root.wanted) { settle.stop(); root.revealed = true }
-        else settle.restart()
+        else if (root.revealed) settle.restart()
     }
+    onRevealedChanged: if (root.revealed) root.built = true
+    // Tab out has no pointer to wait for, so the rail slides away at once; the pointer on the rail keeps it up through pointerWanted.
+    onFocusWantedChanged: if (!root.focusWanted && !root.pointerWanted && root.revealed) { settle.stop(); root.revealed = false }
     // The switch itself is a fresh start either way: nothing is revealed until the pointer asks.
-    onOverlayChanged: root.revealed = false
+    onOverlayChanged: { dwell.stop(); root.edgeShown = false; root.built = false; root.revealed = false }
 
     anchors { top: parent.top; bottom: parent.bottom }
     width: root.inset
@@ -77,23 +95,41 @@ Item {
         interval: root.settleMs
         onTriggered: root.revealed = false
     }
+    Timer {
+        id: dwell
+        interval: Motion.dwellMs
+        onTriggered: root.edgeShown = true
+    }
 
     // The strip that answers the pointer, at the window's own left edge and only while the switch is
     // on. It holds no MouseArea, so a click on the listing under it still lands on the listing.
     Item {
         id: strip
         anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
-        width: Theme.space(4)
+        width: Theme.spacing.rowPaddingX
         enabled: root.overlay
-        HoverHandler { id: edge; enabled: root.overlay }
+        HoverHandler {
+            id: edge
+            enabled: root.overlay
+            // Entering also builds the Sidebar, so the dwell covers the build; a rail already up needs no dwell.
+            onHoveredChanged: {
+                if (!edge.hovered) { dwell.stop(); root.edgeShown = false; return }
+                root.built = true
+                if (root.revealed) root.edgeShown = true
+                else dwell.restart()
+            }
+        }
     }
 
     Loader {
         id: rail
-        anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+        anchors { top: parent.top; bottom: parent.bottom }
+        // The slide moves x only, so the rail's width and rows never change with the motion; visible drops when the hide slide ends.
+        x: root.overlay ? (root.slide - 1) * width : 0
         width: item && !root.held ? item.implicitWidth : 0
-        visible: !root.held
-        active: root.pane !== null && !root.pane.listOnly && root.pane.sharedSidebar === null && (!root.hidden || root.releaseHold)
+        visible: !root.held && (!root.overlay || root.slide > 0)
+        active: root.pane !== null && !root.pane.listOnly && root.pane.sharedSidebar === null
+                && (root.overlay ? (root.built || root.releaseHold) : (!root.hidden || root.releaseHold))
         // A Sidebar that went for another reason took its release with it, so there is nothing left to hold.
         onItemChanged: if (item === null) root.releaseHold = false
         sourceComponent: Flea.Sidebar {

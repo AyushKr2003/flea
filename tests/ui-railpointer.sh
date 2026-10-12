@@ -216,3 +216,56 @@ case_dualautohidereveal() {
     export XDG_STATE_HOME="$suite_home"
     kill_flea
 }
+# The auto-hidden rail's slide, driven for a recording: dwell, leave, re-enter mid-hide, Tab in and Tab out, single view then Dual (runs by name only).
+railmotion_state() { printf 'RAILMOTION %s %s: %s\n' "$1" "$2" "$(ipc railState)"; sleep "${railmotion_pause:-1}"; }
+railmotion_point() {
+    omarchy-drive move "$1" "$2" >/dev/null || fail "cap_railmotion: the pointer move to $1,$2 failed"
+    # Hyprland's cursor move sends no pointer frame, so a one pixel seat nudge makes Qt hear the hover.
+    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null || fail "cap_railmotion: ydotool mousemove failed"
+}
+railmotion_walk() {
+    local mode="$1" wx wy ww wh edge_x away_x y hid=false
+    read -r wx wy ww wh < <(window_box) || fail "cap_railmotion: native window coordinates unavailable"
+    edge_x=$((wx + 1)); away_x=$((wx + ww * 6 / 10)); y=$((wy + wh / 2))
+    for _attempt in $(seq 1 60); do
+        [[ "$(ipc railState | jq -r '.hidden')" == "true" ]] && { hid=true; break; }
+        sleep 0.05
+    done
+    [[ "$hid" == true ]] || fail "cap_railmotion: $mode: the rail never hid before the walk"
+    railmotion_state "$mode" rest
+    railmotion_point "$edge_x" "$y"
+    railmotion_state "$mode" dwell
+    railmotion_point "$away_x" "$y"
+    railmotion_state "$mode" leave
+    railmotion_point "$edge_x" "$y"
+    railmotion_state "$mode" reveal-again
+    railmotion_point "$away_x" "$y"
+    # The settle is 220 ms and the hide slide 140 ms, so the pointer returns while the rail is part way out.
+    sleep 0.3
+    railmotion_point "$edge_x" "$y"
+    railmotion_state "$mode" re-enter-mid-hide
+    railmotion_point "$away_x" "$y"
+    sleep 1
+    key -k Tab >/dev/null
+    railmotion_state "$mode" tab-in
+    key -k Tab >/dev/null
+    railmotion_state "$mode" tab-out
+}
+case_cap_railmotion() {
+    local dir="$fixture_root/railmotion" state="$fixture_root/railmotion-state" suite_home="$XDG_STATE_HOME" i
+    command -v ydotool >/dev/null || fail "cap_railmotion: no ydotool on PATH"
+    [[ -S "${XDG_RUNTIME_DIR:-}/.ydotool_socket" ]] || fail "cap_railmotion: no ydotool socket at ${XDG_RUNTIME_DIR:-}/.ydotool_socket"
+    sandbox_scratch "$dir"
+    mkdir -p "$dir/left" "$dir/right"
+    for i in $(seq -f '%02g' 1 20); do : > "$dir/left/l$i.txt"; : > "$dir/right/r$i.txt"; done
+    seed_ui_state "$state" "$(jq -cn --arg l "$dir/left" '{places:{autoHide:true},dual:{paths:[$l,$l],focus:0}}')"
+    launch "$dir/left"
+    wait_listing 20
+    railmotion_walk single
+    seed_ui_state "$state" '{"view":"dual"}'
+    launch "$dir/left"
+    wait_listing 20
+    railmotion_walk dual
+    export XDG_STATE_HOME="$suite_home"
+    kill_flea
+}

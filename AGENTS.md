@@ -2674,6 +2674,10 @@ request dispatcher here, checking read responsiveness, the operation slot, compl
 Each ceiling is re-derived with `wc -l`; `src/backend/proto.rs` is 363, below the 400-line hard cap,
 so its unused recorded exception is removed. Global limits stay unchanged.
 
+`tests/js/rail.js` is 446: the auto-hidden rail's slide checks (dwell token, durations, curve, reduced-motion gate,
+the x and visible bindings, the build-once Loader) join the Mounts and cursor-follow checks already there.
+`ui/Pane.qml` is 1182: `railRevealed` and `railX` pass the sliding rail's state to `railState` in `ui/Ipc.qml`.
+
 `src/vulkan.rs` is 0.3.2's own exception, recorded rather than split. PR119's display-GPU pin took
 it from 472 to 604 lines, the growth being `icd_for_displays`, `display_pin` and the tests that
 drive a hybrid tree this box cannot produce. The file has one subject, which is what Vulkan can be
@@ -8925,6 +8929,8 @@ The release-line join of the picker answer strip, the Flash file-menu identity a
 The release-line join of the approved fix, bench, search, picker and Flash strip lines re-derives each ceiling both sides moved with `wc -l` on the merged tree: `src/backend/copyfile_tests.rs` 694, `ui/Pane.qml` 1180, `ui/PickerChrome.qml` 426, `ui/PickerWindow.qml` 797, `tests/button-members.qml` 488 and `tests/js/picker.js` 343, and records `tests/chromering.qml` at 413 for the Flash strip's Back checks beside the seven picker strip stops. `tests/startup-units.txt` keeps its 170 units, `ui/PathEntry.qml` leaving for the first edit and `ui/PrebuildDriver.qml` joining, while its `bytes` line moves from 1588400 to 1596965, the sum the probe's tool takes over them.
 
 The Network Tab ring moves three ceilings, each re-derived with `wc -l`: `ui/NetworkDialog.qml` 447 to 457 for the ids, `tabHandle` and `onTabbed` lines that put Cancel, the primary and Install Dropbox in the form's walk after the TLS box, with Escape moved from the form to the card's content so a focused button closes the dialog too, and `ui/NetworkForm.qml` 406 to 413 for the `trailing` prop, the joined ring, the pass-over step and the button labels in `focusName`, and `tests/button-members.qml` 445 to 485 for the trailing-walk checks that Tab from TLS reaches each button and wraps to the first chip, Backtab returns, an unavailable button is passed over and `focusName` names the focused button.
+
+The auto-hidden rail slides on x: `ui/PaneRail.qml` keeps the Sidebar built after its first reveal, eases a `slide` property and waits a dwell at the edge, and `ui/Pane.qml` passes `railRevealed` and `railX` to `railState`, which moves `tests/startup-units.txt`'s `bytes` line from 1596965 to 1599516, the sum the probe's tool takes over the same 170 units.
 
 ## The image flasher
 
