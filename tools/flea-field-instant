@@ -3263,7 +3263,7 @@ def selftest():
             raise RuntimeError("no centre")
         raise ExternalWindow({"journey": journey, "error": "an external window opened"})
     idle_bar = {"activities": [], "errors": 0, "notice": ""}
-    sess.ipc = lambda fn, *a: json.dumps(idle_bar)
+    sess.ipc = lambda name, *a: json.dumps(idle_bar)
     sess.ctx, sess.sample = {"roots": [], "op_base": "/none", "root": "/none", "tag": "t"}, sample_then_die
     with mock.patch.dict(globals(), empty_dir=lambda *a: None, reflink=lambda *a: None):
         rows = run_series(sess, {"type": "op", "op": "op.trash"}, 3)
@@ -3387,8 +3387,8 @@ def selftest():
                 pane.key(c)
                 return len(sent)
             ses.keys = types.SimpleNamespace(chord=chord)
-            ses.ipc = lambda fn, *a: (json.dumps(seq.pop(0) if len(seq) > 1 else seq[0]) if fn == "statusActivityState"
-                                      else pane.ipc(fn, *a))
+            ses.ipc = lambda name, *a: (json.dumps(seq.pop(0) if len(seq) > 1 else seq[0]) if name == "statusActivityState"
+                                      else pane.ipc(name, *a))
             ses.columns = lambda name, t, row, evidence=None, extra=None: dict({"journey": name, "first_ms": 7.0},
                                                                                **(extra or {}))
             ses.pane = pane
@@ -3499,7 +3499,7 @@ def selftest():
                "first_ms" in rows[1]), ([None, True], True, False))
         # A listing that never lands is a harness fault, not a key sent into a loading pane.
         ses, sent = op_session([bar()])
-        ses.ipc = lambda fn, *a: "true" if fn == "listInFlight" else ""
+        ses.ipc = lambda name, *a: "true" if name == "listInFlight" else ""
         try:
             listing_landed(ses, 0)
             landed = "no fault"
@@ -3832,7 +3832,7 @@ def selftest():
     check("load_forced_renewal_waits_out_the_gap", (len(stamps), stamps[1] - stamps[0] >= 0.2 - 0.01), (2, True))
     # Load c's probe is the right pane's request count and listing flag, never a process tick count; the sample is dualState's shape (ui/Ipc.qml:126).
     ipc = {"out": '{"active": true, "focused": 0, "panes": [{"path": "/a", "total": 3, "cursor": 0, "loading": false, "selected": [], "focused": true, "listRequests": 4}, {"path": "/nas/stream", "total": 5000, "cursor": 0, "loading": true, "selected": [], "focused": false, "listRequests": 7}]}'}
-    stub = types.SimpleNamespace(ipc=lambda fn, *a: ipc["out"])
+    stub = types.SimpleNamespace(ipc=lambda name, *a: ipc["out"])
     probe_c, note_c = load_start(stub, "c", {"roots": []})
     check("load_c_probe", (probe_c(), note_c), ((7, True), "NAS listing streaming in the right pane"))
     # The probe reads the fields the producer writes: a pane built from the keys of dualState's own object literal.
