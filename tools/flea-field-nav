@@ -413,9 +413,7 @@ def box_overlaps(box, rect):
 
 def launch_columns(detail, t_exec, win_rect, content_rect, end_ns, ink_min=INK_ROWS,
                    quiet_ns=NAV_QUIET_NS, cap_ns=NAV_CAP_NS, settle_from_ns=None):
-    """First window frame, first rows frame and settle off one full-output recording of detail tuples (presentation ns, received ns, changed rows, first row, last row, first column, last column, ink rows)."""
-    # first_frame is the first change after exec in the window rect, first_rows the first in the content rect with ink rows at or over ink_min.
-    # settled is the last change before the quiet gap, from settle_from_ns (the rows wait end) or exec when None; first times stay exec-relative.
+    """First window frame, first rows frame and settle off one full-output recording of detail tuples (presentation ns, received ns, changed rows, first row, last row, first column, last column, ink rows): first_frame is the first change after exec in the window rect, first_rows the first in the content rect with ink rows at or over ink_min, settled the last change before the quiet gap from settle_from_ns (the rows wait end) or exec when None; first times stay exec-relative."""
     first_frame = first_rows = None
     changes = []
     for f in detail:
@@ -728,11 +726,7 @@ def preview_default(entrant):
 
 
 def measure(plan_path):
-    """measure PLAN.json: {"out": JSONL, "runs": N, "fixtures": {"nav500": D, "enter": D, "preview": D, "nav10k": D, "nav100k": D, "navscroll"?: D}, "arms": [{"id", "entrant", "flea_dir"?, "view"?, "preview"?}], "columns": [cursor|cursor_inview|cursor_scroll|enter|back|preview|ql|launch], "kinds": [...], "inview_steps": 7, "scroll_steps": 12, "pace_ms": 400, "ink_rows": 25, "cache": "warm"|"cold"}."""
-    # ql needs a "qltable" fixture (the tool's qltable folder) and runs QL_KINDS, each in its own launch, the order rotated per round; report prints the ql verdict.
-    # cursor runs both cursor series; the scroll series uses navscroll, else nav10k.
-    # An older plan's "steps" is ignored, since 20 Downs from the top run past the first screen of some views.
-    # Cold is prepared by the caller and the plan only stamps it; rounds interleave the arms and rotate their order.
+    """measure PLAN.json: {"out": JSONL, "runs": N, "fixtures": {"nav500": D, "enter": D, "preview": D, "nav10k": D, "nav100k": D, "navscroll"?: D}, "arms": [{"id", "entrant", "flea_dir"?, "view"?, "preview"?}], "columns": [cursor|cursor_inview|cursor_scroll|enter|back|preview|ql|launch], "kinds": [...], "inview_steps": 7, "scroll_steps": 12, "pace_ms": 400, "ink_rows": 25, "cache": "warm"|"cold"}. ql needs a "qltable" fixture and runs QL_KINDS, each in its own launch, rotated per round; cursor runs both cursor series, the scroll one on navscroll, else nav10k; an older plan's "steps" is ignored (20 Downs run past the first screen of some views); cold is prepared by the caller and only stamped; rounds interleave the arms and rotate their order."""
     # Sample plan line: {"out": "o.jsonl", "runs": 1, "fixtures": {"nav500": "D/nav500"}}.
     with open(plan_path) as f:
         plan = json.load(f)
