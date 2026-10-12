@@ -37,8 +37,8 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
 qs_status=$?
 
 # Every check a full green run makes, read off that run's own PASS line; a leg that stops running makes fewer and fails here.
-expected_checks=108
-# Sample input: "  INFO qml: REVEAL PASS 108 checks", then "REVEAL DONE failures=0", then the probe's own SIGTERM (143).
+expected_checks=110
+# Sample input: "  INFO qml: REVEAL PASS 110 checks", then "REVEAL DONE failures=0", then the probe's own SIGTERM (143).
 pass_count=$(printf '%s\n' "$output" | grep -c 'REVEAL PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'REVEAL FAIL')
 done_count=$(printf '%s\n' "$output" | grep -c 'REVEAL DONE')

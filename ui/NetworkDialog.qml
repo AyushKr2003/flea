@@ -39,8 +39,7 @@ Item {
 
     // A plain overlay, not a QQC Popup, the same call ui/ContextMenu.qml already made.
     anchors.fill: parent
-    // opened flips instantly (open()/close() above), so a caller reading it never races the close
-    // fade; visible only stays true a little longer, until the fade ends, and a closed dialog takes no input.
+    // opened flips at once so no caller races the close fade; visible holds until the fade ends, and a closed dialog takes no input.
     visible: root.opened || root.opacity > 0
     enabled: root.opened
     opacity: 0

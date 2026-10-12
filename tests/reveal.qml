@@ -201,6 +201,7 @@ ShellRoot {
         out.push({ name: "rise: open", sample: lone, act: function () { Flea.Theme.reducedMotion = false; bareReveal.shown = true }, watch: shell.riseCutMs, record: function (samples) {
             var cut = samples[samples.length - 1].rise
             shell.check("rise: a close at half the rise lands mid rise", cut > 0 && cut < Motion.translateUpPx, true)
+            shell.carry.riseCut = cut
             bareReveal.shown = false
         } })
         out.push({ name: "rise: reopen", sample: lone, act: function () {}, watch: shell.reopenGapMs, record: function (samples) {
@@ -210,6 +211,7 @@ ShellRoot {
         } })
         out.push({ name: "rise: reopened", sample: lone, act: function () {}, record: function (samples) {
             var last = samples[samples.length - 1]
+            shell.check("rise: a reopen in the fade of a cut rise rises on from the cut, never back from the full offset", samples.every(function (p) { return p.rise <= shell.carry.riseCut }), true)
             shell.check("rise: a reopen in the fade of a cut rise ends at rest and full", [last.rise, last.op], [0, 1])
         } })
         out.push({ name: "rise: close", sample: lone, act: function () { bareReveal.shown = false }, record: function (samples) {
@@ -273,6 +275,10 @@ ShellRoot {
             shell.check("flyout: it keeps its place and its action through the fade", samples.every(function (p) { return p.offset === shell.carry.flyoutPlace[0] && p.action === shell.carry.flyoutPlace[1] }), true)
             shell.check("flyout: it stays drawn until its fade ends", samples.every(function (p) { return p.vis || p.op < shell.settledGap }), true)
             shell.check("flyout: a closed flyout is hidden", last.vis, false)
+        } })
+        out.push({ name: "flyout: empty", sample: flyoutOf, act: function () { menu.loneFlyoutAction = "noFlyout" }, record: function (samples) {
+            var last = samples[samples.length - 1]
+            shell.check("flyout: a flyout opened with no entries draws no rows, not the last flyout's", [last.now, last.held], [0, 0])
             menu.close()
         } })
     }
