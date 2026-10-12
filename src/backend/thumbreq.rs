@@ -55,7 +55,7 @@ pub(crate) fn thumb_rows(
                     }
                     Some(m) => m,
                 };
-                match cache.lookup(&path, mtime) {
+                match cache.lookup(&path, mtime, tb.thumbs.fingerprint()) {
                     Hit::Ready(p) => {
                         writeln!(out, "{}", thumbed_line(row, &p.to_string_lossy(), since(t))).ok();
                     }
@@ -102,7 +102,7 @@ pub(crate) fn thumb_rows(
             Some(m) => m,
         };
         let mtime = meta.map(|m| m.mtime()).unwrap_or(0);
-        match cache.lookup(&path, mtime) {
+        match cache.lookup(&path, mtime, tb.thumbs.fingerprint()) {
             Hit::Ready(p) => {
                 writeln!(out, "{}", thumbed_line(row, &p.to_string_lossy(), since(t))).ok();
             }
@@ -273,7 +273,7 @@ mod tests {
         let uri = thumbcache::uri_for(&path);
         let large = cache.large_path(&uri);
         std::fs::create_dir_all(large.parent().unwrap()).unwrap();
-        thumbwrite::write_marker(&large, &uri, mtime).unwrap();
+        thumbwrite::write_marker(&large, &uri, mtime, None).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
         listed(&d, &mut st);
         // The window already holds this row's figures, so the request reuses them with no stat.
@@ -382,7 +382,7 @@ mod tests {
         let uri = thumbcache::uri_for(&link);
         let large = cache.large_path(&uri);
         std::fs::create_dir_all(large.parent().unwrap()).unwrap();
-        thumbwrite::write_marker(&large, &uri, target_mtime).unwrap();
+        thumbwrite::write_marker(&large, &uri, target_mtime, None).unwrap();
         st.base = d.path().to_path_buf();
         let mut l = Listing::new();
         l.push("link.jpg", false);
@@ -413,5 +413,36 @@ mod tests {
         assert_eq!(st.outstanding, 1, "the job is in flight as it always was");
         assert_eq!(st.asked.len(), 1, "and the mapping holds it for the report");
         assert_eq!(pool.cancel_all().iter().map(|j| j.path.clone()).collect::<Vec<_>>(), vec![d.join("photo.jpg")], "the queued job is the row's own file");
+    }
+
+    // Sample input: a photo.jpg whose fail marker was written under marker_table, or under the loaded table when None; answers the wire, the jobs in flight and the jobs queued.
+    fn answer_with_marker(tag: &str, marker_table: Option<&str>) -> (String, usize, usize) {
+        let d = TestDir::new(tag);
+        let path = d.file("photo.jpg", "not a picture, and nothing here decodes it");
+        let mtime = std::fs::metadata(&path).unwrap().mtime();
+        let tb = tables();
+        let (mut st, pool, cache) = harness(&d);
+        let uri = thumbcache::uri_for(&path);
+        let marker = cache.fail_path(&uri);
+        std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
+        thumbwrite::write_marker(&marker, &uri, mtime, Some(marker_table.unwrap_or(tb.thumbs.fingerprint()))).unwrap();
+        listed(&d, &mut st);
+        let mut out = Vec::new();
+        thumb_rows(&mut out, &[0], &mut st, &tb, &pool, &cache, false);
+        (String::from_utf8(out).unwrap(), st.outstanding, pool.cancel_all().len())
+    }
+
+    #[test]
+    fn a_failure_recorded_under_the_loaded_table_answers_none_and_queues_nothing() {
+        let (line, outstanding, queued) = answer_with_marker("thumbfailsame", None);
+        assert!(line.contains(r#""file":"""#), "a recorded failure answers none: {}", line);
+        assert_eq!((outstanding, queued), (0, 0), "and no decode is queued for it");
+    }
+
+    #[test]
+    fn a_failure_recorded_under_another_table_is_tried_again() {
+        let (line, outstanding, queued) = answer_with_marker("thumbfailother", Some("an older table"));
+        assert!(line.is_empty(), "a marker from another table is a miss, queued and not answered: {}", line);
+        assert_eq!((outstanding, queued), (1, 1), "the file is tried once more");
     }
 }

@@ -1,3 +1,4 @@
+use crate::backend::thumbcache::TABLE_KEY;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -154,13 +155,17 @@ fn has_key(payload: &[u8], keys: &[&str]) -> bool {
     }
 }
 
-// The three keys the shared cache is read by, which Task 5's lookup reads back out of the file itself.
-fn write_stamped(path: &Path, png: &[u8], uri: &str, mtime: i64) -> std::io::Result<()> {
-    let chunks = vec![
+// The keys the shared cache is read by, which Task 5's lookup reads back out of the file itself.
+fn write_stamped(path: &Path, png: &[u8], uri: &str, mtime: i64, table: Option<&str>) -> std::io::Result<()> {
+    let mut chunks = vec![
         text_chunk(STAMPED_KEYS[0], uri),
         text_chunk(STAMPED_KEYS[1], &mtime.to_string()),
         text_chunk(STAMPED_KEYS[2], SOFTWARE),
     ];
+    // Only a fail marker names its table, because only a failure is judged against the table that made it.
+    if let Some(table) = table {
+        chunks.push(text_chunk(TABLE_KEY, table));
+    }
     // ffmpegthumbnailer writes a Thumb::URI of its own, and two of one key in one entry is a defect whichever one a reader picks; see AGENTS.md "Thumbnail cache".
     let out = insert_after_ihdr(&without_text_keys(png, &STAMPED_KEYS), &chunks)
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "not a png"))?;
@@ -169,12 +174,12 @@ fn write_stamped(path: &Path, png: &[u8], uri: &str, mtime: i64) -> std::io::Res
 
 // The child wrote a bare PNG in place, so it is read back, stamped and written before the rename publishes it.
 pub fn stamp(path: &Path, uri: &str, mtime: i64) -> std::io::Result<()> {
-    write_stamped(path, &std::fs::read(path)?, uri, mtime)
+    write_stamped(path, &std::fs::read(path)?, uri, mtime, None)
 }
 
 // A fail marker is a valid 1x1 PNG carrying only the metadata, which is what other applications read.
-pub fn write_marker(path: &Path, uri: &str, mtime: i64) -> std::io::Result<()> {
-    write_stamped(path, &ONE_PIXEL, uri, mtime)
+pub fn write_marker(path: &Path, uri: &str, mtime: i64, table: Option<&str>) -> std::io::Result<()> {
+    write_stamped(path, &ONE_PIXEL, uri, mtime, table)
 }
 
 #[cfg(test)]
@@ -267,10 +272,11 @@ mod tests {
     fn a_stamped_png_reads_back_through_the_cache_parser() {
         let dir = TestDir::new("thumbwrite");
         let p = dir.join("m.png");
-        write_marker(&p, "file:///tmp/a%20b.jpg", FIXTURE_MTIME).unwrap();
+        write_marker(&p, "file:///tmp/a%20b.jpg", FIXTURE_MTIME, Some("table-a")).unwrap();
         let bytes = std::fs::read(&p).unwrap();
         assert_eq!(png_text(&bytes, "Thumb::URI"), Some("file:///tmp/a%20b.jpg".to_string()));
         assert_eq!(png_text(&bytes, "Thumb::MTime"), Some(FIXTURE_MTIME.to_string()));
         assert_eq!(png_text(&bytes, "Software"), Some(SOFTWARE.to_string()));
+        assert_eq!(png_text(&bytes, TABLE_KEY), Some("table-a".to_string()));
     }
 }
