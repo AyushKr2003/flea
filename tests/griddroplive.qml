@@ -4,8 +4,7 @@ import QtQuick
 import Quickshell
 import "flea" as Flea
 
-// The shipped GridArea under a real Qt drag over the pane's floor: which of the two takes the drag at a folder tile, a file tile, the cell margin and bare ground.
-// A Qt internal drag carries no mime data, so the entry is read from the area's own state and the drop from the pane that said its refusal.
+// The shipped GridArea over the pane's floor under a real Qt drag (no mime data, so entry and drop are read from the area and the pane): who takes a folder tile, a file tile, the margin and bare ground.
 ShellRoot {
     id: root
 

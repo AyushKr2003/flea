@@ -17,6 +17,7 @@ ShellRoot {
     property bool framed: false
     property int polls: 0
     property int minSteps: 0
+    readonly property int doneStage: 6
 
     function pad(i) { var n = String(i); while (n.length < 4) n = "0" + n; return n }
     function bigRows() {
@@ -198,7 +199,9 @@ ShellRoot {
         step.restart()
     }
     function report() {
-        root.stage = 4
+        // Past every live stage, with every timer stopped, so nothing polls or reports again before the kill lands.
+        root.stage = root.doneStage
+        step.stop(); watch.stop(); frameGuard.stop(); watchdog.stop()
         if (root.failures.length === 0)
             console.log("GRIDGROWTH PASS steps=" + root.s0 + " frames=" + root.frames)
         for (var f = 0; f < root.failures.length; f++)

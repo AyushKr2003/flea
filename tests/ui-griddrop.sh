@@ -1,4 +1,5 @@
 # Sourced by ui.sh: the Grid's one shared DropArea and one HoverHandler under a real compositor drag and a real pointer.
+
 # The icon box of a tile as a window-relative point, the part of a tile a press and a drop both hit.
 griddrop_pt() {
     [[ "$#" -eq 1 ]] || fail "griddrop: pt needs a name, got $#"
@@ -62,6 +63,7 @@ case_griddrop() {
     echo "-- a drop past the last tile takes nothing, as it takes nothing in List --"
     griddrop_hold e.txt c.txt "$folder"
     read -r ax ay aw ah <<< "$(ipc listAreaRect)"
+    [[ "$ax $ay $aw $ah" =~ ^-?[0-9]+(\ -?[0-9]+){3}$ ]] || fail "griddrop: no list area, ipc answered '$ax $ay $aw $ah'"
     cap_drops_steer "$((ax + aw / 2))" "$((ay + ah - 30))"
     cap_drops_wait_target "$folder"
     cap_drops_release
@@ -72,10 +74,13 @@ case_griddrop() {
     [[ "$(ipc collideState | jq -r .opened)" == "false" ]] || fail "griddrop: the empty-space drop opened a collide card"
 
     echo "-- ctrl held from the lift copies --"
+    # A fail while Ctrl is down exits the run, so the release rides an exit trap until the key is up.
+    trap '( YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key 29:0 ) >/dev/null 2>&1 || true' EXIT
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key 29:1 >/dev/null 2>&1 || fail "griddrop: ctrl down refused"
     sleep 0.3
     griddrop_hold f.txt box "Copy 1 item to box"
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool key 29:0 >/dev/null 2>&1 || true
+    trap - EXIT
     cap_drops_release
     wait_message "Copied 1 item · z undoes"
     [[ -f "$dir/f.txt" && -f "$dir/box/f.txt" ]] || fail "griddrop: ctrl at the lift did not copy f.txt"
@@ -105,6 +110,7 @@ case_griddrop() {
     read -r ax ay aw ah <<< "$(ipc rowRect "$lit")"
     (( cx >= ax && cx < ax + aw && cy >= ay && cy < ay + ah )) || fail "griddrop: lit tile $lit at $ax,$ay,$aw,$ah does not hold the pointer at $cx,$cy"
     read -r ax ay aw ah <<< "$(ipc listAreaRect)"
+    [[ "$ax $ay $aw $ah" =~ ^-?[0-9]+(\ -?[0-9]+){3}$ ]] || fail "griddrop: no list area, ipc answered '$ax $ay $aw $ah'"
     pointer_glide "$((wx + ax + aw / 2))" "$((wy + ay / 2))" || fail "griddrop: the pointer glide off the tiles failed"
     settle
     lit=$(griddrop_hovered)
