@@ -99,6 +99,7 @@ ShellRoot {
             property int settleMs: 120
             property int coalesceMs: 16
             property int refetchMargin: 25
+            property int cacheRows: 4
             property int buffer: 150
             property int windowSize: 35
             property var backend: null
@@ -310,12 +311,28 @@ ShellRoot {
         root.checkDrawnDim(probePlainClip, "an unmarked row", false)
     }
 
+    // The column list keeps the pane's cache rows of unseen rows, and a column with no pane keeps the named bare count: Qt's 320 px default builds about 12.
+    function checkCacheBuffer() {
+        var rowH = Flea.Theme.fileRowHeight
+        if (activeNarrow.pane.cacheRows !== 4)
+            root.fail("the pane stub carries cacheRows " + activeNarrow.pane.cacheRows + ", want 4")
+        if (activeNarrow.bareCacheRows !== 2)
+            root.fail("a column with no pane names " + activeNarrow.bareCacheRows + " cache rows, want 2")
+        var paneBuf = activeNarrow.viewport.cacheBuffer
+        if (paneBuf !== rowH * 4)
+            root.fail("a column with a pane keeps a cache buffer of " + paneBuf + " px, want " + (rowH * 4))
+        var bareBuf = peekNarrow.viewport.cacheBuffer
+        if (bareBuf !== rowH * 2)
+            root.fail("a column with no pane keeps a cache buffer of " + bareBuf + " px, want " + (rowH * 2))
+    }
+
     // Every delegate read is guarded, so a missing row fails loud instead of hanging.
     function measure() {
         try {
             root.checkRow(probeFile, "a file row", "columnrow-geom.txt")
             root.checkRow(probeDir, "a directory row", "full")
             root.checkDim()
+            root.checkCacheBuffer()
             root.checkPaneRow(activeNarrow, "an active column at 366", 0, root.longName, false, activeNarrow.nameBudgetPlain)
             root.checkPaneRow(activeWide, "an active column at 853", 0, root.longName, false, activeWide.nameBudgetPlain)
             root.checkPaneRow(clippedNarrow, "a clipped row at 366", 0, root.longName, true, clippedNarrow.nameBudgetPlain)
