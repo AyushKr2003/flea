@@ -205,9 +205,10 @@ for colours in "$themes_dir"/*/colors.toml "$synthetic"; do
         || { fail "$theme: the IPC seam never answered ready"; continue; }
     sleep 3
     [ "$(ipc themeLoaded)" = "true" ] || fail "$theme: the window did not load a palette"
-    read -r bg surface fg muted accent error symlink executable accentframe <<< "$(ipc palette)"
+    read -r bg surface fg muted accent error symlink executable accentframe mutedframe <<< "$(ipc palette)"
     case "$bg$fg$muted$accent$accentframe" in *"#"*) ;; *) fail "$theme: the window reports no palette"; continue ;; esac
     case "$accentframe" in "#"*) ;; *) fail "$theme: the window reports no accentFrame field"; continue ;; esac
+    case "$mutedframe" in "#"*) ;; *) fail "$theme: the window reports no mutedFrame field"; continue ;; esac
     # The keys Commons/Color.qml maps, first match wins, each anchored to its own key so background_dim
     # cannot answer for background. Sample input, one line of colors.toml: background = "#1e1e2e"
     want_bg=$(colour_for "$colours" background color0)
@@ -226,6 +227,7 @@ for colours in "$themes_dir"/*/colors.toml "$synthetic"; do
     at_least "$theme" "foreground on surface" "$(ratio "$fg" "$surface")" "$text_min"
     at_least "$theme" "muted text on background" "$(ratio "$muted" "$bg")" "$text_min"
     at_least "$theme" "muted text on surface" "$(ratio "$muted" "$surface")" "$text_min"
+    at_least "$theme" "muted frame on background" "$(ratio "$mutedframe" "$bg")" "$mark_min"
     at_least "$theme" "error on background" "$(ratio "$error" "$bg")" "$text_min"
     at_least "$theme" "symlink on background" "$(ratio "$symlink" "$bg")" "$text_min"
     at_least "$theme" "executable on background" "$(ratio "$executable" "$bg")" "$text_min"

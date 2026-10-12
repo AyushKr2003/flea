@@ -100,6 +100,7 @@ Item {
                     + chevronSlot.width + hintText.anchors.rightMargin)
 
     Rectangle {
+        objectName: "menuWash"
         anchors.fill: parent
         visible: !root.isSeparator
         // selectedAccentFill already carries the theme's own selected alpha, so the tint is a

@@ -57,6 +57,7 @@ ShellRoot {
             Flea.Row { id: restRow; width: 800; row: shell.sampleRow; kindNames: []; hiddenCols: []; clipMark: "" }
             Flea.MenuRow { id: litRow; width: 400; current: true; entry: ({ label: "Open", glyph: "folder-open", action: "open", hint: "enter" }) }
             Flea.MenuRow { id: litDangerRow; width: 400; current: true; entry: ({ label: "Move to Trash", glyph: "trash", action: "trash", danger: true, hint: "d" }) }
+            Flea.DialogButton { id: secondaryButton; label: "Cancel" }
             Flea.MenuRow { id: restingRow; width: 400; entry: ({ label: "Copy", glyph: "copy", action: "copy", hint: "y" }) }
         }
     }
@@ -83,16 +84,23 @@ ShellRoot {
         var c = Flea.Theme.color, rgba = Probe.rgba, name = entry.name
         Flea.Theme.applyColors(entry.body)
         var bg = String(c.background), surface = String(c.surface), fg = String(c.foreground)
-        // The ground a lit menu row draws on: the foreground wash over the surface.
-        var lit = Contrast.hexOf(Contrast.over(fg, Flea.Theme.washHover, surface))
+        // The ground a lit menu row draws on: the wash the row itself draws, over the card's surface.
+        var wash = Probe.find(litRow, "menuWash")
+        shell.check(name + " lit row draws its wash", wash !== null && wash.visible, true)
+        var lit = wash === null ? surface : Contrast.hexOf(Contrast.over(String(wash.color), wash.opacity, surface))
         shell.atLeast(name, "muted text", "background", Contrast.ratio(String(c.muted), bg), Flea.Theme.textContrast)
         shell.atLeast(name, "muted text", "surface", Contrast.ratio(String(c.muted), surface), Flea.Theme.textContrast)
         shell.atLeast(name, "metadata text", "background", Contrast.ratio(String(c.metadata), bg), Flea.Theme.textContrast)
         shell.atLeast(name, "metadata text", "surface", Contrast.ratio(String(c.metadata), surface), Flea.Theme.textContrast)
         shell.atLeast(name, "muted frame", "background", Contrast.ratio(String(c.mutedFrame), bg), Flea.Theme.frameContrast)
-        shell.atLeast(name, "foreground cursor frame", "surface", Contrast.ratio(fg, surface), Flea.Theme.frameContrast)
+        // The cursor frame draws over the wash on the card's surface, so the lower of the two grounds counts.
+        shell.atLeast(name, "foreground cursor frame", "surface and wash", Math.min(Contrast.ratio(fg, surface), Contrast.ratio(fg, lit)), Flea.Theme.frameContrast)
         shell.atLeast(name, "lit row hint", "wash", Contrast.ratio(String(c.mutedLit), lit), Flea.Theme.textContrast)
         shell.atLeast(name, "lit row danger label", "wash", Contrast.ratio(String(c.errorLit), lit), Flea.Theme.textContrast)
+        // The error ink is never the quieter of the two beside a caption, on each ground it draws on.
+        shell.atLeast(name, "error against the caption", "background", Contrast.ratio(String(c.error), bg), Contrast.ratio(String(c.muted), bg))
+        shell.atLeast(name, "status error against the caption", "surface", Contrast.ratio(String(c.errorOnSurface), surface), Contrast.ratio(String(c.muted), surface))
+        shell.atLeast(name, "lit danger label against the hint", "wash", Contrast.ratio(String(c.errorLit), lit), Contrast.ratio(String(c.mutedLit), lit))
         // The lit row draws one hairline frame in the foreground, the chrome control inset inside its footprint (past a card's border rule at the sides); a resting row draws none.
         var frame = shell.frameOf(litRow), inset = Flea.Theme.chromeControlInset, side = inset + Flea.Theme.spacing.hairline
         shell.check(name + " lit row frame colour, width and margins", [frame.count, frame.color, frame.width, frame.margins, frame.visible],
@@ -101,6 +109,9 @@ ShellRoot {
         var hint = shell.textDrawn(litRow, "enter"), danger = shell.textDrawn(litDangerRow, "Move to Trash")
         shell.check(name + " lit row hint draws the lifted ink", hint ? rgba(hint.color) : "none", rgba(c.mutedLit))
         shell.check(name + " lit row danger label draws the lifted ink", danger ? rgba(danger.color) : "none", rgba(c.errorLit))
+        // A secondary dialog button's rest frame is the frame role; the sunset fixture sets a muted that the frame and text lifts take apart, so a frame left on muted is red there.
+        shell.check(name + " secondary dialog button frame draws mutedFrame", Probe.read(secondaryButton).frameColor, rgba(c.mutedFrame))
+        if (name === "sunset") shell.check("sunset: the frame role and the text role differ", rgba(c.mutedFrame) !== rgba(c.muted), true)
         // A resting list row draws its metadata cells in the lifted ink and its file glyph in the unlifted step, so no glyph moves.
         shell.check(name + " resting row metadata ink", rgba(restRow.cellInk), rgba(c.metadata))
         shell.check(name + " resting row file glyph", rgba(restRow.markColor()), rgba(c.metadataFrame))

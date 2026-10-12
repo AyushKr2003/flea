@@ -344,8 +344,7 @@ Singleton {
         var surface = Palette.pick(found, Palette.SURFACE_KEYS, root.fallbackColor.surface);
         root.color.surface = surface;
         Commons.Color.loadColors(body);
-        // The palette's muted lifted to frameContrast on the background is what frames and glyphs draw; text lifts that
-        // result to textContrast on the background and then on the surface, where menus, dialogs and cards draw it.
+        // Frames and glyphs draw the palette's muted lifted to frameContrast; text lifts that to textContrast on the background, then the surface.
         root.color.mutedFrame = Contrast.ensureRatio(
             Palette.pick(found, ["muted"], Qt.darker(Commons.Color.foreground, 1.4)), bg, root.frameContrast);
         root.color.muted = Contrast.ensureRatio(Contrast.ensureRatio(root.color.mutedFrame, bg, root.textContrast), surface, root.textContrast);
@@ -362,13 +361,14 @@ Singleton {
         root.color.executable = Contrast.ensureRatio(
             Palette.pick(found, ["green", "color2"], root.fallbackColor.executable), bg, 4.5);
         // Urgent is the palette's own red: seven of the 23 installed themes leave it under 4.5:1 on their own ground, so it is lifted the way symlink and executable are, and the three whose red carries no chroma at all (solitude, white, vantablack) fall back to the foreground, because a destructive row drawn in the same grey as an unavailable one reads as switched off rather than as dangerous.
-        root.color.error = Commons.Color.urgent.hsvSaturation > root.hueFloor ? Contrast.ensureRatio(Commons.Color.urgent, bg, 4.5) : String(Commons.Color.foreground);
-        // The status bar draws that same ink on the surface, where four themes land under 4.5.
-        root.color.errorOnSurface = Commons.Color.urgent.hsvSaturation > root.hueFloor ? Contrast.ensureRatio(Commons.Color.urgent, surface, 4.5) : String(Commons.Color.foreground);
-        // A lit menu row washes the surface with the foreground, so its hint and danger label are lifted on that ground.
+        var hued = Commons.Color.urgent.hsvSaturation > root.hueFloor;
+        root.color.error = hued ? Contrast.ensureRatio(Commons.Color.urgent, bg, Math.max(4.5, Contrast.ratio(String(root.color.muted), bg))) : String(Commons.Color.foreground);
+        // The status bar draws that same ink on the surface, where four themes land under 4.5; it is never quieter than the caption there.
+        root.color.errorOnSurface = hued ? Contrast.ensureRatio(Commons.Color.urgent, surface, Math.max(4.5, Contrast.ratio(String(root.color.muted), surface))) : String(Commons.Color.foreground);
+        // A lit menu row washes the surface with the foreground, so its hint and danger label are lifted on that ground, the danger label never below the hint.
         var lit = Contrast.hexOf(Contrast.over(String(Commons.Color.foreground), root.washHover, String(surface)));
         root.color.mutedLit = Contrast.ensureRatio(root.color.muted, lit, root.textContrast);
-        root.color.errorLit = Contrast.ensureRatio(root.color.error, lit, root.textContrast);
+        root.color.errorLit = Contrast.ensureRatio(root.color.error, lit, Math.max(root.textContrast, Contrast.ratio(String(root.color.mutedLit), lit)));
         root.tag = Contrast.tagTheme(found, bg, surface);
         // A body that parsed to nothing left every role on its fallback, so the flag says so rather
         // than reporting that the read happened: text() returns "" for a file that is not there.

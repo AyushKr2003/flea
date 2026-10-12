@@ -1,5 +1,6 @@
 .import "../../ui/js/Palette.js" as Palette
 .import "../../ui/js/Contrast.js" as Contrast
+.import "../../ui/js/Buttons.js" as Buttons
 .import "sourcefixture.js" as Source
 
 // The stock themes installed under /usr/share/omarchy/themes, read live rather than fixtured, so a
@@ -40,11 +41,17 @@ function roles(body) {
     var urgent = Palette.pick(found, ["red", "color1"], "#a55555")
     var surface = Palette.pick(found, Palette.SURFACE_KEYS, "#181825")
     var mutedFrame = Contrast.ensureRatio(Palette.pick(found, ["muted"], darker(foreground)), background, MARK_MIN)
+    var muted = Contrast.ensureRatio(Contrast.ensureRatio(mutedFrame, background, TEXT_MIN), surface, TEXT_MIN)
+    var hued = saturation(urgent) > 0.2
+    var error = hued ? Contrast.ensureRatio(urgent, background, Math.max(TEXT_MIN, Contrast.ratio(muted, background))) : foreground
+    var errorOnSurface = hued ? Contrast.ensureRatio(urgent, surface, Math.max(TEXT_MIN, Contrast.ratio(muted, surface))) : foreground
+    // ui/Theme.qml: a lit menu row washes the surface with the foreground, and its hint and danger label are lifted there.
+    var lit = Contrast.hexOf(Contrast.over(foreground, Buttons.WASH_HOVER, surface))
+    var mutedLit = Contrast.ensureRatio(muted, lit, TEXT_MIN)
     return { foreground: foreground, background: background, accent: accent, urgent: urgent,
-             // ui/Theme.qml's own rule, key for key: the palette's muted or a darkened foreground, lifted to the
-             // frame floor on the background for frames and glyphs, then to the text floor on both grounds for text.
+             // ui/Theme.qml's rule: the palette's muted or a darkened foreground, lifted to the frame floor for frames, then to the text floor on both grounds for text.
              mutedFrame: mutedFrame,
-             muted: Contrast.ensureRatio(Contrast.ensureRatio(mutedFrame, background, TEXT_MIN), surface, TEXT_MIN),
+             muted: muted,
              // Metadata ink: the darkened foreground, unlifted for a resting glyph and lifted like muted for text.
              metadataFrame: darker(foreground),
              metadata: Contrast.ensureRatio(Contrast.ensureRatio(darker(foreground), background, TEXT_MIN), surface, TEXT_MIN),
@@ -54,9 +61,10 @@ function roles(body) {
              accentFrame: Contrast.ensureRatio(accent, surface, MARK_MIN),
              // ui/Theme.qml: a red with no chroma of its own reads as switched off, so it is dropped
              // for the foreground; every other red is lifted to AA the way symlink and executable are.
-             error: saturation(urgent) > 0.2 ? Contrast.ensureRatio(urgent, background, TEXT_MIN) : foreground,
+             error: error,
              // ui/Theme.qml's status bar role: the same red lifted on the surface it is drawn on.
-             errorOnSurface: saturation(urgent) > 0.2 ? Contrast.ensureRatio(urgent, surface, TEXT_MIN) : foreground }
+             errorOnSurface: errorOnSurface,
+             lit: lit, mutedLit: mutedLit, errorLit: Contrast.ensureRatio(error, lit, Math.max(TEXT_MIN, Contrast.ratio(mutedLit, lit))) }
 }
 
 // Qt.darker(c, 1.4) in the value channel, which is ui/Theme.qml's fallback when a palette sets no
@@ -134,12 +142,12 @@ var ERROR_ON_SURFACE_SAMPLES = [
 // Sample input: one palette body above; the bar's own ground is the surface it sits on.
 function errorOnSurfaceSamples(check) {
     var applied = Source.source("ui/Theme.qml")
-    check("Theme.qml lifts the status bar red on its surface", applied.indexOf("Contrast.ensureRatio(Commons.Color.urgent, surface, 4.5)") >= 0, true)
+    check("Theme.qml lifts the status bar red on its surface", applied.indexOf("Contrast.ensureRatio(Commons.Color.urgent, surface,") >= 0, true)
     var weak = 0
     for (var i = 0; i < ERROR_ON_SURFACE_SAMPLES.length; i++) {
         var r = roles(ERROR_ON_SURFACE_SAMPLES[i])
         atLeast(check, "surface sample " + i, "error on surface", Contrast.ratio(r.errorOnSurface, r.surface), TEXT_MIN)
-        if (Contrast.ratio(r.error, r.surface) < TEXT_MIN)
+        if (Contrast.ratio(Contrast.ensureRatio(r.urgent, r.background, TEXT_MIN), r.surface) < TEXT_MIN)
             weak += 1
     }
     check("the background lift alone lands under 4.5 on at least one surface", weak >= 1, true)
@@ -194,11 +202,14 @@ function run(check) {
         // The checkbox draws in the two roles above and nothing of its own: a foreground fill with the
         // ground cut out for its tick, and the muted frame when empty, so it needs no rule here.
 
-        // The error role on its ground, and beside the unlifted caption it must never be the quieter of: the text role is
-        // lifted past every error ratio, and ethereal's frame muted of 4.90 is the case that fails if the two inks are compared bare.
+        // The error role on its ground, and beside the drawn caption it is never the quieter of: ethereal's caption lands at 4.90.
         atLeast(check, name, "error on background", Contrast.ratio(r.error, r.background), TEXT_MIN)
         atLeast(check, name, "error is never dimmer than a caption",
-                Contrast.ratio(r.error, r.background), Contrast.ratio(r.mutedFrame, r.background))
+                Contrast.ratio(r.error, r.background), Contrast.ratio(r.muted, r.background))
+        atLeast(check, name, "error on surface is never dimmer than a caption",
+                Contrast.ratio(r.errorOnSurface, r.surface), Contrast.ratio(r.muted, r.surface))
+        atLeast(check, name, "lit error is never dimmer than the lit caption",
+                Contrast.ratio(r.errorLit, r.lit), Contrast.ratio(r.mutedLit, r.lit))
 
         // The cursor's edge borders the unselected ground, which is what a low-chroma theme breaks.
         atLeast(check, name, "cursor edge on the unselected ground", Contrast.ratio(r.accent, r.background), EDGE_MIN)

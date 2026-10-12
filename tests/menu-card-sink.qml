@@ -304,7 +304,7 @@ ShellRoot {
         shell.check("hint:danger-key-hint-is-muted", String(dangerHint.color), String(Flea.Theme.color.muted))
         var litLabel = shell.textDrawn(litKeyRow, "Open"), litHint = shell.textDrawn(litKeyRow, "enter")
         shell.check("hint:lit-row-is-lit", litKeyRow.current, true)
-        shell.check("hint:lit-label-is-not-muted-so-the-test-can-tell", String(litLabel.color) !== String(Flea.Theme.color.muted), true)
+        shell.check("hint:lit-label-is-not-the-lit-hint-ink-so-the-test-can-tell", String(litLabel.color) !== String(Flea.Theme.color.mutedLit), true)
         shell.check("hint:lit-key-hint-is-muted-lifted-on-the-wash", String(litHint.color), String(Flea.Theme.color.mutedLit))
         var squareLabel = shell.textDrawn(squareKeyRow, "Update Flea"), squareHint = shell.textDrawn(squareKeyRow, "0.3.8")
         shell.check("hint:update-label-is-foreground-so-the-test-can-tell", String(squareLabel.color), String(Flea.Theme.color.foreground))

@@ -39,10 +39,10 @@ done
 printf 'cool-dawn\t%s\n' "$PWD/tests/fixtures/cool-dawn/colors.toml" >> "$list"
 printf 'sunset\t%s\n' "$PWD/tests/fixtures/sunset/colors.toml" >> "$list"
 palettes=$(wc -l < "$list")
-[ "$palettes" -eq "$palettes_expected" ] || fail "the sweep reads $palettes palettes, not $palettes_expected: a stock theme was added or removed, update tests/js/themes.js with it"
+[ "$palettes" -eq "$palettes_expected" ] || fail "the sweep reads $palettes palettes, not $palettes_expected: a stock theme was added or removed, update palettes_expected here and paletteCount in tests/theme-contrast.qml with it"
 
 run_timeout_s=120
-expected_checks=$((palettes * 14 + 2))
+expected_checks=$((palettes * 19 + 3))
 config="$test_root/config"
 mkdir -p "$config" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
