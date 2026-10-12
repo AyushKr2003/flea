@@ -30,6 +30,11 @@ pub struct Media {
     pub width: u32,
     pub height: u32,
     pub sample_rate: u32,
+    // ffprobe's own codec names for the first video and first audio stream, empty when the file has none.
+    pub video_codec: String,
+    pub audio_codec: String,
+    // The container's overall bits per second, zero when the file does not say.
+    pub bit_rate: u64,
 }
 
 impl Media {
@@ -46,9 +51,9 @@ fn argv(path: &Path) -> Vec<String> {
         "-v",
         "error",
         "-show_entries",
-        "format=duration",
+        "format=duration,bit_rate",
         "-show_entries",
-        "stream=width,height,sample_rate,codec_type:stream_side_data=rotation",
+        "stream=width,height,sample_rate,codec_name,codec_type:stream_side_data=rotation",
         "-of",
         "default=noprint_wrappers=1",
     ]
@@ -132,25 +137,42 @@ fn reap(child: &mut std::process::Child, watch: &Watch) -> std::io::Result<std::
     }
 }
 
-// Sample input, one key=value per line, streams before the format block:
+// Sample input, one key=value per line, streams before the format block; ffprobe prints a stream's codec_name before its codec_type:
+//   codec_name=h264
 //   codec_type=video
 //   width=1920
 //   height=1080
 //   rotation=-90
 //   duration=10.000000
+//   bit_rate=8100000
 pub fn parse(text: &str) -> Media {
     let mut m = Media::default();
     // A file can carry several streams; the video one owns the pixels and the audio one the rate.
     let mut in_audio = false;
     // A phone stores a sideways recording with a quarter turn that the poster and the player both apply, so the pixels are given as shown.
     let mut turned = false;
+    // The name printed ahead of the type line that says what stream it names.
+    let mut name = "";
     for line in text.lines() {
         let (key, value) = match line.split_once('=') {
             Some(pair) => pair,
             None => continue,
         };
         match key {
-            "codec_type" => in_audio = value == "audio",
+            "codec_name" => name = if value == "N/A" { "" } else { value },
+            "codec_type" => {
+                in_audio = value == "audio";
+                // The first video and the first audio stream name the file; a cover picture or a second track does not.
+                let slot = match value {
+                    "video" => Some(&mut m.video_codec),
+                    "audio" => Some(&mut m.audio_codec),
+                    _ => None,
+                };
+                if let Some(slot) = slot.filter(|slot| slot.is_empty()) {
+                    *slot = name.to_string();
+                }
+                name = "";
+            }
             // A video stream's dimensions win; an audio stream carries none, so nothing is overwritten.
             "width" if !in_audio => {
                 m.width = value.parse().unwrap_or(0);
@@ -161,6 +183,7 @@ pub fn parse(text: &str) -> Media {
             "rotation" if !in_audio => turned = quarter_turn(value),
             "sample_rate" => m.sample_rate = value.parse().unwrap_or(0),
             "duration" => m.duration_ms = seconds_to_ms(value),
+            "bit_rate" => m.bit_rate = value.parse().unwrap_or(0),
             _ => {}
         }
     }
@@ -190,7 +213,7 @@ mod tests {
     #[test]
     fn a_video_stream_reports_pixels_and_the_format_reports_duration() {
         let m = parse("codec_type=video\nwidth=1920\nheight=1080\nduration=10.000000\n");
-        assert_eq!(m, Media { duration_ms: 10000, width: 1920, height: 1080, sample_rate: 0 });
+        assert_eq!(m, Media { duration_ms: 10000, width: 1920, height: 1080, ..Media::default() });
     }
 
     #[test]
@@ -218,7 +241,7 @@ mod tests {
     #[test]
     fn an_audio_only_file_reports_a_rate_and_no_pixels() {
         let m = parse("codec_type=audio\nsample_rate=44100\nduration=245.000000\n");
-        assert_eq!(m, Media { duration_ms: 245000, width: 0, height: 0, sample_rate: 44100 });
+        assert_eq!(m, Media { duration_ms: 245000, sample_rate: 44100, ..Media::default() });
     }
 
     #[test]
@@ -228,6 +251,45 @@ mod tests {
         assert!(parse("duration=N/A\ncodec_type=video\nwidth=N/A\n").is_empty());
         assert_eq!(parse("duration=-3.0\n").duration_ms, 0, "a negative duration is not a duration");
         assert_eq!(parse("duration=0.000000\n").duration_ms, 0);
+    }
+
+    // Sample input as ffprobe 7.1 prints one: codec_name leads its stream's block, and the format block's bit_rate comes last.
+    const MP4: &str = "codec_name=h264\ncodec_type=video\nwidth=1920\nheight=1080\n\
+                       codec_name=aac\ncodec_type=audio\nsample_rate=48000\n\
+                       duration=10.000000\nbit_rate=8100000\n";
+
+    #[test]
+    fn the_codecs_and_the_bit_rate_come_off_the_same_probe_text() {
+        let m = parse(MP4);
+        assert_eq!((m.video_codec.as_str(), m.audio_codec.as_str(), m.bit_rate), ("h264", "aac", 8_100_000));
+        assert_eq!((m.width, m.height, m.sample_rate, m.duration_ms), (1920, 1080, 48000, 10000), "the old answers are unmoved");
+    }
+
+    #[test]
+    fn a_codec_name_belongs_to_the_stream_whose_type_follows_it() {
+        // An audio track first and a data track last: each name goes to its own type, and a data stream's goes nowhere.
+        let m = parse("codec_name=opus\ncodec_type=audio\ncodec_name=vp9\ncodec_type=video\nwidth=640\nheight=360\ncodec_name=bin_data\ncodec_type=data\n");
+        assert_eq!((m.video_codec.as_str(), m.audio_codec.as_str()), ("vp9", "opus"));
+        // Only the first video and first audio stream name the file: a cover picture after the real video does not.
+        let m = parse("codec_name=hevc\ncodec_type=video\ncodec_name=mjpeg\ncodec_type=video\ncodec_name=aac\ncodec_type=audio\ncodec_name=ac3\ncodec_type=audio\n");
+        assert_eq!((m.video_codec.as_str(), m.audio_codec.as_str()), ("hevc", "aac"));
+        assert_eq!(parse("codec_name=aac\n").audio_codec, "", "a name with no type after it is not a stream");
+    }
+
+    #[test]
+    fn a_bit_rate_that_is_not_a_number_is_zero() {
+        assert_eq!(parse("bit_rate=N/A\n").bit_rate, 0);
+        assert_eq!(parse("bit_rate=-4\n").bit_rate, 0);
+        assert_eq!(parse("bit_rate=640000\n").bit_rate, 640_000);
+        assert_eq!(parse("codec_name=N/A\ncodec_type=video\n").video_codec, "", "N/A names no codec");
+    }
+
+    #[test]
+    fn the_argv_asks_for_the_codec_name_and_the_format_bit_rate_in_the_one_probe() {
+        let a = argv(Path::new("/home/gm/clip.mp4"));
+        assert!(a.iter().any(|s| s == "format=duration,bit_rate"), "one format entry, no second process");
+        assert!(a.iter().any(|s| s.starts_with("stream=") && s.split(':').next().unwrap().split(',').any(|f| f == "codec_name")));
+        assert_eq!(a.iter().filter(|s| *s == "-show_entries").count(), 2, "no third entry list");
     }
 
     #[test]
