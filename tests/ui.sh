@@ -14785,10 +14785,13 @@ case_views() {
         (( lit > 0 )) || fail "$mode: the empty directory's hero painted nothing"
         # Its box is the listing slot (a lazy view reports a local origin, once drawing the hero over the sidebar); in columns the whole pane at 2-3 columns, else the free area.
         read -r sx sy sw sh <<< "$(ipc listAreaRect)"
-        local ex=$sx ew=$sw span
+        local ex=$sx ew=$sw span columns
         if [[ "$mode" == "columns" ]]; then
+            # This pass pins the whole-pane side of the rule, so it must show 2 or 3 columns; 4 and 5 are pinned below.
+            columns=$(ipc columnCount)
+            [[ "$columns" =~ ^[23]$ ]] || fail "columns: the views pass shows '$columns' columns, not 2 or 3"
             # fail inside the substitution exits only the subshell, so its status carries the failure here.
-            span=$(columns_hero_span "$sx" "$sw" "$(ipc columnCount)") || exit 1
+            span=$(columns_hero_span "$sx" "$sw" "$columns") || exit 1
             read -r ex ew <<< "$span"
         fi
         rect_is "$(ipc emptyStateRect)" "$ex" "$sy" "$ew" "$sh" 1 \
