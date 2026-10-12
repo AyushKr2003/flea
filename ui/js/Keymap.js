@@ -113,8 +113,9 @@ var PRESET_KEYS = [
     {"mods":"text","key":"h","keys":"h","action":"seekBack","label":"seekBack","frontend":"all","context":"preview,pdf,media","preset":"all","code":"","text":"h","ctrl":false,"shift":false,"alt":false,"super":false,"keycode":0,"mask":(0)},
     {"mods":"text","key":"l","keys":"l","action":"pageForward","label":"pageForward","frontend":"all","context":"preview,pdf,media","preset":"all","code":"","text":"l","ctrl":false,"shift":false,"alt":false,"super":false,"keycode":0,"mask":(0)},
     {"mods":"text","key":"r","keys":"r","action":"markdownView","label":"rendered/source","frontend":"all","context":"preview","preset":"all","code":"","text":"r","ctrl":false,"shift":false,"alt":false,"super":false,"keycode":0,"mask":(0)},
-    {"mods":"text","key":"-","keys":"-","action":"zoomOut","label":"zoomOut","frontend":"all","context":"pdf","preset":"all","code":"","text":"-","ctrl":false,"shift":false,"alt":false,"super":false,"keycode":0,"mask":(0)},
-    {"mods":"text","key":"+","keys":"+","action":"zoomIn","label":"zoomIn","frontend":"all","context":"pdf","preset":"all","code":"","text":"+","ctrl":false,"shift":false,"alt":false,"super":false,"keycode":0,"mask":(0)},
+    {"mods":"text","key":"-","keys":"-","action":"zoomOut","label":"zoomOut","frontend":"all","context":"preview,pdf","preset":"all","code":"","text":"-","ctrl":false,"shift":false,"alt":false,"super":false,"keycode":0,"mask":(0)},
+    {"mods":"text","key":"+","keys":"+","action":"zoomIn","label":"zoomIn","frontend":"all","context":"preview,pdf","preset":"all","code":"","text":"+","ctrl":false,"shift":false,"alt":false,"super":false,"keycode":0,"mask":(0)},
+    {"mods":"text","key":"0","keys":"0","action":"zoomFit","label":"zoomFit","frontend":"all","context":"preview","preset":"all","code":"","text":"0","ctrl":false,"shift":false,"alt":false,"super":false,"keycode":0,"mask":(0)},
     {"mods":"text","key":"e","keys":"e","action":"expand","label":"expand","frontend":"all","context":"pdf","preset":"all","code":"","text":"e","ctrl":false,"shift":false,"alt":false,"super":false,"keycode":0,"mask":(0)},
     {"mods":"none","key":"Escape","keys":"escape","action":"escape","label":"close editor","frontend":"all","context":"editor","preset":"all","code":"Key_Escape","text":"","ctrl":false,"shift":false,"alt":false,"super":false,"keycode":Qt.Key_Escape,"mask":(0)},
 ]

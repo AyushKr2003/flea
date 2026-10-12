@@ -2,6 +2,8 @@ import QtQuick
 import qs.Commons
 import "." as Flea
 import "js/Format.js" as Format
+import "js/PreviewKeys.js" as PreviewKeys
+import "js/Scroll.js" as Scroll
 import "js/Thumbs.js" as Thumbs
 
 // The Quick Look's image pane, reached only through Preview.qml's Loader. It draws the file itself:
@@ -9,7 +11,34 @@ import "js/Thumbs.js" as Thumbs
 Item {
     id: root
 
+    // A zoomed picture runs past the surface's edges.
+    clip: true
+
     property string path: ""
+
+    // Times the fit size, on the PDF's ladder; 1 is fit.
+    property real zoom: PreviewKeys.PDF_ZOOM_MIN
+    readonly property bool zoomed: root.zoom > PreviewKeys.PDF_ZOOM_MIN
+    // The zoom read against fit; fit itself carries no label.
+    readonly property string zoomLabel: root.zoomed ? "%1%".arg(Math.round(root.zoom * 100)) : ""
+    // The pannable viewport, the strip under it and the sharper layer, for Preview.qml's readers and the zoom suite.
+    readonly property alias viewport: flick
+    readonly property alias band: band
+    readonly property alias fullPicture: sharp
+    // Another file is a new subject: the next one opens at fit.
+    onPathChanged: root.zoom = PreviewKeys.PDF_ZOOM_MIN
+
+    // The viewport's centre point stays put across a step; a picture still decoding or refused does not zoom in.
+    function zoomTo(next) {
+        if (next === root.zoom || (next > PreviewKeys.PDF_ZOOM_MIN && picture.status !== Image.Ready)) return
+        var fx = (flick.contentX + flick.width / 2) / flick.contentWidth
+        var fy = (flick.contentY + flick.height / 2) / flick.contentHeight
+        root.zoom = next
+        flick.contentX = Scroll.bounded(fx * flick.contentWidth - flick.width / 2, flick.originX, flick.contentWidth, flick.width, flick.leftMargin, flick.rightMargin)
+        flick.contentY = Scroll.bounded(fy * flick.contentHeight - flick.height / 2, flick.originY, flick.contentHeight, flick.height, flick.topMargin, flick.bottomMargin)
+    }
+    function zoomBy(steps) { root.zoomTo(PreviewKeys.zoomStep(root.zoom, steps)) }
+    function zoomFit() { root.zoomTo(PreviewKeys.PDF_ZOOM_MIN) }
 
     // The row's cache file, held by Quick Look while this decodes: drawn between the
     // ground and the picture, so it is never hidden by one nor covers the other.
@@ -76,14 +105,16 @@ Item {
     // The drawn picture itself, for ui/Ipc.qml's previewPictureRect: the item is sized to the
     // fit of what was decoded, so its rect is the picture and not the surface it is centred on.
     readonly property Item pictureItem: root.fallbackShown ? interimPicture : picture
+
     Image {
         id: picture
         readonly property real fit: Thumbs.fitScale(root.width, root.height, implicitWidth, implicitHeight, 1)
-        x: root.vector ? 0 : Math.round((root.width - width) / 2)
-        y: root.vector ? 0 : Math.round((root.height - height) / 2)
-        width: root.vector ? root.width : implicitWidth * fit
-        height: root.vector ? root.height : implicitHeight * fit
-        visible: picture.status === Image.Ready
+        x: Math.round((flick.contentWidth - width) / 2 - flick.contentX)
+        y: Math.round((flick.contentHeight - height) / 2 - flick.contentY)
+        width: root.vector ? root.width * root.zoom : implicitWidth * fit * root.zoom
+        height: root.vector ? root.height * root.zoom : implicitHeight * fit * root.zoom
+        // The sharper layer takes over once it has a frame, so a transparent picture never shows two.
+        visible: picture.status === Image.Ready && !sharp.drawn
         // Format.fileUri, not a concatenation: a # or a ? in the name would truncate a hand-built URI.
         source: root.path.length > 0 && root.interimSettled ? Format.fileUri(root.path) : ""
         fillMode: root.vector ? Image.PreserveAspectFit : Image.Stretch
@@ -96,6 +127,54 @@ Item {
         // corner: a zero here means unbounded to Qt, so the floor is 1 and never 0.
         sourceSize.width: Math.max(1, Math.round(root.width))
         sourceSize.height: Math.max(1, Math.round(root.height))
+    }
+
+    // Past fit the fit picture is drawn scaled until this layer has a frame.
+    Flea.PreviewImageSharp {
+        id: sharp
+        base: picture
+        active: root.zoomed
+        want: root.vector ? Qt.size(Math.max(1, Math.round(root.width * root.zoom)), Math.max(1, Math.round(root.height * root.zoom))) : Qt.size(0, 0)
+    }
+
+    // The pan: a drag, the wheel and the knobs move contentX and contentY, and the pictures above follow them. At fit it is the whole surface and holds still; zoomed, it is the surface less the band.
+    Flickable {
+        id: flick
+        width: root.width
+        height: root.zoomed ? root.height - band.height : root.height
+        contentWidth: Math.max(flick.width, picture.width)
+        contentHeight: Math.max(flick.height, picture.height)
+        interactive: root.zoomed
+        boundsBehavior: Flickable.StopAtBounds
+
+        // The wheel and the knobs are built at the first step past fit and go at fit: the first frame at fit holds neither.
+        Loader {
+            parent: flick
+            anchors.fill: parent
+            active: root.zoomed
+            sourceComponent: Flea.PreviewImagePan {}
+        }
+    }
+
+    // The zoom as a number under the picture, a media strip tall with no divider; absent at fit.
+    Rectangle {
+        id: band
+        visible: root.zoomed
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: Theme.chromeHeight
+        color: Theme.color.surface
+
+        Text {
+            anchors.centerIn: parent
+            text: root.zoomLabel
+            color: Theme.color.foreground
+            font.family: Theme.font.family
+            font.pixelSize: Theme.font.caption
+            font.features: { "tnum": 1 }
+            textFormat: Text.PlainText
+        }
     }
 
     // A failed decode is a mark and a sentence, never a bare ground: the blank-frame class again otherwise.

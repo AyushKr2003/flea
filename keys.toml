@@ -2014,7 +2014,7 @@ keys = "-"
 action = "zoomOut"
 label = "zoomOut"
 frontend = "all"
-context = "pdf"
+context = "preview,pdf"
 
 [[preset]]
 name = "all"
@@ -2024,7 +2024,18 @@ keys = "+"
 action = "zoomIn"
 label = "zoomIn"
 frontend = "all"
-context = "pdf"
+context = "preview,pdf"
+
+# Media040 callout 3: 0 returns a Quick Look image to fit (image preview only; a PDF has no fit key).
+[[preset]]
+name = "all"
+mods = "text"
+key = "0"
+keys = "0"
+action = "zoomFit"
+label = "zoomFit"
+frontend = "all"
+context = "preview"
 
 [[preset]]
 name = "all"
