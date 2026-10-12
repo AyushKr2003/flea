@@ -42,17 +42,24 @@ cap_dropmods_wait_s=15
 cap_dropmods_mark() {
     cap_dropmods_before=$(ipc statusActivityState | jq -ce '[.activities[].id]') || fail "cap_dropmods: statusActivityState unreadable at the mark"
 }
-# Same-window rows keep the floor signal dark, so a status activity naming the row, one not seen at the mark, shows the hover.
-cap_dropmods_wait_target() {
-    [[ "$#" -eq 1 ]] || fail "cap_dropmods: wait_target needs a name, got $#"
+# Same-window rows keep the floor signal dark, so a status activity reading the whole line, one not seen at the mark, shows the hover.
+cap_dropmods_wait_line() {
+    [[ "$#" -eq 1 ]] || fail "cap_dropmods: wait_line needs a line, got $#"
     local want="$1" seen="" end=$((SECONDS + cap_dropmods_wait_s))
     while (( SECONDS < end )); do
-        seen=$(ipc statusActivityState 2>/dev/null | jq -r --arg w " to $want" --argjson before "$cap_dropmods_before" \
-            '.activities[] | select(.running == false and (.id as $i | $before | index([$i]) | not)) | .text | select(endswith($w))' 2>/dev/null | head -n 1 || true)
+        seen=$(ipc statusActivityState 2>/dev/null | jq -r --arg w "$want" --argjson before "$cap_dropmods_before" \
+            '.activities[] | select(.running == false and (.id as $i | $before | index([$i]) | not)) | .text | select(. == $w)' 2>/dev/null | head -n 1 || true)
         [[ -n "$seen" ]] && return 0
         sleep 0.1
     done
-    fail "cap_dropmods: no drag in flight over $want"
+    fail "cap_dropmods: no drag line reading '$want' (status lines: $(ipc statusActivityState 2>/dev/null | jq -r '[.activities[].text] | join(" | ")' 2>/dev/null))"
+}
+# A press that lands on the parked probe starts no drag, so a probe covering the source point fails the case before the press.
+cap_dropmods_probe_clear_of() {
+    [[ "$#" -eq 2 ]] || fail "cap_dropmods: probe_clear_of needs x and y, got $#"
+    hyprctl clients -j 2>/dev/null | jq -e --argjson x "$1" --argjson y "$2" '[.[] | select(.title == "DropProbe")] | select(length == 1) | .[0]
+        | (.at[0] <= $x and $x < .at[0] + .size[0] and .at[1] <= $y and $y < .at[1] + .size[1]) | not' >/dev/null \
+        || fail "cap_dropmods: the parked probe covers the source point $1,$2, so the press would miss the row"
 }
 # ydotool key 29 is left Ctrl and 42 left Shift.
 cap_dropmods_key() {
@@ -124,7 +131,7 @@ case_cap_dropmods() {
     cap_dropmods_mark
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_dropmods_wait_target "sub"
+    cap_dropmods_wait_line "Move 1 item to sub · ctrl at lift copies"
     cap_dropmods_key 29 1
     cap_drops_release
     cap_dropmods_key 29 0
@@ -140,7 +147,7 @@ case_cap_dropmods() {
     cap_dropmods_mark
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_dropmods_wait_target "sub"
+    cap_dropmods_wait_line "Copy 1 item to sub"
     cap_dropmods_key 29 0
     cap_dropmods_key 42 1
     cap_drops_release
@@ -222,7 +229,7 @@ case_cap_dropmods() {
     hypr_window_float "$probe_addr" on >/dev/null || fail "cap_dropmods: the probe window would not float"
     sleep 0.3
     read -r wx wy ww wh <<< "$(window_box)"
-    hypr_window_move_absolute "$probe_addr" "$((wx + ww - 480))" "$((wy + 60))" >/dev/null \
+    hypr_window_move_absolute "$probe_addr" "$((wx + ww - 480))" "$((wy + wh - 360))" >/dev/null \
         || fail "cap_dropmods: the probe window would not park"
     sleep 0.5
     probe_box=$(hyprctl clients -j 2>/dev/null | jq -er '[.[] | select(.title == "DropProbe")] | select(length == 1) | .[0] | [.at[0] + .size[0] / 2, .at[1] + .size[1] / 2] | select(all(.[]; . == floor)) | @tsv' 2>/dev/null || printf "")
@@ -232,8 +239,11 @@ case_cap_dropmods() {
     seek_row_named "probe1.txt" || fail "cap_dropmods: probe1.txt never came under the cursor"
     src_pt=$(ipc rowCentre "$(row_index_of probe1.txt)"); read -r cx cy <<< "$src_pt"
     read -r wx wy ww wh <<< "$(window_box)"
+    cap_dropmods_probe_clear_of "$((cx + wx))" "$((cy + wy))"
+    cap_dropmods_mark
     cap_dropmods_press_at "$((cx + wx))" "$((cy + wy))"
     cap_dropmods_steer_to "$tx" "$ty"
+    cap_dropmods_wait_line "Move 1 item to a folder · ctrl at lift copies"
     sleep 0.5
     cap_dropmods_release
     local offered1="" offered2=""
@@ -251,8 +261,11 @@ case_cap_dropmods() {
     seek_row_named "probe2.txt" || fail "cap_dropmods: probe2.txt never came under the cursor"
     src_pt=$(ipc rowCentre "$(row_index_of probe2.txt)"); read -r cx cy <<< "$src_pt"
     read -r wx wy ww wh <<< "$(window_box)"
+    cap_dropmods_probe_clear_of "$((cx + wx))" "$((cy + wy))"
+    cap_dropmods_mark
     cap_dropmods_press_at "$((cx + wx))" "$((cy + wy))"
     cap_dropmods_steer_to "$tx" "$ty"
+    cap_dropmods_wait_line "Move 1 item to a folder · ctrl at lift copies"
     sleep 0.5
     cap_dropmods_key 29 1
     cap_dropmods_release

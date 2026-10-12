@@ -19,7 +19,7 @@ mkdir -p "$test_root/bin" || exit 1
 # The fake compositor answers clients -j with two windows, so the pid select is pinned.
 cat > "$test_root/bin/hyprctl" <<'EOF'
 #!/usr/bin/env bash
-printf '%s' '[{"class":"com.thisisgm.flea","pid":5,"at":[10,20],"size":[800,600]},{"class":"com.thisisgm.flea","pid":9,"at":[30,40],"size":[640,480]}]'
+printf '%s' '[{"class":"com.thisisgm.flea","pid":5,"at":[10,20],"size":[800,600]},{"class":"com.thisisgm.flea","pid":9,"at":[30,40],"size":[640,480]},{"class":"qml6","title":"DropProbe","pid":7,"at":[100,100],"size":[420,300]}]'
 EOF
 chmod +x "$test_root/bin/hyprctl" || exit 1
 # The stub hold never touches hardware: it exits 0 and logs each call for the order checks.
@@ -102,4 +102,60 @@ reset_logs
 [[ "$(cat "$ylog")" == "click 0x80" ]] || fail "a bare held exit clicked '$(tr '\n' ' ' < "$ylog")', want click 0x80"
 [[ "$(trap -p EXIT)" == "trap -- 'cleanup' EXIT" ]] || fail "the script's own cleanup trap is gone: $(trap -p EXIT)"
 printf 'DROPMODSBOX PASS barepress=armed-and-cleared\n'
-printf 'DROPMODSBOX DONE checks=4 failed=0\n'
+# The drag line is matched whole: a move line carries its " · ctrl at lift copies" tail, so a suffix match never saw it.
+actstate="$test_root/activity.json"
+ipc() { [[ "$1" == statusActivityState ]] && cat "$actstate"; }
+cap_dropmods_wait_s=1
+printf '%s' '{"activities":[{"id":0,"text":"Move 1 item to sub · ctrl at lift copies","running":false}]}' > "$actstate"
+cap_dropmods_before="[]"
+( cap_dropmods_wait_line "Move 1 item to sub · ctrl at lift copies" ) || fail "the move line was not matched whole"
+( fail() { exit 9; }; cap_dropmods_wait_line "Move 1 item to sub" ) >/dev/null 2>&1
+[[ $? -eq 9 ]] || fail "a line that is only a prefix of the status line was accepted"
+( fail() { exit 9; }; cap_dropmods_wait_line "Copy 1 item to sub" ) >/dev/null 2>&1
+[[ $? -eq 9 ]] || fail "a copy line was accepted for a move status line"
+cap_dropmods_before="[0]"
+( fail() { exit 9; }; cap_dropmods_wait_line "Move 1 item to sub · ctrl at lift copies" ) >/dev/null 2>&1
+[[ $? -eq 9 ]] || fail "a line already present at the mark was taken for a new drag"
+printf 'DROPMODSBOX PASS wait_line=whole-line-and-new-only\n'
+# The probe stub sits at 100,100 size 420x300: a press inside it fails the case, one outside passes.
+( cap_dropmods_probe_clear_of 50 50 ) || fail "a point outside the probe was refused"
+( fail() { exit 9; }; cap_dropmods_probe_clear_of 200 200 ) >/dev/null 2>&1
+[[ $? -eq 9 ]] || fail "a point inside the probe was accepted"
+printf 'DROPMODSBOX PASS probe_clear_of=outside-only\n'
+# The pasted image's trash follows HOME's device: stat is stubbed, so each branch runs on its own tree under the marked root.
+case_dir="$test_root/case"
+mkdir -p "$case_dir" "$test_root/home" || exit 1
+name="Pasted image 2026-10-12 at 10.14.32.png"
+other="Pasted image 2026-10-12 at 10.14.33.png"
+uid=$(id -u)
+stat() { case "$2" in %d) [[ "$4" == "$HOME" ]] && echo 11 || echo "${fake_dev:-22}" ;; %m) echo "$test_root" ;; esac; }
+want="$test_root/data/Trash"
+got=$( HOME="$test_root/home" XDG_DATA_HOME="$test_root/data" fake_dev=11 cap_drops_trash_dirs "$case_dir" )
+[[ "$got" == "$want" ]] || fail "a file on HOME's device asked for '$got', want $want"
+got=$( HOME="$test_root/home" XDG_DATA_HOME="$test_root/data" fake_dev=22 cap_drops_trash_dirs "$case_dir" | tr '\n' ' ' )
+[[ "$got" == "$test_root/.Trash/$uid $test_root/.Trash-$uid " ]] || fail "a file on another device asked for '$got', want the mount top's two trashes"
+printf 'DROPMODSBOX PASS trash_dirs=home-device-or-mount-top\n'
+mount_trash="$test_root/.Trash-$uid"
+mkdir -p "$mount_trash/files" "$mount_trash/info" || exit 1
+for n in "$name" "$other"; do printf 'png\n' > "$mount_trash/files/$n"; done
+printf '[Trash Info]\nPath=case/Pasted%%20image%%202026-10-12%%20at%%2010.14.32.png\n' > "$mount_trash/info/$name.trashinfo"
+printf '[Trash Info]\nPath=elsewhere/Pasted%%20image%%202026-10-12%%20at%%2010.14.33.png\n' > "$mount_trash/info/$other.trashinfo"
+real_home=$HOME
+export fake_dev=22
+export HOME="$test_root/home" XDG_DATA_HOME="$test_root/data"
+[[ "$(cap_drops_trash_holding "$case_dir" "$name")" == "$mount_trash" ]] || fail "the mount-top trash holding the name was not found"
+cap_drops_trash_remove "$case_dir" "$other" && fail "a trashed file whose Path is outside the case was removed"
+[[ -e "$mount_trash/files/$other" && -e "$mount_trash/info/$other.trashinfo" ]] || fail "a foreign trashed file was touched"
+cap_drops_trash_remove "$case_dir" "$name" || fail "the case's own trashed file was refused"
+[[ ! -e "$mount_trash/files/$name" && ! -e "$mount_trash/info/$name.trashinfo" ]] || fail "the case's own trashed file is still in the mount-top trash"
+printf 'DROPMODSBOX PASS trash_remove=own-path-only\n'
+# A fail after the Delete still removes the case's own entry, and the exit status survives the trap.
+printf 'png\n' > "$mount_trash/files/$name"
+printf '[Trash Info]\nPath=case/Pasted%%20image%%202026-10-12%%20at%%2010.14.32.png\n' > "$mount_trash/info/$name.trashinfo"
+( cap_drops_dir=$case_dir; cap_drops_pasted=$name; trap cap_drops_trash_exit EXIT; exit 5 )
+[[ $? -eq 5 ]] || fail "the trash exit trap lost the exit status"
+[[ ! -e "$mount_trash/files/$name" ]] || fail "the exit trap left the pasted image in the mount-top trash"
+printf 'DROPMODSBOX PASS trash_exit=removes-own-and-keeps-status\n'
+HOME=$real_home
+unset -f stat
+printf 'DROPMODSBOX DONE checks=9 failed=0\n'

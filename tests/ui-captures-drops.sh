@@ -118,10 +118,60 @@ cap_drops_centre() {
     [[ -n "$point" ]] || fail "cap_drops: $reader $arg has no centre"
     printf '%s\n' "$point"
 }
+# GLib trashes into the data home only for a file on HOME's own device, whatever XDG_DATA_HOME names, else into the mount top's trash.
+cap_drops_trash_dirs() {
+    [[ "$#" -eq 1 ]] || fail "cap_drops: trash_dirs needs a directory, got $#"
+    local top uid
+    if [[ "$(stat -c %d -- "$1")" == "$(stat -c %d -- "$HOME")" ]]; then
+        printf '%s\n' "$XDG_DATA_HOME/Trash"
+        return 0
+    fi
+    top=$(stat -c %m -- "$1") || fail "cap_drops: no mount top for $1"
+    top=${top%/}
+    uid=$(id -u)
+    printf '%s\n' "$top/.Trash/$uid" "$top/.Trash-$uid"
+}
+# Prints the trash that holds the name for a file lifted from the directory, and fails when none does.
+cap_drops_trash_holding() {
+    [[ "$#" -eq 2 ]] || fail "cap_drops: trash_holding needs a directory and a name, got $#"
+    local trash
+    while IFS= read -r trash; do
+        if [[ -s "$trash/files/$2" ]]; then printf '%s\n' "$trash"; return 0; fi
+    done < <(cap_drops_trash_dirs "$1")
+    return 1
+}
+# Removes only the case's own trashed name: its trashinfo Path must be exactly the file the case lifted from its marked directory.
+cap_drops_trash_remove() {
+    [[ "$#" -eq 2 ]] || fail "cap_drops: trash_remove needs a directory and a name, got $#"
+    local dir="$1" name="$2" trash path top
+    [[ -n "$name" && "$name" != */* && "$dir" == /*/* && -f "${dir%/*}/$SANDBOX_MARKER" ]] || return 1
+    sandbox_require "$dir"
+    trash=$(cap_drops_trash_holding "$dir" "$name") || return 0
+    # Names here hold letters, digits, spaces, hyphens and dots, so a space is the one escape trashinfo carries.
+    path=$(sed -n 's/^Path=//p' "$trash/info/$name.trashinfo" 2>/dev/null | head -n 1)
+    path=${path//%20/ }
+    if [[ "$path" != /* ]]; then
+        top=$(stat -c %m -- "$dir")
+        path="${top%/}/$path"
+    fi
+    [[ "$path" == "$dir/$name" ]] || return 1
+    rm -f -- "$trash/files/$name" "$trash/info/$name.trashinfo"
+}
+# The case's EXIT trap: a pasted image left in a shared mount-top trash is taken out even when the case fails.
+cap_drops_trash_exit() {
+    local st=$?
+    if [[ -n "${cap_drops_pasted:-}" ]] && ! cap_drops_trash_remove "$cap_drops_dir" "$cap_drops_pasted"; then
+        printf 'CAP DROPS trashed %s was not removed\n' "$cap_drops_pasted" >&2
+    fi
+    return "$st"
+}
 case_cap_drops() {
     local dir="$fixture_root/cap-drops" menus_checks=0 cap_drops_wx=0 cap_drops_wy=0
     local i src_pt dst_pt cx cy tx ty count target names index ax ay aw ah img
     sandbox_scratch "$dir"
+    cap_drops_dir=$dir
+    cap_drops_pasted=""
+    trap cap_drops_trash_exit EXIT
     mkdir -p "$dir/Photos" "$dir/deep/outer/inner"
     printf 'drag me\n' > "$dir/a.txt"
     printf 'p one\n' > "$dir/Photos/p1.txt"
@@ -129,7 +179,7 @@ case_cap_drops() {
     printf 'note\n' > "$dir/deep/outer/inner/note.txt"
     for i in $(seq -w 1 200); do printf 'pad\n' > "$dir/pad-$i.txt"; done
     seed_ui_state "$fixture_root/cap-drops-state" '{"keys":"default","view":"list"}'
-    # The pasted image's Delete goes to this case's own trash on the fixture's device, never the operator's; GLib refuses a /home topdir trash.
+    # On a box whose fixture shares HOME's device the pasted image's Delete goes to this data home, never the operator's.
     export XDG_DATA_HOME="$fixture_root/cap-drops-data"
     sandbox_scratch "$XDG_DATA_HOME"
     launch "$dir"
@@ -153,7 +203,8 @@ case_cap_drops() {
     img=""
     for i in $(seq 1 100); do img=$(ls -t "$dir"/Pasted\ image*.png 2>/dev/null | head -n 1); [[ -n "$img" ]] && break; sleep 0.1; done
     [[ -n "$img" ]] || fail "cap_drops: p with an image on the clipboard pasted no file"
-    cap_drops_wait_rename "$(basename "$img")"
+    cap_drops_pasted=$(basename "$img")
+    cap_drops_wait_rename "$cap_drops_pasted"
     [[ "$(ipc renameState | jq -r .selectedText)" == "$(basename "$img" .png)" ]] || fail "cap_drops: rename selects '$(ipc renameState | jq -r .selectedText)', not the stem"
     shot drops-pasted-image
     key -k Escape >/dev/null
@@ -165,7 +216,9 @@ case_cap_drops() {
     key -k Delete >/dev/null
     settle
     cap_drops_wait_settled 203
-    [[ -s "$XDG_DATA_HOME/Trash/files/$(basename "$img")" ]] || fail "cap_drops: the pasted image did not land in $XDG_DATA_HOME/Trash/files"
+    cap_drops_trash_holding "$dir" "$cap_drops_pasted" >/dev/null || fail "cap_drops: the pasted image landed in none of: $(cap_drops_trash_dirs "$dir" | tr '\n' ' ')"
+    cap_drops_trash_remove "$dir" "$cap_drops_pasted" || fail "cap_drops: the trashed pasted image is not this case's own file"
+    cap_drops_pasted=""
     seek_row_named "a.txt" || fail "cap_drops: a.txt never came under the cursor"
     src_pt=$(cap_drops_centre rowCentre "$(row_index_of a.txt)")
     dst_pt=$(cap_drops_centre rowCentre "$(row_index_of Photos)")
@@ -272,6 +325,7 @@ case_cap_drops() {
     [[ -f "$dir/Photos/p1.txt" ]] || fail "cap_drops: the columns leg lost p1.txt"
     cap_drops_fat_skip
     wl-copy --clear >/dev/null 2>&1 || true
+    trap - EXIT
     printf 'CAP_DROPS settings=off,on pasted=image target=held hover=open scroll=band crumb=held columns=held fat=skip\n'
     kill_flea
 }
