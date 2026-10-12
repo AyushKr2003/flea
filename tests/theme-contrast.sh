@@ -42,7 +42,7 @@ palettes=$(wc -l < "$list")
 [ "$palettes" -eq "$palettes_expected" ] || fail "the sweep reads $palettes palettes, not $palettes_expected: a stock theme was added or removed, update palettes_expected here and paletteCount in tests/theme-contrast.qml with it"
 
 run_timeout_s=120
-expected_checks=$((palettes * 19 + 3))
+expected_checks=$((palettes * 19 + 4))
 config="$test_root/config"
 mkdir -p "$config" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.

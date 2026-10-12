@@ -80,6 +80,11 @@ ShellRoot {
                  margins: [f.anchors.leftMargin, f.anchors.rightMargin, f.anchors.topMargin, f.anchors.bottomMargin] }
     }
 
+    // The ground a wash draws over a surface: the colour's own alpha times the item's opacity (Contrast.parse drops the alpha of #AARRGGBB).
+    function groundOf(wash, surface) {
+        return Contrast.hexOf(Contrast.over(String(wash.color), wash.color.a * wash.opacity, surface))
+    }
+
     function sweep(entry) {
         var c = Flea.Theme.color, rgba = Probe.rgba, name = entry.name
         Flea.Theme.applyColors(entry.body)
@@ -87,7 +92,7 @@ ShellRoot {
         // The ground a lit menu row draws on: the wash the row itself draws, over the card's surface.
         var wash = Probe.find(litRow, "menuWash")
         shell.check(name + " lit row draws its wash", wash !== null && wash.visible, true)
-        var lit = wash === null ? surface : Contrast.hexOf(Contrast.over(String(wash.color), wash.opacity, surface))
+        var lit = wash === null ? surface : shell.groundOf(wash, surface)
         shell.atLeast(name, "muted text", "background", Contrast.ratio(String(c.muted), bg), Flea.Theme.textContrast)
         shell.atLeast(name, "muted text", "surface", Contrast.ratio(String(c.muted), surface), Flea.Theme.textContrast)
         shell.atLeast(name, "metadata text", "background", Contrast.ratio(String(c.metadata), bg), Flea.Theme.textContrast)
@@ -122,6 +127,7 @@ ShellRoot {
         shell.check("sandbox: HOME lies under the harness root", inside, true)
         if (!inside) { shell.finish(); return }
         shell.check("the sweep reads the 22 stock palettes and two fixtures", Palettes.PALETTES.length, shell.paletteCount)
+        shell.check("a wash ground keeps the colour's own alpha", shell.groundOf({ color: Qt.rgba(1, 1, 1, 0.5), opacity: 0.5 }, "#000000"), "#404040")
         for (var i = 0; i < Palettes.PALETTES.length; i++)
             shell.sweep(Palettes.PALETTES[i])
         shell.finish()

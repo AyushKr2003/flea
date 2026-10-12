@@ -38,7 +38,7 @@ Item {
     // Focus is the control's own frame: foreground, or accent for a set member where it has hue. Where a hairline would match the rest (a primary whose rest frame is the foreground, a set member without hue) the frame draws RING wide.
     readonly property string focusFrame: Buttons.focusFrame(Theme.color.accentHasHue, root.setMember, root.primary && Qt.colorEqual(Theme.color.accentFrame, Theme.color.foreground))
     readonly property bool focusShown: root.focused && root.available
-    // A secondary frame takes mutedFrame, ThemeRoles' border role, under a live label; a set member takes foreground while current and muted otherwise.
+    // A secondary frame takes mutedFrame, ThemeRoles' border role, under a live label; a set member takes foreground while current and mutedFrame otherwise.
     readonly property color frame: root.focusShown && root.focusFrame === "accent" ? Theme.color.accent
         : root.focusShown ? Theme.color.foreground
         : root.setMember ? (root.current ? Theme.color.foreground : Theme.color.mutedFrame)

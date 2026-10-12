@@ -52,7 +52,12 @@ function inkFailures(probe, theme) {
     var folder = probe.folderItem()
     probe.hovered = false
     var restRatio = Contrast.ratio(String(folder.color), String(theme.color.background))
-    if (restRatio < 4.5 || Qt.colorEqual(folder.color, fg)) out.push("rest folder ink " + folder.color + " is " + restRatio.toFixed(2) + ":1 on the background, want at least 4.5:1 and not the foreground")
+    // muted and metadata derive from one colour, so the role is told apart by moving muted away while the ink is read.
+    var kept = theme.color.muted
+    theme.color.muted = "#ff00ff"
+    if (!Qt.colorEqual(folder.color, theme.color.metadata)) out.push("rest folder ink " + folder.color + ", want List's rest ink " + theme.color.metadata)
+    theme.color.muted = kept
+    if (restRatio < 4.5) out.push("rest folder ink " + folder.color + " is " + restRatio.toFixed(2) + ":1 on the background, want at least 4.5:1")
     probe.cursor = true
     if (!Qt.colorEqual(folder.color, fg)) out.push("cursor folder ink " + folder.color + ", want foreground")
     probe.cursor = false
