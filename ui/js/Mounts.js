@@ -11,11 +11,6 @@ var WORDS = {
     stillUnmounting: "Still unmounting %1; wait for its result."
 }
 
-// One value, so an absent label prints as a string.
-function fill(sentence, value) {
-    return Format.fill(sentence, value)
-}
-
 // Sample input, captured live on the box with one network share mounted (2026-08-31):
 // Drive(0): KBG40ZNS256G NVMe KIOXIA 256GB
 //   Type: GProxyDrive (GProxyVolumeMonitorUDisks2)
@@ -274,7 +269,7 @@ function raiseMenu(pane, sidebar) {
     if (rowMenu(entry).length > 0)
         sidebar.openCursorMenu()
     else
-        pane.message(fill(WORDS.nothingToRelease, entry.label), false)
+        pane.message(Format.fill(WORDS.nothingToRelease, entry.label), false)
 }
 
 // Sample input: (true, "a", "a", "b", "b") answers "skip", while (true, "a", "x", "b", "b") answers "rebuild".

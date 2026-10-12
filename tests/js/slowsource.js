@@ -194,4 +194,7 @@ function run(check) {
           squashed(Source.block(previewSwap, "function start(", "ui/PreviewSwap.qml")).indexOf("cap.interval = PreviewSwap.capMs(isPdf) cap.restart()") >= 0, true)
     check("and a whole preview waits out what the loading state is owed",
           squashed(Source.block(previewSwap, "function check(", "ui/PreviewSwap.qml")).indexOf("PreviewSwap.releaseIn(root.ready, root.started, root.shownAt, Date.now())") >= 0, true)
+    var above = previewSwap.split("    Connections {\n        target: root.syncArmed")[0].replace(/\s+$/, "").split("\n").slice(-2)
+    check("one comment line above the sync Connections names the basic loop's scheduledUpdateCompleted wait",
+        above[0].trim().indexOf("//") !== 0 && above[1].trim().indexOf("//") === 0 && above[1].indexOf("scheduledUpdateCompleted") >= 0, true)
 }

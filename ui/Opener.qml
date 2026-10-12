@@ -67,7 +67,7 @@ Item {
             else
                 root.failed(root.current)
         }
-        // A program that never started reports no exit, only running turning false, so its refusal is said here and no later open stays busy.
+        // A program that never started reports no exit, only running turning false.
         onRunningChanged: {
             if (child.running || !root.pending)
                 return

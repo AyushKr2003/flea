@@ -6,8 +6,8 @@ Column {
     id: root
     required property var oldNames
     // The dialog's own half-width gap and stack gap, bound by the card so both halves stay equal.
-    property int columnGap: 14
-    property int headGap: 4
+    required property int columnGap
+    required property int headGap
     // How far a column's first name sits under its label: the new names box's hairline and 2 px of padding, in this column and in that box alike.
     readonly property int rowsInset: Theme.spacing.hairline + 2
     width: (parent.width - columnGap) / 2

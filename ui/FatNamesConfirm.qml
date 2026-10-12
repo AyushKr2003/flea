@@ -4,7 +4,7 @@ import "." as Flea
 import "js/Collide.js" as Collide
 import "js/Icons.js" as Icons
 
-// The names a FAT-family destination cannot hold, on ui/CollideConfirm.qml's card, keys and look; Rename and copy opens focused, the one choice that loses nothing.
+// FAT-family names, on CollideConfirm's card, keys and look.
 FocusScope {
     id: root
     anchors.fill: parent
@@ -14,15 +14,12 @@ FocusScope {
     property var renames: []
     property string noteText: ""
     property string focusName: Collide.FAT_DEFAULT
-    // The board's own reference size, pad and content width, so no bare number sits in an expression.
-    readonly property real referenceBody: 13
-    readonly property real cardPad: 16
-    readonly property real contentBase: 368
-    readonly property real referenceScale: Theme.font.bodySmall / referenceBody
-    readonly property real cardPadding: Math.round(cardPad * referenceScale)
+    // The card geometry lives in ui/js/Collide.js, shared with CollideConfirm.
+    readonly property real referenceScale: Collide.cardReferenceScale(Theme.font.bodySmall)
+    readonly property real cardPadding: Collide.cardPadding(referenceScale)
     readonly property real cardBottomPadding: Theme.spacing.rowPaddingX
     // The card grows with the labels rather than wrapping one, and Rename and copy keeps the ring.
-    readonly property real contentWidth: Math.max(Math.round(contentBase * referenceScale * Theme.dialogWidthRatio), buttons.implicitWidth)
+    readonly property real contentWidth: Collide.cardContentWidth(referenceScale, Theme.dialogWidthRatio, buttons.implicitWidth)
     signal chosen(string choice)
     readonly property var cardItem: card
     readonly property bool buttonsFit: buttons.width <= body.holderWidth
