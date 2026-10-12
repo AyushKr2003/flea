@@ -239,11 +239,12 @@ impl Tags {
                 pass.unread_failed.store(false, Ordering::Relaxed);
             } else {
                 self.whole = false;
-                if std::mem::take(&mut self.armed) {
+                let armed = std::mem::take(&mut self.armed);
+                if armed {
                     self.refresh(missing, index);
                 }
-                // Walking only while a read is in flight: a spent retry leaves the answer final and partial until a query or patch re-arms.
-                return pass.rewrites.lock().unwrap().busy;
+                // Walking while a read is in flight, and in the call that armed one, whose landing the loop answers even if the worker already cleared busy; a spent retry leaves the answer final and partial until a query or patch re-arms.
+                return armed || pass.rewrites.lock().unwrap().busy;
             }
         }
         self.whole = pass.done.load(Ordering::Relaxed);
