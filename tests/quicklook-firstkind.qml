@@ -35,6 +35,12 @@ ShellRoot {
     property var seen: []
     property var unitsAtKey: null
     property double keyAt: 0
+    // The first-open cost census: what the Space maps and builds, for the first open and for a reopen of the same file.
+    property int opened: 0
+    property bool cardExpected: false
+    property int firstObjects: 0
+    property var filesAtKey: []
+    property int objectsAtKey: 0
 
     function log(line) { console.log("QLFK " + line) }
     function fail(why) { root.failures++; root.log("FAIL " + root.leg + ": " + why) }
@@ -73,6 +79,16 @@ ShellRoot {
         var found = root.proc("/proc/self/maps").match(/lib(?:Qt6(?:Pdf|Multimedia)[A-Za-z]*|avcodec|avformat)\.so/g) || []
         return found.filter(function (n, i) { return found.indexOf(n) === i }).sort().join("+")
     }
+    // Every distinct file path mapped now, as a sorted array, for the first-open cost census.
+    // Sample input: the /proc/self/maps line "7f3a1c000000-7f3a1c2a4000 r--p 00000000 08:01 1234567    /usr/lib/libQt6Pdf.so.6.12.0" answers "/usr/lib/libQt6Pdf.so.6.12.0", the path after the first " /" with a trailing " (deleted)" cut.
+    function mappedFiles() {
+        var found = root.proc("/proc/self/maps").match(/ \/[^\n]*/g) || []
+        var seenFiles = {}
+        found.forEach(function (f) { seenFiles[f.trim().replace(/ \(deleted\)$/, "")] = true })
+        return Object.keys(seenFiles).sort()
+    }
+    // Sample input: before ["/a", "/b"] and after ["/a", "/b", "/c"] answer ["/c"].
+    function addedFiles(before, after) { return after.filter(function (f) { return before.indexOf(f) < 0 }) }
     // Every object under the window, the census the startup-objects suite takes.
     function objects() {
         var seenObjects = []
@@ -143,8 +159,22 @@ ShellRoot {
             root.fail("step " + (root.step + 1) + " held [" + held.join(" ") + "], want [" + want.join(" ") + "]")
         if (s.unit.length === 0 && (w.previewUnit !== null || w.swapUnit !== null))
             root.fail("step " + (root.step + 1) + " held Quick Look's own unit for " + s.name + ", which Quick Look opens from no unit")
-        if (root.pv() !== null)
-            root.fail("step " + (root.step + 1) + " built a Quick Look card at a rest on " + s.name + ", which only a Markdown rest does")
+        // A rest on a file with a unit builds the card closed, swap wrapper included, so the first Space only opens it; a file with no unit builds none until a unit file has been rested on, as the loader keeps a built card.
+        root.cardExpected = root.cardExpected || s.unit.length > 0
+        var look = root.pv()
+        if (root.cardExpected && (look === null || look.active || !look.swapBuilt))
+            root.fail("step " + (root.step + 1) + " rested on " + s.name + " without a closed card and swap wrapper built: card=" + (look !== null) + " swap=" + (look !== null && look.swapBuilt))
+        if (!root.cardExpected && look !== null)
+            root.fail("step " + (root.step + 1) + " built a Quick Look card at a rest on " + s.name + ", which has no unit")
+    }
+    // Presses Space with the census taken first.
+    function startOpen() {
+        root.filesAtKey = root.mappedFiles()
+        root.objectsAtKey = root.objects()
+        root.stage = 4
+        root.stageAt = Date.now()
+        root.keyAt = Date.now()
+        root.press(Qt.Key_Space, 1)
     }
     // Space on the rested file: every unit it needs is Ready before the key, and the key compiles nothing (the suite reads the compile trace between KEY and OPENED).
     function openIt() {
@@ -154,10 +184,7 @@ ShellRoot {
         root.log("KEY " + root.leg + " " + s.name + " preview=" + root.unitsAtKey.preview + " swap=" + root.unitsAtKey.swap + " kind=" + root.unitsAtKey.kind)
         if (!root.unitsAtKey.preview || !root.unitsAtKey.swap || !root.unitsAtKey.kind)
             root.fail("a unit was not Component.Ready before the Space: preview=" + root.unitsAtKey.preview + " swap=" + root.unitsAtKey.swap + " kind=" + root.unitsAtKey.kind)
-        root.stage = 4
-        root.stageAt = Date.now()
-        root.keyAt = Date.now()
-        root.press(Qt.Key_Space, 1)
+        root.startOpen()
         root.log("KEYRETURNED " + root.leg + " active=" + (root.pv() !== null && root.pv().active) + " keyMs=" + (Date.now() - root.keyAt))
         if (root.pv() === null || !root.pv().active) root.fail("Space returned without Quick Look open")
     }
@@ -246,6 +273,19 @@ ShellRoot {
             if (look === null || !look.revealed) return
             var state = look.openState()
             root.log("OPENED " + root.leg + " revealed=" + look.revealed + " landed=" + state.landed + " early=" + state.revealedEarly + " lookEmptyFrames=" + state.lookEmptyFrames + " ms=" + (Date.now() - root.keyAt) + " libs=" + root.libs() + " pss=" + root.pssKb())
+            var added = root.addedFiles(root.filesAtKey, root.mappedFiles())
+            var built = root.objects() - root.objectsAtKey
+            root.log("COST " + root.leg + " open=" + (root.opened + 1) + " objects=+" + built + " mapped=" + added.length + " " + added.join(" "))
+            var unit = root.steps[root.step].unit
+            if (root.opened === 0) {
+                root.firstObjects = built
+                // The media backend is a library the clip itself loads; every other kind maps nothing new in its first Space.
+                if (added.length > 0 && unit !== "PreviewMedia.qml")
+                    root.fail("the first Space on " + root.steps[root.step].name + " mapped " + added.length + " new file(s): " + added.join(" "))
+            } else if (root.firstObjects > built) {
+                root.fail("the first Space on " + root.steps[root.step].name + " built " + root.firstObjects + " objects, the reopen " + built + ": the first open builds what a rest should")
+            }
+            root.opened++
             root.stage = 5
             root.stageAt = Date.now()
             root.press(Qt.Key_Space, 1)
@@ -253,6 +293,11 @@ ShellRoot {
         }
         if (root.stage === 5) {
             if (root.pv().visible) return
+            if (root.opened < 2) {
+                // The reopen is the second Space on the same file, after the first card is gone.
+                root.startOpen()
+                return
+            }
             root.finish()
             return
         }
