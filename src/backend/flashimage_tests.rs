@@ -31,6 +31,17 @@ fn magic_that_disagrees_with_the_name_refuses_the_row() {
     assert!(magic_holds("img", b""));
 }
 
+// A fifo named like an image has no head to read and no writer to wake its open, so the probe must refuse it unopened.
+#[test]
+fn a_fifo_named_like_an_image_is_refused_and_never_waited_on() {
+    use crate::backend::fifotest::{mkfifo, within};
+    let d = TestDir::new("flashimage-fifo");
+    let fifo = d.join("pipe.img");
+    mkfifo(&fifo);
+    let got = within("a probe of a fifo", move || probe(&fifo));
+    assert_eq!(got.kind, "", "a fifo is no image");
+}
+
 #[test]
 fn a_raw_image_probes_off_name_and_bytes_alone() {
     let d = TestDir::new("flashimage-raw");
