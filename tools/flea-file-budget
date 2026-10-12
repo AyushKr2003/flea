@@ -97,7 +97,7 @@ tests/js/search.js 336
 tests/button-members.qml 515
 tests/chromering.qml 413
 tests/columnrow-geom.qml 426
-tests/dialog-board.qml 654
+tests/dialog-board.qml 663
 tests/columnscost.qml 416
 tests/rowcost.qml 417
 tests/gridmark.qml 419
@@ -144,7 +144,7 @@ ui/FlashView.qml 399
 ui/NetworkDialog.qml 435
 ui/NetworkForm.qml 426
 ui/NetworkMounts.qml 909
-ui/OpenWithDialog.qml 612
+ui/OpenWithDialog.qml 613
 ui/Pane.qml 1228
 ui/PaneMenuActions.qml 522
 ui/PaneWire.qml 608
@@ -159,8 +159,8 @@ ui/Row.qml 496
 ui/SettingsPanel.qml 547
 ui/SettingsRow.qml 409
 ui/Sidebar.qml 710
-ui/StatusBar.qml 472
-ui/Theme.qml 489
+ui/StatusBar.qml 477
+ui/Theme.qml 475
 ui/TrashView.qml 468
 ui/UnlockDialog.qml 450
 ui/ViewState.qml 542

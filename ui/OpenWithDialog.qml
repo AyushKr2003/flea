@@ -24,7 +24,7 @@ Item {
     property var installed: []
     property bool always: false
     property int cursor: 0
-    // 0 search, 1 list, 2 always box, 3 Cancel, 4 Open: rule 8's own cycle, and it wraps.
+    // 0 search, 1 list, 2 always box, 3 Cancel, 4 Open: rule 8's own cycle, and it wraps; the cursor row draws on 0 and 1 only, as Enter from either opens it.
     property int focusPart: 0
     // Where a row or the ground last saw the pointer, -1 since opening, so a row built or scrolled under a resting pointer never takes the cursor.
     property point pointerGlobal: Qt.point(-1, -1)
@@ -402,7 +402,7 @@ Item {
                             entry: row.isEyebrow ? ({}) : ({ label: row.modelData.label, action: "",
                                 icon: row.modelData.icon, glyph: "app-window",
                                 hint: row.modelData.default === true ? "default" : "" })
-                            current: !row.isEyebrow && root.cursor === row.appIndex
+                            current: !row.isEyebrow && root.focusPart < 2 && root.cursor === row.appIndex
                             lastPointerGlobal: root.pointerGlobal
                             onPointerSeen: function (at) { root.pointerGlobal = at }
                             // The cursor follows the pointer, the focus does not: a pointer crossing

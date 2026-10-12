@@ -49,7 +49,7 @@ ShellRoot {
         while (queue.length > 0) {
             var o = queue.shift()
             var kids = (o && o.children !== undefined) ? o.children : []
-            if (kids.length === 2 && shell.isText(kids[0]) && shell.isText(kids[1]) && shell.labels.indexOf(kids[0].text) >= 0) out.push({label: kids[0], value: kids[1]})
+            if ((kids.length === 2 || kids.length === 3) && shell.isText(kids[0]) && shell.isText(kids[1]) && shell.labels.indexOf(kids[0].text) >= 0) out.push({label: kids[0], value: kids[1]})
             for (var i = 0; i < kids.length; i++) queue.push(kids[i])
         }
         return out
@@ -62,6 +62,17 @@ ShellRoot {
     function shown(t) {
         return t.textFormat === Text.StyledText
             ? t.text.replace(/<[^>]*>/g, "").replace(/&gt;/g, ">").replace(/&lt;/g, "<").replace(/&amp;/g, "&") : t.text
+    }
+    // Every item under a root that the test accepts, in tree order.
+    function under(root, accept) {
+        var out = [], queue = [root]
+        while (queue.length > 0) {
+            var o = queue.shift()
+            if (accept(o)) out.push(o)
+            var kids = (o && o.children !== undefined) ? o.children : []
+            for (var i = 0; i < kids.length; i++) queue.push(kids[i])
+        }
+        return out
     }
     function names() { return shell.pairs().map(function (p) { return p.label.text }) }
     function pair(label) {
@@ -204,6 +215,32 @@ ShellRoot {
                 shell.check("and its link target is a pair", shell.line("Link target"), "/fixture/Music")
                 shell.check("and no count is asked for", shell.sent.filter(function (m) { return m.op === "contents" && m.id === 11 }).length, 0)
                 shell.check("a link and a folder ask for no facts", [shell.factsAsked(11).length, shell.factsAsked(7).length], [0, 0])
+                dialog.close()
+            },
+            function () {
+                // The harness fills no theme tags, so the menu colours are set here and told apart from the listing's.
+                Flea.Theme.tag = {colors: {Red: "#ff0000", Blue: "#0000ff"}, menuColors: {Red: "#aa0000", Blue: "#0000aa"}, fallback: false}
+                dialog.open("properties", 12, "/fixture", parking)
+                shell.feed(shell.reply({id: 12, path: "/fixture/notes.md", kind: "File", directory: false, bytes: 4096, tags: ["Red", "Blue", "work"]}))
+            },
+            function () {
+                var colors = Flea.Theme.tag.menuColors
+                var marks = shell.under(dialog.cardItem, function (o) { return o.tagColors !== undefined && o.visible })
+                var words = shell.under(dialog.cardItem, function (o) { return shell.isText(o) && o.visible && ["Red", "Blue", "work"].indexOf(o.text) >= 0 })
+                shell.check("a tagged file draws Tags right after Size, as the board's Tagged file does", shell.drawn(), ["Path", "Type", "Size", "Tags", "Modified", "Permissions", "Owner", "Group"])
+                shell.check("the Tags value is not drawn as one plain string", shell.pair("Tags").visible, false)
+                shell.check("each own tag draws one swatch in the menu colour, a foreign word draws none", marks.map(function (o) { return [o.swatch, String(o.color)] }),
+                    [["Red", String(colors.Red)], ["Blue", String(colors.Blue)]])
+                shell.check("every name is foreground at the body size, in the tag's order", words.map(function (o) { return [o.text, String(o.color), o.font.pixelSize] }),
+                    [["Red", String(Flea.Theme.color.foreground), Flea.Theme.font.body], ["Blue", String(Flea.Theme.color.foreground), Flea.Theme.font.body], ["work", String(Flea.Theme.color.foreground), Flea.Theme.font.body]])
+                shell.check("the tags run left to right on one line", words.map(function (o) { return o.mapToItem(null, 0, 0).x }).every(function (x, i, all) { return i === 0 || x > all[i - 1] }), true)
+                if (marks.length === 2 && words.length === 3) shell.check("a swatch sits 6 px left of its name at text size 14 and the next tag starts 16 px on, as Properties040 draws",
+                    [words[0].mapToItem(null, 0, 0).x - marks[0].mapToItem(null, 0, 0).x - marks[0].width,
+                     marks[1].mapToItem(null, 0, 0).x - words[0].mapToItem(null, 0, 0).x - words[0].width,
+                     words[2].mapToItem(null, 0, 0).x - words[1].mapToItem(null, 0, 0).x - words[1].width],
+                    [Flea.Theme.space(5), Flea.Theme.space(14), Flea.Theme.space(14)])
+                if (marks.length > 0) shell.check("the Properties swatch is the board's 10 px square, smaller than the 14 px rail swatch", [marks[0].width, marks[0].height], [10, 10])
+                if (marks.length > 0) shell.check("the Tags value starts at the label's left edge", Math.round(marks[0].mapToItem(null, 0, 0).x - shell.labelOf("Tags").mapToItem(null, 0, 0).x), 0)
                 dialog.close()
             }
         ]

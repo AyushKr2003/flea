@@ -8,9 +8,10 @@ Rectangle {
     property bool fallback: false
     property string digit: ""
     required property var tagColors
+    property int size: Tags.SWATCH_SIZE
     readonly property int fallbackBorder: 2
-    width: Tags.SWATCH_SIZE
-    height: Tags.SWATCH_SIZE
+    width: root.size
+    height: root.size
     color: root.fallback ? "transparent" : root.tagColors[root.swatch] || "transparent"
     border.width: root.fallback ? root.fallbackBorder : 0
     border.color: root.tagColors[root.swatch] || "transparent"
