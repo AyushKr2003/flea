@@ -248,9 +248,12 @@ sandbox_cache_require() {
   return 0
 }
 
-# The files directory the trash lands in: the home Trash where the backend renames in-process or GLib keeps it home, else the item mount's top trash.
+# The files directory a direct gio trash lands in: GLib compares the item with HOME's device only, so it ignores a data home on another device.
+sandbox_trash_gio_dir() { sandbox_trash_files_dir "${1:-}" "${2:-${HOME:-}}" gio; }
+
+# The files directory the trash lands in: the home Trash where the backend renames in-process (not with rule "gio") or GLib keeps it home, else the item mount's top trash.
 sandbox_trash_files_dir() {
-  local item="${1:-}" home="${2:-${HOME:-}}" parent idev hdev data top uid globaldir candidate owner folder fdev odev ancestor tdev
+  local item="${1:-}" home="${2:-${HOME:-}}" rule="${3:-}" parent idev hdev data top uid globaldir candidate owner folder fdev odev ancestor tdev
   [ -n "$item" ] || return 1
   [ -n "$home" ] || return 1
   folder=$(dirname -- "$item" 2>/dev/null) || return 1
@@ -275,7 +278,7 @@ sandbox_trash_files_dir() {
       tdev=$(stat -L -c %d -- "$ancestor" 2>/dev/null) || tdev=""
       ;;
   esac
-  if [ "$idev" = "$hdev" ] || { [ -n "$fdev" ] && [ -n "$tdev" ] && [ "$fdev" = "$tdev" ] && [ "$odev" = "$fdev" ]; }; then
+  if [ "$idev" = "$hdev" ] || { [ "$rule" != gio ] && [ -n "$fdev" ] && [ -n "$tdev" ] && [ "$fdev" = "$tdev" ] && [ "$odev" = "$fdev" ]; }; then
     case "$data" in /*) ;; *) return 1 ;; esac
     printf '%s/Trash/files\n' "$data"
     return 0

@@ -83,6 +83,15 @@ XDG_DATA_HOME="$second_root/data"
 got=$(sandbox_trash_files_dir "$second_root/item.txt" "$home_same") || { XDG_DATA_HOME="$data_real"; fail "data-device branch refused"; }
 [[ "$got" == "$second_root/data/Trash/files" ]] || { XDG_DATA_HOME="$data_real"; fail "data-device branch gave $got, not $second_root/data/Trash/files"; }
 ok "item on the data home's device, HOME elsewhere: $got"
+# The same layout through a direct gio trash: GLib compares with HOME's device only, so the data home on the item's device does not keep it home.
+got=$(sandbox_trash_gio_dir "$second_root/item.txt" "$home_same") || { XDG_DATA_HOME="$data_real"; fail "gio rule refused the data-device layout"; }
+[[ "$got" != "$second_root/data/Trash/files" && "$got" == */.Trash*/files ]] || { XDG_DATA_HOME="$data_real"; fail "gio rule gave $got for the data-device layout"; }
+gio_want=$got
+got=$(sandbox_trash_gio_dir "$second_root/gone/deeper/item.txt" "$home_same") || { XDG_DATA_HOME="$data_real"; fail "gio rule refused a moved-away folder"; }
+[[ "$got" == "$gio_want" ]] || { XDG_DATA_HOME="$data_real"; fail "gio rule gave $got for a moved-away folder, not $gio_want"; }
+got=$(sandbox_trash_gio_dir "$test_root/item.txt" "$home_same") || { XDG_DATA_HOME="$data_real"; fail "gio rule refused the HOME-device item"; }
+[[ "$got" == "$second_root/data/Trash/files" ]] || { XDG_DATA_HOME="$data_real"; fail "gio rule gave $got for the HOME-device item"; }
+ok "direct gio trash, data home on the item's device and HOME elsewhere: $gio_want"
 # A Trash root not made yet is judged by the nearest folder above it that exists, as the backend does.
 XDG_DATA_HOME="$second_root/not/yet/made"
 got=$(sandbox_trash_files_dir "$second_root/item.txt" "$home_same") || { XDG_DATA_HOME="$data_real"; fail "unmade data home refused"; }
