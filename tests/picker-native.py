@@ -694,6 +694,7 @@ def ui_json():
 
 
 # SCHEMA's top-level keys as src/uischema.rs spells them; a parse that finds no entries or an unknown constant raises.
+# Sample input: 'pub const SCHEMA: &[(&str, Rule)] = &[', then '    ("view", Rule::Word(&["list", "columns", "grid", "dual"])),' and '    (STATE_VERSION, Rule::Version),', with 'pub const STATE_VERSION: &str = "stateVersion";'
 def schema_top_keys(source=REPO / "src/uischema.rs"):
     text = source.read_text()
     block = re.search(r"pub const SCHEMA: &\[\(&str, Rule\)\] = &\[\n(.*?)\n\];", text, re.S)
