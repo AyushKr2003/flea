@@ -61,6 +61,8 @@ cap_drops_wait_target() {
         sleep 0.1
     done
     seen=$(ipc statusActivityState 2>/dev/null | jq -r '[.activities[] | select(.running == false) | .text] | join(" | ")' 2>/dev/null || true)
+    # A case holding the pointer names its release here, so a timeout never leaves the drag held.
+    "${cap_drops_wait_abort:-:}"
     fail "cap_drops: no drag line reading \"$want\" (status lines: ${seen:-none})"
 }
 # One dropped file is awaited in, undone and awaited away, so the next leg starts clean.

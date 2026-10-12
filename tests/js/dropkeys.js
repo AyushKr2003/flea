@@ -68,6 +68,7 @@ function run(check) {
     check("and clears what was seen", store.ctrl, -1)
 
     rowWiring(check)
+    leaveWiring(check)
 
     var paneSource = Source.source("ui/Pane.qml")
     check("the pane funnels presses into the drop keys",
@@ -157,6 +158,33 @@ function rowWiring(check) {
     check("a by-index drop onto the row follows the shift held there", sent ? sent.c + " " + sent.op : "nothing", "transfer move")
     check("and the drag it started carried the lift's number", liftNumber, "1")
     own.parent.destroy()
+}
+
+// A hover-open swaps the lit delegate onto another row: leaving clears the folder it recorded, and never a folder another row recorded since.
+function leaveWiring(check) {
+    var gone = CollideFixture.scene(7)
+    gone.target.row = { n: "Photos", d: true }
+    gone.target.enter("", ["file:///x/a.txt"], "", "", Qt.CopyAction)
+    gone.pane.path = "/d/Photos"
+    gone.target.row = { n: "p2.txt", d: false }
+    dropArea(gone.target).exited()
+    check("leaving the reused row clears the recorded folder", gone.session.dropDest + "|" + gone.session.dropIndex, "|-1")
+    var sentBefore = gone.backend.sent.length
+    check("a later drop on that reused file row takes nothing", gone.target.dropped("", ["file:///x/a.txt"], "", "", Qt.CopyAction), false)
+    check("and sends nothing, leaving that drop to the floor", gone.backend.sent.length, sentBefore)
+    var other = CollideFixture.built("RowDrag.qml", gone.parent, { session: gone.session, listingIndex: 3, row: { n: "Docs", d: true } })
+    check("another folder row takes the next drag", other.enter("", ["file:///x/a.txt"], "", "", Qt.CopyAction), true)
+    check("a drop on it lands in that row", other.dropped("", ["file:///x/a.txt"], "", "", Qt.CopyAction), true)
+    check("and in no earlier folder", gone.backend.sent.length > sentBefore ? gone.backend.sent[sentBefore].dest : "", "/d/Docs")
+    gone.parent.destroy()
+    var late = CollideFixture.scene(7)
+    late.target.row = { n: "Photos", d: true }
+    late.target.enter("", ["file:///x/a.txt"], "", "", Qt.CopyAction)
+    var next = CollideFixture.built("RowDrag.qml", late.parent, { session: late.session, listingIndex: 3, row: { n: "Docs", d: true } })
+    next.enter("", ["file:///x/a.txt"], "", "", Qt.CopyAction)
+    dropArea(late.target).exited()
+    check("an exit arriving after another row took the hover keeps that row's folder", late.session.dropDest + "|" + late.session.dropIndex, "/d/Docs|3")
+    late.parent.destroy()
 }
 
 // The row's own DropArea, whose exited handler is the shipped leave path.

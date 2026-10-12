@@ -29,6 +29,7 @@ cap_dropmods_abandon() {
 # The case's one exit trap: a fail anywhere lets go of the pointer and keys and closes the probe window if it runs.
 cap_dropmods_cleanup() {
     ipc_pid=""
+    cap_drops_wait_abort=""
     cap_dropmods_abandon
     [[ -z "$cap_dropmods_probe_pid" ]] || kill "$cap_dropmods_probe_pid" 2>/dev/null || true
     cap_dropmods_probe_pid=""
@@ -86,6 +87,7 @@ case_cap_dropmods() {
     local src_pt dst_pt cx cy tx ty wx wy ww wh seen win1 win2 probe_log probe_box
     cap_dropmods_probe_pid=""
     trap cap_dropmods_cleanup EXIT
+    cap_drops_wait_abort=cap_dropmods_abandon
     sandbox_scratch "$dir"
     sandbox_scratch "$dir2"
     mkdir -p "$dir/sub" "$dir2/sub2"

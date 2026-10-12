@@ -228,9 +228,7 @@ function refusedRow(check) {
     at.parent.destroy()
 }
 
-// A drop after a hover-open lands in the hovered folder: the rest opens
-// /d/Photos and the swap rebuilds this delegate on another row, so the drop
-// uses the recorded destination, never the reused row's current path.
+// A hover-open swaps the lit delegate onto another row: the drop uses the recorded folder, never the reused row's path.
 function reusedRowAfterHoverOpen(check) {
     var reused = [{ n: "p2.txt", d: false }, { n: "2024", d: true }]
     for (var i = 0; i < reused.length; i++) {

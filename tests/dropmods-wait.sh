@@ -92,6 +92,16 @@ out=$(run "$(target "$copy_line")" eval "d_text='$copy_line' d_after=99")
 [ "$out" = "FAIL: cap_drops: no drag line reading \"$copy_line\" (status lines: none)" ] \
     && ok "no activity at all never lands" || bad "an empty bar must not land, got: $out"
 
+# A case that holds the pointer names its release, which runs before the timeout fails and not on a landed line.
+out=$(run "$(target "$copy_line")" eval "d_text='$move_line'; abandon() { echo released; }; cap_drops_wait_abort=abandon")
+[ "$out" = "released
+FAIL: cap_drops: no drag line reading \"$copy_line\" (status lines: $move_line)" ] \
+    && ok "a timed out wait runs the case's release before it fails" || bad "a timeout must release the pointer first, got: $out"
+out=$(run "$(target "$copy_line")" eval "d_text='$copy_line'; abandon() { echo released; }; cap_drops_wait_abort=abandon")
+[ "$out" = landed ] && ok "a landed line never runs the release" || bad "a landed line must not release the pointer, got: $out"
+[ "$(grep -c 'cap_drops_wait_abort=cap_dropmods_abandon' tests/ui-captures-dropmods.sh)" = 1 ] \
+    && ok "cap_dropmods names its release for the shared wait" || bad "cap_dropmods does not name its release for the shared wait"
+
 # Sample input, case_cap_drops: the four hover waits, in order, are the lines that wait on a drag target.
 calls=()
 while IFS= read -r line; do calls+=("${line# }"); done < <(sed -n '/^case_cap_drops()/,/^}/p' tests/ui-captures-drops.sh | grep -E '^    cap_drops_wait_' | grep -Ev '^    cap_drops_wait_(settled|rename) ')
@@ -134,6 +144,9 @@ undo() {
         sleep() { command sleep 0.05; }
         fail() { printf 'FAIL: %s\n' "$*"; exit 1; }
         key() { printf 'key %s\n' "$*" >> "$box/keys"; if [ "$d_undoes" = yes ]; then rm -f "$gone"; fi; }
+        # The failure line reads the ipc message and searches the fixture root, so both exist here under set -u.
+        ipc() { return 0; }
+        fixture_root="$box"
         d_undoes=yes
         "$@"
         cap_drops_wait_s=3
@@ -148,8 +161,8 @@ out=$(undo true)
 
 : > "$box/keys"
 rm -f "$gone"
-out=$(undo true)
-[[ "$out" == "FAIL: cap_drops: the drop never landed $gone, so z has no drop to undo (said "* ]] && [ ! -s "$box/keys" ] \
+out=$(undo true 2>&1)
+[ "$out" = "FAIL: cap_drops: the drop never landed $gone, so z has no drop to undo (said ; found at )" ] && [ ! -s "$box/keys" ] \
     && ok "a drop that never landed fails before z, which would undo another leg" || bad "a missing drop must fail before z, got: $out / $(cat "$box/keys")"
 
 : > "$box/keys"

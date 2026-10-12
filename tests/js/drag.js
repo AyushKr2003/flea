@@ -355,7 +355,7 @@ function run(check) {
     var capCrumbs = Crumbs.crumbs("/home/gm/cap-drops/deep/outer/inner", "/home/gm", null)
     check("cap_drops names the crumb above the leaf by its own text, slash included", capCrumbs[capCrumbs.length - 2].text, "outer/")
     var capCrumb = Drag.feedbackFor(Drag.markerPayload([0], false, "/cap-drops/deep/outer/inner", 56), ["file:///cap-drops/deep/outer/inner/note.txt"])
-    check("cap_drops crumb reads a copy, because its device is unknown", Drag.feedbackLine(capCrumb, capCrumbs[capCrumbs.length - 2].text, 0),
+    check("cap_drops crumb reads a copy, because its device is unknown", Drag.feedbackLine(capCrumb, capCrumbs[capCrumbs.length - 2].text, Number(/^\s*destDev:\s*(\d+)\s*$/m.exec(Source.source("ui/CrumbDrop.qml"))[1])),
         "Copy 1 item to outer/")
     var capColumn = Drag.feedbackFor(Drag.markerPayload([0], false, "/cap-drops/Photos", 56), ["file:///cap-drops/Photos/p1.txt"])
     check("cap_drops Columns parent row reads a move", Drag.feedbackLine(capColumn, "deep", 56),
