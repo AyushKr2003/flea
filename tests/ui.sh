@@ -10183,15 +10183,18 @@ case_hanglisting() {
     shot hanglisting-up
 
     # Inside the wait a rail click is the newest request: it is taken, not refused, and the held listing's late rows never draw over it.
-    export FLEA_HANGLISTING_MARKER="$dir/newest-delayed" FLEA_HANGLISTING_DELAY=4
+    # 8 s keeps the held rows out past a native launch and its IPC reads, and still lands them before the 10 s wait.
+    export FLEA_HANGLISTING_MARKER="$dir/newest-delayed" FLEA_HANGLISTING_DELAY=8
     flea_bin="$dir/flea-proxy"
     launch "$dir"
     flea_bin="$real_bin"
     wait_marker "$dir/newest-delayed" "hanglisting: the proxy never held the fifth listing"
     held_at=$(date +%s%3N)
     sleep 1
-    [[ "$(ipc listInFlight)" == "true" && "$(ipc state)" != "waiting" ]] \
-        || fail "hanglisting: the fifth listing is not out inside the wait, state is $(ipc state)"
+    local flight state_now
+    flight=$(ipc listInFlight); state_now=$(ipc state)
+    [[ "$flight" == "true" && "$state_now" != "waiting" ]] \
+        || fail "hanglisting: the fifth listing is not out inside the wait, in flight $flight, state $state_now, $(( $(date +%s%3N) - held_at )) ms after the hold"
     click_rail_row "$(rail_row_of Home)" left
     sleep 0.3
     [[ "$(ipc stateMessage)" != "A directory is already loading." ]] \
