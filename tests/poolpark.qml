@@ -14,7 +14,7 @@ ShellRoot {
     property bool finished: false
     property var failures: []
     // Plain JS state: a counted property would be read by the very bindings that bump it, a binding loop.
-    property var counts: ({ rowFor: 0, readPast: 0, landTotal: 0 })
+    property var counts: ({ rowFor: 0, readPast: 0, landTotal: 0, empty: false })
     property var selectedSet: ({})
     // The listing index under the synthesized pointer, -1 while it rests off the view.
     property int hoverIndex: -1
@@ -196,6 +196,17 @@ ShellRoot {
         return ""
     }
 
+    // Grid tiles read rows from the held snapshot (GridGeometry.heldRow), never pane.rowFor, so the grid leg counts on the rows array itself: any tile read while the view holds no count, and a read of a row at or past the landed count after.
+    function watched(rows) {
+        if (root.which !== "grid") return rows
+        return new Proxy(rows, { get: function (target, key) {
+            if (typeof key === "string" && /expression for row@\S*GridArea\.qml/.test(new Error().stack)
+                    && (key === "length" ? root.counts.empty : /^\d+$/.test(key) && Number(key) + root.stubPane.held >= root.counts.landTotal))
+                root.counts.readPast += 1
+            return target[key]
+        } })
+    }
+
     // Nav.forget then PaneSwap.land, in their order: count to 0, rows, then the new count; reads past it are counted.
     function land(path, total, rows, prefix) {
         var p = root.stubPane
@@ -204,7 +215,8 @@ ShellRoot {
         p.listInFlight = true
         p.total = 0
         p.held = 0
-        p.rows = []
+        root.counts.empty = true
+        p.rows = root.watched([])
         p.kindNames = []
         p.cursorIndex = 0
         p.renamingIndex = -1
@@ -213,7 +225,8 @@ ShellRoot {
         p.listingState = "loading"
         root.selectedSet = {}
         p.selectionVersion += 1
-        p.rows = rows
+        p.rows = root.watched(rows)
+        root.counts.empty = false
         p.total = total
         p.path = path
         p.listingState = total === 0 ? "empty" : "ready"
@@ -288,7 +301,7 @@ ShellRoot {
         var p = root.stubPane, keep = root.counts.landTotal
         root.counts.landTotal = 1
         root.counts.readPast = 0
-        p.rows = p.rows.slice()
+        p.rows = root.watched(p.rows.slice())
         var seen = root.counts.readPast
         root.counts.landTotal = keep
         root.counts.readPast = 0
