@@ -167,6 +167,8 @@ function run(check) {
     check("nor WebDAV", Mounts.trashable("/run/user/1000/gvfs/dav:host=slot,ssl=true/notes"), false)
     check("every ordinary path still can", Mounts.trashable("/home/gm/Downloads"), true)
     check("a checkout of gvfs itself included", Mounts.trashable("/home/gm/src/gvfs/daemon"), true)
+    check("a plain folder named gvfs holding a scheme-shaped folder still trashes", Mounts.trashable("/home/u/mirror/gvfs/smb-share:server=h,share=d/a.txt"), true)
+    check("a gvfs folder inside the run folder is no mount root", Mounts.trashable("/run/user/1000/home/gvfs/mtp:host=X/DCIM"), true)
 
     // Directive 44, captured on the test box with an iPhone on USB (iOS 26.6.2, 2026-09-14). It answers
     // on two monitors at once: GPhoto2 for the camera store, which lists zero folders on this iOS

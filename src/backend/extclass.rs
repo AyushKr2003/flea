@@ -16,20 +16,7 @@ pub fn fstype_is_network(fstype: &str) -> bool {
     super::netfs::is_network_fstype(fstype)
 }
 
-// Sample input: "/run/user/1000/gvfs/mtp:host=X/" answers Some("phone").
-pub fn gvfs_class(path: &Path) -> Option<&'static str> {
-    if !path.to_string_lossy().starts_with("/run/user/") {
-        return None;
-    }
-    let text = path.to_string_lossy().into_owned();
-    let mark = text.find("/gvfs/")?;
-    let rest = text[mark + "/gvfs/".len()..].to_ascii_lowercase();
-    if rest.starts_with("mtp:") || rest.starts_with("gphoto2:") || rest.starts_with("afc:") {
-        Some("phone")
-    } else {
-        Some("network")
-    }
-}
+pub use super::gvfsroot::{gvfs_class, gvfs_root};
 
 // The classes ui/js/DirSizes.js isRemoteClass refuses a folder size on; unknown never reaches the backend, classify always answers.
 // Sample input: "network" and "phone" true, "usb" and "" false.
@@ -105,21 +92,6 @@ pub(crate) fn test_link_reads() -> Vec<PathBuf> {
 #[cfg(test)]
 pub(crate) fn test_reset_link_reads() {
     LINK_READS.with(|v| v.borrow_mut().clear());
-}
-
-// Sample input: "/run/user/1000/gvfs/smb-share:server=n,share=x/dir" answers "/run/user/1000/gvfs/smb-share:server=n,share=x".
-pub fn gvfs_root(path: &Path) -> Option<PathBuf> {
-    gvfs_class(path)?;
-    let mut root = PathBuf::new();
-    let mut after_gvfs = false;
-    for part in path.components() {
-        root.push(part);
-        if after_gvfs {
-            return Some(root);
-        }
-        after_gvfs = part.as_os_str() == "gvfs";
-    }
-    None
 }
 
 // Sample sysfs target: "../../devices/pci0000:00/0000:00:14.0/usb2/2-1/host0/block/sdb/sdb1" trues.
