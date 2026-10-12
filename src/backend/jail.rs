@@ -324,26 +324,31 @@ mod tests {
         assert!(alive, "kill_tree signalled a pid its jail never owned");
     }
 
-    // setsid puts the sleep outside the group like bwrap's --new-session, so only the learned-pid kill ends it.
+    // setsid puts the sleep outside the group like bwrap's --new-session, so only the learned-pid kill ends it; the shell reports its own pid from there, since a /proc scan missed a mid-exec argv under load.
     #[test]
     fn a_learned_pid_outside_the_group_is_killed_by_its_own_pid() {
-        let token = format!("32.{}", std::process::id());
         let fd = crate::backend::sandbox::STATUS_FD;
-        let script = format!("/usr/bin/setsid /usr/bin/sleep {token} & /usr/bin/sleep 0.05; printf '{{\"child-pid\": %d}}' $! >&{fd}; wait");
+        let script = format!("/usr/bin/setsid /bin/sh -c 'printf \"{{\\\"child-pid\\\": %d}}\" $$ >&{fd}; exec /usr/bin/sleep 32' & wait");
         let mut jailed = spawn_jailed(&["/bin/sh".to_string(), "-c".to_string(), script], |cmd| {
             cmd.stdin(std::process::Stdio::null());
             cmd.stdout(std::process::Stdio::null());
             cmd.stderr(std::process::Stdio::null());
         })
         .expect("shell jail did not start");
-        // The sleep must exist before the kill, or the group kill lands pre-fork and the test passes vacuously.
+        // The bound only ends a run whose fixture never reports; the pid itself is the signal.
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while !proc_with_token(&token) && std::time::Instant::now() < deadline {
+        while jailed.sandbox_pid.load(Ordering::SeqCst) <= 0 && std::time::Instant::now() < deadline {
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
-        assert!(proc_with_token(&token), "the fixture never started its sleep");
+        let learned = jailed.sandbox_pid.load(Ordering::SeqCst);
+        assert!(learned > 0, "the fixture never reported its pid, so this pins nothing");
+        let group = jailed.child.id() as i32;
+        let (pgrp, session) = pgrp_session_of_stat(&std::fs::read_to_string(format!("/proc/{learned}/stat")).expect("the reported pid is not alive"))
+            .expect("the reported pid has no readable stat");
+        assert_ne!(pgrp, group, "the fixture sleep is inside the jail group, so the group kill would pass this vacuously");
+        assert_eq!(session, learned, "the fixture sleep did not leave the session");
         kill_tree(&mut jailed);
-        assert!(!proc_with_token(&token), "the setsid sleep outlived a kill_tree that learned its pid");
+        assert!(gone(learned), "the setsid sleep outlived a kill_tree that learned its pid");
     }
 
     // A jail whose argv never writes the status fd still returns within the bounded wait.
@@ -374,6 +379,24 @@ mod tests {
             .expect("ls /proc/self/fd did not run");
         assert!(out.status.success());
         String::from_utf8_lossy(&out.stdout).lines().count()
+    }
+
+    // Sample /proc/<pid>/stat tail: after the last ")" come state, ppid, pgrp, session.
+    fn pgrp_session_of_stat(text: &str) -> Option<(i32, i32)> {
+        let mut fields = text.rsplit_once(')')?.1.split_whitespace();
+        fields.next()?;
+        fields.next()?;
+        let pgrp = fields.next()?.parse::<i32>().ok()?;
+        let session = fields.next()?.parse::<i32>().ok()?;
+        Some((pgrp, session))
+    }
+
+    // A killed process is gone once /proc forgets it or it is a zombie awaiting its reaper.
+    fn gone(pid: i32) -> bool {
+        match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+            Ok(text) => text.rsplit_once(')').and_then(|(_, rest)| rest.split_whitespace().next().map(|state| state == "Z")).unwrap_or(false),
+            Err(_) => true,
+        }
     }
 
     // Sample /proc/<pid>/cmdline: NUL-separated argv, so the token matches exactly one argument.
