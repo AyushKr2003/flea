@@ -78,9 +78,9 @@ if [ "$fuse_calls" != "$want_fuse" ]; then
     exit 1
 fi
 
-# Sample input, one trace line: 'openat(AT_FDCWD, "/proc/self/mountinfo", O_RDONLY|O_CLOEXEC) = 25'; the rail's own read must be in the file or a silent trace proves nothing.
+# Sample input, one trace line: 'openat(AT_FDCWD, "/proc/self/mountinfo", O_RDONLY|O_CLOEXEC) = 25'; it proves the trace saw qs open /proc/self/mountinfo, so a trace with no automount line is a live trace.
 if ! grep -q '"/proc/self/mountinfo"' "$test_root/trace.log"; then
-    printf 'FAIL the trace never saw the rail read /proc/self/mountinfo, so it proves nothing\n'
+    printf 'FAIL the trace never saw qs open /proc/self/mountinfo, so a trace with no automount line proves nothing\n'
     exit 1
 fi
 touched=$(grep -c "$idle_path" "$test_root/trace.log")
