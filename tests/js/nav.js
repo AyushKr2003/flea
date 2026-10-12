@@ -50,7 +50,7 @@ function pane() {
     p.cancelSlowClick = function () { p.cancelled += 1; SlowClick.cancel(p) }
     p.listArea = { primeSettle: function () {} }
     // ui/PaneSwap.qml with nothing held, so the reset runs at the request; tests/js/swap.js holds.
-    p.swap = { hold: function () { return false } }
+    p.swap = { hold: function () { return false }, stopWaiting: function () {} }
     p.backend = {
         // A listing that answers is what moves the pane, ui/PaneSwap.qml applyListed, never the request.
         list: function (path, first, hidden, wantChanged, select) { p.sent.push("list " + path); p.selected = select; if (!p.refuses) p.path = path },
@@ -106,7 +106,7 @@ function run(check) {
     Nav.back(travel)
     check("back preserves the departed directory for forward", paths(travel.forwardHistory), "/home/gm/Work")
     Nav.forward(travel)
-    check("forward while loading preserves the destination", travel.forwardHistory.length, 1)
+    check("forward while loading is taken from the place asked for", travel.forwardHistory.length + "|" + paths(travel.history) + "|" + travel.said.join(""), "0|/home/gm|")
     travel.listInFlight = false
     Nav.forward(travel)
     check("forward returns to the departed directory", travel.path, "/home/gm/Work")
@@ -200,18 +200,15 @@ function run(check) {
     check("and leaves the locked mode standing too", busy.lockedMode, 0o40750)
     check("and leaves an open rename alone, because the listing did not change", busy.renamingIndex, 4)
 
-    // The in-flight guard has to run before the pop. openWithoutHistory is what refuses a listing
-    // while one is loading, and by then back() has already shortened the history, so a back taken
-    // during a load threw away the directory it was going to and went nowhere.
+    // A back taken during a load pops the entry and lists it in the place of the listing out, see tests/js/navnewest.js.
     var loading = browsing(["/home/gm"])
     loading.listInFlight = true
     Nav.back(loading)
-    check("a back refused during a load keeps the history entry it was going to",
-          pathsComma(loading.history), "/home/gm")
-    check("and stays in the directory that is still loading", loading.path, "/home/gm/Work")
-    check("and says so, which is the sentence every refused navigation gives",
-          loading.said.join(""), "A directory is already loading.")
-    check("and sends no listing", loading.sent.length, 0)
+    check("a back during a load takes the history entry it was going to",
+          pathsComma(loading.history), "")
+    check("and remembers the directory it left for forward", pathsComma(loading.forwardHistory), "/home/gm/Work")
+    check("and says nothing, because no navigation is refused", loading.said.join(""), "")
+    check("and lists the entry", loading.sent.join("|"), "view /home/gm|list /home/gm|fsinfo")
 
     // Issue 20 asked for the mouse's back button to climb. Nautilus and Explorer bind that button to
     // history, so it goes back where there is somewhere to go back to and climbs where there is not:
@@ -238,8 +235,8 @@ function run(check) {
     var busyBack = browsing(["/home/gm"])
     busyBack.listInFlight = true
     Nav.mouseBack(busyBack)
-    check("and a press during a load keeps the history it would have popped",
-          pathsComma(busyBack.history) + "|" + busyBack.path, "/home/gm|/home/gm/Work")
+    check("and a press during a load takes the history entry it would have popped",
+          pathsComma(busyBack.history) + "|" + busyBack.path, "|/home/gm")
     // An open context menu covers the listing and nothing in a navigation closes it, so a press
     // here left the menu standing over rows from another directory and its next row acted on
     // whatever had arrived at that index: on Move to Trash that is a different file trashed.
@@ -282,10 +279,9 @@ function run(check) {
     var busyOpen = browsing([])
     busyOpen.listInFlight = true
     Nav.open(busyOpen, "/home/gm")
-    check("an open refused during a load remembers nothing", pathsComma(busyOpen.history), "")
-    check("and stays where it is, saying the sentence every refused navigation gives",
-          busyOpen.path + "|" + busyOpen.said.join(""),
-          "/home/gm/Work|A directory is already loading.")
+    check("an open during a load remembers the folder the pane stands in", pathsComma(busyOpen.history), "/home/gm/Work")
+    check("and takes the place of the listing out, saying nothing",
+          busyOpen.path + "|" + busyOpen.said.join(""), "/home/gm|")
 
     // A keyboard rename reveals the row it renamed; one the pointer committed keeps the row the
     // click chose instead, because a write operation targets the selection ahead of the cursor.
@@ -341,8 +337,8 @@ function run(check) {
     busyUp.opened = []
     busyUp.open = function (path) { busyUp.opened.push(path) }
     Nav.parent(busyUp)
-    check("a refused climb sends nothing", busyUp.opened.length, 0)
-    check("and plants no select", busyUp.pendingSelect, "")
+    check("a climb during a load takes the listing's place", busyUp.opened.join("|"), "/home/gm")
+    check("and plants the folder it left as the select", busyUp.pendingSelect, "/home/gm/Work")
 
     // Issue 193, measured on the box at 0.3.4: Backspace on a refused hop's Locked tile climbed past the
     // folder the breadcrumb names, a whole listing away from the refused folder's own Permissions row.
@@ -446,7 +442,9 @@ function run(check) {
     upFirst.listingPath = "/mnt/dead/sub/"
     check("the up arrow is live on a first listing past the wait", canGoUp(upFirst, Nav), true)
     upFirst.listingState = "ready"
-    check("the up arrow is dead on an empty path once the wait ends", canGoUp(upFirst, Nav), false)
+    check("the up arrow stays live before the wait while the first listing is out", canGoUp(upFirst, Nav), true)
+    upFirst.listInFlight = false
+    check("the up arrow is dead on an empty path once nothing is out", canGoUp(upFirst, Nav), false)
     var wCursor = waitingRoute()
     wCursor.cursorIndex = 0
     wCursor.rowFor = function () { return { n: "sub", d: true, i: 0 } }

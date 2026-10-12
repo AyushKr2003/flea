@@ -10135,13 +10135,14 @@ hanglisting_write_proxy() {
     local dest="$1"
     cat > "$dest" <<'EOS'
 #!/usr/bin/env python3
-# Forwards a backend session to the real binary, holding the first list past the deadline.
+# Forwards a backend session to the real binary, holding the first list (or the first list of FLEA_HANGLISTING_PATH) past the deadline.
 import json, os, subprocess, sys, threading
 real = os.environ["FLEA_HANGLISTING_REAL"]
 if sys.argv[1:] != ["--backend"]:
     os.execv(real, [real] + sys.argv[1:])
 delay = float(os.environ.get("FLEA_HANGLISTING_DELAY", "15"))
 marker = os.environ.get("FLEA_HANGLISTING_MARKER", "")
+want = os.environ.get("FLEA_HANGLISTING_PATH", "")
 child = subprocess.Popen([real, "--backend"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, bufsize=1)
 def pump():
     for line in child.stdout:
@@ -10179,13 +10180,25 @@ def replaces_held(line):
         if same:
             held.clear()
     return same
+# Names the list to hold, or None: the first list, or the first one for FLEA_HANGLISTING_PATH when it is set.
+def held_name(line):
+    if '"c":"list"' not in line:
+        return None
+    if not want:
+        return "delayed"
+    try:
+        path = json.loads(line).get("path")
+    except ValueError:
+        return None
+    return path if path == want else None
 seen = False
 for line in sys.stdin:
-    if '"c":"list"' in line and not seen:
+    name = None if seen else held_name(line)
+    if name is not None:
         seen = True
         held.append(line)
         if marker:
-            open(marker, "w").write("delayed\n")
+            open(marker, "w").write(name + "\n")
         # The hold must not stall later lines, so an F5 re-list runs past it at once.
         threading.Timer(delay, release, args=[line]).start()
     else:
@@ -10308,7 +10321,44 @@ case_hanglisting() {
         || fail "hanglisting: Up put the cursor on $up_name, not the waited folder"
     shot hanglisting-up
 
-    printf 'HANGLISTING deadline=ok rows-land-after=ok wait-escape=ok late-rows-dropped=ok reload-escape=ok up-climb=ok\n'
+    # A rail click inside the wait is the newest request, taken not refused; the proxy holds the Up listing of the parent for 8 s, below the 10 s wait.
+    export FLEA_HANGLISTING_MARKER="$dir/newest-delayed" FLEA_HANGLISTING_DELAY=8 FLEA_HANGLISTING_PATH="$fixture_root"
+    flea_bin="$dir/flea-proxy"
+    launch "$dir"
+    flea_bin="$real_bin"
+    key -k BackSpace >/dev/null
+    wait_marker "$dir/newest-delayed" "hanglisting: the proxy never held the fifth listing"
+    held_at=$(date +%s%3N)
+    printf 'HELD path=%s age_ms=%s\n' "$(cat "$dir/newest-delayed")" "$(( held_at - $(date -r "$dir/newest-delayed" +%s%3N) ))"
+    sleep 1
+    local flight state_now
+    flight=$(ipc listInFlight); state_now=$(ipc state)
+    [[ "$flight" == "true" && "$state_now" != "waiting" ]] \
+        || fail "hanglisting: the fifth listing is not out inside the wait, in flight $flight, state $state_now, $(( $(date +%s%3N) - held_at )) ms after the hold"
+    click_rail_row "$(rail_row_of Home)" left
+    sleep 0.3
+    [[ "$(ipc stateMessage)" != "A directory is already loading." ]] \
+        || fail "hanglisting: a rail click inside the wait was refused with $(ipc stateMessage)"
+    escape_by=$(( $(date +%s%3N) + 10000 ))
+    seen_path=""
+    while (( $(date +%s%3N) < escape_by )); do
+        seen_path=$(ipc path 2>/dev/null || true)
+        [[ "$seen_path" == "$home_path" ]] && break
+        sleep 0.2
+    done
+    [[ "$seen_path" == "$home_path" ]] \
+        || fail "hanglisting: Home never landed inside the wait, path is $seen_path"
+    late_by=$(( held_at + FLEA_HANGLISTING_DELAY * 1000 + 2000 ))
+    while (( $(date +%s%3N) < late_by )); do sleep 0.2; done
+    [[ "$(ipc path)" == "$home_path" && -z "$(ipc stateMessage)" ]] \
+        || fail "hanglisting: the late rows drew over Home: $(ipc path) with $(ipc stateMessage)"
+    # As in the second listing, Home's list sent the held one ahead of its own, so its stale rows came while Home was out.
+    grep -qx flushed "$dir/newest-delayed" 2>/dev/null \
+        || fail "hanglisting: Home's list never flushed the held fifth listing, the proxy wrote $(tr '\n' ' ' 2>/dev/null < "$dir/newest-delayed" || echo 'no marker file')"
+    unset FLEA_HANGLISTING_PATH
+    export FLEA_HANGLISTING_DELAY=15
+
+    printf 'HANGLISTING deadline=ok rows-land-after=ok wait-escape=ok late-rows-dropped=ok reload-escape=ok up-climb=ok newest-wins=ok\n'
     kill_flea
 }
 

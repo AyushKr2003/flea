@@ -237,8 +237,8 @@ function run(check) {
     check("held rows send nothing for dd, Delete, F2 or Return either",
           [DD, DELETE, F2, RETURN].map(function (keys) { return pressed(true, FILE, keys).sent.length }).join(","), "0,0,0,0")
     var heldBack = pressed(true, FILE, [key(Qt.Key_Backspace, "\b")])
-    check("while Backspace still reaches the pane, which refuses it the same way",
-          heldBack.acted.join(",") + "|" + heldBack.sent.length + "|" + heldBack.said.join(""), "parent|0|" + Swap.LOADING)
+    check("while Backspace still reaches the pane, which climbs from the listing out and says nothing",
+          heldBack.acted.join(",") + "|" + heldBack.sent.length + "|" + heldBack.said.join(""), "parent|1|")
 
     // What one frame showed while a listing was out.
     check("a listing out drawn in the loading state before the cap is the blank frame", Swap.frameKind(true, "loading", false), "blank")

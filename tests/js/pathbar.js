@@ -145,14 +145,14 @@ function run(check) {
           Source.source("ui/WindowBody.qml").indexOf("pathFailed: Nav.pathFailed(view.currentPane)") >= 0, true)
     check("ChromeBar gates the commit on that flag",
           Source.source("ui/ChromeBar.qml").indexOf("PathBar.shouldNavigate(target, root.path, root.pathFailed)") >= 0, true)
-    // Nav.open refuses while a listing is in flight, which is what a different-path Enter meets there.
-    var refused = { said: "", opened: false }
+    // Nav.open takes a different-path Enter while a listing is in flight as the newest request.
+    var taken = { said: "", opened: false }
     var flightPane = { listInFlight: true, path: HOME, history: [], forwardHistory: [],
-        message: function (text) { refused.said = text },
-        openWithoutHistory: function () { refused.opened = true } }
+        message: function (text) { taken.said = text },
+        openWithoutHistory: function (path, options) { taken.opened = path + "|" + (options && options.supersede === true) } }
     Nav.open(flightPane, "/etc")
-    check("a path entered in flight is refused", refused.said, "A directory is already loading.")
-    check("and no listing starts behind it", refused.opened, false)
+    check("a path entered in flight is not refused", taken.said, "")
+    check("and its listing starts behind the one out", taken.opened, "/etc|true")
 
     // Where a completion reads, which is the head of the line and never the half-typed leaf.
     check("the completion directory is the head of the line",

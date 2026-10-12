@@ -58,13 +58,13 @@ function run(check) {
     MouseNav.forward(ahead)
     check("mouse forward with nothing ahead stays put and asks for no listing", stood(ahead), "/home/gm/Work|0|0")
 
-    // A press during a load keeps the entry it would have taken, as back's guard does.
+    // A press during a load takes the entry it holds, as back does, and leaves the folder it was standing in behind it.
     var busy = forwardPane([])
     busy.forwardHistory = ["/home/gm/Work/flea"]
     busy.listInFlight = true
     MouseNav.forward(busy)
-    check("a forward press during a load keeps the entry it would have taken",
-          busy.forwardHistory.join(",") + "|" + busy.path, "/home/gm/Work/flea|/home/gm/Work")
+    check("a forward press during a load takes the entry it holds",
+          busy.forwardHistory.join(",") + "|" + busy.listingPath + "|" + busy.history.map(BackReturn.pathOf).join(","), "|/home/gm/Work/flea|/home/gm/Work")
 
     // Behind the pane's own context menu or the collision card the press does nothing, as back's does.
     var menuUp = forwardPane([])

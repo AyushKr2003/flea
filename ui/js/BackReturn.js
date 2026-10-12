@@ -15,11 +15,38 @@ function asEntry(target) {
     return typeof target === "string" ? makeEntry(target, "", 0) : target
 }
 
-// The departing cursor; leaving a walk names no row, so the landing stays at the top.
-function capture(pane) {
+// The place a listing still out asked for, with the cursor its Back or Forward owes it; null when none is out or it re-reads the drawn folder.
+function pending(pane) {
+    if (!pane.listInFlight || !pane.listingPath || pane.listingPath === pane.path)
+        return null
+    var owed = pane.swap ? pane.swap.restore : null
+    if (owed && owed.path === pane.listingPath)
+        return makeEntry(owed.path, owed.name, owed.index)
+    return makeEntry(pane.listingPath, "", 0)
+}
+
+// A tab switch left its cursor, order and located row to its landing; the listing let go never lands, so a later one must not take them.
+function dropOwed(pane) {
+    if (pane.tabs)
+        Object.assign(pane.tabs, { pendingCursor: -1, pendingCursorName: null, pendingLocatePath: "", pendingSortBy: "", pendingSortDesc: false })
+}
+
+// The stack a Back or Forward still out pushed the drawn place onto, or "" when the listing out is any other.
+function pushedOnto(pane) {
+    var owed = pending(pane) && pane.swap ? pane.swap.restore : null
+    return owed && owed.pushedOnto ? owed.pushedOnto : ""
+}
+
+// The drawn folder with the cursor row it stands on; leaving a walk names no row, so the landing stays at the top.
+function drawn(pane) {
     var walk = pane.searchMode === "results" || (pane.searchFrom || "").length > 0
     var row = !walk && pane.rowFor ? pane.rowFor(pane.cursorIndex) : null
     return makeEntry(pane.path, row ? row.n : "", walk ? 0 : pane.cursorIndex)
+}
+
+// The departing cursor, or the pending place while a listing is out.
+function capture(pane) {
+    return pending(pane) || drawn(pane)
 }
 
 // One step through the stacks after Nav's guard, popping before the open pushes back.
@@ -28,7 +55,7 @@ function travel(pane, from, to) {
     var target = asEntry(stack[stack.length - 1])
     pane[to] = (pane[to] || []).concat([capture(pane)])
     pane[from] = stack.slice(0, -1)
-    pane.openWithoutHistory(pathOf(target), { restore: target })
+    pane.openWithoutHistory(pathOf(target), { restore: Object.assign({}, target, { pushedOnto: to }), supersede: true })
 }
 
 // The landing in the rows reply's turn: name, then clamped index, then the top.

@@ -510,7 +510,7 @@ Item {
             var parkedLanded = where !== "stale" && pane.swap.landParked()
             // The rows a request named were another numbering's, so only that request ended, see src/backend/rowguard.rs.
             // A paths failure clears its claim either way. Leaving it set blocks the next copy.
-            var listingEnded = (terminal || !parkedLanded) && Swap.failListing(pane, where)
+            var listingEnded = (terminal || !parkedLanded) && Swap.failListing(pane, where, input)
             if (input === "paths") {
                 var claim = pane.pathsPending
                 if (claim && claim.kind === "drag") {

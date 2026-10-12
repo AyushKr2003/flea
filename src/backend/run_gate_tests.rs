@@ -344,3 +344,7 @@ fn a_query_burst_behind_a_held_scan_answers_only_its_newest_query() {
 
 #[path = "run_gate_unmount_tests.rs"]
 mod unmount;
+#[path = "run_gate_newest_tests.rs"]
+mod newest;
+#[path = "run_gate_alias_tests.rs"]
+mod alias;
