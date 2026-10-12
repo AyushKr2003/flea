@@ -64,7 +64,7 @@ tests/js/drag.js 469
 tests/js/devices.js 363
 tests/js/previewswap.js 463
 tests/js/mdstructure.js 655
-tests/js/keymap.js 315
+tests/js/keymap.js 320
 tests/js/focus.js 760
 tests/js/mounts.js 327
 tests/js/menu.js 553
@@ -114,7 +114,7 @@ ui/ColumnPane.qml 438
 ui/ContextMenu.qml 751
 ui/ConvertDialog.qml 446
 ui/GridArea.qml 461
-ui/Ipc.qml 966
+ui/Ipc.qml 967
 tests/gridprebuild.qml 458
 tests/columnsprebuild.qml 416
 ui/KeymapSheet.qml 549
@@ -128,7 +128,7 @@ ui/NetworkDialog.qml 457
 ui/NetworkForm.qml 413
 ui/NetworkMounts.qml 901
 ui/OpenWithDialog.qml 613
-ui/Pane.qml 1180
+ui/Pane.qml 1183
 ui/PaneMenuActions.qml 490
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
@@ -141,19 +141,19 @@ ui/PreviewMarkdown.qml 625
 ui/Row.qml 496
 ui/SettingsPanel.qml 543
 ui/SettingsRow.qml 409
-ui/Sidebar.qml 693
+ui/Sidebar.qml 699
 ui/StatusBar.qml 463
 ui/Theme.qml 443
 ui/TrashView.qml 468
 ui/UnlockDialog.qml 439
 ui/ViewState.qml 536
-ui/WindowBody.qml 739
+ui/WindowBody.qml 746
 ui/js/Anchor.js 406
 ui/js/ColumnsCarry.js 102
 ui/js/Devices.js 383
 ui/js/Filter.js 268
-ui/js/Focus.js 449
-ui/js/Keymap.js 363
+ui/js/Focus.js 471
+ui/js/Keymap.js 368
 ui/js/Nav.js 324
 ui/js/Markdown.js 155
 ui/js/MdBlocks.js 444
@@ -172,7 +172,7 @@ ui/js/Settings.js 459
 ui/js/Scroll.js 304
 ui/js/Tabs.js 717
 ui/js/UiState.js 435
-ui/TabBar.qml 640
+ui/TabBar.qml 673
 ui/boot/fleatab.qml 50
 tests/unlock-stdin.qml 427"
 

@@ -97,6 +97,7 @@ QtObject {
         function fileClipboard(): string { return JSON.stringify(root.pane.clipboard) }
         function rowClipMark(i: int): string { var row = root.pane.itemFor(i); return row ? row.clipMark : "unavailable" }
         function focusView(): string { return root.pane.focusView }
+        function focusStop(): string { var p = root.pane; return p.focusView === "chrome" ? "chrome:" + p.chromeBar.focusedGlyph : p.focusView === "strip" ? "strip:" + p.tabStrip.focusedIndex : p.focusView }
         function keyDeliveryState(): string {
             var pane = root.pane
             var window = pane.Window.window

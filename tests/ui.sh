@@ -15083,6 +15083,7 @@ case_previewviews() {
 . "$repo/tests/ui-openwith-design.sh"
 . "$repo/tests/ui-providers.sh"
 . "$repo/tests/ui-gvfsbridge.sh"
+. "$repo/tests/ui-keyreach.sh"
 # Native minipc checks two owned windows, surviving owners, GTK files and disabled text-only Paste inside a marked root.
 case_clipboard() {
     command -v wl-copy >/dev/null || fail "clipboard: wl-copy is missing"

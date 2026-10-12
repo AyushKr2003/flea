@@ -13,6 +13,8 @@ Item {
     required property var modelData
     property bool cursor: false
     property bool focused: false
+    // The keyboard is on this row's eject mark, which then draws its own frame in the foreground at its hit box.
+    property bool markFocused: false
     // Network only, driven from ui/Sidebar.qml's renamingIndex; swaps the label for the editor.
     property bool renaming: false
 
@@ -170,6 +172,8 @@ Item {
     // RailEject: a mounted row draws the eject mark in place of the square.
     readonly property bool showsEject: Eject.releasable(root.modelData)
     readonly property real ejectMarkSize: Theme.font.caption
+    // The keyboard frame on the eject mark, read by tests/keyreach.qml.
+    readonly property Item markFrameItem: ejectLoader.item ? ejectLoader.item.frame : null
     // The rail's real trailing indicator slot, so ui/Ipc.qml measures this dot instead of recomputing it.
     readonly property Item indicatorSlot: dot
     readonly property Item detailItem: detailText
@@ -237,6 +241,7 @@ Item {
         id: ejectMark
         Item {
             property alias hit: hitBox
+            property alias frame: markFrame
             property alias hovered: hitHover.hovered
             width: root.ejectMarkSize
             height: root.ejectMarkSize
@@ -245,9 +250,18 @@ Item {
                 id: ink
                 anchors.centerIn: parent
                 name: "eject"
-                color: root.cursor || hitHover.hovered ? Theme.color.foreground : Theme.color.muted
+                color: root.cursor || hitHover.hovered || root.markFocused ? Theme.color.foreground : Theme.color.muted
                 width: root.ejectMarkSize
                 height: root.ejectMarkSize
+            }
+
+            Rectangle {
+                id: markFrame
+                anchors.fill: hitBox
+                color: "transparent"
+                border.width: Theme.spacing.hairline
+                border.color: Theme.color.foreground
+                visible: root.markFocused
             }
 
             Item {
