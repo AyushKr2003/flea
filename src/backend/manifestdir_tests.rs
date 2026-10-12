@@ -13,11 +13,11 @@ fn a_candidate_on_the_copy_filesystem_is_skipped() {
     owned_seven_hundred(&same);
     let dev: u64 = same.symlink_metadata().unwrap().dev();
     assert!(
-        pick(&[same.clone()], &[dev], current_uid()).is_err(),
+        pick(std::slice::from_ref(&same), &[dev], current_uid()).is_err(),
         "same-device candidate pins the drive being copied to"
     );
     assert_eq!(
-        pick(&[same.clone()], &[], current_uid()).unwrap(),
+        pick(std::slice::from_ref(&same), &[], current_uid()).unwrap(),
         same,
         "the same directory qualifies once no copy forbids its filesystem"
     );
@@ -74,14 +74,14 @@ fn an_owned_0700_directory_is_reused() {
     let d = TestDir::new("manifestdirreuse");
     let good = d.dir("good");
     owned_seven_hundred(&good);
-    assert_eq!(pick(&[good.clone()], &[], current_uid()).unwrap(), good);
+    assert_eq!(pick(std::slice::from_ref(&good), &[], current_uid()).unwrap(), good);
 }
 
 #[test]
 fn a_missing_candidate_is_created_owner_only() {
     let d = TestDir::new("manifestdirmake");
     let fresh = d.join("fresh");
-    let picked = pick(&[fresh.clone()], &[], current_uid()).unwrap();
+    let picked = pick(std::slice::from_ref(&fresh), &[], current_uid()).unwrap();
     assert_eq!(picked, fresh);
     assert_eq!(fresh.symlink_metadata().unwrap().permissions().mode() & 0o777, 0o700);
 }
