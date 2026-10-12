@@ -1334,7 +1334,8 @@ The device number of each path named, symlinks followed, so a path reached throu
 link points at. The device is the number `listed`'s `v` already gives for the listing itself, which is what lets
 a client compare the two without a table of mounts: a plain drop onto a path moves when its device equals the
 drag's source device and copies otherwise. The client asks **once per listing** for the ancestors of the listed
-path, the breadcrumb's drop targets, and keeps the answers by path. Answers one `devs` line from a thread of its
+path, the breadcrumb's drop targets, and **once per drag** for the visible folder rows of the neighbour columns,
+whose peeked rows carry no device, and keeps the answers by path. Answers one `devs` line from a thread of its
 own, because a stat on a mount that stopped answering never returns and the loop waits on nothing. A path on a
 network or FUSE mount runs under the same 5 s bound a listing has, then the mount is marked stuck for 30 s and
 answers 0 at once, so a dead share costs one thread and one wait, never one per ask. An absent `paths` asks nothing.

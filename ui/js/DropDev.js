@@ -42,3 +42,11 @@ function devFor(known, path) {
     var dev = known ? Number(known[normalize(path)]) : 0
     return dev > 0 ? dev : 0
 }
+
+// Sample input: folderAsks([{n: "deep", d: true}, {n: "a.txt", d: false}, {n: "big", d: true, v: 5}], "/home/u", 0, 2, pane) is ["/home/u/deep"]; a file, a row with its own device and a row out of view ask nothing.
+function folderAsks(rows, dir, first, last, pane) {
+    var out = []
+    for (var i = Math.max(0, first); i <= last && i < (rows || []).length; i++)
+        if (rows[i].d === true && !rows[i].v) out.push(pane.join(dir, rows[i].n))
+    return out
+}

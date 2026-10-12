@@ -242,6 +242,36 @@ function wire(check) {
           before + "|" + verb(usb, "/home/u/docs", 7, back.pathDevs), "0|copy|9|copy")
 }
 
+// A peek or carried column row names no device, so a drag entering the pane asks the backend for the visible folder rows' paths once.
+function columnasks(check) {
+    var pane = { join: function (base, name) { return base === "/" ? "/" + name : base + "/" + name } }
+    var rows = [{ n: "deep", d: true, i: "folder" }, { n: "a.txt", d: false, i: "text-x-generic" }, { n: "big", d: true, v: 5 }, { n: "late", d: true }]
+    check("only the visible folder rows with no device of their own are asked, by full path",
+          JSON.stringify(DropDev.folderAsks(rows, "/home/u", 0, 2, pane)) + JSON.stringify(DropDev.folderAsks(rows, "/", 2, 9, pane))
+          + JSON.stringify(DropDev.folderAsks(null, "/", 0, 3, pane)), '["/home/u/deep"]["/late"][]')
+    var sent = []
+    var back = { pickerOnly: false, _dropAsked: "", pathDevs: { "/a/deep": 7, "/keep": 9 }, send: function (message) { sent.push(JSON.stringify(message)) } }
+    back.askDropDevs = new Function("root", "DropDev", "return function (token, paths) {"
+        + Source.block(Source.source("ui/Backend.qml"), "function askDropDevs(", "ui/Backend.qml") + "}")(back, DropDev)
+    back.askDropDevs("3", ["/a/deep", "/a/more"])
+    back.askDropDevs("3", ["/a/deep", "/a/more"])
+    check("one drag asks a set once, and a known answer stands until its new one lands",
+          sent.join("") + JSON.stringify(back.pathDevs), '{"c":"devs","paths":["/a/deep","/a/more"]}{"/a/deep":7,"/keep":9}')
+    back.askDropDevs("4", ["/a/deep", "/a/more"])
+    back.askDropDevs("4", [])
+    check("another drag asks again, and an empty set asks nothing", sent.length, 2)
+    back.pickerOnly = true
+    back.askDropDevs("5", ["/x"])
+    check("the chooser's backend asks nothing", sent.length, 2)
+    var row = Source.source("ui/RowDrag.qml")
+    check("a row reads its own device first, else the backend's answer for its path, at every drop seam",
+          row.indexOf("DropDev.devFor(root.targetPane.backend.pathDevs") >= 0 && row.split("row.v").length - 1 === 2
+          && row.split("root.destDev").length - 1 >= 6, true)
+    check("a drag entering a row asks through the columns area, which asks the drawn neighbour columns' visible rows",
+          row.indexOf("columnsArea.askDropDevs(lift)") >= 0 && Source.source("ui/ColumnsArea.qml").indexOf("column.dropAsks()") >= 0
+          && Source.source("ui/ColumnPane.qml").indexOf("DropDev.folderAsks(root.rows") >= 0, true)
+}
+
 function run(check) {
     flow(check)
     hover(check)
@@ -250,4 +280,5 @@ function run(check) {
     crumbflow(check)
     dropdev(check)
     wire(check)
+    columnasks(check)
 }

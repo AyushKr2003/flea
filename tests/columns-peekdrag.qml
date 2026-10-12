@@ -15,6 +15,8 @@ ShellRoot {
         property bool listInFlight: false
         property var asked: []
         property string said: ""
+        // The backend's device answers by path, which a peek row with no device of its own reads at the drop.
+        readonly property QtObject backend: QtObject { property var pathDevs: ({}) }
         readonly property var collide: ({ ask: function (req) { root.paneStub.asked = root.paneStub.asked.concat([req]); return true } })
         // Drag.js dropInto asks through pane.asks(), as a product pane builds its collide card on first use.
         function asks() { return root.paneStub.collide }
@@ -110,6 +112,22 @@ ShellRoot {
             root.check("a listing in flight closes the peek folder row's drop", folder ? root.dropAreaOf(folder).enabled : null, false)
             root.paneStub.listInFlight = false
             root.check("the landed listing opens it again", folder ? root.dropAreaOf(folder).enabled : null, true)
+            // A peek row is {n,d,i} with no v: its drop verb reads the backend's answer for its own path, and an unanswered or other-device path copies.
+            var own = DragOps.markerPayload([], false, "/fx/other", 42, true, false)
+            var carried = ["file:///fx/other/p1.txt"]
+            var seen = function () { return [folder.session.dragCopy, folder.session.dropDestDev, folder.destDev] }
+            root.check("a peek folder row carries no device of its own", folder.row.v, undefined)
+            root.check("an own drop enters it", root.attempt(function () { return folder.enter(own, carried, "", "", Qt.MoveAction, "") }), [true, ""])
+            root.check("unanswered, the drop copies", seen(), [true, 0, 0])
+            root.paneStub.backend.pathDevs = { "/fx/sub/inbox": 42 }
+            root.check("the answer landing under the pointer moves it", seen(), [false, 42, 42])
+            folder.leaveRow()
+            root.check("a later enter on the answered row moves", [root.attempt(function () { return folder.enter(own, carried, "", "", Qt.MoveAction, "") })[0]].concat(seen()), [true, false, 42, 42])
+            folder.leaveRow()
+            root.paneStub.backend.pathDevs = { "/fx/sub/inbox": 43 }
+            root.check("a folder under another device copies", [root.attempt(function () { return folder.enter(own, carried, "", "", Qt.MoveAction, "") })[0]].concat(seen()), [true, true, 43, 43])
+            folder.leaveRow()
+            root.paneStub.backend.pathDevs = {}
             var bareRows = root.rowsOf(bareColumn)
             root.check("every bare row realised", bareRows.length, root.names.length)
             for (var b = 0; b < bareRows.length; b++)

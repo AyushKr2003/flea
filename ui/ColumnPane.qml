@@ -10,6 +10,7 @@ import "js/Tap.js" as Tap
 import "js/Thumbs.js" as Thumbs
 import "js/DirSizes.js" as DirSizes
 import "js/DragOut.js" as DragOut
+import "js/DropDev.js" as DropDev
 
 // One Miller column: a scrolling list of ColumnRows over either a peeked directory or the pane's
 // own listing window. It owns no state; the area above it decides which row is which.
@@ -110,6 +111,13 @@ Item {
             return {first: first, last: last < 0 ? Math.min(view.count - 1, first + visibleRows) : last}
         }
         return fallback
+    }
+
+    // The visible folder rows of a peek column that name no device, which a drag entering the pane asks the backend for.
+    function dropAsks() {
+        if (!root.visible || !root.peekSource) return []
+        var range = root.visibleRange()
+        return DropDev.folderAsks(root.rows, root.peekSource.dir, range.first, range.last, root.peekSource.pane)
     }
 
     // The active column uses List/Grid's integer model and refills only around its viewport.
