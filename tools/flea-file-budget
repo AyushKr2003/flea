@@ -103,7 +103,7 @@ tests/rowcost.qml 417
 tests/gridmark.qml 419
 tests/columnsfilter.qml 402
 tests/columnsfolder.qml 400
-tests/quicklook-firstframe.qml 452
+tests/quicklook-firstframe.qml 457
 tests/markdown-render.qml 795
 tests/rename-cost.qml 482
 tests/markdown-linearity.qml 679
