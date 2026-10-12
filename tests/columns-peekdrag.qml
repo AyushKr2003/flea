@@ -154,6 +154,14 @@ ShellRoot {
             Messages.route(root.paneStub.backend, { t: "devs", devs: { "/fx/sub/inbox": 43 } })
             root.check("a folder under another device copies", [root.attempt(function () { return folder.enter(own, carried, "", "", Qt.MoveAction, "") })[0]].concat(seen()), [true, true, 43, 43])
             folder.leaveRow()
+            // A row that names its own device drops on it, whatever the backend answers for its path: the backend says 42, the source's device, which would move, and the row says 5.
+            var bigRows = root.rowsOf(askColumn).filter(function (r) { return r.row && r.row.n === "big" })
+            var big = bigRows.length === 1 ? bigRows[0] : null
+            root.paneStub.backend.pathDevs = { "/fx/sub/big": 42 }
+            var seenBig = function () { return [big.session.dragCopy, big.session.dropDestDev, big.destDev] }
+            root.check("a folder row with a device of its own is realised", big ? big.row.v : null, 5)
+            root.check("its own device wins over the backend's answer for its path", big ? [root.attempt(function () { return big.enter(own, carried, "", "", Qt.MoveAction, "") })[0]].concat(seenBig()) : [], [true, true, 5, 5])
+            big.leaveRow()
             root.paneStub.backend.pathDevs = {}
             root.paneStub.columnsArea.columns = []
             var bareRows = root.rowsOf(bareColumn)
