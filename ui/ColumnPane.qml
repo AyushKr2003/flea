@@ -224,6 +224,8 @@ Item {
         model: Flea.StableModel { id: stable; view: view; total: root.visible || root.keptTotal === root.rowTotal ? root.rowTotal : 0; keptRows: true
                                   warm: root.pane !== null && view.visible && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true; warmRows: Math.floor((view.height + view.cacheBuffer) / Theme.fileRowHeight) + 1 }
         clip: true
+        // The pane's cache rows, as ui/List.qml takes them: Qt's default 320 px builds about 12 unseen rows into every landing.
+        cacheBuffer: Theme.fileRowHeight * (root.pane ? root.pane.cacheRows : 2)
         boundsBehavior: Flickable.StopAtBounds
         onContentYChanged: if (root.pane !== null) { coalesce.start(); settle.restart() }
         onCountChanged: root.prebuild.landed()
