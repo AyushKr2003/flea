@@ -25,6 +25,8 @@ CAPTURE_SETTLE_SECONDS = 0.4
 CAPTURE_BODY_PX = 14
 PICKER_WIDTH = 1040
 PICKER_HEIGHT = 760
+# Long enough to wrap the save collision line at the sweep's text size 14.
+SAVE_COLLISION_NAME = "quarterly.report.june_2026.final.export.reviewed.pdf"
 PROCESS_WAIT_SECONDS = 5
 # Sample input: "hwkh1d5nbmt", the instance id Quickshell names its runtime directory by.
 QS_INSTANCE_ID_CHARS = 11
@@ -90,7 +92,7 @@ picker_env["FLEA_BIN"] = str(Path(os.environ["FLEA_BIN"]).resolve(strict=True))
 picker_env["FLEA_UI"] = str(REPO / "ui")
 listing = root / "files"
 listing.mkdir()
-for name in ("alpha.txt", "beta.txt", "gamma.txt"):
+for name in ("alpha.txt", "beta.txt", "gamma.txt", SAVE_COLLISION_NAME):
     (listing / name).write_text(f"Sweep picker fixture: {name}\n")
 portals = root / "portals"
 portals.mkdir()
@@ -239,7 +241,7 @@ try:
     picker_pid = client["pid"]
     client = owned_window()
     run(["omarchy-drive", "focus", title])
-    wait("listing", lambda: state()["path"] == str(listing) and state()["total"] == 3 and state()["state"] != "loading")
+    wait("listing", lambda: state()["path"] == str(listing) and state()["total"] == 4 and state()["state"] != "loading")
     # Sample input: "0xabc123", an owned Hyprland window address.
     if not re.fullmatch(r"0x[0-9a-fA-F]+", client["address"]):
         raise AssertionError("invalid picker window address")
@@ -279,6 +281,58 @@ try:
     wait("picker closed", lambda: not any(window.get("pid") == picker_pid for window in windows()))
     picker_pid = None
     bus.signal_unsubscribe(subscription)
+    save_token = "sweepsave"
+    save_sender = bus.get_unique_name()[1:].replace(".", "_")
+    save_handle = f"{OBJECT}/request/{save_sender}/{save_token}"
+    save_subscription = bus.signal_subscribe(FRONTEND, "org.freedesktop.portal.Request", "Response", save_handle,
+        None, Gio.DBusSignalFlags.NONE, lambda *args: response.append(args[-1].unpack()[0]))
+    save_options = {"handle_token": GLib.Variant("s", save_token),
+                    "current_name": GLib.Variant("s", SAVE_COLLISION_NAME),
+                    "current_folder": GLib.Variant("ay", os.fsencode(listing) + b"\0")}
+    save_result = bus.call_sync(FRONTEND, OBJECT, "org.freedesktop.portal.FileChooser", "SaveFile",
+                                GLib.Variant("(ssa{sv})", ("", title, save_options)), None,
+                                Gio.DBusCallFlags.NONE, 10000, None)
+    if save_result.unpack()[0] != save_handle:
+        raise AssertionError("public portal returned a foreign save handle")
+    client = wait("native save picker", lambda: next((window for window in windows() if window.get("title") == title), None))
+    picker_pid = client["pid"]
+    client = owned_window()
+    run(["omarchy-drive", "focus", title])
+    wait("save collision", lambda: state()["path"] == str(listing) and state()["saveName"] == SAVE_COLLISION_NAME
+         and state()["collision"] and state()["state"] != "loading")
+    answer = run(["bash", REPO / "tests/lib/hypr-dispatch.sh", "window_resize", client["address"], PICKER_WIDTH, PICKER_HEIGHT])
+    if answer != "ok":
+        raise AssertionError(f"picker save resize refused: {answer}")
+    run(["omarchy-drive", "window", "center", title])
+    wait("save picker viewport", lambda: state()["width"] == PICKER_WIDTH and state()["height"] == PICKER_HEIGHT)
+    time.sleep(CAPTURE_SETTLE_SECONDS)
+    observed = state()
+    if observed["body"] != CAPTURE_BODY_PX:
+        raise AssertionError(f"picker save effective font size is {observed['body']}, expected {CAPTURE_BODY_PX}")
+    if not observed["themeLoaded"] or observed["themeForeground"].lower() != expected_foreground:
+        raise AssertionError(f"picker save theme expected ready foreground={expected_foreground}; saw themeLoaded={observed['themeLoaded']} themeForeground={observed['themeForeground']}")
+    name = "sweep-picker-save-collision"
+    png = evidence / f"{name}.png"
+    if png.exists() or png.is_symlink():
+        raise AssertionError(f"capture already exists: {png}")
+    run(["omarchy-drive", "shot", png, title])
+    if not png.is_file() or not png.stat().st_size:
+        raise AssertionError(f"empty capture: {png}")
+    dimensions = run(["magick", "identify", "-ping", "-format", "%wx%h", png])
+    # Sample input: "1040x760", from magick identify -ping -format %wx%h.
+    if not re.fullmatch(r"[1-9][0-9]*x[1-9][0-9]*", dimensions):
+        raise AssertionError(f"invalid PNG dimensions: {dimensions}")
+    (evidence / f"{name}.json").write_text(json.dumps(observed, indent=2))
+    with (evidence / "manifest.tsv").open("a") as manifest:
+        manifest.write(f"{name}\t{dimensions}\n")
+    print(f"SWEEP {name} {dimensions}", flush=True)
+    press("-k", "Escape")
+    wait("save cancel response", lambda: len(response) == 2)
+    if response != [1, 1]:
+        raise AssertionError(f"picker save cancellation answered {response}")
+    wait("save picker closed", lambda: not any(window.get("pid") == picker_pid for window in windows()))
+    picker_pid = None
+    bus.signal_unsubscribe(save_subscription)
 finally:
     # The private backend's process group owns its picker children, even after a failed IPC read.
     for process in reversed(processes):
