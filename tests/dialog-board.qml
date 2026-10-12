@@ -25,6 +25,8 @@ ShellRoot {
     readonly property int tickMs: 16
     readonly property int outerTimeoutS: Number(Quickshell.env("DIALOGBOARD_TIMEOUT_S")) || 60
     readonly property int capShare: 2
+    // The long-error step's length: well past two wrapped lines at any dialog width.
+    readonly property int longErrorChars: 300
     readonly property int msPerSecond: 1000
     readonly property double startedAt: Date.now()
     readonly property int capMs: shell.outerTimeoutS * shell.msPerSecond / shell.capShare
@@ -149,7 +151,7 @@ ShellRoot {
 
     // One dialog's status slot steps: one card height and one button row at rest, busy and short errors; a 300-character error is drawn whole and grows only the card.
     function slotSteps(d) {
-        var rest, slot, longError = new Array(301).join("e")
+        var rest, slot, longError = new Array(shell.longErrorChars + 1).join("e")
         // The card height, and Cancel's and the primary's x and width in the card's coordinates.
         var geometry = function () {
             var c = d.cancel.mapToItem(d.card, 0, 0)
@@ -165,7 +167,13 @@ ShellRoot {
         }
         var steps = [
             { name: "slot-" + d.name + "-rest", act: d.open, record: function () { rest = geometry() } },
-            { name: "slot-" + d.name + "-busy", act: function () { d.busy(true) }, record: function () { check("busy", false) } },
+            { name: "slot-" + d.name + "-busy", act: function () { d.busy(true) }, record: function () {
+                check("busy", false)
+                // The busy word sits in the status slot in muted ink, found by its text so a slot that stays blank finds nothing, and the primary keeps its rest label.
+                var busy = line(d.busyText)
+                shell.check(d.name + " slot busy: the status reads " + d.busyText + " in muted ink and the primary keeps " + d.restLabel,
+                            [busy ? [busy.text, shell.rgba(busy.color)] : null, d.primary.label], [[d.busyText, shell.rgba(Flea.Theme.color.muted)], d.restLabel])
+            } },
             { name: "slot-" + d.name + "-error", act: function () { d.busy(false); d.error(d.oneLine) }, record: function () {
                 check("error", false)
                 slot = line(d.oneLine).height
@@ -175,7 +183,8 @@ ShellRoot {
         if (d.twoLines)
             steps.push({ name: "slot-" + d.name + "-two", act: function () { d.error(d.twoLines) }, record: function () {
                 check("two-line error", false)
-                shell.check(d.name + " slot two-line error: the line draws two lines whole", [line(d.twoLines).lineCount, line(d.twoLines).truncated], [2, false])
+                var two = line(d.twoLines)
+                shell.check(d.name + " slot two-line error: the line draws two lines whole", [two.lineCount, two.height >= two.implicitHeight], [2, true])
             } })
         steps.push({ name: "slot-" + d.name + "-long", act: function () { d.error(longError) }, record: function () {
             check("long error", true)
@@ -385,6 +394,7 @@ ShellRoot {
         ].concat(shell.slotSteps({ name: "convert", card: convert.cardItem, cancel: convert.cancelItem, primary: convert.submitItem,
                                     open: function () { convert.open("photo.png", holder) }, busy: function (on) { convert.busy = on },
                                     error: function (text) { convert.errorText = text }, oneLine: "The converter wrote nothing.",
+                                    busyText: "Converting…", restLabel: "Convert",
                                     twoLines: "Backend stopped; conversion outcome unknown. Check the output.",
                                     close: function () { convert.errorText = ""; convert.opened = false } }),
                   shell.slotSteps({ name: "openwith", card: openWith.cardItem, cancel: openWith.closeItem, primary: openWith.submitItem,
@@ -395,6 +405,8 @@ ShellRoot {
                                                            installed: [{ id: "a.desktop", label: "Alpha", icon: "a" }] })
                                     }, busy: function (on) { openWith.committing = on },
                                     error: function (text) { openWith.errorText = text }, oneLine: "The application could not be opened.",
+                                    busyText: "Opening…", restLabel: "Open",
+                                    twoLines: "Backend stopped; the application outcome is unknown. Check the application and try opening the file again from the list.",
                                     close: function () { openWith.close() } }))
     }
 
