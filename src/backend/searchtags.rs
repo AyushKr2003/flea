@@ -32,6 +32,8 @@ struct Pass {
     rewrites: Mutex<Rewrites>,
     done: AtomicBool,
     announced: AtomicBool,
+    // Raised when a re-read has swapped its names in, spent by the one re-run of the standing query that owes it.
+    rewritten: AtomicBool,
     stop: AtomicBool,
     // Bumped when a patch renumbers the rows, so a re-read that located its rows before it locates them again.
     epoch: AtomicUsize,
@@ -47,6 +49,7 @@ impl Pass {
             rewrites: Mutex::new(Rewrites { queue: Vec::new(), busy: true }),
             done: AtomicBool::new(false),
             announced: AtomicBool::new(false),
+            rewritten: AtomicBool::new(false),
             stop: AtomicBool::new(false),
             epoch: AtomicUsize::new(0),
             #[cfg(test)]
@@ -61,8 +64,6 @@ pub(crate) struct Tags {
     events: Sender<Event>,
     // False while the last answer ran on a pass still reading, so its matches cannot seed a narrowing.
     whole: bool,
-    // True from an own tag write until the standing tagged query is re-run on the names it queued.
-    rewritten: bool,
 }
 
 impl Drop for Tags {
@@ -75,11 +76,10 @@ impl Drop for Tags {
 
 impl Tags {
     pub(crate) fn new(events: Sender<Event>) -> Tags {
-        Tags { pass: None, events, whole: true, rewritten: false }
+        Tags { pass: None, events, whole: true }
     }
 
-    // A patch moves row ids: a finished pass keeps every surviving row's names under its new id, with the added rows unread and answered
-    // for the caller to queue; a pass still reading numbered its rows under the old ids, so it is dropped and the next tagged query starts one.
+    // A patch moves row ids: a finished pass follows its rows and answers the added ones to queue; a pass still reading is dropped.
     pub(crate) fn carry(&mut self, index: &Index) -> Vec<String> {
         let Some(pass) = &self.pass else { return Vec::new() };
         if !pass.done.load(Ordering::Relaxed) {
@@ -117,9 +117,9 @@ impl Tags {
         Terms { tags, text }
     }
 
-    // An extension scores only the previous matches: same tags, text grown, and the previous answer saw every row.
+    // An extension scores only the previous matches: same tags, text grown, the previous answer saw every row, and no landed rewrite is unanswered.
     pub(crate) fn narrows(&self, last: &str, query: &str) -> bool {
-        if last.is_empty() || !self.whole {
+        if last.is_empty() || !self.whole || self.pass.as_ref().is_some_and(|pass| pass.rewritten.load(Ordering::Relaxed)) {
             return false;
         }
         let (before, now) = (Tags::terms(last), Tags::terms(query));
@@ -166,10 +166,9 @@ impl Tags {
         hits.retain(|&(_, row)| matches!(names.get(row), Some(Some(have)) if names_carry(have, &terms.tags)));
     }
 
-    // An own tag write: the named files' rows get their names re-read off the loop and swapped in whole. False with no pass open, which reads nothing.
+    // An own tag write: the named files' rows get their names re-read off the loop and swapped in whole. With no pass open it reads nothing.
     fn refresh(&mut self, rels: Vec<String>, index: &Arc<Mutex<Index>>, scope: &Path) {
         let Some(pass) = &self.pass else { return };
-        self.rewritten = true;
         let mut rewrites = pass.rewrites.lock().unwrap();
         rewrites.queue.extend(rels);
         // A worker already running drains this too, before it lands, so a write during the first read is never lost.
@@ -180,9 +179,10 @@ impl Tags {
         }
     }
 
-    // True once after a landed rewrite when the standing query carries a tag term, so it is re-run whatever answered in between.
-    pub(crate) fn rewrite_due(&mut self, standing: &str) -> bool {
-        std::mem::take(&mut self.rewritten) && !Tags::terms(standing).tags.is_empty()
+    // True once after a re-read landed when the standing query carries a tag term, so it is re-run whatever answered in between.
+    pub(crate) fn rewrite_due(&self, standing: &str) -> bool {
+        let landed = self.pass.as_ref().is_some_and(|pass| pass.rewritten.swap(false, Ordering::Relaxed));
+        landed && !Tags::terms(standing).tags.is_empty()
     }
 
     // True once after the worker finished, so the loop re-runs the standing query exactly once.
@@ -242,6 +242,7 @@ fn read_all(pass: &Pass, index: &Mutex<Index>, scope: &Path, len: usize, events:
 
 // Re-reads each queued write until the queue is dry, then announces: the first worker also marks the pass done under the same lock.
 fn land(pass: &Pass, index: &Mutex<Index>, scope: &Path, events: &Sender<Event>, first: bool) {
+    let mut reread_any = false;
     loop {
         if pass.stop.load(Ordering::Relaxed) {
             return;
@@ -258,6 +259,11 @@ fn land(pass: &Pass, index: &Mutex<Index>, scope: &Path, events: &Sender<Event>,
             std::mem::take(&mut rewrites.queue)
         };
         reread(pass, index, scope, rels);
+        reread_any = true;
+    }
+    // Raised only now that the names are in, so an earlier landing cannot spend the re-run on the old ones.
+    if reread_any {
+        pass.rewritten.store(true, Ordering::Relaxed);
     }
     if !first {
         pass.announced.store(false, Ordering::Relaxed);

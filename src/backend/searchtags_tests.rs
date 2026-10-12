@@ -305,6 +305,46 @@ fn a_slow_mount_write_reaches_the_open_tag_search_through_its_late_message() {
     assert_eq!(landed(&mut s, &rx).total, 4);
 }
 
+// A narrowing query asked after the names swapped in and before the loop re-runs the standing query still sees the newly tagged row.
+#[test]
+fn a_narrowing_tag_query_after_a_tag_write_sees_the_row_it_tagged() {
+    let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let d = fixture("tagsredseed");
+    let (mut s, rx) = opened(&d);
+    tagged(&mut s, &rx, 1, "tag:Red");
+    let mut o = ops();
+    s.note_tags_written(&written(&d, &mut o, "plain-holiday.txt", "add", "Red"));
+    assert!(matches!(rx.recv_timeout(DEADLINE), Ok(Event::SearchWalked)), "the rewrite lands");
+    let narrowed = s.query(2, "tag:Red h", 50).expect("answers");
+    assert!(names(&narrowed).contains(&"plain-holiday.txt".to_string()), "the seed holds the row the write tagged: {:?}", names(&narrowed));
+    assert!(s.poll_walked(), "the landing still stands for its re-run");
+    assert!(names(&s.re_answer_standing().expect("re-run once")).contains(&"plain-holiday.txt".to_string()));
+}
+
+// An earlier landing that reaches the standing query before the re-read's names are in must not spend the re-run the re-read owes.
+#[test]
+fn an_earlier_landing_does_not_spend_the_re_run_a_pending_re_read_owes() {
+    let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let d = fixture("tagsredearly");
+    let (mut s, rx) = opened(&d);
+    tagged(&mut s, &rx, 1, "tag:Red");
+    let before = s.tags.reads();
+    let pass = Arc::clone(s.tags.pass.as_ref().expect("a pass is open"));
+    // The test holds the names, so the re-read finds and reads its row, then waits to swap it in.
+    let held = pass.names.lock().unwrap();
+    let mut o = ops();
+    s.note_tags_written(&written(&d, &mut o, "plain-holiday.txt", "add", "Red"));
+    let started = Instant::now();
+    while s.tags.reads() <= before {
+        assert!(started.elapsed() < DEADLINE, "the re-read reads its row");
+        std::thread::yield_now();
+    }
+    assert!(!s.tags.rewrite_due("tag:Red"), "an earlier landing finds no landed rewrite to spend");
+    drop(held);
+    let after = landed(&mut s, &rx);
+    assert!(names(&after).contains(&"plain-holiday.txt".to_string()), "the re-run holds the newly tagged row");
+}
+
 // Frozen mid-read: the first worker holds a stale read of the row when the write lands, and the queue makes it read the row again.
 #[test]
 fn a_write_during_the_first_read_is_not_lost() {
