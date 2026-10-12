@@ -5132,8 +5132,17 @@ row on the wire that no thumbnailer can serve. All nine shipped files
 resolve here, and five of them name their program by bare name rather than by absolute path
 (`xournalpp-thumbnailer`, `evince-thumbnailer`, `ffmpegthumbnailer` twice,
 `gsf-office-thumbnailer`); only the four `glycin` files give `/usr/bin/glycin-thumbnailer`.
-A bare name is why `is_runnable` searches `PATH`, and why anything that later runs these
-programs with a scrubbed environment has to supply one.
+A bare name is why `resolve` (the former `is_runnable`) searches `PATH` at load.
+
+**The `Exec` program is stored as the absolute path validation found (issue #171).** `resolve`
+answers the path it accepted: a program written with a `/` as written, a bare name as the first
+absolute `PATH` entry whose file is a regular file with an execute bit. `Spec.exec[0]` holds that path, so
+nothing after load searches for a name, and the argv is still a direct exec. A thumbnailer outside
+`/usr` therefore has to be self-contained: the jail holds `/usr`, `/etc` and the one program file
+(see "Thumbnail sandbox"), so a program that needs a library or an asset outside `/usr` does not
+run, nor does a script whose interpreter line names a program outside `/usr`; `#!/usr/bin/env sh`
+and `#!/bin/sh` resolve. `worker_shape` matches the file name, so it accepts the same specs as
+before.
 
 `argv`, in `backend/thumbargv.rs`, substitutes four placeholders: `%i` the input path, `%u` its
 `file://` URI, `%o` the output path and `%s` the pixel size. The input is put through `canonicalize` first, so a
@@ -5320,7 +5329,19 @@ The flags, and why each is there:
   survives exec through the child's own `dup2`, so a spawn from any other backend thread mid-jail
   inherits nothing; a reported pid is killed only while `/proc/<pid>/stat` still names this jail's
   bwrap as its parent (field 4), and a forged one is refused.
-- `--ro-bind <input> <input>` is the one file it may read.
+- `--ro-bind <input> <input>` is the one file it may read, apart from the program below.
+- `--ro-bind <target> <program>` puts the thumbnailer's program in reach (issue #171). `backend/thumbbind.rs`
+  adds it between the output bind and the inner argv, from the stored program path P and its canonical
+  target C. The jail roots are `/usr`, `/etc`, `/bin`, `/sbin`, `/lib` and `/lib64`: the jail mounts `/usr` and
+  `/etc` and links the other four into `/usr`. P under a jail root, C under `/usr` or `/etc`, and every hop of P's link chain
+  under a jail root: no bind. P under a jail root otherwise: `--ro-bind C L` for each hop L of the chain that lies outside
+  all six jail roots, and `--ro-bind C C` when C lies outside `/usr` and `/etc`, because the jail follows P's link
+  text and a hop it does not hold answers `ENOENT`. P anywhere else: `--ro-bind C P`, so argv[0] stays P.
+  Every bind is the same read-only file, so the program's directory and its siblings stay out of the jail. A job that needs a
+  bind is refused before the jail starts, through `discard` with no `fail/` marker like a missing `bwrap`, when C is not
+  a regular file with an execute bit, is owned by neither root nor the backend's uid, or is writable by
+  group or others, when P, C or any hop of the chain is under `/proc`, `/dev` or `/sys` or equals the input or output
+  path, or when P is relative or holds a `..`. `--bind <out>` below stays the only writable bind.
 - `--bind <out> <out>` is the one path it may write, which production makes the temp file itself.
 
 **A bare program name resolves without a `PATH`.** Five of the nine shipped `.thumbnailer`
@@ -5331,10 +5352,10 @@ present-day probe prints those two alongside `PWD=/`. `bwrap` execs
 through `execvp`, whose glibc fallback when `PATH` is unset is `confstr(_CS_PATH)`, measured
 here as `/bin:/usr/bin`. All four installed bare-name thumbnailers live in `/usr/bin`, so
 they resolve, and a bare-name `ffmpegthumbnailer` under the shipped flags produces a real
-PNG from the video fixture. **No `--setenv PATH` is needed and none is set.** The limit
-worth knowing is that `/usr/local/bin` is not on that fallback path, so a thumbnailer
-installed there would fail to resolve by bare name; nothing relevant is installed there
-today.
+PNG from the video fixture. **No `--setenv PATH` is needed and none is set.** The fallback
+does not decide a thumbnailer's program, because load stores the absolute path validation found
+(see "Thumbnailer specs"), so a bare name that lives in `/usr/local/bin` or `~/.local/bin` runs by
+its path.
 
 **Measured overhead, nine interleaved pairs with the arm order alternating.** Against a
 trivial `/usr/bin/true` child, which isolates the wrapper from the decode, the full

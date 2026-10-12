@@ -81,6 +81,7 @@ pub mod timing;
 pub mod md5;
 pub mod thumbspec;
 pub mod thumbargv;
+pub mod thumbbind;
 pub mod thumbcache;
 pub mod sandbox;
 pub mod jail;

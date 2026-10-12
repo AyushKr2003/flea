@@ -1,6 +1,6 @@
 use crate::backend::aliases::Aliases;
 use crate::backend::child::{run_with_timeout, Ran};
-use crate::backend::sandbox;
+use crate::backend::{sandbox, thumbbind};
 use crate::backend::thumbargv::argv;
 use crate::backend::thumbcache::{uri_for, Cache};
 use crate::backend::thumbspec::Thumbnailers;
@@ -186,13 +186,12 @@ pub(crate) fn run_one(tables: &Tables, job: &mut Job) -> Outcome {
         Some(a) => a,
         None => return discard(&temp),
     };
-    // corner: a missing bwrap or prlimit fails the job closed and records nothing, because a missing package is not a broken file; see AGENTS.md "Thumbnail sandbox".
+    // corner: a missing bwrap or prlimit, or a program the jail cannot bind safely, fails the job closed and records nothing, because neither is a broken file; see AGENTS.md "Thumbnail sandbox".
     if !sandbox::available() {
         return discard(&temp);
     }
     // corner: a thumbnailer that wrote then renamed would fail against this file bind, and only glycin and ffmpegthumbnailer were probed; see AGENTS.md "Thumbnail pool".
-    let mut full = sandbox::wrap(&inner, &abs, &temp);
-    sandbox::add_status(&mut full, inner.len());
+    let Some(full) = thumbbind::wrap(&inner, &abs, &temp) else { return discard(&temp) };
     if let Some(t) = job.trace.as_mut() {
         t.spawned = t.at.elapsed();
     }
