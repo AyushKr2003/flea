@@ -129,4 +129,6 @@ function run(check) {
     var counting = newBig.map(function (s) { return { toString: function () { reads += 1; return s } } })
     BulkRename.reasons(counting)
     check("one pass reads each name once", reads, newBig.length)
+    check("the dialog's column gap stays the literal 14, not a text size scaled token",
+        Source.source("ui/BulkRenameDialog.qml").indexOf("readonly property int columnGap: 14\n") >= 0, true)
 }
