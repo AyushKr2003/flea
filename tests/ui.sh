@@ -7156,13 +7156,14 @@ case_tabs() {
     key w >/dev/null
     settle
     [[ "$(ipc tabCount)" == "1" ]] || fail "tabs: w did not close to one tab, count=$(ipc tabCount)"
+    # The clock starts at the press that raises the notice, so the bar's 4000 ms expiry cannot meet the 2000 ms bound.
+    local notice_seen_ns
+    notice_seen_ns=$(date +%s%N)
     key w >/dev/null
     wait_message "Can't close the last tab."
     [[ "$(ipc lastMessage)" == "Can't close the last tab." ]] || fail "tabs: the last-tab refusal never stood, got $(ipc lastMessage)"
     # Half the bar's 4000 ms notice life, so its own expiry cannot land inside it.
     local withdraw_within_ms=2000
-    local notice_seen_ns
-    notice_seen_ns=$(date +%s%N)
     key t >/dev/null
     settle
     [[ "$(ipc tabCount)" == "2" ]] || fail "tabs: t did not reopen a second tab, count=$(ipc tabCount)"

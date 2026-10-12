@@ -9003,6 +9003,8 @@ The rail heading adds one first-frame unit to `tests/startup-units.txt`, `ui/Rai
 
 The stage join of the fix, tag, drop, rail, guidance and contributor lines re-derives the one ceiling it moves past the hard cap with `wc -l` on the merged tree: `src/backend/thumbspec.rs` 410, where two thumbnailer fixes meet, the user thumbnailer outside `/usr` with the failure marker per table (399 lines on its own side) and the link chain bound hop by hop with the PATH search that skips empty and relative entries (372 on its own side). `tests/startup-units.txt` gains `js/DropDev.js` (the drop guard's device map, which `Backend.qml` and `js/Messages.js` import) and `js/FolderViews.js` (the per-folder view, which `Pane.qml` imports), 173 units, while its `bytes` line moves from 1596985 to 1614048, the sum the probe's tool takes over them.
 
+tbn1 2026-10-12 moves one ceiling, re-derived with `wc -l`: `tests/js/tabs.js` 797 to 800 for the three checks that each tab-count verdict stood before the next action withdraws it.
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one

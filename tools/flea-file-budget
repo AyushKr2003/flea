@@ -86,7 +86,7 @@ tests/js/tap.js 401
 tests/js/uistate.js 370
 tests/js/watch.js 540
 tests/js/xwwatch.js 299
-tests/js/tabs.js 797
+tests/js/tabs.js 800
 tests/js/search.js 336
 tests/button-members.qml 488
 tests/chromering.qml 413

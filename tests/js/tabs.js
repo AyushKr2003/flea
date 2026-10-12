@@ -712,12 +712,14 @@ function run(check) {
     // A tab-count verdict stands only until the count changes; anything else stands.
     var lone = Fixture.pane("/tmp/lone")
     Tabs.act("tabClose", lone)
+    check("the last-tab verdict stood", lone.statusBar.notice, "Can't close the last tab.")
     Tabs.act("tabNew", lone)
     check("a new tab withdraws the standing last-tab verdict", lone.statusBar.notice, "")
     check("and the new tab is still opened", Tabs.count(lone), 2)
     var capPane = Fixture.pane("/tmp/cap")
     for (var ci = 0; ci < 8; ci++) Tabs.act("tabNew", capPane)
     Tabs.openNew(capPane)
+    check("the cap verdict stood", capPane.statusBar.notice, "Nine tabs is the most.")
     Tabs.closeAt(capPane, 8)
     check("closing a tab withdraws the standing cap verdict", capPane.statusBar.notice, "")
     check("and the tab is still closed", Tabs.count(capPane), 8)
@@ -737,6 +739,7 @@ function run(check) {
     var recvPane = Fixture.pane("/tmp/recv")
     for (var ri = 0; ri < 8; ri++) Tabs.act("tabNew", recvPane)
     Tabs.receiveTab(recvPane, foreign, 0)
+    check("the receive cap verdict stood", recvPane.statusBar.notice, "Nine tabs is the most.")
     Tabs.closeAt(recvPane, 0)
     check("closing a tab withdraws the standing receive cap verdict", recvPane.statusBar.notice, "")
     // A received tab lands under a standing count verdict, which it withdraws.
