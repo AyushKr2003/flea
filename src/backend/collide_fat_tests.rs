@@ -104,6 +104,7 @@ fn skip_them_leaves_the_names_inside_a_folder_as_they_are() {
     let to = d.dir("to");
     let trip = trip_with_bad_names(&d);
     let _fat = RefusesFatNames::arm(&["clip: x.mp4", "sub: a"]);
+    crate::backend::unheld::test_force_linkless(true);
     let (ok, failed, _, errors, _) = transfer(false, &[&trip], &to, fat_policy(Choice::Skip, true));
     assert_eq!((ok, failed), (0, 1), "Skip skips the listed top-level items only, so the folder still lands and names what it could not hold");
     assert!(errors[0].contains("2 items inside could not be copied"), "{errors:?}");
