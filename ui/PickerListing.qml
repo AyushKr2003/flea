@@ -55,9 +55,9 @@ Item {
             current.write(JSON.stringify({c: "fsinfo"}) + "\n")
     }
     // Sort reorders the worker's own listing without replacing it; the caller re-asks the window after.
-    function sort(by, desc, foldersFirst, groupByKind) {
+    function sort(by, desc, foldersFirst, groupByKind, hiddenLast) {
         if (current && current.running && !current.obsolete && !quitting)
-            current.write(JSON.stringify({c: "sort", by: by, desc: desc, foldersFirst: foldersFirst, groupByKind: groupByKind}) + "\n")
+            current.write(JSON.stringify({c: "sort", by: by, desc: desc, foldersFirst: foldersFirst, groupByKind: groupByKind, hiddenLast: hiddenLast}) + "\n")
     }
     // Thumbnails are planned against the rows this worker holds, so the ask goes to it and not to
     // the picker's selection backend, which holds no listing at all. An empty ask names nothing.
