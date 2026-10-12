@@ -1,7 +1,7 @@
 // Pixel dimensions read from a file header, because the preview column names them and the wire does
 // not carry them. Only the first bytes are read: no image is ever decoded to answer this.
 use crate::backend::regfile::open_regular;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
 // Enough for every header but a JPEG's, whose frame can sit behind tens of kilobytes of EXIF.
@@ -32,7 +32,7 @@ pub fn header(path: &Path) -> Option<Header> {
     if buf.starts_with(&[0xFF, 0xD8]) {
         f.seek(SeekFrom::Start(2)).ok()?;
         // Buffered, because the walk resyncs a byte at a time and a raw File makes that a syscall each.
-        return jpeg_header(&mut std::io::BufReader::new(&mut f));
+        return jpeg_header(&mut BufReader::new(&mut f));
     }
     from_header(&buf).map(|(width, height)| Header { width, height, orientation: NO_TURN })
 }
@@ -213,16 +213,15 @@ fn gif(b: &[u8]) -> Option<(u32, u32)> {
 // The walk never goes past this offset: a GIF that has not ended by then gets no frame count.
 const GIF_WALK: u64 = 16 * 1024 * 1024;
 
-// Frames in a GIF, counted by walking its blocks and skipping every sub-block by its length, so no pixel is decoded.
-// 0 for anything that is not a GIF, a malformed or truncated one, or one longer than GIF_WALK.
+// Frames in a GIF (0 if not a GIF, malformed, truncated or past GIF_WALK), counted by skipping sub-blocks, no pixel decoded.
 pub fn gif_frames(path: &Path) -> u32 {
     let Some(f) = open_regular(path) else { return 0 };
     let Ok(size) = f.metadata().map(|m| m.len()) else { return 0 };
-    gif_frame_count(&mut std::io::BufReader::new(f), size).unwrap_or(0)
+    gif_frame_count(&mut BufReader::new(f), size).unwrap_or(0)
 }
 
 // Skips a run of sub-blocks, each a length byte then that many bytes, ended by a zero length.
-fn gif_sub_blocks<R: Read + Seek>(r: &mut R, pos: &mut u64, size: u64) -> Option<()> {
+fn gif_sub_blocks<R: Read + Seek>(r: &mut BufReader<R>, pos: &mut u64, size: u64) -> Option<()> {
     loop {
         let mut len = [0u8; 1];
         r.read_exact(&mut len).ok()?;
@@ -233,12 +232,12 @@ fn gif_sub_blocks<R: Read + Seek>(r: &mut R, pos: &mut u64, size: u64) -> Option
         if len[0] == 0 {
             return Some(());
         }
-        r.seek(SeekFrom::Current(len[0] as i64)).ok()?;
+        r.seek_relative(len[0] as i64).ok()?;
     }
 }
 
 // Sample input: "GIF89a" | screen descriptor(7, flags in its fifth byte) | [palette] | blocks: 0x21 label sub-blocks.. | 0x2C descriptor(9) [palette] lzw(1) sub-blocks.. | 0x3B
-fn gif_frame_count<R: Read + Seek>(r: &mut R, size: u64) -> Option<u32> {
+fn gif_frame_count<R: Read + Seek>(r: &mut BufReader<R>, size: u64) -> Option<u32> {
     let mut head = [0u8; 13];
     r.read_exact(&mut head).ok()?;
     if &head[..4] != GIF_MAGIC {
@@ -248,7 +247,7 @@ fn gif_frame_count<R: Read + Seek>(r: &mut R, size: u64) -> Option<u32> {
     if head[10] & 0x80 != 0 {
         let table = 3u64 << ((head[10] & 7) + 1);
         pos += table;
-        r.seek(SeekFrom::Current(table as i64)).ok()?;
+        r.seek_relative(table as i64).ok()?;
     }
     let mut frames = 0u32;
     loop {
@@ -262,7 +261,7 @@ fn gif_frame_count<R: Read + Seek>(r: &mut R, size: u64) -> Option<u32> {
             0x3B => return Some(frames),
             0x21 => {
                 // The label byte, then the extension's sub-blocks.
-                r.seek(SeekFrom::Current(1)).ok()?;
+                r.seek_relative(1).ok()?;
                 pos += 1;
                 gif_sub_blocks(r, &mut pos, size)?;
             }
@@ -273,10 +272,10 @@ fn gif_frame_count<R: Read + Seek>(r: &mut R, size: u64) -> Option<u32> {
                 if desc[8] & 0x80 != 0 {
                     let table = 3u64 << ((desc[8] & 7) + 1);
                     pos += table;
-                    r.seek(SeekFrom::Current(table as i64)).ok()?;
+                    r.seek_relative(table as i64).ok()?;
                 }
                 // The LZW minimum code size, then the pixel data's sub-blocks.
-                r.seek(SeekFrom::Current(1)).ok()?;
+                r.seek_relative(1).ok()?;
                 pos += 1;
                 gif_sub_blocks(r, &mut pos, size)?;
                 frames += 1;
@@ -547,86 +546,6 @@ mod tests {
         assert!(stopped, "the writer this test started is killed by its own pid");
     }
 
-    // A GIF of `n` frames: header, a 4 colour global palette, then per frame a graphic control extension and an image block.
-    fn gif_of(n: usize) -> Vec<u8> {
-        let mut g = b"GIF89a".to_vec();
-        g.extend_from_slice(&[4, 0, 4, 0, 0x81, 0, 0]);
-        g.extend_from_slice(&[0u8; 12]);
-        for _ in 0..n {
-            g.extend_from_slice(&[0x21, 0xF9, 4, 0, 10, 0, 0, 0]);
-            g.extend_from_slice(&[0x2C, 0, 0, 0, 0, 4, 0, 4, 0, 0, 2, 3, 1, 2, 3, 0]);
-        }
-        g.push(0x3B);
-        g
-    }
-
-    fn frames_of(bytes: &[u8]) -> Option<u32> {
-        gif_frame_count(&mut std::io::Cursor::new(bytes), bytes.len() as u64)
-    }
-
-    #[test]
-    fn a_gif_counts_one_two_and_twenty_four_frames_without_decoding() {
-        assert_eq!(frames_of(&gif_of(1)), Some(1));
-        assert_eq!(frames_of(&gif_of(2)), Some(2));
-        assert_eq!(frames_of(&gif_of(24)), Some(24));
-    }
-
-    #[test]
-    fn a_gif_with_a_local_palette_still_counts_its_frames() {
-        let mut g = gif_of(0);
-        g.pop();
-        // A frame whose own 2 colour palette sits between its descriptor and its pixel data.
-        g.extend_from_slice(&[0x2C, 0, 0, 0, 0, 4, 0, 4, 0, 0x80, 0, 0, 0, 0xFF, 0xFF, 0xFF, 2, 3, 1, 2, 3, 0, 0x3B]);
-        assert_eq!(frames_of(&g), Some(1));
-    }
-
-    #[test]
-    fn a_truncated_gif_has_no_frame_count() {
-        let g = gif_of(3);
-        assert_eq!(frames_of(&g[..g.len() - 1]), None, "no trailer");
-        assert_eq!(frames_of(&g[..g.len() - 10]), None, "cut inside a frame");
-        assert_eq!(frames_of(&g[..20]), None, "cut inside the palette");
-        assert_eq!(frames_of(b"GIF89a"), None);
-    }
-
-    #[test]
-    fn a_sub_block_length_past_the_end_has_no_frame_count() {
-        let mut g = gif_of(2);
-        // The last frame's pixel data now claims 200 bytes where 5 remain.
-        let at = g.len() - 6;
-        g[at] = 200;
-        assert_eq!(frames_of(&g), None);
-    }
-
-    #[test]
-    fn an_unknown_block_has_no_frame_count() {
-        let mut g = gif_of(1);
-        let at = g.len() - 1;
-        g[at] = 0x55;
-        assert_eq!(frames_of(&g), None);
-    }
-
-    #[test]
-    fn a_gif_longer_than_the_walk_has_no_frame_count() {
-        let mut g = gif_of(1);
-        g.pop();
-        // One more frame whose pixel data runs past the cap in full sub-blocks, then a trailer.
-        g.extend_from_slice(&[0x2C, 0, 0, 0, 0, 4, 0, 4, 0, 0, 2]);
-        for _ in 0..(GIF_WALK / 256 + 2) {
-            g.push(255);
-            g.extend_from_slice(&[0u8; 255]);
-        }
-        g.extend_from_slice(&[0, 0x3B]);
-        assert!(g.len() as u64 > GIF_WALK);
-        assert_eq!(frames_of(&g), None);
-        let d = TestDir::new("imagesizegifcap");
-        std::fs::write(d.join("long.gif"), &g).unwrap();
-        std::fs::write(d.join("short.gif"), gif_of(24)).unwrap();
-        assert_eq!(gif_frames(&d.join("long.gif")), 0);
-        assert_eq!(gif_frames(&d.join("short.gif")), 24);
-        assert_eq!(gif_frames(&d.join("missing.gif")), 0);
-    }
-
     #[test]
     fn a_png_has_no_frame_count() {
         let d = TestDir::new("imagesizepngframes");
@@ -634,3 +553,7 @@ mod tests {
         assert_eq!(gif_frames(&d.join("a.png")), 0);
     }
 }
+
+#[cfg(test)]
+#[path = "imagesize_gif_tests.rs"]
+mod gif_tests;

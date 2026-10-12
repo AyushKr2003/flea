@@ -19,8 +19,9 @@ ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/pv-gif.qml "$test_root/config/shell.qml" || exit 1
 fx="$test_root/fixture"
-# A 24-frame GIF, a one-frame GIF, a PNG, and the first frame of each as the cache's still.
+# A 24-frame GIF and a copy of it, a one-frame GIF, a PNG, and the first frame of each as the cache's still.
 ffmpeg -y -nostdin -loglevel error -f lavfi -i testsrc=size=160x90:rate=12 -frames:v 24 "$fx/clip.gif" \
+    && cp "$fx/clip.gif" "$fx/clip2.gif" \
     && ffmpeg -y -nostdin -loglevel error -f lavfi -i testsrc=size=160x90 -frames:v 1 "$fx/still.gif" \
     && ffmpeg -y -nostdin -loglevel error -f lavfi -i testsrc=size=160x90 -frames:v 1 "$fx/shot.png" \
     && ffmpeg -y -nostdin -loglevel error -i "$fx/clip.gif" -frames:v 1 "$fx/clip.png" \

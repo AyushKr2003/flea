@@ -142,10 +142,24 @@ ShellRoot {
             } else if (root.step === 6) {
                 if (!root.waitFor(function () { return gif.playing && gif.currentFrame !== root.held })) return
                 root.advance(7)
-                // Moving to a PNG takes the moving layer in the same pass.
+                // The facts stay at 24 frames while the path moves: only the path can take the moving layer, as when a move lands before its meta.
+                column.path = root.dir + "/shot.png"
+                root.check(root.mine() === null, "the moving layer outlived a path change with its frames still above one")
+            } else if (root.step === 7) {
+                if (!root.waitFor(function () { return column.frameStatus === Image.Ready })) return
+                root.check(column.meta.frames > 1, "the meta did not keep its frames across the path change")
+                root.check(root.mine() === null, "a PNG path got a moving layer")
+                // Another GIF with the frames still above one: only the new file's layer is built.
+                column.path = root.dir + "/clip2.gif"
+                root.advance(71)
+            } else if (root.step === 71) {
+                var next = root.mine()
+                if (!root.waitFor(function () { next = root.mine(); return next !== null && next.ready })) return
+                root.check(/clip2\.gif$/.test(String(next.path)), "the moving layer plays " + next.path + ", want clip2.gif")
                 root.show("shot.png", "image-x-generic", "PNG image", root.dir + "/shot.png", { w: 160, h: 90, frames: 0 })
                 root.check(root.mine() === null, "the moving layer outlived a move to a PNG")
-            } else if (root.step === 7) {
+                root.advance(72)
+            } else if (root.step === 72) {
                 if (!root.waitFor(function () { return column.frameStatus === Image.Ready })) return
                 root.check(root.mine() === null, "a PNG got a moving layer")
                 root.advance(8)
