@@ -2,8 +2,8 @@
 
 A GUI file manager for Linux, keyboard first, native to Omarchy.
 P0 is the local browser, and remotes, search, disk operations and Flea's own terminal
-interface (`flea --tui`, `src/tui`) have since landed on top of it. Encryption is a later
-phase and is not in this tree yet.
+interface (`flea --tui`, `src/tui`) have since landed on top of it. An encrypted drive
+unlocks and locks from its rail row through `src/unlock.rs`.
 
 ## The seven load-bearing rules
 
