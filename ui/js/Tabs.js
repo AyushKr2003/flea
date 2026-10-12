@@ -128,10 +128,25 @@ function closePreview(pane) {
 
 function busy(pane) {
     if (Nav.loading(pane)) {
-        pane.message("A directory is already loading.", false)
+        sayPlain(pane, "A directory is already loading.")
         return true
     }
     return false
+}
+// The mark names a standing notice's serial, never its sentence; a count change withdraws it.
+function sayCount(pane, text) {
+    pane.message(text, false)
+    pane.tabCountNotice = pane.statusBar ? pane.statusBar.noticeSerial : -1
+}
+// Any other verdict from here replaces a standing count one, so no later change withdraws it.
+function sayPlain(pane, text) {
+    pane.tabCountNotice = -1
+    pane.message(text, false)
+}
+// The count changed under a standing count verdict, so it is withdrawn; anything else stands.
+function dropCount(pane) {
+    if (pane.tabCountNotice !== -1 && pane.statusBar) pane.statusBar.withdraw(pane.tabCountNotice)
+    pane.tabCountNotice = -1
 }
 
 // Only ever called for a switch that re-listed nothing; the clamp is the belt on top of that, since
@@ -271,7 +286,7 @@ function openNew(pane, where) {
         return
     // Before the preview and the search go: a refused tenth tab must cost the user nothing.
     if (count(pane) >= MAX) {
-        pane.message("Nine tabs is the most.", false)
+        sayCount(pane, "Nine tabs is the most.")
         return
     }
     var here = restingPath(pane)
@@ -285,6 +300,7 @@ function openNew(pane, where) {
     items[index] = snapshot(pane, here, items[index].tabIdentity, dropped)
     items.push(snapshot(pane, target, undefined, dropped))
     pane.tabs = pack(items, items.length - 1)
+    dropCount(pane)
     // dropOverlay clears the search while its rows still stand, and a listing still out belongs to the tab being left, so both list the target again.
     if (pane.path !== target || dropped || pane.listInFlight)
         pane.openWithoutHistory(target)
@@ -295,7 +311,7 @@ function openNew(pane, where) {
 function openCursorTab(pane) {
     var row = pane.rowFor ? pane.rowFor(pane.cursorIndex) : null
     if (!row || !row.d || typeof row.n !== "string") {
-        pane.message("Only a folder opens in a new tab.", false)
+        sayPlain(pane, "Only a folder opens in a new tab.")
         return
     }
     var base = pane.path
@@ -308,7 +324,7 @@ function selectAt(pane, i) {
     var here = restingPath(pane)
     var items = currentItems(pane, here)
     if (i < 0 || i >= items.length) {
-        pane.message("No tab " + (i + 1) + ".", false)
+        sayCount(pane, "No tab %1.".arg(i + 1))
         return
     }
     var index = currentIndex(pane)
@@ -326,11 +342,11 @@ function closeAt(pane, i) {
         return
     var items = currentItems(pane)
     if (items.length <= 1) {
-        pane.message("Can't close the last tab.", false)
+        sayCount(pane, "Can't close the last tab.")
         return
     }
     if (i < 0 || i >= items.length) {
-        pane.message("No tab " + (i + 1) + ".", false)
+        sayCount(pane, "No tab %1.".arg(i + 1))
         return
     }
     var index = currentIndex(pane)
@@ -348,6 +364,7 @@ function closeAt(pane, i) {
     } else {
         pane.tabs = pack(items, next)
     }
+    dropCount(pane)
 }
 
 function move(pane, from, to) {
@@ -599,7 +616,7 @@ function receiveTab(pane, payload, at) {
     if (busy(pane))
         return false
     if (count(pane) >= MAX) {
-        pane.message("Nine tabs is the most.", false)
+        sayCount(pane, "Nine tabs is the most.")
         return false
     }
     closePreview(pane)
@@ -616,6 +633,7 @@ function receiveTab(pane, payload, at) {
     var place = at >= 0 && at <= items.length ? at : items.length
     items.splice(place, 0, snap)
     pane.tabs = pack(items, place)
+    dropCount(pane)
     apply(pane, snap, dropped, info.cursor)
     return true
 }
