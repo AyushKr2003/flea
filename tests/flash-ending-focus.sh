@@ -36,7 +36,6 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
 qs_status=$?
 
 # Sample input, one probe line: "  INFO qml: FLASHFOCUS PASS flash-flow-live".
-# Sample input, the receipt: "  INFO qml: FLASHFOCUS DONE failures=0".
 # The owned termination is the probe's own self-kill (SIGTERM, 143) after its one DONE receipt; a PASS beside any other status is a double's, never a proof.
 pass_count=$(printf '%s\n' "$output" | grep -c 'FLASHFOCUS PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'FLASHFOCUS FAIL')

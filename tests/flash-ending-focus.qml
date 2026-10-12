@@ -5,8 +5,7 @@ import Quickshell
 import qs.Commons
 import "flea" as Flea
 
-// tests/flash-ending-focus.sh's harness: a failed flash with a Flash again
-// ending parks the keyboard frame on the drawn end button.
+// tests/flash-ending-focus.sh's harness: a failed Flash again ending parks the keyboard frame on its button.
 ShellRoot {
     id: shell
 
