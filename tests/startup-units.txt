@@ -48,6 +48,7 @@ PaneSwap.qml
 PaneWire.qml
 PhoneMounts.qml
 PrebuildDriver.qml
+RailHeading.qml
 RailPlaces.qml
 RenameField.qml
 ResizeHandle.qml
@@ -169,4 +170,4 @@ js/Trash.js
 js/TrashDates.js
 js/UiState.js
 js/Update.js
-bytes 1596985
+bytes 1596034

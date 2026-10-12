@@ -293,7 +293,8 @@ Item {
         }
     }
 
-    // The first sync queues a repaint, so the change runs after it; the basic loop emits inside the frame, so it waits for scheduledUpdateCompleted.
+    // The first sync queues a repaint, so the change runs after it.
+    // The picture is taken in the render before any later sync.
     Connections {
         target: root.syncArmed ? root.Window.window : null
         function onAfterSynchronizing() { if (root.syncQueued) root.captured() }

@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell.Io
 import "js/Devices.js" as Devices
+import "js/Format.js" as Format
 import "js/Mounts.js" as Mounts
 import "js/Eject.js" as Eject
 
@@ -210,14 +211,14 @@ Item {
     function unmount(index) {
         // A chain owns unmountProcess for its legs, so a user unmount waits for the eject.
         if (root._powerOffDisk.length > 0) {
-            root.message(Mounts.fill(Mounts.WORDS.stillEjecting, root._ejectLabel), false)
+            root.message(Format.fill(Mounts.WORDS.stillEjecting, root._ejectLabel), false)
             return
         }
         var e = root.entries[index]
         if (!e || e.kind !== "volume" || !e.mounted)
             return
         if (unmountProcess.running) {
-            root.message(Mounts.fill(Mounts.WORDS.stillUnmounting, root._unmountLabel), false)
+            root.message(Format.fill(Mounts.WORDS.stillUnmounting, root._unmountLabel), false)
             return
         }
         root.quiesce(e.path)
@@ -253,7 +254,7 @@ Item {
         if (!e || e.kind !== "volume" || !e.mounted)
             return
         if (ejectProcess.running || root._ejectDevice.length > 0) {
-            root.message(Mounts.fill(Mounts.WORDS.stillEjecting, root._ejectLabel), false)
+            root.message(Format.fill(Mounts.WORDS.stillEjecting, root._ejectLabel), false)
             return
         }
         // A USB disk that is not media-removable (a USB HDD or SSD bridge) is powered off
@@ -406,7 +407,7 @@ Item {
         // TRAN is the transport, asked for because RM alone misses a USB bridge: a WD My Passport
         // reports rm=false with tran=usb, and a drive you can unplug has to offer Eject (PR 74).
         // PARTTYPE, PTTYPE, PARTN and UUID are the hide rule's own columns: a firmware type, an
-        // installer ISO keep, a recovery label and the dedupe key never come out of FSTYPE alone; FSVER beside FSTYPE names LUKS1 or LUKS2; RO keeps Flash image off a write-protected card.
+        // FSVER beside FSTYPE names LUKS1 or LUKS2; RO keeps Flash off a write-protected card.
         command: ["lsblk", "--bytes", "--json", "-o", "NAME,PATH,LABEL,MOUNTPOINTS,RM,RO,TRAN,SIZE,TYPE,MODEL,FSTYPE,FSVER,PARTTYPENAME,PARTTYPE,PTTYPE,PARTN,UUID"]
         stdout: StdioCollector {
             id: listOut

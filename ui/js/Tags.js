@@ -5,6 +5,9 @@
 // Flea's seven tag names in menu order, which is also the 1 to 7 key order; src/backend/tags.rs NAMES is the same list.
 var NAMES = ["Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Gray"]
 
+// The board's tag swatch square, in px.
+var SWATCH_SIZE = 14
+
 // The digit each name answers to, "" when no digit names it.
 function keyFor(name) {
     var at = NAMES.indexOf(name)
@@ -45,25 +48,22 @@ function statesFrom(applied, mixed) {
     return states
 }
 
-// One function fills every placeholder, so no sentence is ever joined from fragments.
-var fill = Format.fill
-
 // The status bar's own sentence after a tag change; the count agrees with ui/js/Ops.js nouns.
 function statusLine(ok, name) {
-    if (ok === 1) return fill("Tagged %1 item %2 \u00b7 z undoes", ok, name)
-    return fill("Tagged %1 items %2 \u00b7 z undoes", ok, name)
+    if (ok === 1) return Format.fill("Tagged %1 item %2 \u00b7 z undoes", ok, name)
+    return Format.fill("Tagged %1 items %2 \u00b7 z undoes", ok, name)
 }
 
 // The same sentence for clearing every tag off the named rows.
 function clearedLine(ok) {
-    if (ok === 1) return fill("Removed all tags from %1 item \u00b7 z undoes", ok)
-    return fill("Removed all tags from %1 items \u00b7 z undoes", ok)
+    if (ok === 1) return Format.fill("Removed all tags from %1 item \u00b7 z undoes", ok)
+    return Format.fill("Removed all tags from %1 items \u00b7 z undoes", ok)
 }
 
 // The same sentence for taking one tag off the named rows.
 function removedLine(ok, name) {
-    if (ok === 1) return fill("Removed %1 from %2 item \u00b7 z undoes", name, ok)
-    return fill("Removed %1 from %2 items \u00b7 z undoes", name, ok)
+    if (ok === 1) return Format.fill("Removed %1 from %2 item \u00b7 z undoes", name, ok)
+    return Format.fill("Removed %1 from %2 items \u00b7 z undoes", name, ok)
 }
 
 // The line for a settagged answer, read from the op the backend applied rather than from the UI's guess.
@@ -74,8 +74,8 @@ function changedLine(op, ok, name) {
 
 // The line when rows were skipped: names the one left out, or counts the many.
 function skippedLine(names) {
-    if (names.length === 1) return fill("%1 is not a file or folder, so it was left untagged", names[0])
-    return fill("%1 items are not files or folders, so they were left untagged", names.length)
+    if (names.length === 1) return Format.fill("%1 is not a file or folder, so it was left untagged", names[0])
+    return Format.fill("%1 items are not files or folders, so they were left untagged", names.length)
 }
 
 // The whole answer line: the changed sentence when a file changed, the skipped sentence when a row was left out, both joined when both hold, and empty when neither does.

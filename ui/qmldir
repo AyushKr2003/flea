@@ -160,6 +160,8 @@ SettingsFavourite 1.0 SettingsFavourite.qml
 TrashView 1.0 TrashView.qml
 TrashConfirm 1.0 TrashConfirm.qml
 TagSlot 1.0 TagSlot.qml
+TagSwatch 1.0 TagSwatch.qml
+RailHeading 1.0 RailHeading.qml
 TagState 1.0 TagState.qml
 TagRailSection 1.0 TagRailSection.qml
 TagMenuMark 1.0 TagMenuMark.qml

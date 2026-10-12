@@ -17,13 +17,13 @@ FocusScope {
     // Merge is present only when a folder lands on a folder; the second card never offers it.
     property bool showMerge: false
     readonly property string explainText: Collide.EXPLAIN
-    readonly property real referenceScale: Theme.font.bodySmall / 13
-    readonly property real cardPadding: Math.round(16 * referenceScale)
+    readonly property real referenceScale: Collide.cardReferenceScale(Theme.font.bodySmall)
+    readonly property real cardPadding: Collide.cardPadding(referenceScale)
     readonly property real cardBottomPadding: Math.round(12 * referenceScale)
     // MergeFolders: the buttons keep 6 px of air over the gap.
     readonly property real buttonsAir: Math.round(6 * referenceScale)
     // The card grows with the labels rather than wrapping one, and Keep both stays the default with the ring.
-    readonly property real contentWidth: Math.max(Math.round(368 * referenceScale * Theme.dialogWidthRatio), buttons.implicitWidth)
+    readonly property real contentWidth: Collide.cardContentWidth(referenceScale, Theme.dialogWidthRatio, buttons.implicitWidth)
     signal chosen(string choice)
     readonly property var cardItem: card
     readonly property bool titleTruncated: title.truncated

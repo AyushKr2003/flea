@@ -161,19 +161,8 @@ Item {
         root.close()
     }
 
-    // A dimmed ground, and a click on it is a cancel, the same shape the convert dialog uses.
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.color.background
-        opacity: 0.5
-
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            hoverEnabled: true
-            onClicked: root.close()
-            onWheel: function (wheel) { wheel.accepted = true }
-        }
+    Flea.DialogScrim {
+        onDismissed: root.close()
     }
 
     Rectangle {

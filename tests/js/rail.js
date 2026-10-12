@@ -1,4 +1,5 @@
 .import "../../ui/js/Devices.js" as Devices
+.import "../../ui/js/Format.js" as Format
 .import "../../ui/js/Mounts.js" as Mounts
 .import "../../ui/js/Eject.js" as Eject
 .import "../../ui/js/Cloud.js" as Cloud
@@ -289,7 +290,7 @@ function run(check) {
     check("a label holding dollar signs is printed as written",
           ejector("/", [cashRow], 0).said, "CASH$$ is the system drive, which Flea never unmounts.")
     check("and both busy sentences fill a label whole",
-          [Mounts.WORDS.stillUnmounting, Mounts.WORDS.stillEjecting].map(function (w) { return Mounts.fill(w, "CASH$$") }).join("|"),
+          [Mounts.WORDS.stillUnmounting, Mounts.WORDS.stillEjecting].map(function (w) { return Format.fill(w, "CASH$$") }).join("|"),
           "Still unmounting CASH$$; wait for its result.|Still ejecting CASH$$; wait for its result.")
 
     // CloudMounts: a FUSE mount inside the home folder shows in NETWORK under its
