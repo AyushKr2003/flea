@@ -75,6 +75,42 @@ home_other="$second_root/home"
 mkdir -p "$home_other" || fail "no other-device home"
 printf 'devices root=%s other=%s\n' "$root_dev" "$second_dev"
 
+# The minipc layout: the item shares a device with XDG_DATA_HOME but not with HOME, so the backend renames into $XDG_DATA_HOME/Trash.
+printf 'body\n' > "$second_root/item.txt" || fail "no data-device item"
+mkdir -p "$second_root/data" || fail "no data-device data home"
+data_real="$XDG_DATA_HOME"
+XDG_DATA_HOME="$second_root/data"
+got=$(sandbox_trash_files_dir "$second_root/item.txt" "$home_same") || { XDG_DATA_HOME="$data_real"; fail "data-device branch refused"; }
+[[ "$got" == "$second_root/data/Trash/files" ]] || { XDG_DATA_HOME="$data_real"; fail "data-device branch gave $got, not $second_root/data/Trash/files"; }
+ok "item on the data home's device, HOME elsewhere: $got"
+# A Trash root not made yet is judged by the nearest folder above it that exists, as the backend does.
+XDG_DATA_HOME="$second_root/not/yet/made"
+got=$(sandbox_trash_files_dir "$second_root/item.txt" "$home_same") || { XDG_DATA_HOME="$data_real"; fail "unmade data home refused"; }
+[[ "$got" == "$second_root/not/yet/made/Trash/files" ]] || { XDG_DATA_HOME="$data_real"; fail "unmade data home gave $got"; }
+ok "unmade data home uses the nearest existing folder: $got"
+# An item on neither the data home's device nor HOME's falls to the mount top.
+XDG_DATA_HOME="$data_real"
+got=$(sandbox_trash_files_dir "$second_root/item.txt" "$home_same") || fail "third-device item refused"
+[[ "$got" != "$data_real/Trash/files" && "$got" == */.Trash*/files ]] || fail "third-device item gave $got"
+ok "item off the data home's device and HOME's: $got"
+# An item whose own device differs from its folder's (a nested volume) goes to gio, never into the data home Trash, though its folder shares the data home's device.
+printf 'body\n' > "$second_root/nested.txt" || fail "no nested-volume item"
+stat() {
+    if [[ "${1:-}" == "-c" && "${2:-}" == "%d" && "${3:-}" == "--" && "${4:-}" == "$second_root/nested.txt" ]]; then
+        printf '%s\n' "$((second_dev + 1))"
+        return 0
+    fi
+    command stat "$@"
+}
+XDG_DATA_HOME="$second_root/data"
+got=$(sandbox_trash_files_dir "$second_root/nested.txt" "$home_same") || { unset -f stat; XDG_DATA_HOME="$data_real"; fail "nested-volume item refused"; }
+unset -f stat
+XDG_DATA_HOME="$data_real"
+[[ "$got" != "$second_root/data/Trash/files" && "$got" == */.Trash*/files ]] || fail "nested-volume item gave $got"
+ok "item on its own device inside the data home's folder goes to gio: $got"
+# The remaining mount-top cases keep the data home on the other device, apart from the item.
+export XDG_DATA_HOME="$second_root/data"
+
 # One literal expectation per GLib layout, through a stat interposition for %m.
 fake_top="$test_root/faketop"
 slash_top="$test_root/slashtop"
@@ -382,6 +418,9 @@ gio_sweep() {
 gio_dir=$second_root
 [[ "$root_dev" != "$home_dev" ]] && gio_dir=$test_root
 gio_dev=$(stat -c %d -- "$gio_dir") || fail "no device for $gio_dir"
+# The data home sits on the other marked root, so gio and the helper both leave the home Trash alone.
+export XDG_DATA_HOME="$test_root/data"
+[[ "$gio_dir" == "$test_root" ]] && export XDG_DATA_HOME="$second_root/data"
 if ! command -v gio >/dev/null 2>&1; then
     printf 'skip gio cross-check: gio is not installed\n'
 elif [[ "$gio_dev" == "$home_dev" ]]; then
