@@ -14641,6 +14641,15 @@ case_overlays() {
 # The same manual test: thumbnails, the empty hero, the peeked column's menu and video playback, per
 # view. Each view enters its own uncached copy of the fixture through the UI, so it acquires its own
 # thumbnails rather than reading ones another view warmed.
+# The x and width a Columns hero centres on: the whole pane at 2 and 3 columns, where it clears
+# the listed columns at the suite's window, else the free area from the active column's left edge.
+columns_hero_span() {
+    local sx="$1" sw="$2" count="$3" active
+    (( count <= 3 )) && { printf '%s %s\n' "$sx" "$sw"; return; }
+    active=$(( (count - 2) * (sw / count) ))
+    printf '%s %s\n' "$((sx + active))" "$((sw - active))"
+}
+
 case_views() {
     # Four fixtures directly inside the sandbox root, which is what its guard allows; the fourth is the
     # grid again after the columns view, so a column kept alive under the grid is proven to plan nothing.
@@ -14776,15 +14785,13 @@ case_views() {
             sleep "$mark_poll_s"
         done
         (( lit > 0 )) || fail "$mode: the empty directory's hero painted nothing"
-        # Its box is the listing slot exactly, and in the columns view every slot right of the
-        # ancestor column: an empty active column has no peek beside it, so the hero centres in the
-        # space there actually is. A lazy view's item reports a local origin, and the hero placed on
-        # it once drew over the sidebar, still inside a wide slot.
+        # Its box is the listing slot exactly, and in the columns view the whole pane while the
+        # hero clears the listed columns (2 and 3 columns) and the free area right of them otherwise.
+        # A lazy view's item reports a local origin, and the hero placed on it once drew over the
+        # sidebar, still inside a wide slot.
         read -r sx sy sw sh <<< "$(ipc listAreaRect)"
-        # The columns view draws three fixed slots and the pane's own listing is the middle one, so
-        # the hero sits over that column alone: every view then puts the animation in the same place.
         local ex=$sx ew=$sw
-        [[ "$mode" == "columns" ]] && { ex=$((sx + sw / 3)); ew=$((sw / 3)); }
+        [[ "$mode" == "columns" ]] && read -r ex ew <<< "$(columns_hero_span "$sx" "$sw" "$(ipc columnCount)")"
         rect_is "$(ipc emptyStateRect)" "$ex" "$sy" "$ew" "$sh" 1 \
             || fail "$mode: the hero's box is $(ipc emptyStateRect), not the slot $ex $sy $ew $sh"
         read -r mx my mw mh <<< "$(ipc emptyMarkRect)"
@@ -14798,6 +14805,19 @@ case_views() {
         [[ "$(ipc path)" == "$root" ]] || fail "$mode: two Backspaces did not return to the root, path $(ipc path)"
         printf 'VIEWS %s thumbs=ok hero=%s\n' "$pass" "$lit"
     done
+    # Five columns put the active column's left edge past where the hero would centre on the pane, so the hero takes the free area.
+    seed_ui_state "$fixture_root/views-hero5-state" '{"view":"columns","columnsLimit":5}'
+    launch "$root/views-columns/empty"
+    wait_listing 0
+    local count5
+    count5=$(ipc columnCount)
+    [[ "$count5" == "5" && "$(ipc emptyShown)" == "true" ]] || fail "columns: limit 5 drew $count5 columns, empty $(ipc emptyShown)"
+    read -r sx sy sw sh <<< "$(ipc listAreaRect)"
+    read -r ex ew <<< "$(columns_hero_span "$sx" "$sw" "$count5")"
+    rect_is "$(ipc emptyStateRect)" "$ex" "$sy" "$ew" "$sh" 1 \
+        || fail "columns: with 5 columns the hero's box is $(ipc emptyStateRect), not the free area $ex $sy $ew $sh"
+    printf 'VIEWS columns5 hero=free area %s %s\n' "$ex" "$ew"
+    export XDG_STATE_HOME="$suite_state"
     kill_flea
 }
 
