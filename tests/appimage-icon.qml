@@ -10,7 +10,9 @@ ShellRoot {
     id: root
 
     property string iconPath: Quickshell.env("FLEA_APPICON_PNG")
-    property var appRow: ({ n: "Obsidian-1.9.AppImage", d: false, i: "application-x-executable", p: 493, s: 123456789, m: 1758835200, t: true, k: 0, v: 0 })
+    property var appRow: ({ n: "Obsidian-1.9.AppImage", d: false, i: "application-x-executable", p: 493, s: 123456789, m: 1758835200, t: true, a: true, k: 0, v: 0 })
+    // An executable with a thumbnailer of its own: the same generic icon, and no a, so Images keeps it a mark.
+    property var exeRow: ({ n: "setup.exe", d: false, i: "application-x-executable", p: 493, s: 1234567, m: 1758835200, t: true, k: 0, v: 0 })
     property var failures: []
 
     Component {
@@ -121,6 +123,10 @@ ShellRoot {
         var wantAsked = mode === "off" ? 0 : 1
         if (asked !== wantAsked)
             failures.push(mode + " asks for " + asked + " icons, want " + wantAsked)
+        var exeAsked = Thumbs.plan(Thumbs.empty(), [root.exeRow], 0, 0, 0, mode).ask.length
+        var wantExe = mode === "media" ? 1 : 0
+        if (exeAsked !== wantExe)
+            failures.push(mode + " asks for " + exeAsked + " executable thumbnails, want " + wantExe)
     }
 
     property int step: 0
