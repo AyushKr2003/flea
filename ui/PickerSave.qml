@@ -123,7 +123,7 @@ Item {
                     : root.picker.saveError || (root.picker.saveCollision ? Format.fill(Picker.SAVE_EXISTS, Picker.jointName(root.picker.saveName)) : "")
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
-                color: Theme.color.error
+                color: Theme.color.errorOnSurface
                 font { family: Theme.font.family; pixelSize: Theme.font.caption }
             }
             Row {

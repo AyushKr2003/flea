@@ -328,7 +328,7 @@ FocusScope {
                     text: root.errorText || (root.busy ? "Working…" : "")
                     textFormat: Text.PlainText
                     wrapMode: Text.Wrap
-                    color: root.errorText ? Theme.color.error : Theme.color.muted
+                    color: root.errorText ? Theme.color.errorOnSurface : Theme.color.muted
                     font { family: Theme.font.family; pixelSize: Theme.font.caption }
                 }
             }

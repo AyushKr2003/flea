@@ -394,7 +394,7 @@ Item {
                     topPadding: 2 * Theme.spacing.hairline
                     bottomPadding: 2 * Theme.spacing.hairline
                     text: root.busy ? "Converting…" : root.errorText
-                    color: root.busy ? Theme.color.muted : Theme.color.error
+                    color: root.busy ? Theme.color.muted : Theme.color.errorOnSurface
                     font { family: Theme.font.family; pixelSize: Theme.font.caption }
                     textFormat: Text.PlainText
                     wrapMode: Text.Wrap

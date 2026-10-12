@@ -67,4 +67,4 @@ fi
 if [ "$verdict" -ne 0 ]; then
     exit 1
 fi
-printf 'FILLROLES PASS %s checks, fills on accentFrame, card error inks on errorOnSurface, name lines on error, the fill eases only with motion on\n' "$passed"
+printf 'FILLROLES PASS %s checks, fills on accentFrame, card error inks and name lines on errorOnSurface, the fill eases only with motion on\n' "$passed"

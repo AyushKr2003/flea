@@ -663,7 +663,7 @@ ShellRoot {
                     anchors.rightMargin: Theme.spacing.gap
                     anchors.verticalCenter: parent.verticalCenter
                     text: win.message.length > 0 ? win.message : !win.marksAllowed ? "" : Picker.statusLine(win.marks.length, Picker.totalBytes(win.marks))
-                    color: win.messageError ? Theme.color.error : Theme.color.foreground
+                    color: win.messageError ? Theme.color.errorOnSurface : Theme.color.foreground
                     font.family: Theme.font.family
                     font.pixelSize: Theme.font.caption
                     textFormat: Text.PlainText

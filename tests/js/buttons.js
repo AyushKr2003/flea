@@ -216,6 +216,13 @@ function run(check) {
         check(file + " frames a focused field in the accent", text.indexOf(fields[file]) >= 0, true)
         check(file + " draws no thick button frame around a field", text.indexOf("Buttons.RING") < 0, true)
     }
+    // Decided FIELDS-01: error text and its mark on a card or the surface footer draw errorOnSurface, so none of these files reads a bare color: Theme.color.error (frames are border.color and stay).
+    var errorCards = ["ui/BulkRenameDialog.qml", "ui/UnlockDialog.qml", "ui/PermissionsDialog.qml", "ui/OpenWithDialog.qml", "ui/MenuActionDialog.qml", "ui/NetworkDialog.qml",
+                      "ui/ArchiveCompressDialog.qml", "ui/ArchivePasswordDialog.qml", "ui/ConvertDialog.qml", "ui/PickerSave.qml", "ui/PickerWindow.qml"]
+    errorCards.forEach(function (file) {
+        var bare = Source.source(file).split("\n").filter(function (line) { return /(^|[^.\w])color:.*Theme\.color\.error\b(?!OnSurface)/.test(line) })
+        check(file + " draws no card error ink on the window error role", bare.length, 0)
+    })
     // The chrome path field is the editFrame block alone: one accent hairline, no ring, and no sibling draws a border around it. The strip is the bar and the entry it holds.
     var chrome = Source.source("ui/ChromeBar.qml") + Source.source("ui/PathEntry.qml")
     var edit = blockOf(chrome, "id: editFrame")
