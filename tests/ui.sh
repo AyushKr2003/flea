@@ -12162,8 +12162,18 @@ dual_sort_header() {
 
 # Sample input: ipc sortMark prints "size:asc" and ipc rowAt 0 prints "y.txt|file|10 B"; the mark reads "size:asc rows=y.txt,z.txt,x.txt".
 foldersort_mark() { printf '%s rows=%s,%s,%s' "$(ipc sortMark)" "$(ipc rowAt 0 | cut -d'|' -f1)" "$(ipc rowAt 1 | cut -d'|' -f1)" "$(ipc rowAt 2 | cut -d'|' -f1)"; }
-# The remembered-sort re-sort lands within 0.7 s of the listing, so the mark is read across that window and both reads must agree.
-foldersort_settled_mark() { local a b; a=$(foldersort_mark); sleep 0.7; b=$(foldersort_mark); if [[ "$a" == "$b" ]]; then printf '%s' "$b"; else printf '%s, then %s' "$a" "$b"; fi; }
+# The remembered-sort re-sort lands within 0.7 s of the listing, and a mark is four ipc calls, so a read is kept only when the next one a window later agrees.
+foldersort_window_s=0.7 foldersort_settle_s=10
+foldersort_settled_mark() {
+    local a b deadline=$((SECONDS + foldersort_settle_s))
+    a=$(foldersort_mark)
+    while (( SECONDS < deadline )); do
+        sleep "$foldersort_window_s"; b=$(foldersort_mark)
+        [[ "$a" == "$b" ]] && { printf '%s' "$b"; return; }
+        a=$b
+    done
+    printf '%s, never settled' "$a"
+}
 foldersort_wait_path() {
     local want="$1" i
     for i in $(seq 1 100); do [[ "$(ipc path)" == "$want" && "$(ipc listInFlight)" == false ]] && return 0; sleep 0.05; done
