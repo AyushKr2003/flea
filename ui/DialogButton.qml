@@ -41,8 +41,8 @@ Item {
     // A secondary frame takes muted, ThemeRoles' border role, under a live label; a set member takes foreground while current and muted otherwise.
     readonly property color frame: root.focusShown && root.focusFrame === "accent" ? Theme.color.accent
         : root.focusShown ? Theme.color.foreground
-        : root.setMember ? (root.current ? Theme.color.foreground : Theme.color.muted)
-        : root.primary && root.available ? Theme.color.accentFrame : Theme.color.muted
+        : root.setMember ? (root.current ? Theme.color.foreground : Theme.color.mutedFrame)
+        : root.primary && root.available ? Theme.color.accentFrame : Theme.color.mutedFrame
     readonly property color ink: !root.available || root.setMember && !root.current ? Theme.color.muted
         : root.destructive ? Theme.color.error : Theme.color.foreground
     // The frame and this wash say which action is being asked for; the label stays foreground.

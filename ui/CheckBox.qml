@@ -35,7 +35,7 @@ Item {
         anchors.fill: parent
         color: root.filled ? Theme.color.foreground : "transparent"
         border.width: root.borderWidth
-        border.color: root.filled || root.focused ? Theme.color.foreground : Theme.color.muted
+        border.color: root.filled || root.focused ? Theme.color.foreground : Theme.color.mutedFrame
 
         // The mark is the fill cut away, so the control needs no third colour and no accent at all.
         Flea.Glyph {

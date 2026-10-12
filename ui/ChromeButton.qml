@@ -82,7 +82,7 @@ Item {
         width: root.glyphSize
         height: root.glyphSize
         name: root.glyph
-        color: !root.enabled ? Theme.color.muted
+        color: !root.enabled ? Theme.color.mutedFrame
              : root.active ? Theme.color.accent
              : root.keyboardFocused ? Theme.color.foreground : root.restingColor
         // A control with nowhere to go keeps its slot so the bar never reflows, and says so by dimming.

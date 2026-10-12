@@ -44,7 +44,7 @@ Row {
             // Tier A, where a box around four marks would be furniture.
             border.width: segment.glyph ? 0 : segment.focusedHere && segment.focusFrame === "thick" ? Buttons.RING : Theme.spacing.hairline
             border.color: segment.focusedHere && segment.focusFrame === "accent" ? Theme.color.accent
-                : segment.current ? Theme.color.foreground : Theme.color.muted
+                : segment.current ? Theme.color.foreground : Theme.color.mutedFrame
             Accessible.role: Accessible.Button
             Accessible.name: String(segment.modelData)
             Accessible.onPressAction: root.picked(segment.index)
@@ -55,7 +55,7 @@ Row {
                 width: Theme.railIconSize
                 height: width
                 name: segment.glyph || "file"
-                color: segment.current ? Theme.color.foreground : Theme.color.muted
+                color: segment.current ? Theme.color.foreground : Theme.color.mutedFrame
             }
 
             Text {

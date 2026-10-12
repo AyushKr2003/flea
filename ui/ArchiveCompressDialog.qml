@@ -186,7 +186,7 @@ Item {
         height: Theme.cardSpan(body.wanted + 2 * Theme.spacing.rowPaddingX, root.height - 2 * root.clampMargin)
         color: Theme.color.surface
         border.width: Theme.spacing.hairline
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
         radius: Style.cornerRadius
 
         MouseArea {
@@ -226,7 +226,7 @@ Item {
                         x: Theme.spacing.rowPaddingX
                         width: parent.width - 2 * Theme.spacing.rowPaddingX
                         height: Theme.spacing.hairline
-                        color: Theme.color.muted
+                        color: Theme.color.mutedFrame
                         opacity: 0.4
                     }
                 }

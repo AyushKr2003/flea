@@ -53,7 +53,7 @@ Item {
             height: Theme.stateMarkSize
             name: root.locked ? "lock" : root.nothingMatched ? "search" : "alert"
             // Only a failure takes the urgent role, and only on the mark; the sentence stays readable.
-            color: root.nothingMatched ? Theme.color.muted : Theme.color.error
+            color: root.nothingMatched ? Theme.color.mutedFrame : Theme.color.error
         }
 
         Text {

@@ -317,7 +317,7 @@ Column {
             color: "transparent"
             border.width: Theme.spacing.hairline * 2
             border.color: root.tls ? Theme.color.accent
-                                   : (tlsRow.focused ? Theme.color.foreground : Theme.color.muted)
+                                   : (tlsRow.focused ? Theme.color.foreground : Theme.color.mutedFrame)
 
             Flea.Glyph {
                 anchors.fill: parent

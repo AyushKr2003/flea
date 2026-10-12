@@ -508,7 +508,7 @@ Item {
         x: Theme.cardOrigin(parent.width, width)
         y: Theme.cardOrigin(parent.height, height) + surface.rise
         border.width: Theme.spacing.hairline
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
         // Open rises into place and close only fades, faster, because the translation is enabled: root.active.
         property real rise: root.revealedOpen ? 0 : Motion.translateUpPx
         opacity: root.unrevealed ? 0 : root.fade
@@ -667,7 +667,7 @@ Item {
                     width: Theme.stateMarkSize
                     height: Theme.stateMarkSize
                     name: root.archiveFailed ? "alert" : "file"
-                    color: root.archiveFailed ? Theme.color.error : Theme.color.muted
+                    color: root.archiveFailed ? Theme.color.error : Theme.color.mutedFrame
                 }
 
                 Text {

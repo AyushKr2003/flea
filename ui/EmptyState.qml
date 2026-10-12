@@ -28,8 +28,8 @@ Item {
     ]
     // The OEM phraseTimer's own interval, tailscale's and airpods' Panel.qml.
     readonly property int rotateMs: 2800
-    // PanelHero's own secondary ink: Qt.darker(foreground, 1.4), not the row's muted role.
-    readonly property color dim: Qt.darker(Theme.color.foreground, 1.4)
+    // PanelHero's own secondary ink, the metadata role, not the row's muted one.
+    readonly property color dim: Theme.color.metadata
     // A data-held folder skips this for one landing, so it draws whole like the picture hold did.
     property bool animateEntrance: true
 
@@ -84,7 +84,7 @@ Item {
             width: Theme.stateMarkSize
             height: Theme.stateMarkSize
             name: root.mark
-            color: root.dim
+            color: Theme.color.metadataFrame
         }
 
         Text {

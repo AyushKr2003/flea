@@ -213,7 +213,7 @@ Item {
             anchors.centerIn: parent
             width: root.dotSize
             height: root.dotSize
-            color: root.modelData.mounted ? Theme.color.executable : Theme.color.muted
+            color: root.modelData.mounted ? Theme.color.executable : Theme.color.mutedFrame
             opacity: root.modelData.mounted ? 1 : root.unmountedOpacity
         }
 
@@ -245,7 +245,7 @@ Item {
                 id: ink
                 anchors.centerIn: parent
                 name: "eject"
-                color: root.cursor || hitHover.hovered ? Theme.color.foreground : Theme.color.muted
+                color: root.cursor || hitHover.hovered ? Theme.color.foreground : Theme.color.mutedFrame
                 width: root.ejectMarkSize
                 height: root.ejectMarkSize
             }

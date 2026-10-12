@@ -41,7 +41,7 @@ Column {
             visible: root.cursor
             width: Theme.spacing.hairline * 2
             height: parent.height
-            color: root.focused ? Theme.color.accent : Theme.color.muted
+            color: root.focused ? Theme.color.accent : Theme.color.mutedFrame
         }
         Row {
             anchors.fill: parent

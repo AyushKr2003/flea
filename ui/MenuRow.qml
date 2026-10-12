@@ -56,10 +56,13 @@ Item {
     Component.onCompleted: root.mountTag()
     onEntryChanged: root.mountTag()
     readonly property color markColor: root.errored ? Theme.color.error
-                                     : !root.available ? Theme.color.muted : root.danger ? Theme.color.error
-                                     : root.picked ? Theme.color.accent : Theme.color.muted
-    readonly property color labelColor: root.errored ? Theme.color.error
-                                      : !root.available ? Theme.color.muted : root.danger ? Theme.color.error
+                                     : !root.available ? Theme.color.mutedFrame : root.danger ? Theme.color.error
+                                     : root.picked ? Theme.color.accent : Theme.color.mutedFrame
+    // A lit row is washed, so its error ink and its hint are the lifted pair; a picked row keeps its accent fill and its ink.
+    readonly property bool lit: root.current && !root.picked
+    readonly property color errorInk: root.lit ? Theme.color.errorLit : Theme.color.error
+    readonly property color labelColor: root.errored ? root.errorInk
+                                      : !root.available ? Theme.color.muted : root.danger ? root.errorInk
                                       : root.entry.labelColor !== undefined ? root.entry.labelColor
                                       : root.picked ? Theme.color.accent : Theme.color.foreground
 
@@ -105,13 +108,27 @@ Item {
         opacity: root.picked ? 1 : (root.current ? root.hoverOpacity : 0)
     }
 
+    // The cursor row's own hairline in the foreground, inside the row and clear of any separator by the chrome control inset, and of a card's border rule on both sides by the inset past that rule.
+    Rectangle {
+        objectName: "menuCursorFrame"
+        anchors.fill: parent
+        anchors.leftMargin: Theme.chromeControlInset + Theme.spacing.hairline
+        anchors.rightMargin: Theme.chromeControlInset + Theme.spacing.hairline
+        anchors.topMargin: Theme.chromeControlInset
+        anchors.bottomMargin: Theme.chromeControlInset
+        visible: root.current && !root.isSeparator
+        color: "transparent"
+        border.width: Theme.spacing.hairline
+        border.color: Theme.color.foreground
+    }
+
     Rectangle {
         visible: root.isSeparator
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         height: Theme.spacing.hairline
-        color: Theme.color.muted
+        color: Theme.color.mutedFrame
         opacity: root.separatorOpacity
     }
 
@@ -248,7 +265,7 @@ Item {
         horizontalAlignment: Text.AlignRight
         // MenuAdditions040: every key hint is muted on a live, lit or dead row; a dead row dims it with the label, a wrapped reason stays readable.
         color: root.entry.hintSquare === true ? root.labelColor
-             : root.available || root.entry.hintWrap !== true ? Theme.color.muted : Theme.color.foreground
+             : root.available || root.entry.hintWrap !== true ? (root.lit ? Theme.color.mutedLit : Theme.color.muted) : Theme.color.foreground
         opacity: root.available || root.entry.hintWrap === true ? 1 : label.opacity
         font.family: Theme.font.family
         font.pixelSize: Theme.font.caption
@@ -270,7 +287,7 @@ Item {
             anchors.fill: parent
             visible: root.isSubmenu
             name: "chevron-right"
-            color: Theme.color.muted
+            color: Theme.color.mutedFrame
         }
     }
 

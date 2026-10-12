@@ -63,7 +63,7 @@ Item {
         height: Theme.rowHeight - Theme.spacing.rowPaddingY
         color: Theme.color.background
         border.width: Theme.spacing.hairline
-        border.color: root.error ? Theme.color.error : (field.activeFocus ? Theme.color.accent : Theme.color.muted)
+        border.color: root.error ? Theme.color.error : (field.activeFocus ? Theme.color.accent : Theme.color.mutedFrame)
 
         TextInput {
             id: field
@@ -133,7 +133,7 @@ Item {
                 height: Theme.font.bodySmall
                 visible: root.secret
                 name: "eye"
-                color: reveal.pressed ? Theme.color.accent : Theme.color.muted
+                color: reveal.pressed ? Theme.color.accent : Theme.color.mutedFrame
             }
 
             MouseArea {

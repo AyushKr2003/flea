@@ -48,7 +48,7 @@ Column {
             visible: root.cursor
             width: Theme.spacing.hairline * 2
             height: parent.height
-            color: root.focused ? Theme.color.accent : Theme.color.muted
+            color: root.focused ? Theme.color.accent : Theme.color.mutedFrame
         }
         Row {
             anchors.fill: parent
@@ -66,7 +66,7 @@ Column {
                 width: Theme.markSize
                 height: parent.height
                 visible: root.running
-                color: Theme.color.muted
+                color: Theme.color.mutedFrame
             }
             Flea.Glyph {
                 width: Theme.markSize
@@ -74,7 +74,7 @@ Column {
                 visible: root.ending !== null
                 name: root.ending ? root.ending.mark : "check"
                 color: root.ending && root.ending.role === "error" ? Theme.color.error
-                    : root.ending && root.ending.role === "foreground" ? Theme.color.foreground : Theme.color.muted
+                    : root.ending && root.ending.role === "foreground" ? Theme.color.foreground : Theme.color.mutedFrame
             }
             Text {
                 width: Math.max(0, parent.width - Theme.markSize - flashControl.width - 2 * parent.spacing)
@@ -129,7 +129,7 @@ Column {
         Rectangle {
             width: parent.width
             height: root.barHeight
-            color: Theme.color.muted
+            color: Theme.color.mutedFrame
             opacity: root.trackOpacity
             Rectangle {
                 width: parent.width * Transfer.fraction(root.transfer)

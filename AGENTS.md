@@ -4027,6 +4027,8 @@ The variadic `prctl` declarations move two ceilings, each re-derived with `wc -l
 
 The Columns prebuild moves one ceiling, re-derived with `wc -l`: `ui/ColumnPane.qml` 423 to 518 for the active column's parked-row driver, whose quiet 16 ms ticks build the rows the next landing adopts: the pool counters and the first-landing hold, the 16 ms Timer with its quiet test, start, tick, adoption and drop, the count, height and visibility hooks, and the delegate's parked branch. The new `tests/columnsprebuild.qml` is 317 lines, over the soft budget and under the hard cap, with `tests/columnsprebuild.sh` at 43.
 
+The muted text lift and the menu cursor frame move two ceilings, each re-derived with `wc -l`: `ui/Theme.qml` 443 to 462 for the named text and frame contrast floors, the `mutedFrame`, `metadata`, `metadataFrame`, `mutedLit` and `errorLit` roles with their defaults, and the two lifts that derive them in `applyColors`; `tests/button-members.qml` 488 to 490 for the frame and ink readings it now takes apart. `ui/MenuRow.qml` stays over its soft budget and under the hard cap with the cursor row's own frame. `tests/startup-units.txt` keeps its 170 units while its `bytes` line moves from 1596965 to 1600104, the sum the probe's tool takes over them with the five Theme roles, the lit-row inks and the cursor frame. The new `tests/theme-contrast.qml` is 137 lines and `tests/theme-contrast.sh` 92, both under the soft budget.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

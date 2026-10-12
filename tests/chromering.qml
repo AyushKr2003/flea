@@ -61,7 +61,7 @@ ShellRoot {
             // The picker's answer in its strip: a strip DialogButton keeps the inset.
             Flea.DialogButton { id: answer; label: "Answer"; inStrip: true }
             Flea.ChromeButton { id: off; glyph: "x"; keyboardFocused: true; enabled: false }
-            Flea.ChromeButton { id: muted; glyph: "x"; keyboardFocused: true; restingColor: Flea.Theme.color.muted }
+            Flea.ChromeButton { id: muted; glyph: "x"; keyboardFocused: true; restingColor: Flea.Theme.color.mutedFrame }
             Flea.ChromeButton { id: lit; glyph: "x"; active: true; keyboardFocused: true }
         }
 
@@ -197,7 +197,7 @@ ShellRoot {
         check("the frame is the foreground", ringRead(hot, function (ring) { return String(ring.border.color) }), String(Flea.Theme.color.foreground))
         check("the ring has no fill", ringRead(hot, function (ring) { return ring.color.a }), 0)
         check("a disabled mark draws no ring", ringRead(off, shown), false)
-        check("a disabled mark mutes its glyph", markRead(off, function (mark) { return String(mark.color) }), String(Flea.Theme.color.muted))
+        check("a disabled mark mutes its glyph", markRead(off, function (mark) { return String(mark.color) }), String(Flea.Theme.color.mutedFrame))
         check("a muted resting mark inks in the foreground under the ring", markRead(muted, function (mark) { return String(mark.color) }), String(Flea.Theme.color.foreground))
         check("an active mark still takes the ring", ringRead(lit, shown), true)
         check("a resting mark inks in the foreground", markRead(rest, function (mark) { return String(mark.color) }), String(Flea.Theme.color.foreground))

@@ -223,7 +223,7 @@ FocusScope {
         width: Theme.cardSpan(root.cardWant, root.width - 2 * Theme.spacing.gap)
         height: Theme.cardSpan(body.wanted + 2 * root.cardPadding + 2 * Theme.spacing.hairline, root.height - 2 * Theme.spacing.gap)
         color: Theme.color.surface
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
         border.width: Theme.spacing.hairline
         radius: Style.cornerRadius
         MouseArea {
@@ -284,7 +284,7 @@ FocusScope {
                             width: parent.width
                             color: Theme.color.background
                             // One editor, so the frame follows the caret however many lines it holds.
-                            border.color: namesScope.activeFocus ? Theme.color.accent : Theme.color.muted
+                            border.color: namesScope.activeFocus ? Theme.color.accent : Theme.color.mutedFrame
                             border.width: Theme.spacing.hairline
                             height: root.oldNames.length * Theme.fileRowHeight + 4
                             // One focus scope around the name lines, so the frame binds live focus state with no counter to drift.

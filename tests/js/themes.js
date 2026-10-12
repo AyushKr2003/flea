@@ -13,7 +13,6 @@ var THEME_DIR = "file:///usr/share/omarchy/themes/"
 
 // Every threshold carries the rule it answers to; none of them is fitted to what the palettes do.
 var TEXT_MIN = 4.5          // HANDOFF rule 2: body text on its own ground, WCAG AA.
-var CAPTION_MIN = 3.0       // A muted caption is large-text AA against the ground it sits on.
 var DISABLED_MIN = 1.5      // Containers: a disabled row still reads as a row, never as an empty one.
 var WASH_MIN = 1.06         // A 14 percent wash has to be visible against the ground it washes.
 var MARK_MIN = 3.0          // A drawn mark or frame is a graphical object, AA at 3:1.
@@ -40,10 +39,15 @@ function roles(body) {
     var accent = Palette.pick(found, ["accent", "color4"], "#cacccc")
     var urgent = Palette.pick(found, ["red", "color1"], "#a55555")
     var surface = Palette.pick(found, Palette.SURFACE_KEYS, "#181825")
+    var mutedFrame = Contrast.ensureRatio(Palette.pick(found, ["muted"], darker(foreground)), background, MARK_MIN)
     return { foreground: foreground, background: background, accent: accent, urgent: urgent,
-             // ui/Theme.qml's own rule, key for key: the palette's muted or a darkened foreground, lifted
-             // to the caption floor on the ground it sits on.
-             muted: Contrast.ensureRatio(Palette.pick(found, ["muted"], darker(foreground)), background, CAPTION_MIN),
+             // ui/Theme.qml's own rule, key for key: the palette's muted or a darkened foreground, lifted to the
+             // frame floor on the background for frames and glyphs, then to the text floor on both grounds for text.
+             mutedFrame: mutedFrame,
+             muted: Contrast.ensureRatio(Contrast.ensureRatio(mutedFrame, background, TEXT_MIN), surface, TEXT_MIN),
+             // Metadata ink: the darkened foreground, unlifted for a resting glyph and lifted like muted for text.
+             metadataFrame: darker(foreground),
+             metadata: Contrast.ensureRatio(Contrast.ensureRatio(darker(foreground), background, TEXT_MIN), surface, TEXT_MIN),
              // ui/Theme.qml: the heading ink is the palette's bright_foreground (color15 without one) when it has more contrast on the ground than the foreground.
              foregroundBright: brighter(foreground, Palette.pick(found, ["bright_foreground", "color15"], foreground), background),
              surface: surface,
@@ -98,7 +102,7 @@ function mirrorFallbacks(check) {
     // binds this mirror's darker() to ui/Theme.qml's own Qt.darker(c, 1.4).
     check("a palette with no muted takes the darkened foreground the window renders", none.muted, "#9299ae")
     atLeast(check, "a palette with no muted", "its derived caption still clears the floor",
-            Contrast.ratio(none.muted, none.background), CAPTION_MIN)
+            Contrast.ratio(none.muted, none.background), TEXT_MIN)
     var eight = roles(ground + "color8 = \"#585b70\"\n")
     check("and color8 is not the caption either, because ui/Theme.qml does not read it",
           eight.muted, none.muted)
@@ -162,7 +166,11 @@ function run(check) {
         // Text, on both grounds a listing row can sit on.
         atLeast(check, name, "foreground on background", Contrast.ratio(r.foreground, r.background), TEXT_MIN)
         atLeast(check, name, "foreground on surface", Contrast.ratio(r.foreground, r.surface), TEXT_MIN)
-        atLeast(check, name, "muted caption on background", Contrast.ratio(r.muted, r.background), CAPTION_MIN)
+        atLeast(check, name, "muted text on background", Contrast.ratio(r.muted, r.background), TEXT_MIN)
+        atLeast(check, name, "muted text on surface", Contrast.ratio(r.muted, r.surface), TEXT_MIN)
+        atLeast(check, name, "metadata text on background", Contrast.ratio(r.metadata, r.background), TEXT_MIN)
+        atLeast(check, name, "metadata text on surface", Contrast.ratio(r.metadata, r.surface), TEXT_MIN)
+        atLeast(check, name, "muted frame on background", Contrast.ratio(r.mutedFrame, r.background), MARK_MIN)
 
         // The heading ink never reads weaker than the body ink it sits over.
         atLeast(check, name, "heading ink against the foreground",
@@ -186,11 +194,11 @@ function run(check) {
         // The checkbox draws in the two roles above and nothing of its own: a foreground fill with the
         // ground cut out for its tick, and the muted frame when empty, so it needs no rule here.
 
-        // The error role on its ground, and beside the caption it must never be the quieter of: two inks
-        // compared to each other would measure the floors above, and ethereal's muted of 4.90 would fail.
+        // The error role on its ground, and beside the unlifted caption it must never be the quieter of: the text role is
+        // lifted past every error ratio, and ethereal's frame muted of 4.90 is the case that fails if the two inks are compared bare.
         atLeast(check, name, "error on background", Contrast.ratio(r.error, r.background), TEXT_MIN)
         atLeast(check, name, "error is never dimmer than a caption",
-                Contrast.ratio(r.error, r.background), Contrast.ratio(r.muted, r.background))
+                Contrast.ratio(r.error, r.background), Contrast.ratio(r.mutedFrame, r.background))
 
         // The cursor's edge borders the unselected ground, which is what a low-chroma theme breaks.
         atLeast(check, name, "cursor edge on the unselected ground", Contrast.ratio(r.accent, r.background), EDGE_MIN)

@@ -17,7 +17,6 @@ class=com.thisisgm.flea
 failures=0
 # The same floors tests/js/themes.js names, and the same rules behind them.
 text_min=4.5      # body text on its own ground, WCAG AA
-caption_min=3     # a muted caption, large-text AA
 mark_min=3        # a drawn mark or frame is a graphical object, AA at 3:1
 role_steps=4      # how far a screenshot's round trip may move a role, measured over all 22 themes
 
@@ -225,7 +224,8 @@ for colours in "$themes_dir"/*/colors.toml "$synthetic"; do
     # The rules, on the roles the running window carries rather than on the file it read.
     at_least "$theme" "foreground on background" "$(ratio "$fg" "$bg")" "$text_min"
     at_least "$theme" "foreground on surface" "$(ratio "$fg" "$surface")" "$text_min"
-    at_least "$theme" "muted caption on background" "$(ratio "$muted" "$bg")" "$caption_min"
+    at_least "$theme" "muted text on background" "$(ratio "$muted" "$bg")" "$text_min"
+    at_least "$theme" "muted text on surface" "$(ratio "$muted" "$surface")" "$text_min"
     at_least "$theme" "error on background" "$(ratio "$error" "$bg")" "$text_min"
     at_least "$theme" "symlink on background" "$(ratio "$symlink" "$bg")" "$text_min"
     at_least "$theme" "executable on background" "$(ratio "$executable" "$bg")" "$text_min"
@@ -236,9 +236,10 @@ for colours in "$themes_dir"/*/colors.toml "$synthetic"; do
         [ "$accentframe" = "$accent" ] \
             || fail "$theme: the primary frame is $accentframe, not this theme's own accent $accent"
     fi
-    # The caption is the palette's own muted lifted to that same floor, so a theme already clearing it
-    # reports that muted itself: this is what binds the role tests/js/themes.js mirrors to the file.
-    if [ -n "$want_muted" ] && clears "$theme" "the file's own muted on the background" "$(ratio "$want_muted" "$bg")" "$caption_min"; then
+    # The text role is the palette's own muted lifted to the text floor on both grounds, so a theme already clearing
+    # it there reports that muted itself: this is what binds the role tests/js/themes.js mirrors to the file.
+    if [ -n "$want_muted" ] && clears "$theme" "the file's own muted on the background" "$(ratio "$want_muted" "$bg")" "$text_min" \
+        && clears "$theme" "the file's own muted on the surface" "$(ratio "$want_muted" "$surface")" "$text_min"; then
         [ "$want_muted" = "$muted" ] \
             || fail "$theme: the caption draws $muted, not this theme's own $want_muted"
     fi

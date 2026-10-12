@@ -201,7 +201,7 @@ Item {
         height: Theme.cardSpan(body.wanted + 2 * Theme.spacing.rowPaddingX, root.height - 2 * root.clampMargin)
         color: Theme.color.surface
         border.width: Theme.spacing.hairline
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
         radius: Style.cornerRadius
 
         // The checkbox handler takes a passive grab, so without this sink its press reaches the ground.
@@ -252,7 +252,7 @@ Item {
                     height: Theme.rowHeight - Theme.spacing.rowPaddingY
                     color: Theme.color.background
                     border.width: Theme.spacing.hairline
-                    border.color: field.activeFocus ? Theme.color.accent : Theme.color.muted
+                    border.color: field.activeFocus ? Theme.color.accent : Theme.color.mutedFrame
 
                     Flea.Glyph {
                         id: lens
@@ -262,7 +262,7 @@ Item {
                         width: Theme.font.body
                         height: Theme.font.body
                         name: "search"
-                        color: Theme.color.muted
+                        color: Theme.color.mutedFrame
                     }
 
                     TextInput {
@@ -307,7 +307,7 @@ Item {
                             anchors.fill: parent
                             visible: field.text.length > 0
                             name: "x"
-                            color: Theme.color.muted
+                            color: Theme.color.mutedFrame
                         }
 
                         TapHandler {
@@ -362,7 +362,7 @@ Item {
                             width: parent.width
                             height: Theme.spacing.hairline
                             visible: row.isEyebrow && row.modelData.rule === true
-                            color: Theme.color.muted
+                            color: Theme.color.mutedFrame
                             opacity: 0.4
                         }
 
@@ -447,7 +447,7 @@ Item {
                     anchors.top: parent.top
                     width: parent.width
                     height: Theme.spacing.hairline
-                    color: Theme.color.muted
+                    color: Theme.color.mutedFrame
                     opacity: 0.4
                 }
 

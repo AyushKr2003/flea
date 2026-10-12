@@ -109,7 +109,7 @@ Item {
         height: Theme.stateMarkSize
         visible: root.poster
         name: "play"
-        color: Theme.color.muted
+        color: Theme.color.mutedFrame
         opacity: 0.7
     }
 
@@ -128,7 +128,7 @@ Item {
             width: Theme.stateMarkSize
             height: Theme.stateMarkSize
             name: "music"
-            color: Theme.color.muted
+            color: Theme.color.mutedFrame
             opacity: 0.7
         }
 

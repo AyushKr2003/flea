@@ -8,7 +8,7 @@ import QtQuick.Shapes
 Item {
     id: root
 
-    property color color: Theme.color.muted
+    property color color: Theme.color.mutedFrame
     // The mark draws on the same 24 unit grid as every Glyph, scaled to the slot.
     readonly property real grid: 24
     readonly property real markScale: Math.min(root.width, root.height) / root.grid

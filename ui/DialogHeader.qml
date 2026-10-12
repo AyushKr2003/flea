@@ -25,7 +25,7 @@ Item {
         anchors.bottom: parent.bottom
         width: parent.width
         height: Theme.spacing.hairline
-        color: Theme.color.muted
+        color: Theme.color.mutedFrame
         opacity: 0.4
     }
 }

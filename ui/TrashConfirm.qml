@@ -62,7 +62,7 @@ FocusScope {
         width: Theme.cardSpan(Math.round(340 * root.referenceScale * Theme.dialogWidthRatio) + 2 * root.cardPadding + 2 * Theme.spacing.hairline, root.width - 2 * Theme.spacing.gap)
         height: Theme.cardSpan(body.wanted + root.cardPadding + root.cardBottomPadding + 2 * Theme.spacing.hairline, root.height - 2 * Theme.spacing.gap)
         color: Theme.color.surface
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
         border.width: Theme.spacing.hairline
         radius: Style.cornerRadius
         MouseArea {

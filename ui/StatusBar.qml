@@ -336,7 +336,7 @@ Item {
             sourceComponent: Flea.Spinner {
                 width: Theme.chromeMarkSize
                 height: Theme.chromeMarkSize
-                color: Theme.color.muted
+                color: Theme.color.mutedFrame
             }
         }
 

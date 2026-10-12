@@ -50,7 +50,7 @@ function inkFailures(probe, theme) {
     var fg = theme.color.foreground
     var folder = probe.folderItem()
     probe.hovered = false
-    if (String(folder.color) !== String(Qt.darker(fg, 1.4))) out.push("rest folder ink " + folder.color + ", want List's darker foreground")
+    if (String(folder.color) !== String(theme.color.metadata)) out.push("rest folder ink " + folder.color + ", want List's darker foreground")
     probe.cursor = true
     if (!Qt.colorEqual(folder.color, fg)) out.push("cursor folder ink " + folder.color + ", want foreground")
     probe.cursor = false

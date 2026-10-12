@@ -203,7 +203,7 @@ Item {
         height: Theme.cardSpan(body.wanted + 2 * Theme.spacing.rowPaddingX, root.height - 2 * root.clampMargin)
         color: Theme.color.surface
         border.width: Theme.spacing.hairline
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
         radius: Style.cornerRadius
 
         // The strip toggle's handler takes a passive grab, so without this sink its press fell
@@ -248,7 +248,7 @@ Item {
                     anchors.bottom: parent.bottom
                     width: parent.width
                     height: Theme.spacing.hairline
-                    color: Theme.color.muted
+                    color: Theme.color.mutedFrame
                     opacity: 0.4
                 }
             }
@@ -281,7 +281,7 @@ Item {
             Rectangle {
                 width: parent.width
                 height: Theme.spacing.hairline
-                color: Theme.color.muted
+                color: Theme.color.mutedFrame
                 opacity: 0.4
             }
 

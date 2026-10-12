@@ -21,7 +21,7 @@ Item {
         width: Theme.markSize
         height: width
         name: root.row.glyph || "folder"
-        color: root.row.error ? Theme.color.error : Theme.color.muted
+        color: root.row.error ? Theme.color.error : Theme.color.mutedFrame
     }
     Text {
         anchors.left: icon.right
@@ -74,7 +74,7 @@ Item {
             width: Theme.markSize
             height: Theme.markSize
             name: "x"
-            color: Theme.color.muted
+            color: Theme.color.mutedFrame
         }
     }
 
@@ -90,7 +90,7 @@ Item {
             width: Theme.markSize
             height: Theme.markSize
             name: "list"
-            color: Theme.color.muted
+            color: Theme.color.mutedFrame
         }
         DragHandler {
             id: drag

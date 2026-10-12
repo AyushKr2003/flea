@@ -40,7 +40,7 @@ QtObject {
     }
     // Which role a frame draws in, so a capture asserts the frame's colour without knowing the theme.
     function roleOf(color) {
-        return Qt.colorEqual(color, Theme.color.error) ? "error" : Qt.colorEqual(color, Theme.color.accent) ? "accent" : Qt.colorEqual(color, Theme.color.muted) ? "muted" : "other"
+        return Qt.colorEqual(color, Theme.color.error) ? "error" : Qt.colorEqual(color, Theme.color.accent) ? "accent" : Qt.colorEqual(color, Theme.color.muted) || Qt.colorEqual(color, Theme.color.mutedFrame) ? "muted" : "other"
     }
     function confirmationState(item) {
         return item ? {opened: item.opened, token: item.snapshot.token || 0, count: item.snapshot.count || 0,

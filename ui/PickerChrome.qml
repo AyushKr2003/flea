@@ -124,7 +124,7 @@ Item {
         }
 
         readonly property color frame: control.primary
-            ? Theme.color.accentFrame : Theme.color.muted
+            ? Theme.color.accentFrame : Theme.color.mutedFrame
 
         // The chosen chip carries its wash at rest; every other earns one under the pointer or the keyboard.
         readonly property real wash: control.primary ? Theme.washActive : !control.available ? 0
@@ -399,7 +399,7 @@ Item {
             objectName: "pickerListView"
             glyph: "list"
             lit: root.picker.viewMode === "list"
-            restingColor: listButton.lit ? Theme.color.foreground : Theme.color.muted
+            restingColor: listButton.lit ? Theme.color.foreground : Theme.color.mutedFrame
             activeFocusOnTab: false
             onActivated: root.viewChosen("list")
         }
@@ -409,7 +409,7 @@ Item {
             objectName: "pickerGridView"
             glyph: "grid"
             lit: root.picker.viewMode === "grid"
-            restingColor: gridButton.lit ? Theme.color.foreground : Theme.color.muted
+            restingColor: gridButton.lit ? Theme.color.foreground : Theme.color.mutedFrame
             activeFocusOnTab: false
             onActivated: root.viewChosen("grid")
         }

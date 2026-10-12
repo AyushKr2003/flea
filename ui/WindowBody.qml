@@ -398,7 +398,7 @@ Rectangle {
         width: Theme.spacing.hairline
         height: primaryPane.height
         visible: view.dualMode
-        color: Theme.color.muted
+        color: Theme.color.mutedFrame
     }
 
     Flea.StatusBar {

@@ -142,7 +142,7 @@ Item {
             anchors.fill: parent
             visible: !root.thumbDrawn
             name: root.row ? Icons.glyphForRow(root.row.i, root.row.p) : "file"
-            color: root.dimmed(root.cursor ? Theme.color.accent : Theme.color.muted)
+            color: root.dimmed(root.cursor ? Theme.color.accent : Theme.color.mutedFrame)
         }
     }
 
@@ -239,7 +239,7 @@ Item {
                         sourceComponent: Text {
                             text: Match.location(markParts.path)
                             // List's metadata ink (ui/Row.qml cellInk): foreground on a lifted row, a darker foreground at rest.
-                            color: root.dimmed(root.cursor || root.lifted || root.hovered || root.selected || root.dropTarget ? Theme.color.foreground : Qt.darker(Theme.color.foreground, 1.4))
+                            color: root.dimmed(root.cursor || root.lifted || root.hovered || root.selected || root.dropTarget ? Theme.color.foreground : Theme.color.metadata)
                             font.family: Theme.font.family
                             font.pixelSize: Theme.font.caption
                             elide: Text.ElideLeft
@@ -280,7 +280,7 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.verticalCenterOffset: -1
                         name: root.clipMark
-                        color: Theme.color.muted
+                        color: Theme.color.mutedFrame
                     }
                 }
             }
@@ -308,7 +308,7 @@ Item {
             anchors.fill: parent
             visible: root.showChevron && !root.dropTarget
             name: "chevron-right"
-            color: root.cursor ? Theme.color.accent : Theme.color.muted
+            color: root.cursor ? Theme.color.accent : Theme.color.mutedFrame
         }
     }
 
