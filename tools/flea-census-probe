@@ -27,7 +27,8 @@ perWindowFrameDelta=". Texture work: "atlastexture upload enqueued in: Nms (WxH)
 Qt prints whole milliseconds, so a 120 Hz frame of 8.3 ms is read to 1 ms: every figure here is a range with its n.
 The lines carry no clock. A tail thread polls the session log every POLL_S and stamps each batch with CLOCK_MONOTONIC, so
 a stamp is up to POLL_S after the line's print; frame times and framecap F lines (presentation ns) share that clock.
-A run whose first sweep or sample reads no timing line stops with an error row that says so, never a timing.
+A run that reads no timing line ends with an error row that says so (held stops after its first sweep, ops and dual finish
+their samples first, so those rows carry zero qt figures): the error row, not a zero, is the verdict.
 
 held: j held on the 10k folder in list (control), columns and grid, series_held's hold; per sweep, per repeat slot
 (anchor + k * interval, half an interval either side, the slot rule of held_analysis), drawn or missed, the GUI thread's
@@ -41,8 +42,8 @@ one facts row the device of the sandbox, the op directories, the home Trash Flea
 trash renames in place (src/backend/hometrash.rs same_filesystem) and the directory GLib picks.
 paste: five fresh op.copy.many sessions of three pastes each, so n=5 cold (the first paste of a session builds
 CollideHost) and n=10 warm. Each paste is followed by a burst of "ready" IPC calls for BURST_S; the GUI thread serves
-them, so the largest round trip over the idle median is the longest the GUI thread was away. The Qt GUI frame gaps and
-the dest refresh of the 1000 rows ride in the same row.
+them, so the largest round trip over the idle median is the longest the GUI thread was away. Paste takes no stamps: their
+IPC calls would queue the burst's own. The Qt GUI frame gaps and the dest refresh of the 1000 rows ride in the same row.
 dual: nav.dual.down and nav.dual.up (series_pairs) in the p7-load session under: b (the census load b, a Flea copy to the
 USB stick), d (dd direct writes to it, the census load d), pin (Flea pinned to FLEA cores, no load, the control), burn-off
 (pin, plus one CPU burner per BURN core, on cores Flea may not use) and burn-on (pin, plus burners on Flea's own cores).
@@ -64,6 +65,7 @@ import sys
 import tempfile
 import threading
 import time
+import types
 from importlib.machinery import SourceFileLoader
 
 sys.dont_write_bytecode = True  # the loader would leave tools/__pycache__ behind
@@ -77,6 +79,18 @@ POLL_S = 0.001  # s between tail reads
 SMALL_MS = 2.0  # a missed slot with every part under this is light
 STAMP_S = (0.1, 0.25, 0.5, 1.0, 2.0, 5.0)  # s after a paste or delete that statusActivityState is read
 BURST_S = 1.5  # s of ready calls after a paste
+IDLE_RTTS = 8  # ready round trips read before a paste session, the idle median the burst is judged against
+READ_BYTES = 1 << 20  # bytes a tail read takes at most
+NS_FOREVER = 1 << 62  # an upper bound past any monotonic stamp
+FRAME_TAIL_MS = 250  # ms past a sample's first change that F lines are kept
+FRAME_MISS_NS = 3 * 10**9  # ns of F lines kept after a press that changed nothing
+CHANGED_CAP_NS = 30 * 10**9  # ns after a press in which changed frames are counted, the op cap
+HOLD_TAIL_NS = 500 * MS  # ns past key-up in which a held sweep's last frames still arrive
+FRAME_SLACK_NS = 16 * MS  # one 60 Hz frame past a dual row's first change, so its frame is inside the qt window
+EVENT_LAG_NS = 50 * MS  # ns past a window's end a stamped batch may still hold its lines, POLL_S and the print delay
+DUAL_MISS_MS = 100  # ms a dual row with no first change is given for its qt window
+PIN_TRIES = 2  # taskset attempts per process, one retry for a thread that exits mid-pin
+BURN_START_S = 0.2  # s a burner gets to show CPU ticks before its arm counts as loaded
 BIN_MS, BINS = 100, 30  # the render and GUI work bins after an op's input
 FRAME_LIMIT = 40  # F lines kept around a sample
 PROBES = {"held": ("p2-held", 10), "ops": ("p6-ops", 8), "paste": ("p6-ops", 3), "dual": ("p7-load", 20)}
@@ -215,7 +229,7 @@ class Tail:
         self.thread.start()
 
     def drain(self):
-        data = os.read(self.fd, 1 << 20)
+        data = os.read(self.fd, READ_BYTES)
         if not data:
             return False
         ns = time.monotonic_ns()
@@ -357,18 +371,44 @@ class Burn:
         return total
 
 
+def pin_failure(pid, rc, allowed, cores):
+    """Why a pin of pid did not take, or None: taskset's exit code, or a read-back list that is not cores."""
+    if rc != 0:
+        return "taskset exited %d on pid %d" % (rc, pid)
+    if not allowed or parse_cpulist(allowed) != parse_cpulist(cores):
+        return "pid %d reads Cpus_allowed_list %r, not %s" % (pid, allowed, cores)
+    return None
+
+
 def pin_tree(proc, cores):
-    """Every thread of proc and its descendants onto cores; the (pid, allowed list) read back for the facts."""
+    """Every thread of proc and its descendants onto cores; the (pid, allowed list) read back for the facts, RuntimeError when one did not take."""
     seen = []
     for pid in sorted(S.descendants(proc.pid)):
-        subprocess.run(["taskset", "-a", "-p", "-c", cores, str(pid)], capture_output=True)
-        try:
-            with open("/proc/%d/status" % pid) as f:
-                allowed = next((ln.split(":")[1].strip() for ln in f if ln.startswith("Cpus_allowed_list")), "")
-        except OSError:
-            continue
-        seen.append((pid, allowed))
+        for _ in range(PIN_TRIES):
+            rc = subprocess.run(["taskset", "-a", "-p", "-c", cores, str(pid)], capture_output=True).returncode
+            try:
+                # Sample input: "Cpus_allowed_list:\t0-5"
+                with open("/proc/%d/status" % pid) as f:
+                    allowed = next((ln.split(":")[1].strip() for ln in f if ln.startswith("Cpus_allowed_list")), "")
+            except OSError:
+                break  # the process ended during the pin
+            why = pin_failure(pid, rc, allowed, cores)
+            if not why:
+                seen.append((pid, allowed))
+                break
+        else:
+            raise RuntimeError("pin to cores %s failed: %s" % (cores, why))
     return seen
+
+
+def burn_failure(burn, cores):
+    """Why a burner is not loading cores, or None: it has exited, or it shows no CPU ticks after BURN_START_S."""
+    time.sleep(BURN_START_S)
+    if burn.poll() is not None:
+        return "the burner on cores %s exited %d at once" % (cores, burn.poll())
+    if burn.ticks() == 0:
+        return "the burner on cores %s shows no CPU ticks after %.1f s" % (cores, BURN_START_S)
+    return None
 
 
 # Trash.
@@ -391,6 +431,7 @@ def flea_renames(item_dev, parent_dev, trash_dev):
 
 
 def nearest(path):
+    """The nearest existing path at or above path: "/a/b/new" gives "/a" when /a/b is missing."""
     while not os.path.exists(path) and os.path.dirname(path) != path:
         path = os.path.dirname(path)
     return path
@@ -419,6 +460,7 @@ def facts(root):
     out["glib_dir_for_item"] = glib_trash_dir(item, home, data_home, uid, devof, usable)
     out["flea_home_trash_dir"] = own
     out["cpus"] = sorted(os.sched_getaffinity(0))
+    # Sample input: "Quickshell 0.3.0 (revision , distributed by Debian)"
     out["qs"] = subprocess.run(["qs", "-V"], capture_output=True, text=True).stdout.strip()
     return out
 
@@ -442,7 +484,7 @@ class Instr:
             return t
         keys.chord = chord
         self.keys = keys
-        self.idle_rtt = [self.rtt() for _ in range(8)] if burst else []
+        self.idle_rtt = [self.rtt() for _ in range(IDLE_RTTS)] if burst else []
 
     def rtt(self):
         a = time.monotonic_ns()
@@ -493,7 +535,7 @@ class Instr:
 
     def check_timing(self):
         """False when the log holds no Qt frame line, so a run says so instead of timing."""
-        return any(e["kind"] in ("gui", "render", "basic") for e in self.tail.between(0, 1 << 62))
+        return any(e["kind"] in ("gui", "render", "basic") for e in self.tail.between(0, NS_FOREVER))
 
     def close(self):
         self.keys.chord = self.orig_chord
@@ -542,7 +584,7 @@ def series_held(sess, spec, n):
                 break
             anchor = S.first_change_after(S.changes_of(frames), t_down + delay * MS)
             if anchor is not None:
-                events = ins.events(t_down, t_up + 500 * MS)
+                events = ins.events(t_down, t_up + HOLD_TAIL_NS)
                 row["slots"] = held_slots(S.changes_of(frames), events, anchor, h["repeats_due"], int(interval * MS))
                 row["slots_head"] = ["k", "drawn", "gui_ms", "sync_ms", "render_ms", "frames", "gui_gap_ms", "verdict"]
                 row["frame_rows"] = frame_rows(events, anchor, int(interval * MS), h["repeats_due"])
@@ -574,9 +616,9 @@ def attach_op(ins, row):
     first = row.get("first_ms")
     detail = ins.sess.rec.detail_snapshot()
     press = ins.presses.get(t, {})
-    row["frames"] = (around(detail, t, t + int((first + 250) * MS)) if first is not None else around(detail, t, t + 3 * 10**9))
+    row["frames"] = (around(detail, t, t + int((first + FRAME_TAIL_MS) * MS)) if first is not None else around(detail, t, t + FRAME_MISS_NS))
     row["frames_head"] = ["present_ms", "received_ms", "changed_rows", "ink_rows"]
-    row["changed_in_cap"] = len([d for d in detail if t <= d[0] < t + 30 * 10**9 and d[2] > 0])
+    row["changed_in_cap"] = len([d for d in detail if t <= d[0] < t + CHANGED_CAP_NS and d[2] > 0])
     row["stamps"] = press.get("stamps", [])
     row["qt_bins"] = bins_of(ins.events(t, t + BINS * BIN_MS * MS), t)
     row["qt_bins_head"] = ["render_ms", "gui_ms", "frames"]
@@ -604,6 +646,8 @@ def series_probe_op(sess, spec, n):
 
 def series_probe_dual(sess, spec, n):
     """series_pairs for down and up, each row with the GUI and render work in its window and the arm's evidence."""
+    if getattr(sess, "arm_error", None):
+        raise RuntimeError(sess.arm_error)
     ins = Instr(sess, stamps=False)
     orig = I.per_key_rows
 
@@ -618,8 +662,8 @@ def series_probe_dual(sess, spec, n):
         for r in rows:
             t = r.get("t_press_ns")
             if t is not None:
-                end = t + int((r["first_ms"] if r["first_ms"] is not None else 100) * MS) + 16 * MS
-                r["qt"] = split_window(t, end, ins.events(t, end + 50 * MS))
+                end = t + int((r["first_ms"] if r["first_ms"] is not None else DUAL_MISS_MS) * MS) + FRAME_SLACK_NS
+                r["qt"] = split_window(t, end, ins.events(t, end + EVENT_LAG_NS))
         if rows and not ins.check_timing():
             rows.append({"journey": "nav.dual", "row": 3, "error": NO_TIMING})
         if rows:
@@ -632,6 +676,25 @@ def series_probe_dual(sess, spec, n):
 
 # The harness hooks.
 
+def probe_sessions(probe, opts, sess):
+    """The probe's sessions, made from the harness's own sessions of its part."""
+    if probe == "held":
+        sess = [dict(s, series=[{"type": "probe-held"}]) for s in sess if s["view"] in HELD_VIEWS]
+        sess.sort(key=lambda s: HELD_VIEWS.index(s["view"]))
+    elif probe == "ops":
+        sess = [dict(s, series=[{"type": "probe-op", "op": s["op"], "stamps": opts["stamps"]}]) for s in sess if s["op"] in OPS_PROBED]
+    elif probe == "paste":
+        one = next(s for s in sess if s["op"] == "op.copy.many")
+        # no stamps: their IPC calls would queue the ready burst and inflate the GUI away time
+        sess = [dict(one, n=opts["samples"], series=[{"type": "probe-paste", "op": "op.copy.many", "stamps": False}])
+                for _ in range(PASTE_SESSIONS)]
+    else:
+        arms = ("b", "d") + ARMS
+        down_up = [{"type": "probe-dual", "pairs": [(("down",), ("up",))]}]
+        sess = [dict(next(s for s in sess if s.get("load") == "a"), load=a, series=down_up, n=opts["samples"]) for a in arms]
+    return sess
+
+
 def install(probe, opts):
     """Point flea-field-instant's session table, series table, loads and environment at the probe."""
     part = PROBES[probe][0]
@@ -641,21 +704,7 @@ def install(probe, opts):
 
     def parts(fx, samples):
         base = orig_parts(fx, samples)
-        sess = base[part]
-        if probe == "held":
-            sess = [dict(s, series=[{"type": "probe-held"}]) for s in sess if s["view"] in HELD_VIEWS]
-            sess.sort(key=lambda s: HELD_VIEWS.index(s["view"]))
-        elif probe == "ops":
-            sess = [dict(s, series=[{"type": "probe-op", "op": s["op"], "stamps": opts["stamps"]}]) for s in sess if s["op"] in OPS_PROBED]
-        elif probe == "paste":
-            one = next(s for s in sess if s["op"] == "op.copy.many")
-            sess = [dict(one, n=samples, series=[{"type": "probe-paste", "op": "op.copy.many", "stamps": opts["stamps"]}])
-                    for _ in range(PASTE_SESSIONS)]
-        else:
-            arms = ("b", "d") + ARMS
-            down_up = [{"type": "probe-dual", "pairs": [(("down",), ("up",))]}]
-            sess = [dict(next(s for s in sess if s.get("load") == "a"), load=a, series=down_up, n=samples) for a in arms]
-        base[part] = sess
+        base[part] = probe_sessions(probe, dict(opts, samples=samples), base[part])
         return base
 
     def load_right(load, ctx):
@@ -665,13 +714,23 @@ def install(probe, opts):
         if load not in ARMS:
             return orig_start(sess, load, ctx)
         flea, burn = cores
-        sess.pinned = pin_tree(sess.proc, cpulist(flea))
+        where = flea if load != "burn-off" else burn
+        sess.arm_error = None  # series_probe_dual raises it as the arm's error row; a raise here would end the whole part
+        try:
+            sess.pinned = pin_tree(sess.proc, cpulist(flea))
+            if load != "pin":
+                sess.load_proc = Burn(cpulist(where))
+                sess.arm_error = burn_failure(sess.load_proc, cpulist(where))
+        except (RuntimeError, OSError) as e:
+            sess.arm_error = str(e)
         if load == "pin":
             return (lambda: (0, False)), "Flea pinned to cores %s, no load" % cpulist(flea)
-        where = burn if load == "burn-off" else flea
-        sess.load_proc = Burn(cpulist(where))
         note = "Flea pinned to %s, one CPU burner per core on %s" % (cpulist(flea), cpulist(where))
-        return (lambda: (sess.load_proc.ticks(), True)), note
+
+        def probe():
+            burner = getattr(sess, "load_proc", None)
+            return (burner.ticks(), burner.poll() is None) if burner else (0, False)
+        return probe, note
 
     I.parts, I.load_start, I.load_right = parts, load_start, load_right
     S.session_env = lambda: dict(orig_env(), QT_LOGGING_RULES=QT_RULES, QSG_RENDER_TIMING="1", QS_NO_FILTER_QT_LOGS="1")
@@ -785,6 +844,7 @@ def summarise(rows):
                     r.get("sample"), r.get("changed_in_cap"), r.get("frames")[:6], [(s["at_ms"], s["errors"], s["notice"], s["activities"]) for s in r.get("stamps", [])]))
     dual = {}
     for r in rows:
+        # series_pairs rows come from per_key_rows, row 1; the census row 3 is the journey's, not the row's tag
         if r.get("row") == 1 and r.get("load") and "nav.dual" in r.get("journey", ""):
             dual.setdefault((r["load"], r["journey"]), []).append(r)
     for (load, name), g in sorted(dual.items()):
@@ -886,6 +946,31 @@ def selftest():
         check("clean refuses relative", clean("x"), 2)
         root = new_out(td)
         check("clean marked", (clean(root), os.path.exists(root)), (0, False))
+    nominal = [{"op": "op.copy.many", "view": "list", "fixture": "/f"}]
+    pasted = probe_sessions("paste", {"samples": 3, "stamps": True}, nominal)
+    check("paste no stamps", ([x["series"][0]["stamps"] for x in pasted], [x["n"] for x in pasted]), ([False] * PASTE_SESSIONS, [3] * PASTE_SESSIONS))
+    check("ops stamps follow the flag", probe_sessions("ops", {"samples": 3, "stamps": True}, [dict(nominal[0], op="op.trash")])[0]["series"][0]["stamps"], True)
+    check("pin ok", pin_failure(7, 0, "0-2", "0-2"), None)
+    check("pin rc", "exited 1" in (pin_failure(7, 1, "0-2", "0-2") or ""), True)
+    check("pin readback", "Cpus_allowed_list" in (pin_failure(7, 0, "0-5", "0-2") or ""), True)
+    check("pin empty readback", pin_failure(7, 0, "", "0-2") is not None, True)
+    if shutil.which("taskset"):
+        first = cpulist(sorted(os.sched_getaffinity(0))[:1])
+        for cores, want in (("999", "exited"), (first, None)):
+            burner = Burn(cores)
+            why = burn_failure(burner, cores)
+            burner.kill()
+            burner.wait()
+            check("burner %s" % cores, why if why is None else ("exited" if "exited" in why else why), want)
+    idle = types.SimpleNamespace(poll=lambda: None, ticks=lambda: 0)
+    check("burner idle", "no CPU ticks" in (burn_failure(idle, "1") or ""), True)
+    try:
+        series_probe_dual(types.SimpleNamespace(arm_error="pin to cores 0-2 failed"), {}, 1)
+        bad.append("a failed arm ran its series")
+    except RuntimeError:
+        pass
+    dual_row = {"journey": "nav.dual.down", "row": 1, "load": "pin", "first_ms": 5.0, "load_active": False, "qt": {"gui_ms": 1.0, "render_ms": 2.0}}
+    check("summary dual", [x.split(":")[0] for x in summarise([dual_row]) if x.startswith("nav.dual")], ["nav.dual.down pin"])
     with contextlib.redirect_stdout(io.StringIO()):
         check("dry", dry("dual", {"cores": ([0], [1]), "stamps": True}, 3), 0)
     print("\n".join(bad) if bad else "flea-census-probe selftest: ok")
