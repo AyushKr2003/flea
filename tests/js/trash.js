@@ -105,7 +105,7 @@ function run(check) {
     check("wire pin: the backend orders every listing it reads, through the one reader the tests feed",
         rust.indexOf("newest_first(&mut items, |item| dates.get(&item.uri)") >= 0 && rust.indexOf("fn list() -> Result<Vec<Item>, String> {\n    list_with(gio)\n}") >= 0, true)
     check("wire pin: item membership is by uri set, never a uri search of the date-ordered listing",
-        rust.indexOf("let listed = listed_uris(&self.items);") >= 0 && rust.indexOf("listed.contains(item.uri.as_str())") >= 0 && rust.indexOf("binary_search") < 0, true)
+        rust.indexOf("let listed = listed_uris(&self.items);") >= 0 && rust.indexOf("if !listed.contains(item.uri.as_str()) { continue; }") >= 0 && rust.indexOf("binary_search") < 0, true)
     check("wire pin: both staleness comparisons ignore the order of the two reads",
         rust.indexOf("if !same_items(&list()?, &self.items) {") >= 0 && rust.indexOf("if !same_items(&list()?, &confirmation.listing) {") >= 0
             && rust.indexOf("list()? != ") < 0, true)
