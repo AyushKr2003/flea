@@ -69,7 +69,7 @@ Window {
         property var thumbState: ({file: {}, order: []})
         property var dirSizeState: ({file: {}, order: []})
         // Tiles draw from the held rows (GridGeometry.heldRow), so the stub holds all of them.
-        property var rows: { var out = []; for (var i = 0; i < 1202; i++) out.push(rowFor(i)); return out }
+        property var rows: { var out = []; for (var i = 0; i < shownTotal; i++) out.push(rowFor(i)); return out }
         property int held: 0
         property int refetchMargin: 0
         property int buffer: 0
