@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.." || exit 1
 # A foreign drop leaves focus on the probe window, and key() refuses any key while focus is off the pid ipc points at, so the case focuses Flea between the first probe drop and the next seek.
 case_body=$(sed -n '/^case_cap_dropmods()/,/^}/p' tests/ui-captures-dropmods.sh)
 between=$(printf '%s\n' "$case_body" | sed -n '/the probe never logged the plain drop/,/seek_row_named "probe2.txt"/p')
-if ! printf '%s\n' "$between" | grep -q 'seek_row_named "probe2.txt"' || ! printf '%s\n' "$between" | grep -Eq '^[[:space:]]*cap_dropmods_focus_pid '; then
+if ! printf '%s\n' "$between" | grep -q 'seek_row_named "probe2.txt"' || ! printf '%s\n' "$between" | grep -Eq '^[[:space:]]*cap_dropmods_focus_pid([[:space:]]|;|$)'; then
     printf 'FAIL cap_dropmods seeks probe2.txt with focus still on the probe window, so key() refuses it\n'
     exit 1
 fi
