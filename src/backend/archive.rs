@@ -17,6 +17,7 @@ pub(crate) const ZIP_TYPE: &str = "-tzip";
 
 // Either tool reads a .zip and a .rar, which is what a 7z-only box can still extract.
 const ZIP_SUFFIXES: &[&str] = &[".zip", ".rar"];
+const ZIP_SUFFIX: &str = ".zip";
 // Tar stays on bsdtar: `7z x` on a .tar.gz writes the inner .tar, not the files.
 const TAR_SUFFIXES: &[&str] = &[".tar.zst", ".tar.bz2", ".tar.gz", ".tar.xz", ".tgz", ".tar"];
 // Packages and disk images read through 7z, or bsdtar where 7z is missing except an AppImage; longest form first.
@@ -227,14 +228,7 @@ impl Formats {
             return None;
         }
         match self.reader_for(archive)? {
-            Reader::SevenZip => Some(vec![
-                SEVENZIP.to_string(),
-                "x".to_string(),
-                "-bd".to_string(),
-                "-y".to_string(),
-                archive.to_string_lossy().to_string(),
-                format!("-o{}", dest.to_string_lossy()),
-            ]),
+            Reader::SevenZip => Some(seven_extract_argv(archive, dest)),
             // bsdtar's secure-extraction default is exercised by the native archive tests.
             Reader::Bsdtar => Some(vec![
                 BSDTAR.to_string(),
@@ -247,13 +241,28 @@ impl Formats {
         }
     }
 
+    // Whether 7z can read this archive, which a zip stays readable by beside bsdtar and only 7z can unlock.
+    pub fn seven_reads(&self, archive: &Path) -> bool {
+        let zip = archive.to_string_lossy().to_lowercase().ends_with(ZIP_SUFFIX);
+        self.have_7z && (zip || self.reader_for(archive) == Some(Reader::SevenZip))
+    }
+
+    // 7z's own extract argv, which the test stub answers as it does for the plain one.
+    pub(crate) fn seven_extract(&self, archive: &Path, dest: &Path) -> Vec<String> {
+        #[cfg(test)]
+        if let Some(stub) = &self.stub {
+            return stub.extract.clone();
+        }
+        seven_extract_argv(archive, dest)
+    }
+
     // `7z l -slt`, the technical listing whose keys are not localized; None unless 7z reads the archive.
     pub fn technical_list_argv(&self, archive: &Path) -> Option<Vec<String>> {
         #[cfg(test)]
         if let Some(stub) = &self.stub {
             return Some(stub.technical.clone());
         }
-        (self.reader_for(archive)? == Reader::SevenZip)
+        self.seven_reads(archive)
             .then(|| vec![SEVENZIP.to_string(), "l".to_string(), "-slt".to_string(), archive.to_string_lossy().to_string()])
     }
 
@@ -276,6 +285,18 @@ impl Formats {
             )),
         }
     }
+}
+
+// 7z's own extract, which asks its stdin for a password where the archive has one.
+pub(crate) fn seven_extract_argv(archive: &Path, dest: &Path) -> Vec<String> {
+    vec![
+        SEVENZIP.to_string(),
+        "x".to_string(),
+        "-bd".to_string(),
+        "-y".to_string(),
+        archive.to_string_lossy().to_string(),
+        format!("-o{}", dest.to_string_lossy()),
+    ]
 }
 
 #[cfg(test)]

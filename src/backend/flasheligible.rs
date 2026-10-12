@@ -19,10 +19,15 @@ pub struct Roots<'a> {
     pub dev: &'a Path,
     pub exe: &'a Path,
     pub ui: &'a Path,
+    // The bench's named loop root, read from the environment once at production's edge; unused without the flash-test-seam feature.
+    pub loop_root: Option<&'a Path>,
 }
 
 // Sample sysfs: <sys>/block/sda with removable, ro, size, diskseq, dev, vendor, model and holders/.
 pub fn list_drives(roots: &Roots, mountinfo: &str, swaps: &str, image: Option<&Path>, image_bytes: Option<u64>) -> Vec<Drive> {
+    // The pane's path may run through a link into a mount; mountinfo names the real one.
+    let real = image.map(|path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf()));
+    let image = real.as_deref();
     let mut excluded = excluded_disks(roots, mountinfo, swaps);
     let _ = excluded.insert(String::new());
     let mut out = Vec::new();
@@ -67,7 +72,7 @@ fn block_names(sys: &Path) -> Vec<String> {
 // None when any layer refuses to list the drive at all; refused names why it cannot take the image.
 fn drive_if_candidate(roots: &Roots, mountinfo: &str, excluded: &std::collections::HashSet<String>, dev: &str, image: Option<&Path>, image_bytes: Option<u64>) -> Option<Drive> {
     // The bench seam admits a loop whose backing file is inside its root; every other excluded prefix is refused before any flag is read.
-    let seam_loop = dev.starts_with("loop") && loop_permitted(dev, roots.sys);
+    let seam_loop = dev.starts_with("loop") && loop_permitted(dev, roots);
     if EXCLUDED_PREFIXES.iter().any(|p| dev.starts_with(p)) && !seam_loop {
         return None;
     }
@@ -207,15 +212,27 @@ fn swap_disks(swaps: &str, mountinfo: &str, roots: &Roots) -> Vec<String> {
 }
 
 // A loop device is listed only through the bench seam, for a backing file inside its marked root; the feature off compiles it out.
-fn loop_permitted(dev: &str, sys: &Path) -> bool {
+fn loop_permitted(dev: &str, roots: &Roots) -> bool {
     #[cfg(feature = "flash-test-seam")]
     {
-        crate::backend::flashseam::loop_backing_inside(dev, sys)
+        crate::backend::flashseam::loop_backing_inside(roots.loop_root, dev, roots.sys)
     }
     #[cfg(not(feature = "flash-test-seam"))]
     {
-        let _ = (dev, sys);
+        let _ = (dev, roots.sys, roots.loop_root);
         false
+    }
+}
+
+// The root the bench named in the environment, for the production callers that build Roots; None in a default build.
+pub(crate) fn seam_root() -> Option<std::path::PathBuf> {
+    #[cfg(feature = "flash-test-seam")]
+    {
+        crate::backend::flashseam::named_root()
+    }
+    #[cfg(not(feature = "flash-test-seam"))]
+    {
+        None
     }
 }
 

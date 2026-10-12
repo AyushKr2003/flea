@@ -6,11 +6,6 @@ use std::path::Path;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-// std offers no way to kill a child from another thread without owning it, so the signal is declared here rather than taking a crate, the same call metareq.rs makes for its archive watchdog.
-extern "C" {
-    fn kill(pid: i32, sig: i32) -> i32;
-}
-
 const SIGKILL: i32 = 9;
 // A header read on a local file is milliseconds; this is a runaway, not a slow file.
 const PROBE_LIMIT: Duration = Duration::from_secs(5);
@@ -112,7 +107,7 @@ fn watchdog(pid: i32, sandbox_pid: Arc<std::sync::atomic::AtomicI32>, watch: Arc
         if !*reaped {
             // The group ends bwrap, and the sandbox pid ends the jailed tool --new-session hid from it.
             crate::backend::jail::kill_sandbox(&sandbox_pid, pid);
-            unsafe { kill(-pid, SIGKILL) };
+            let _ = crate::procsignal::signal_group(pid, SIGKILL);
         }
     })
 }

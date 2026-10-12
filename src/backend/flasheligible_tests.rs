@@ -8,8 +8,13 @@ const SERIAL: &str = "2003007157171692";
 const STICK_BYTES: u64 = 124_623_257_600;
 
 fn drives(sys: &Path, dev: &Path, mountinfo: &str, image_bytes: Option<u64>) -> Vec<Drive> {
+    drives_rooted(sys, dev, mountinfo, image_bytes, None)
+}
+
+// The bench's named loop root rides in as a value, so no test writes the process environment.
+fn drives_rooted(sys: &Path, dev: &Path, mountinfo: &str, image_bytes: Option<u64>, loop_root: Option<&Path>) -> Vec<Drive> {
     let (exe, ui) = roots();
-    let r = Roots { sys, dev, exe: &exe, ui: &ui };
+    let r = Roots { sys, dev, exe: &exe, ui: &ui, loop_root };
     list_drives(&r, mountinfo, "Filename Type Size Used Priority\n", None, image_bytes)
 }
 
@@ -81,7 +86,7 @@ fn a_btrfs_root_on_dm_crypt_excludes_its_disk() {
     devlink(&f.sys, "253:0", "../../block/dm-0");
     let info = "28 1 253:0 / / rw - btrfs /dev/mapper/root rw\n".to_string();
     let (exe, ui) = roots();
-    let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui };
+    let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui, loop_root: None };
     assert_eq!(disk_under(std::path::Path::new("/"), &info, &r), ["nvme0n1"], "the chain is source, dev/block, slaves, parent");
     let got = list_drives(&r, &info, "Filename Type Size Used Priority\n", None, None);
     assert_eq!(got.len(), 1, "the stick survives while the crypt disk is excluded");
@@ -95,7 +100,7 @@ fn a_disk_under_an_active_swap_partition_is_never_listed() {
     stick(&f.sys);
     part(&f.sys, "sda", "sda2", "8:18");
     let (exe, ui) = roots();
-    let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui };
+    let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui, loop_root: None };
     let swaps = "Filename Type Size Used Priority\n/dev/sda2 partition 1 0 -2\n";
     let got = list_drives(&r, &root_mountinfo(), swaps, None, None);
     assert!(got.is_empty(), "the swap partition's disk is never a candidate");
@@ -138,8 +143,6 @@ fn a_card_reader_with_no_medium_is_listed_with_no_bytes() {
 
 #[test]
 fn loop_and_optical_devices_are_never_listed() {
-    let _guard = LOOP_ENV_GUARD.lock().unwrap();
-    std::env::remove_var(LOOP_ENV);
     let f = fake("eligible-never");
     system(&f.sys);
     disk(&f.sys, "loop0", "1\n", "0\n", 1_000_000, "6\n", "/pci/loop");
@@ -152,7 +155,6 @@ fn loop_and_optical_devices_are_never_listed() {
 #[cfg(not(feature = "flash-test-seam"))]
 #[test]
 fn the_default_build_has_no_loop_seam() {
-    let _guard = LOOP_ENV_GUARD.lock().unwrap();
     let f = fake("eligible-loopoff");
     system(&f.sys);
     let backing = f._dir.file("backing.img", "backing");
@@ -161,9 +163,7 @@ fn the_default_build_has_no_loop_seam() {
     let loopdir = f.sys.join("block").join("loop0").join("loop");
     std::fs::create_dir_all(&loopdir).unwrap();
     std::fs::write(loopdir.join("backing_file"), backing.to_string_lossy().to_string()).unwrap();
-    std::env::set_var(LOOP_ENV, f._dir.path().to_string_lossy().to_string());
-    let got = drives(&f.sys, &f.dev, &root_mountinfo(), None);
-    std::env::remove_var(LOOP_ENV);
+    let got = drives_rooted(&f.sys, &f.dev, &root_mountinfo(), None, Some(f._dir.path()));
     assert!(got.is_empty(), "without the feature no loop device is ever listed");
 }
 
@@ -171,7 +171,6 @@ fn the_default_build_has_no_loop_seam() {
 #[cfg(feature = "flash-test-seam")]
 #[test]
 fn the_seam_lists_a_loop_whose_backing_file_is_inside_its_marked_root() {
-    let _guard = LOOP_ENV_GUARD.lock().unwrap();
     let f = fake("eligible-loop");
     system(&f.sys);
     let backing = f._dir.file("backing.img", "backing");
@@ -180,9 +179,7 @@ fn the_seam_lists_a_loop_whose_backing_file_is_inside_its_marked_root() {
     let loopdir = f.sys.join("block").join("loop0").join("loop");
     std::fs::create_dir_all(&loopdir).unwrap();
     std::fs::write(loopdir.join("backing_file"), backing.to_string_lossy().to_string()).unwrap();
-    std::env::set_var(LOOP_ENV, f._dir.path().to_string_lossy().to_string());
-    let got = drives(&f.sys, &f.dev, &root_mountinfo(), None);
-    std::env::remove_var(LOOP_ENV);
+    let got = drives_rooted(&f.sys, &f.dev, &root_mountinfo(), None, Some(f._dir.path()));
     assert_eq!(got.len(), 1, "the seam admits a loop backed inside its marked root");
     assert_eq!(got[0].dev, "loop0");
 }
@@ -190,7 +187,6 @@ fn the_seam_lists_a_loop_whose_backing_file_is_inside_its_marked_root() {
 #[cfg(feature = "flash-test-seam")]
 #[test]
 fn the_seam_refuses_a_root_without_its_marker() {
-    let _guard = LOOP_ENV_GUARD.lock().unwrap();
     let f = fake("eligible-loopnomark");
     system(&f.sys);
     let plain = f._dir.dir("plain");
@@ -201,16 +197,13 @@ fn the_seam_refuses_a_root_without_its_marker() {
     let loopdir = f.sys.join("block").join("loop0").join("loop");
     std::fs::create_dir_all(&loopdir).unwrap();
     std::fs::write(loopdir.join("backing_file"), backing.to_string_lossy().to_string()).unwrap();
-    std::env::set_var(LOOP_ENV, plain.to_string_lossy().to_string());
-    let got = drives(&f.sys, &f.dev, &root_mountinfo(), None);
-    std::env::remove_var(LOOP_ENV);
+    let got = drives_rooted(&f.sys, &f.dev, &root_mountinfo(), None, Some(&plain));
     assert!(got.is_empty(), "a root without the sandbox marker admits nothing");
 }
 
 #[cfg(feature = "flash-test-seam")]
 #[test]
 fn the_seam_refuses_a_backing_file_outside_its_root() {
-    let _guard = LOOP_ENV_GUARD.lock().unwrap();
     let f = fake("eligible-loopoutside");
     let elsewhere = TestDir::new("eligible-loopelsewhere");
     system(&f.sys);
@@ -220,16 +213,13 @@ fn the_seam_refuses_a_backing_file_outside_its_root() {
     let loopdir = f.sys.join("block").join("loop0").join("loop");
     std::fs::create_dir_all(&loopdir).unwrap();
     std::fs::write(loopdir.join("backing_file"), backing.to_string_lossy().to_string()).unwrap();
-    std::env::set_var(LOOP_ENV, f._dir.path().to_string_lossy().to_string());
-    let got = drives(&f.sys, &f.dev, &root_mountinfo(), None);
-    std::env::remove_var(LOOP_ENV);
+    let got = drives_rooted(&f.sys, &f.dev, &root_mountinfo(), None, Some(f._dir.path()));
     assert!(got.is_empty(), "a backing file outside the named root is refused");
 }
 
 #[cfg(feature = "flash-test-seam")]
 #[test]
 fn the_seam_refuses_a_symlink_escaping_its_root() {
-    let _guard = LOOP_ENV_GUARD.lock().unwrap();
     let f = fake("eligible-looplink");
     let elsewhere = TestDir::new("eligible-looplescape");
     system(&f.sys);
@@ -241,9 +231,7 @@ fn the_seam_refuses_a_symlink_escaping_its_root() {
     let loopdir = f.sys.join("block").join("loop0").join("loop");
     std::fs::create_dir_all(&loopdir).unwrap();
     std::fs::write(loopdir.join("backing_file"), link.to_string_lossy().to_string()).unwrap();
-    std::env::set_var(LOOP_ENV, f._dir.path().to_string_lossy().to_string());
-    let got = drives(&f.sys, &f.dev, &root_mountinfo(), None);
-    std::env::remove_var(LOOP_ENV);
+    let got = drives_rooted(&f.sys, &f.dev, &root_mountinfo(), None, Some(f._dir.path()));
     assert!(got.is_empty(), "a symlink pointing outside the root is not a file inside it");
 }
 
@@ -255,10 +243,29 @@ fn a_drive_holding_the_image_is_refused() {
     let info = root_mountinfo() + "40 28 8:17 / /media/stick rw - vfat /dev/sda1 rw\n";
     let image = PathBuf::from("/media/stick/raspios.img");
     let (exe, ui) = roots();
-    let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui };
+    let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui, loop_root: None };
     let got = list_drives(&r, &info, "Filename Type Size Used Priority\n", Some(&image), None);
     assert_eq!(got.len(), 1);
     assert_eq!(got[0].refused, "holdsimage");
+}
+
+#[test]
+fn a_drive_holding_the_image_through_a_symlinked_folder_is_refused() {
+    let f = fake("eligible-holds-link");
+    system(&f.sys);
+    stick(&f.sys);
+    let mount = f._dir.dir("mnt/stick");
+    std::fs::create_dir_all(mount.join("dl")).unwrap();
+    std::fs::write(mount.join("dl/raspios.img"), b"x").unwrap();
+    std::fs::create_dir_all(f._dir.join("home")).unwrap();
+    std::os::unix::fs::symlink(mount.join("dl"), f._dir.join("home/dl")).unwrap();
+    let info = root_mountinfo() + &format!("40 28 8:17 / {} rw - vfat /dev/sda1 rw\n", mount.display());
+    let image = f._dir.join("home/dl/raspios.img");
+    let (exe, ui) = roots();
+    let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui, loop_root: None };
+    let got = list_drives(&r, &info, "Filename Type Size Used Priority\n", Some(&image), None);
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].refused, "holdsimage", "the pane's path runs through a link into the stick, the stick still holds the image");
 }
 
 #[test]
@@ -278,7 +285,7 @@ fn identity_is_changed_on_any_difference_and_quiet_when_equal() {
     stick(&f.sys);
     let info = root_mountinfo();
     let (exe, ui) = roots();
-    let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui };
+    let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui, loop_root: None };
     let same = |dev: &'static str, seq: u64, serial: &'static str, bytes: u64| !identity_changed(&r, &info, NO_SWAPS, &Chosen { dev, seq, serial, bytes }, None, None);
     assert!(same("sda", 2, SERIAL, STICK_BYTES));
     assert!(!same("sda", 3, SERIAL, STICK_BYTES), "a swapped stick has a new diskseq");
@@ -295,7 +302,7 @@ fn c21_a_drive_that_holds_or_cannot_fit_the_image_is_changed_at_flash_time() {
     stick(&f.sys);
     let info = root_mountinfo() + "40 28 8:17 / /media/stick rw - vfat /dev/sda1 rw\n";
     let (exe, ui) = roots();
-    let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui };
+    let r = Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui, loop_root: None };
     let chosen = Chosen { dev: "sda", seq: 2, serial: SERIAL, bytes: STICK_BYTES };
     let held = PathBuf::from("/media/stick/raspios.img");
     assert!(identity_changed(&r, &info, NO_SWAPS, &chosen, Some(&held), Some(1)), "the image sits on the drive");

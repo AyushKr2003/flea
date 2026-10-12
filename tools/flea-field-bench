@@ -937,6 +937,7 @@ clean_bench() {
   close_entrant_dialogs
 }
 
+# warm launch begin
 # One untimed launch on the run's fixture compiles the units a timed launch loads, stale ones included, from a fresh copy of the shipped defaults; done once the window is up and no unit is written for WARM_QUIET_POLLS polls.
 WARM_POLL_S=0.1
 WARM_QUIET_POLLS=20
@@ -952,6 +953,8 @@ warm_qml_cache() {
   : > "$state/polled" || fail "cannot write the poll marker in $state"
   # A leaf of its own, as a timed run has, so warm_stop can end everything it starts, sandboxed decoders in their own sessions included.
   mkdir "$cg" || fail "could not make the control group $cg"
+  # The EXIT trap's clean_bench runs only once this is set, so it is what ends an interrupted warm launch.
+  ENTRANT_LAUNCHED=yes
   { printf '%s\n' "$BASHPID" > "$cg/cgroup.procs" \
       || { printf 'FAIL: could not join %s, so the warm launch was not started\n' "$cg" >&2; exit 1; }
     FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI QML_DISK_CACHE_PATH=$FLEA_QMLCACHE XDG_STATE_HOME=$state FLEA_FIELD_BENCH=$BENCH_TOKEN \
@@ -995,6 +998,7 @@ warm_stop() {
   cg_empty "$cg" || fail "the warm launch's control group $cg did not empty, so it could run into the timed launches"
   rmdir "$cg" || fail "could not remove the control group $cg"
 }
+# warm launch end
 
 # A killed entrant can leave Hyprland's not-responding dialog over every entrant after it, and the text ends with the window's class.
 # Sample input: hyprland-dialog's cmdline "--title Application Not Responding --text An application flea-media-btrfs - pcmanfm is not responding. ..."

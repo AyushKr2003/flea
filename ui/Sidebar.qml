@@ -142,6 +142,7 @@ Item {
     // The rail's Edit row asks the window to open the dialog over the saved place.
     signal editRequested(string uri, string label, string password, string reason, bool failedConnect, var origin)
     signal message(string text, bool isError)
+    signal operationResult(string headline, string detail, bool isError)
     signal forgetMessage(string text)
 
     // The entry index mid-rename, or -1; ui/SidebarRow.qml swaps its Text for a field on it, and ui/Pane.qml holds its keys off while it stands.
@@ -259,6 +260,7 @@ Item {
         showUnmounted: root.placesState.showUnmounted !== false
         onOpened: function (path) { root.opened(path) }
         onMessage: function (text, isError) { root.message(text, isError) }
+        onOperationResult: function (headline, detail, isError) { root.operationResult(headline, detail, isError) }
         onForgetMessage: function (text) { root.forgetMessage(text) }
         // An eject releases the volume, so readers on it stop first and panes on it go Home.
         onQuiesce: function (path) { if (root.navigationPane) root.navigationPane.quiesceVolume(path) }

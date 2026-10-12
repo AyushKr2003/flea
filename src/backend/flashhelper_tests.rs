@@ -1,6 +1,5 @@
 // The helper client against stub helpers: the real answer shapes, the refusals and the waits that must end.
 use super::*;
-use crate::backend::flashfake::{LOOP_ENV, LOOP_ENV_GUARD};
 use crate::backend::testdir::TestDir;
 use std::sync::mpsc::channel;
 
@@ -238,12 +237,9 @@ fn recording(d: &TestDir) -> (String, std::path::PathBuf) {
 
 #[test]
 fn a_default_build_passes_the_helper_no_bench_root() {
-    let _guard = LOOP_ENV_GUARD.lock().unwrap();
     let d = TestDir::new("flashhelper-noseam");
     let (stub, log) = recording(&d);
-    std::env::set_var(LOOP_ENV, d.path());
-    let _ = drives_text(&stub, &devs(), HELPER_TIMEOUT);
-    std::env::remove_var(LOOP_ENV);
+    let _ = drives_text(&stub, &devs(), HELPER_TIMEOUT, Some(d.path()));
     let args = std::fs::read_to_string(&log).unwrap_or_default();
     assert_eq!(args.lines().collect::<Vec<_>>().contains(&"--loop-root"), cfg!(feature = "flash-test-seam"), "only the bench feature forwards its root: {args}");
 }
@@ -252,12 +248,9 @@ fn a_default_build_passes_the_helper_no_bench_root() {
 #[cfg(feature = "flash-test-seam")]
 #[test]
 fn the_seam_tells_the_helper_its_root() {
-    let _guard = LOOP_ENV_GUARD.lock().unwrap();
     let d = TestDir::new("flashhelper-seam");
     let (stub, log) = recording(&d);
-    std::env::set_var(LOOP_ENV, d.path());
-    let _ = drives_text(&stub, &devs(), HELPER_TIMEOUT);
-    std::env::remove_var(LOOP_ENV);
+    let _ = drives_text(&stub, &devs(), HELPER_TIMEOUT, Some(d.path()));
     let args: Vec<String> = std::fs::read_to_string(&log).unwrap().lines().map(str::to_string).collect();
     assert_eq!(args, ["drives", "--loop-root", &d.path().to_string_lossy(), "sda", "nvme0n1"]);
 }

@@ -2234,7 +2234,7 @@ journaled, so no `undo` reverses it.
 An `archive` request is `{"c":"archive","op":"compress"|"extract","paths":[<string>,...],"path":"<string>","dest":"<string>","format":"<string>","password":"<string>","encryptNames":<bool>}`.
 A `compress` names absolute `paths` sharing one parent and the `format` to write; an `extract` names the
 one archive in `path`. `password` is empty for a plain operation: only a 7z compress or an extract that
-7z reads takes a non-empty one, and any other reader answers `err` of `"only an archive that 7-Zip reads
+7z reads (a `.zip` too, where 7z is installed) takes a non-empty one, and any other reader answers `err` of `"only an archive that 7-Zip reads
 can take a password"` without piping the secret. The secret travels this stdin wire and leaves it only on
 7z's own stdin pipe, never in argv, an environment variable, a log or `/proc/<pid>/cmdline`. A compress
 argv carries a bare `-p` (7z then reads one stdin line), an extract carries none (7z reads a bare `-p`

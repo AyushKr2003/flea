@@ -12162,6 +12162,18 @@ dual_sort_header() {
 
 # Sample input: ipc sortMark prints "size:asc" and ipc rowAt 0 prints "y.txt|file|10 B"; the mark reads "size:asc rows=y.txt,z.txt,x.txt".
 foldersort_mark() { printf '%s rows=%s,%s,%s' "$(ipc sortMark)" "$(ipc rowAt 0 | cut -d'|' -f1)" "$(ipc rowAt 1 | cut -d'|' -f1)" "$(ipc rowAt 2 | cut -d'|' -f1)"; }
+# The remembered-sort re-sort lands within 0.7 s of the listing, and a mark is four ipc calls, so a read is kept only when the next one a window later agrees.
+foldersort_window_s=0.7 foldersort_settle_s=10
+foldersort_settled_mark() {
+    local a b deadline=$((SECONDS + foldersort_settle_s))
+    a=$(foldersort_mark)
+    while (( SECONDS < deadline )); do
+        sleep "$foldersort_window_s"; b=$(foldersort_mark)
+        [[ "$a" == "$b" ]] && { printf '%s' "$b"; return; }
+        a=$b
+    done
+    printf '%s, never settled' "$a"
+}
 foldersort_wait_path() {
     local want="$1" i
     for i in $(seq 1 100); do [[ "$(ipc path)" == "$want" && "$(ipc listInFlight)" == false ]] && return 0; sleep 0.05; done
@@ -12181,15 +12193,15 @@ case_foldersort() {
     key -k Return >/dev/null; foldersort_wait_path "$root/a"; wait_listing 3
     key s >/dev/null; settle; sleep 1
     key -k Left >/dev/null; foldersort_wait_path "$root"
-    key -k Down >/dev/null; key -k Return >/dev/null; foldersort_wait_path "$root/b"; wait_listing 3; sleep 0.5
-    m=$(foldersort_mark); printf 'FOLDERSORT b-open %s (want %s)\n' "$m" "$by_name"; [[ "$m" == "$by_name" ]] || bad=$((bad + 1))
+    key -k Down >/dev/null; key -k Return >/dev/null; foldersort_wait_path "$root/b"; wait_listing 3
+    m=$(foldersort_settled_mark); printf 'FOLDERSORT b-open %s (want %s)\n' "$m" "$by_name"; [[ "$m" == "$by_name" ]] || bad=$((bad + 1))
     key -k Left >/dev/null; foldersort_wait_path "$root"
-    key -k Up >/dev/null; key -k Return >/dev/null; foldersort_wait_path "$root/a"; wait_listing 3; sleep 0.5
-    m=$(foldersort_mark); printf 'FOLDERSORT a-reopen %s (want %s)\n' "$m" "$by_size"; [[ "$m" == "$by_size" ]] || bad=$((bad + 1))
-    launch "$root/b"; wait_listing 3; sleep 0.5
-    m=$(foldersort_mark); printf 'FOLDERSORT b-restart %s (want %s)\n' "$m" "$by_name"; [[ "$m" == "$by_name" ]] || bad=$((bad + 1))
-    launch "$root/a"; wait_listing 3; sleep 0.5
-    m=$(foldersort_mark); printf 'FOLDERSORT a-restart %s (want %s)\n' "$m" "$by_size"; [[ "$m" == "$by_size" ]] || bad=$((bad + 1))
+    key -k Up >/dev/null; key -k Return >/dev/null; foldersort_wait_path "$root/a"; wait_listing 3
+    m=$(foldersort_settled_mark); printf 'FOLDERSORT a-reopen %s (want %s)\n' "$m" "$by_size"; [[ "$m" == "$by_size" ]] || bad=$((bad + 1))
+    launch "$root/b"; wait_listing 3
+    m=$(foldersort_settled_mark); printf 'FOLDERSORT b-restart %s (want %s)\n' "$m" "$by_name"; [[ "$m" == "$by_name" ]] || bad=$((bad + 1))
+    launch "$root/a"; wait_listing 3
+    m=$(foldersort_settled_mark); printf 'FOLDERSORT a-restart %s (want %s)\n' "$m" "$by_size"; [[ "$m" == "$by_size" ]] || bad=$((bad + 1))
     kill_flea
     [[ $bad == 0 ]] || fail "foldersort: $bad of 4 remembered-sort expectations broke"
     printf 'FOLDERSORT ok\n'
@@ -13309,7 +13321,7 @@ case_xwdrag() {
     trap - EXIT
 }
 
-# A peek-column drag drops a file from a non-focused column into the second window by its exact name; readiness reads the drawn view (visibleRowName) as wait_listing does, because rowAt reads the list delegate, unbuilt in Columns.
+# A peek-column drag drops a file of a non-focused column into the second window by exact name; readiness reads the drawn view (visibleRowName), since Columns builds no list delegate for rowAt.
 xwpeek_ready() {
     local id="$1" i flight total shown
     for i in $(seq 1 50); do
@@ -15534,10 +15546,12 @@ clipboard_wait() {
 . "$repo/tests/ui-captures-flasher.sh"
 . "$repo/tests/ui-captures-archives.sh"
 . "$repo/tests/ui-captures-unlock.sh"
+. "$repo/tests/ui-captures-mountfail.sh"
 . "$repo/tests/ui-captures-runfile.sh"
 . "$repo/tests/ui-captures-merge.sh"
 . "$repo/tests/ui-captures-drops.sh"
 . "$repo/tests/ui-captures-dropmods.sh"
+. "$repo/tests/ui-griddrop.sh"
 . "$repo/tests/ui-captures-bulk.sh"
 . "$repo/tests/ui-captures-tags.sh"
 . "$repo/tests/ui-captures-filter.sh"
@@ -15546,6 +15560,7 @@ clipboard_wait() {
 . "$repo/tests/ui-colwatch.sh"
 . "$repo/tests/ui-captures-markdown.sh"
 . "$repo/tests/ui-captures-states.sh"
+. "$repo/tests/ui-captures-gridhover.sh"
 # README retakes, one launch per frame at its own size, text size and fixture; 2560x1440 corner park, wait and retry bounds.
 readme_park_x=2559
 readme_park_y=1439
@@ -15883,11 +15898,11 @@ case_readme() {
     printf 'README done\n'
 }
 
-# Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline, ui:cap_markdown_fences and ui:cap_markdown_fences14, sourced above; so do cap_merge, cap_drops and cap_dropmods, sourced above, and cap_tags, sourced from ui-captures-tags.sh, and ui:cap_flasher and ui:cap_filter, sourced above; so do ui:cap_heldcolumns, ui:cap_sysrefusal, ui:cap_gridreveal and ui:cap_columnsrename, sourced above; ui:cap_railmotion runs only by name, sourced from ui-railpointer.sh; ui:readme runs only by name, defined in this file.
+# Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline, ui:cap_markdown_fences and ui:cap_markdown_fences14, sourced above; so do cap_merge, cap_drops and cap_dropmods, sourced above, and cap_tags, sourced from ui-captures-tags.sh, and ui:cap_flasher and ui:cap_filter, sourced above; so do ui:cap_heldcolumns, ui:cap_sysrefusal, ui:cap_gridreveal, ui:cap_columnsrename and ui:cap_gridhover, sourced above; ui:cap_railmotion runs only by name, sourced from ui-railpointer.sh; ui:cap_mountfail runs only by name, sourced from ui-captures-mountfail.sh; ui:readme runs only by name, defined in this file.
 . "$repo/tests/ui-captures-sweep.sh"
 . "$repo/tests/ui-captures-collide.sh"
 declare -a wanted=("$@")
-[[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick shiftscroll querypaste viewrestart dd ddclick collide sortrestart foldersort duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer dualautohidereveal preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap searchnoblank lookopen transferlive recent middleclick opentab xwundo folderviews hiddenlast marqueemargin relstart userthumbnailer dualtab dualdivider)
+[[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick shiftscroll querypaste viewrestart dd ddclick griddrop collide sortrestart foldersort duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer dualautohidereveal preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap searchnoblank lookopen transferlive recent middleclick opentab xwundo folderviews hiddenlast marqueemargin relstart userthumbnailer dualtab dualdivider)
 
 : > "$run_log"
 : > "$flea_log"

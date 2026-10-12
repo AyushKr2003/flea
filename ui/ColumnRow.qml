@@ -304,11 +304,20 @@ Item {
         width: root.dropTarget && dropClipLoader.item && dropClipLoader.item.label ? dropClipLoader.item.label.implicitWidth : root.showChevron ? Theme.font.caption : 0
         height: root.dropTarget && dropClipLoader.item && dropClipLoader.item.label ? dropClipLoader.item.label.implicitHeight : Theme.font.caption
 
-        Flea.Glyph {
+        // Built only on the row that draws it, so a row at rest holds no Shape for it, and kept once built so a cursor that moves on hides it without a destroy and rebuild in the frame an answer lands.
+        Loader {
+            id: chevronLoader
+            property bool built: false
+            readonly property bool drawn: root.showChevron && !root.dropTarget
             anchors.fill: parent
-            visible: root.showChevron && !root.dropTarget
-            name: "chevron-right"
-            color: root.cursor ? Theme.color.accent : Theme.color.mutedFrame
+            visible: drawn
+            active: built || drawn
+            onDrawnChanged: if (drawn) built = true
+            Component.onCompleted: if (drawn) built = true
+            sourceComponent: Flea.Glyph {
+                name: "chevron-right"
+                color: root.cursor ? Theme.color.accent : Theme.color.mutedFrame
+            }
         }
     }
 

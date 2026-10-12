@@ -51,7 +51,7 @@ run_leg() {
     legs=$((legs + 1))
     [ -z "${FLEA_CI_SUITE_LOGS:-}" ] || cp "$log" "$FLEA_CI_SUITE_LOGS/quicklook-firstkind-$leg.log" 2>/dev/null
     # Sample input, one probe line: "  INFO qml: QLFK REST pdf step=1 d-doc.pdf unit=PdfViewer.qml held=PdfViewer.qml base=true libs=libQt6Pdf.so pss=61234 objects=700".
-    grep -a 'QLFK \(LAUNCH\|IDLE\|MOVE\|REST\|KEY\|KEYRETURNED\|OPENED\|COST\|FAIL\|DONE\)' "$log" | sed 's/\x1b\[[0-9;]*m//g; s/^.*QLFK /QLFK /' | sed "s/^/$leg: /"
+    grep -a 'QLFK \(LAUNCH\|IDLE\|MOVE\|REST\|KEY\|KEYRETURNED\|CAP\|OPENED\|COST\|FAIL\|DONE\)' "$log" | sed 's/\x1b\[[0-9;]*m//g; s/^.*QLFK /QLFK /' | sed "s/^/$leg: /"
     if ! qslog_nullptr "quicklook-firstkind $leg" < "$log"; then
         failures=$((failures + 1))
     fi

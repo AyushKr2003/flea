@@ -1,6 +1,7 @@
 pragma Singleton
 
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import QtQuick
 import qs.Commons
@@ -51,7 +52,7 @@ Singleton {
     readonly property real textContrast: 4.5
     readonly property real frameContrast: 3
     // Tag swatch colours lifted on the listing and the menu ground plus the digit fallback, filled once per theme load by Contrast.tagTheme.
-    property var tag: ({ colors: {}, menuColors: {}, fallback: false })
+    property var tag: ({ colors: {}, menuColors: {}, menuLitColors: {}, fallback: false })
     // The board's fixed tag slot width, once a tagged row has been seen in the folder.
     readonly property int tagSlotWidth: 88
 
@@ -66,7 +67,9 @@ Singleton {
         // Metadata ink at rest, the foreground darkened and lifted like muted; metadataFrame is the unlifted derivation a resting glyph draws.
         property color metadata: Qt.darker(Commons.Color.foreground, 1.4)
         property color metadataFrame: Qt.darker(Commons.Color.foreground, 1.4)
-        // The hint and the danger label on a lit menu row, lifted on the row's own wash.
+        // The label, glyph, hint and danger label on a lit menu row, lifted on the row's own wash.
+        property color labelLit: Commons.Color.foreground
+        property color markLit: Qt.darker(Commons.Color.foreground, 1.4)
         property color mutedLit: Qt.darker(Commons.Color.foreground, 1.4)
         property color errorLit: Commons.Color.urgent
         readonly property color accent: Commons.Color.accent
@@ -201,6 +204,8 @@ Singleton {
     // active segment already take, so a control under the keyboard reads at the same strength.
     readonly property real washHover: Buttons.WASH_HOVER
     readonly property real washActive: Buttons.WASH_PRESS
+    // The menu cursor's fill, pointer and keyboard alike: the foreground washed into the surface until it stands frameContrast off it; applyColors derives it per palette.
+    property real washCursor: Buttons.WASH_HOVER
     readonly property real disabledOpacity: Buttons.DISABLED_OPACITY
     // A search result's base name takes at most this share of the row, so its folder always shows; Row and ColumnRow read it.
     readonly property real searchNameShare: 0.66
@@ -368,11 +373,17 @@ Singleton {
         root.color.error = hued ? Contrast.ensureRatio(Commons.Color.urgent, bg, Math.max(4.5, Contrast.ratio(String(root.color.muted), bg))) : String(Commons.Color.foreground);
         // The status bar draws that same ink on the surface, where four themes land under 4.5; it is never quieter than the caption there.
         root.color.errorOnSurface = hued ? Contrast.ensureRatio(Commons.Color.urgent, surface, Math.max(4.5, Contrast.ratio(String(root.color.muted), surface))) : String(Commons.Color.foreground);
-        // A lit menu row washes the surface with the foreground, so its hint and danger label are lifted on that ground, the danger label never below the hint.
-        var lit = Contrast.hexOf(Contrast.over(String(Commons.Color.foreground), root.washHover, String(surface)));
+        // A lit menu row washes the surface with the foreground, so its label, glyph, hint and danger label are lifted on that ground, the danger label never below the hint.
+        root.washCursor = Contrast.washAlpha(String(Commons.Color.foreground), String(surface), root.frameContrast, root.washHover);
+        var lit = Contrast.hexOf(Contrast.over(String(Commons.Color.foreground), root.washCursor, String(surface)));
+        root.color.labelLit = Contrast.ensureRatio(String(Commons.Color.foreground), lit, root.textContrast);
+        root.color.markLit = Contrast.ensureRatio(root.color.mutedFrame, lit, root.frameContrast);
         root.color.mutedLit = Contrast.ensureRatio(root.color.muted, lit, root.textContrast);
         root.color.errorLit = Contrast.ensureRatio(root.color.error, lit, Math.max(root.textContrast, Contrast.ratio(String(root.color.mutedLit), lit)));
-        root.tag = Contrast.tagTheme(found, bg, surface);
+        var tags = Contrast.tagTheme(found, bg, surface);
+        // The Tags flyout's swatches on a lit row stand 3:1 off the cursor wash, not the surface.
+        tags.menuLitColors = Contrast.tagTheme(found, bg, lit).menuColors;
+        root.tag = tags;
         // A body that parsed to nothing left every role on its fallback, so the flag says so rather
         // than reporting that the read happened: text() returns "" for a file that is not there.
         root.ready = Palette.isPalette(found);
@@ -435,6 +446,19 @@ Singleton {
             // The OEM shell's applyTheme runs this beside the two reloads above, and without it a theme that moves decoration:rounding leaves every corner here on the old value.
             Style.scheduleRefresh();
         }
+    }
+
+    // Hyprland reloads its config for a Window Corners, Gaps or Transparency change with no theme switch, so Style's rounding and Glass's mode are read again then.
+    signal configReloaded()
+    function hyprEvent(name) {
+        if (name !== "configreloaded") return;
+        Style.scheduleRefresh();
+        root.configReloaded();
+    }
+    // The Hyprland singleton is only touched inside Hyprland, so a headless run has no socket to join.
+    Connections {
+        target: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") !== null ? Hyprland : null
+        function onRawEvent(event) { root.hyprEvent(event.name) }
     }
 
     // Read once, not watched: the Display section reports the compositor's scale and Flea owns no

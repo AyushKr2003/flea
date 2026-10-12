@@ -60,7 +60,7 @@ Item {
     // What the seam reads: the line as it stands, and the box a test double-clicks to open the bar.
     readonly property string editText: entryLoader.item !== null ? entryLoader.item.editText : ""
     readonly property alias pathArea: pathArea
-    // The open field and its frame, so a test measures where they lie in the strip.
+    // The open field and its frame, null until the bar is first opened, so a test measures where they lie in the strip once it is.
     readonly property var pathFrame: entryLoader.item !== null ? entryLoader.item.pathFrame : null
     readonly property var pathField: entryLoader.item !== null ? entryLoader.item.pathField : null
     // The collapsed middle's own crumb, so a test can press the one segment that names no directory. Its index moves with the room, because the crumbs nearest the root are put back before it.

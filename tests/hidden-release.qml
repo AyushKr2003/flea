@@ -66,6 +66,11 @@ ShellRoot {
                                 rows: host ? host.entries.map(function (e) { return e.label + ":" + e.mounted + ":" + e.path }) : null,
                                 found: root.found })
     }
+    // The status bar's error entries naming a volume: where the user reads a refusal.
+    function barErrors(volume) {
+        var bar = root.find(body, "StatusBar")
+        return bar ? bar.errors.filter(function (e) { return e.text.indexOf(volume) >= 0 }).length : -1
+    }
     function volumeRow(label) {
         var rows = pane.sidebar ? pane.sidebar.entries : []
         for (var i = 0; i < rows.length; i++)
@@ -85,6 +90,12 @@ ShellRoot {
         function onMessage(text, isError) {
             root.said = root.said.concat([text])
             if (isError) root.errors = root.errors.concat([text])
+        }
+        // A failed unmount or eject rides operationResult, whose error headline the status bar lists (ui/WindowBody.qml).
+        function onOperationResult(headline, detail, isError) {
+            if (!isError) return
+            root.said = root.said.concat([headline])
+            root.errors = root.errors.concat([headline])
         }
     }
     Process {
@@ -135,6 +146,7 @@ ShellRoot {
         function () {
             if (!until("the refusal", root.errors.length > 0)) return false
             check("a refused unmount says so once, naming the volume", root.errors.length + "|" + (root.errors[0].indexOf("Busy") >= 0), "1|true")
+            check("and the status bar lists it once", root.barErrors("Busy"), 1)
             return true
         },
         function () {
@@ -249,6 +261,7 @@ ShellRoot {
         function () {
             if (!until("the held Sidebar to go", root.find(pane, "Sidebar") === null)) return false
             check("the held unmount's refusal lands once, naming the volume", root.errors.length + "|" + (root.errors.length > 0 && root.errors[0].indexOf("Held") >= 0), "1|true")
+            check("and the status bar lists it once", root.barErrors("Held"), 1)
             check("and the rail is still hidden once the hold ends", Flea.ViewState.railHidden, true)
             return true
         }

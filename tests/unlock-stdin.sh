@@ -34,8 +34,7 @@ cp tests/unlock-stdin-find.js "$test_root/config/unlock-stdin-find.js" || exit 1
 cp tests/UnlockKit.qml "$test_root/config/UnlockKit.qml" || exit 1
 cp tests/UnlockSteps.qml "$test_root/config/UnlockSteps.qml" || exit 1
 
-# The stub udisksctl: unlock refuses twice, then unlocks; every recorder is a cat that exits only on EOF.
-# A mode word in stub/mode (hang, latesuccess, latefail, mounthang, mountfail, lockfail, comma joined) arms the later phases; unlocked and lockcalls are state.
+# The stub udisksctl refuses unlock twice then unlocks, every recorder is a cat that exits only on EOF, and a stub/mode word (hang, latesuccess, latefail, mounthang, mountfail, lockfail, comma joined) arms the later phases.
 mkdir -p "$test_root/stub" || exit 1
 cat > "$test_root/stub/udisksctl.live" <<'EOF'
 #!/bin/sh

@@ -188,18 +188,18 @@ fn stranded_error(mut error: FleaError, live: &BTreeMap<PathBuf, (PathBuf, ItemI
 }
 
 // Like rename, a batch answers inline on a local mount and on a worker past the deadline on a remote one.
-pub(crate) fn do_bulkrename(out: &mut impl Write, ops: &mut super::opsdispatch::Ops, paths: Vec<String>, names: Vec<String>) {
+pub(crate) fn do_bulkrename(out: &mut impl Write, ops: &mut super::opsdispatch::Ops, paths: Vec<String>, names: Vec<String>) -> Vec<PathBuf> {
     if ops.live.running().is_some() {
         let e = super::opsreq::op_err("bulkrename", "", "an operation is already running");
         writeln!(out, "{}", super::proto::error_line(&e)).ok();
         out.flush().ok();
-        return;
+        return Vec::new();
     }
     let sources: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
     let folder = paths.first().and_then(|first| Path::new(first).parent().map(Path::to_path_buf)).unwrap_or_else(|| PathBuf::from("/"));
     // A source or the folder on a pending mount waits, so the late journal lands first.
     if super::opsdispatch::pending_busy_for(out, ops, "bulkrename", &sources, std::slice::from_ref(&folder)) {
-        return;
+        return Vec::new();
     }
     let body = super::iomount::mount_body();
     let key = folder.clone();
@@ -217,6 +217,8 @@ pub(crate) fn do_bulkrename(out: &mut impl Write, ops: &mut super::opsdispatch::
                 let result = rx.recv().unwrap_or(Ok((Vec::new(), Err(failed))));
                 let _ = tx.send(super::opsreq::OpMsg::BulkRenameDone { id, result });
             });
+            // The slow path lands later through BulkRenameDone, which the session patches on arrival.
+            Vec::new()
         }
     }
 }
@@ -238,16 +240,17 @@ fn bulk_work(paths: Vec<String>, names: Vec<String>) -> BulkOutcome {
     }
 }
 
-// One journal entry per request, so one undo reverses the in-time answer and the late one alike.
-pub(crate) fn land_bulkrename(out: &mut impl Write, ops: &mut super::opsdispatch::Ops, outcome: Result<BulkOutcome, FleaError>) {
+// One journal entry per request, so one undo reverses the in-time answer and the late one alike; answers the landed paths for a session patch.
+pub(crate) fn land_bulkrename(out: &mut impl Write, ops: &mut super::opsdispatch::Ops, outcome: Result<BulkOutcome, FleaError>) -> Vec<PathBuf> {
     let (steps, result) = match outcome {
         Ok(landed) => landed,
         Err(error) => {
             writeln!(out, "{}", super::proto::error_line(&error)).ok();
             out.flush().ok();
-            return;
+            return Vec::new();
         }
     };
+    let touched = super::undo::Journal::touched_paths(&steps);
     match result {
         Ok((ok, unchanged)) => {
             if !steps.is_empty() {
@@ -264,6 +267,7 @@ pub(crate) fn land_bulkrename(out: &mut impl Write, ops: &mut super::opsdispatch
         }
     }
     out.flush().ok();
+    touched
 }
 
 #[cfg(test)]

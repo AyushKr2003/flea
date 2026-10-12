@@ -42,6 +42,21 @@ fn a_silent_unpacker_ends_decompress_on_a_zero_stall() {
 }
 
 #[test]
+fn a_stream_that_carries_no_bytes_never_ends_ok() {
+    let d = TestDir::new("flashwrite-empty");
+    let cancel = AtomicBool::new(false);
+    let raw = d.file("empty.img", "");
+    let dest = target(&d, "drive.img", PIPE_DRIVE_BYTES);
+    let out = write_stream(&Job::new(&raw, "img", "", &dest, PIPE_DRIVE_BYTES, &cancel), &mut |_, _| {});
+    assert!(matches!(out, Err(Fail::Io(_))), "an empty raw image wrote nothing: {out:?}");
+    let packed = d.file("empty.img.xz", "x");
+    let mut job = Job::new(&packed, "xz", "", &dest, PIPE_DRIVE_BYTES, &cancel);
+    job.decompressor = Some(vec!["/bin/true".to_string()]);
+    let out = write_stream(&job, &mut |_, _| {});
+    assert!(matches!(out, Err(Fail::Decompress(_))), "an unpacker that exits clean with no output wrote nothing: {out:?}");
+}
+
+#[test]
 fn an_image_outgrowing_its_drive_ends_nospace() {
     let d = TestDir::new("flashwrite-nospace");
     let src = image(&d, "a.img", IMAGE_BYTES, 11);

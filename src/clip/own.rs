@@ -11,7 +11,6 @@ use std::time::Duration;
 extern "C" {
     fn waitid(kind: c_int, id: u32, info: *mut c_void, options: c_int) -> c_int;
     fn setsid() -> c_int;
-    fn kill(pid: c_int, sig: c_int) -> c_int;
 }
 
 const SIGTERM: c_int = 15;
@@ -43,7 +42,7 @@ pub fn withdraw(token: &str) -> bool {
     if !owner_live(pid) {
         return false;
     }
-    if unsafe { kill(pid as c_int, SIGTERM) } != 0 {
+    if crate::procsignal::signal_process(pid as c_int, SIGTERM).is_err() {
         owned.remove(token);
         return false;
     }

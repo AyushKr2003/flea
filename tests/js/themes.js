@@ -46,7 +46,7 @@ function roles(body) {
     var error = hued ? Contrast.ensureRatio(urgent, background, Math.max(TEXT_MIN, Contrast.ratio(muted, background))) : foreground
     var errorOnSurface = hued ? Contrast.ensureRatio(urgent, surface, Math.max(TEXT_MIN, Contrast.ratio(muted, surface))) : foreground
     // ui/Theme.qml: a lit menu row washes the surface with the foreground, and its hint and danger label are lifted there.
-    var lit = Contrast.hexOf(Contrast.over(foreground, Buttons.WASH_HOVER, surface))
+    var lit = Contrast.hexOf(Contrast.over(foreground, Contrast.washAlpha(foreground, surface, MARK_MIN, Buttons.WASH_HOVER), surface))
     var mutedLit = Contrast.ensureRatio(muted, lit, TEXT_MIN)
     return { foreground: foreground, background: background, accent: accent, urgent: urgent,
              // ui/Theme.qml's rule: the palette's muted or a darkened foreground, lifted to the frame floor for frames, then to the text floor on both grounds for text.

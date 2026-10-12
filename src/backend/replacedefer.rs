@@ -22,14 +22,14 @@ impl Deferred {
         Deferred { before: None, listed: false, trashed: Vec::new(), home: Vec::new(), unsynced: std::collections::BTreeSet::new(), trash_durable: None }
     }
     // Trash one replaced file now, refusing a path already gone before gio runs, the Issue 88 rule.
-    pub(crate) fn trash_one(&mut self, dst: &Path) -> Result<(), String> {
+    pub(crate) fn trash_one(&mut self, dst: &Path, cancel: &std::sync::atomic::AtomicBool) -> Result<(), String> {
         // A refusal for any other reason keeps today's message, whatever gio answered.
         if dst.symlink_metadata().is_err() {
             return Err(crate::backend::collide::TRASH_REFUSED.to_string());
         }
         // A location with no Trash of its own keeps the old item in the home Trash, which names its own entry, so it needs no list.
         if !crate::backend::hometrash::trashable(dst) {
-            return crate::backend::hometrash::trash_to_home(dst).map(|entry| self.keep_home(dst, entry));
+            return crate::backend::hometrash::trash_to_home(dst, cancel).map(|entry| self.keep_home(dst, entry));
         }
         // An item on the home Trash's own filesystem is renamed there in-process, which also names its own entry.
         if let Some(moved) = crate::backend::hometrash::rename_to_home(dst, &mut self.unsynced, &mut self.trash_durable) {
@@ -134,8 +134,8 @@ impl Deferred {
 }
 
 // Replace through the batch's deferred session: trash now, journal now, and a failed landing attributes its own entry and puts it back at once like the old path did.
-pub(crate) fn replacing_deferred(dst: &Path, steps: &mut Vec<Step>, deferred: &mut Deferred, land: impl FnOnce(&mut Vec<Step>) -> Result<(), FleaError>) -> Result<(), FleaError> {
-    if let Err(reason) = deferred.trash_one(dst) {
+pub(crate) fn replacing_deferred(dst: &Path, steps: &mut Vec<Step>, deferred: &mut Deferred, cancel: &std::sync::atomic::AtomicBool, land: impl FnOnce(&mut Vec<Step>) -> Result<(), FleaError>) -> Result<(), FleaError> {
+    if let Err(reason) = deferred.trash_one(dst, cancel) {
         return Err(FleaError { where_: "transfer".into(), path: dst.to_string_lossy().into(), msg: reason });
     }
     let at = steps.len();

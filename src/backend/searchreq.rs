@@ -206,9 +206,13 @@ pub fn op_write_paths(msg: &crate::backend::opsreq::OpMsg) -> Vec<PathBuf> {
     use crate::backend::opsreq::OpMsg;
     let mut paths = Vec::new();
     match msg {
-        OpMsg::TransferDone { entry, .. } | OpMsg::Trashed { entry, .. } | OpMsg::Linked { entry, .. } => {
-            paths.extend(Journal::touched_paths(&entry.steps))
-        }
+        OpMsg::TransferDone { entry, .. }
+        | OpMsg::MergeDone { entry, .. }
+        | OpMsg::Trashed { entry, .. }
+        | OpMsg::Linked { entry, .. }
+        | OpMsg::Pasted { entry: Some(entry), .. } => paths.extend(Journal::touched_paths(&entry.steps)),
+        // The landed steps count whether or not the batch finished.
+        OpMsg::BulkRenameDone { result: Ok((steps, _)), .. } => paths.extend(Journal::touched_paths(steps)),
         OpMsg::Duplicated { path, .. } => paths.push(PathBuf::from(path)),
         OpMsg::RenameDone { result, .. } | OpMsg::MkdirDone { result, .. } => {
             if let Ok((path, steps)) = result {
@@ -350,5 +354,27 @@ mod tests {
             touched: crate::backend::undo::Reached { dirs: vec![PathBuf::from("/scope/back.txt")], tags: Vec::new() },
         };
         assert_eq!(op_write_paths(&redone), vec![PathBuf::from("/scope/back.txt")], "a redo patches its snapshot");
+    }
+
+    #[test]
+    fn a_merge_a_paste_and_a_bulk_rename_patch_the_session_like_a_transfer() {
+        use crate::backend::opsreq::OpMsg;
+        use crate::backend::undo::{Entry, Step};
+        let identity = || crate::backend::undo::ItemIdentity::from_parts(1, 2, 0o100000, 3, (4, 5), (6, 7), None);
+        let moved = || Step::Moved { from: PathBuf::from("/scope/a.txt"), to: PathBuf::from("/scope/sub/b.txt"), before: identity(), after: identity(), rename_fat: false };
+        let both = vec![PathBuf::from("/scope/a.txt"), PathBuf::from("/scope/sub/b.txt")];
+        let merged = OpMsg::MergeDone {
+            id: 1, ok: 1, failed: 0, skipped: 0, cancelled: false,
+            entry: Entry { op: "merge".to_string(), steps: vec![moved()] },
+            retry: Vec::new(), durable: false, note: String::new(), merged: 1, kept_both: 0, into: "sub".to_string(), refused: Vec::new(),
+        };
+        assert_eq!(op_write_paths(&merged), both, "a merge patches the folders it moved and filled");
+        let pasted = OpMsg::Pasted { line: String::new(), entry: Some(Entry { op: "paste".to_string(), steps: vec![moved()] }) };
+        assert_eq!(op_write_paths(&pasted), both, "a pasted image patches the folder it landed in");
+        assert!(op_write_paths(&OpMsg::Pasted { line: String::new(), entry: None }).is_empty(), "a refused paste patches nothing");
+        let renamed = OpMsg::BulkRenameDone { id: 2, result: Ok((vec![moved()], Ok((1, 0)))) };
+        assert_eq!(op_write_paths(&renamed), both, "a late bulk rename patches what it renamed");
+        let partial = OpMsg::BulkRenameDone { id: 3, result: Ok((vec![moved()], Err(crate::error::FleaError { where_: "bulkrename".into(), path: String::new(), msg: "x".into() }))) };
+        assert_eq!(op_write_paths(&partial), both, "a batch that failed part way patches what landed");
     }
 }

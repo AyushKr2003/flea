@@ -17,6 +17,7 @@ mod oflags;
 mod open;
 mod paths;
 mod prefetch;
+mod procsignal;
 mod qsregistry;
 mod tearoff;
 mod runfile;

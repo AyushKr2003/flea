@@ -5,7 +5,7 @@ use crate::backend::testdir::TestDir;
 use std::io::{self, ErrorKind};
 use std::os::fd::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 // The one hang bound every fake compositor waits on, in both its forms.
@@ -65,35 +65,6 @@ pub(crate) fn advertise(conn: &mut Conn, registry: u32, globals: &[(&str, u32)])
         wire::put_string(&mut payload, interface);
         wire::put_u32(&mut payload, *version);
         conn.send(registry, REGISTRY_GLOBAL, &payload, &[]).unwrap();
-    }
-}
-
-// Holds the one lock every writer of the runtime dir takes (gvfs prefetch, TUI warm tests, this) and restores WAYLAND_DISPLAY and XDG_RUNTIME_DIR on drop.
-pub(crate) struct DisplayEnv {
-    old_display: Option<std::ffi::OsString>,
-    // Fields drop in this order: the runtime dir comes back while the lock is still held.
-    _runtime: crate::gvfsprefetch::EnvGuard,
-    _lock: std::sync::MutexGuard<'static, ()>,
-}
-
-impl DisplayEnv {
-    pub(crate) fn set(socket: Option<&Path>) -> DisplayEnv {
-        let (lock, runtime) = crate::gvfsprefetch::hold_env();
-        let old_display = std::env::var_os("WAYLAND_DISPLAY");
-        match socket {
-            Some(path) => std::env::set_var("WAYLAND_DISPLAY", path),
-            None => std::env::remove_var("WAYLAND_DISPLAY"),
-        }
-        DisplayEnv { old_display, _runtime: runtime, _lock: lock }
-    }
-}
-
-impl Drop for DisplayEnv {
-    fn drop(&mut self) {
-        match self.old_display.take() {
-            Some(old) => std::env::set_var("WAYLAND_DISPLAY", old),
-            None => std::env::remove_var("WAYLAND_DISPLAY"),
-        }
     }
 }
 

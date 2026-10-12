@@ -365,36 +365,8 @@ mod tests {
             assert_eq!(score(hay, query), *expected, "{query} against {hay}");
         }
     }
-
-    // The packed forms answer exactly what the classic scorer answers, ASCII and mixed script alike.
-    #[test]
-    fn packed_forms_score_identically_to_the_classic_scorer() {
-        let candidates = [
-            "docs/work/bench-notes.txt",
-            "Downloads/CleanShot at 18.25.25@2x.png",
-            "CAFÉ-Notes.md",
-            "SearchStrip.qml",
-            "benches/İstanbul.txt",
-            "notes/日本語-file.txt",
-            "MiXeD/CaSe_PaTh-01.TXT",
-        ];
-        let queries = ["bench", "notes", "shot2x", "café", "strip", "stnbul", "nihon", "mixedcase", "zzz", ""];
-        for candidate in candidates {
-            let packed = fold_packed(candidate);
-            let hay = match &packed {
-                Packed::Ascii(bytes) => Hay::Ascii(bytes),
-                Packed::Wide(words) => Hay::Wide(words),
-            };
-            if candidate.is_ascii() {
-                assert!(matches!(packed, Packed::Ascii(_)), "{candidate} packs to bytes");
-            } else {
-                assert!(matches!(packed, Packed::Wide(_)), "{candidate} packs to words");
-            }
-            for query in queries {
-                let classic = score(candidate, query);
-                let packed_score = Fuzzy::new(query).score_pre_folded(hay);
-                assert_eq!(packed_score, classic, "{query} against {candidate}");
-            }
-        }
-    }
 }
+
+#[cfg(test)]
+#[path = "fuzzy_packed_tests.rs"]
+mod packed_tests;

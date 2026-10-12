@@ -19,7 +19,7 @@ pub(crate) struct WalkProbes {
     pub cancel: AtomicBool,
     // Test seam: parks this walk alone once it has opened `at` directories, until released.
     #[cfg(test)]
-    hold: Mutex<Option<WalkHold>>,
+    pub(crate) hold: Mutex<Option<crate::backend::searchwalkhold::WalkHold>>,
 }
 
 impl WalkProbes {
@@ -31,53 +31,6 @@ impl WalkProbes {
             hold: Mutex::new(None),
         }
     }
-
-    // Arms the hold on this walk's own probes; the walk sends `parked` once blocked.
-    #[cfg(test)]
-    pub(crate) fn test_hold_walk_at(
-        &self,
-        at: usize,
-    ) -> (std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
-        let (parked_tx, parked_rx) = std::sync::mpsc::channel();
-        let (release_tx, release_rx) = std::sync::mpsc::channel();
-        *self.hold.lock().unwrap() = Some(WalkHold { at, dir: None, parked: parked_tx, release: release_rx });
-        (parked_rx, release_tx)
-    }
-
-    // Arms the hold on the directory named `dir` instead of a count, so which directory parks never races the threads.
-    #[cfg(test)]
-    pub(crate) fn test_hold_walk_in(&self, dir: &str) -> (std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
-        let (parked_rx, release_tx) = self.test_hold_walk_at(usize::MAX);
-        if let Some(hold) = self.hold.lock().unwrap().as_mut() {
-            hold.dir = Some(dir.to_string());
-        }
-        (parked_rx, release_tx)
-    }
-}
-
-#[cfg(test)]
-impl WalkProbes {
-    // Parks this walk once it has opened `at` directories, or as it opens the directory the hold names; other walks never see the hold.
-    fn hold_if_due(&self, opened: usize, dir: &Path) {
-        let named = |hold: &WalkHold| hold.dir.as_deref().is_some_and(|name| dir.file_name() == Some(std::ffi::OsStr::new(name)));
-        let due = self.hold.lock().unwrap().as_ref().is_some_and(|hold| opened >= hold.at || named(hold));
-        if due {
-            let hold = self.hold.lock().unwrap().take();
-            if let Some(hold) = hold {
-                let _ = hold.parked.send(());
-                let _ = hold.release.recv();
-            }
-        }
-    }
-}
-
-// Test seam: holds the walk once it has opened `at` directories until released, so close lands mid-walk.
-#[cfg(test)]
-struct WalkHold {
-    at: usize,
-    dir: Option<String>,
-    parked: std::sync::mpsc::Sender<()>,
-    release: std::sync::mpsc::Receiver<()>,
 }
 
 // The whole walk: one mountinfo read, then the local or the remote walk.
@@ -164,7 +117,7 @@ fn open_local(out: &Mutex<Index>, root: &Path, dir: &Path, hidden: bool, probes:
     }
     probes.opened.fetch_add(1, Ordering::Relaxed);
     #[cfg(test)]
-    probes.hold_if_due(probes.opened.load(Ordering::Relaxed), dir);
+    probes.hold_if_due(probes.opened.load(Ordering::Relaxed), dir, false);
     if probes.cancel.load(Ordering::Relaxed) {
         return None;
     }
@@ -182,8 +135,14 @@ fn open_local(out: &Mutex<Index>, root: &Path, dir: &Path, hidden: bool, probes:
         }
         rows.push((rel.join(&name), is_dir));
     }
+    #[cfg(test)]
+    probes.hold_if_due(probes.opened.load(Ordering::Relaxed), dir, true);
     // Rows land before their subdirectories queue, so a directory's rows always precede its children's.
     let mut index = out.lock().unwrap();
+    // A cancel stored before this lock was taken is seen here, so a patch taken after the cancel is never pushed over; see src/backend/searchpatch.rs.
+    if probes.cancel.load(Ordering::Relaxed) {
+        return None;
+    }
     for (path, is_dir) in rows {
         index.push(path, is_dir);
     }
@@ -201,7 +160,7 @@ fn walk_remote(out: &Mutex<Index>, root: &Path, hidden: bool, body: &str, probes
         }
         probes.opened.fetch_add(1, Ordering::Relaxed);
         #[cfg(test)]
-        probes.hold_if_due(probes.opened.load(Ordering::Relaxed), &dir);
+        probes.hold_if_due(probes.opened.load(Ordering::Relaxed), &dir, false);
         if probes.cancel.load(Ordering::Relaxed) {
             break;
         }
@@ -214,6 +173,9 @@ fn walk_remote(out: &Mutex<Index>, root: &Path, hidden: bool, body: &str, probes
         let rel = rel_of(root, &dir);
         {
             let mut index = out.lock().unwrap();
+            if probes.cancel.load(Ordering::Relaxed) {
+                break;
+            }
             for (name, is_dir) in entries {
                 if !hidden && is_hidden(&name) {
                     continue;
@@ -246,8 +208,11 @@ impl Session {
         let body = crate::backend::mountinfo::read_body();
         let scope_buf = PathBuf::from(scope);
         let remote = crate::backend::iomount::is_remote(&scope_buf, &body);
-        let dev = crate::backend::fsinfo::dev_of(&scope_buf);
-        let writable = crate::backend::ops::dir_writable(&scope_buf);
+        // The root's figures go through the bound, so a dead server answers 0 and read-only instead of hanging the loop.
+        let root = scope_buf.clone();
+        let (dev, writable) = crate::backend::iomount::call(&scope_buf, &body, "search", move || {
+            (crate::backend::fsinfo::dev_of(&root), crate::backend::ops::dir_writable(&root))
+        }).unwrap_or((0, false));
         let index = Arc::new(Mutex::new(Index::new()));
         let walk_done = Arc::new(AtomicBool::new(false));
         let thread_index = Arc::clone(&index);
@@ -282,6 +247,7 @@ impl Session {
             last_query: String::new(),
             last_matches: Vec::new(),
             pending_rest: None,
+            pending_patches: Default::default(),
             folder_n: 0,
             last_answered_gen: 0,
             standing: None,
@@ -323,6 +289,7 @@ impl Session {
             self.walk_dirs = handle.join().unwrap_or(0);
         }
         self.walk_ms = self.opened_at.elapsed().as_secs_f64() * 1000.0;
+        self.flush_patches();
         true
     }
 
@@ -333,6 +300,7 @@ impl Session {
             return None;
         }
         self.probes.cancel.store(true, Ordering::Relaxed);
+        self.flush_patches();
         self.stand_held();
         // The landing event still arrives; swallowing it here stops the re-run it would fire.
         self.announced = true;

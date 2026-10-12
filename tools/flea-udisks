@@ -256,6 +256,9 @@ def call_each(listed, dev, picks, iface, method, what):
                             Gio.DBusCallFlags.ALLOW_INTERACTIVE_AUTHORIZATION, -1, None)
         except GLib.Error as error:
             name = error_name(error)
+            # A volume that went unmounted since the list was read, during the password prompt, is the goal met and not a busy drive.
+            if name.endswith(".Error.NotMounted"):
+                continue
             say("%s refused with %s" % (what, name or "an unnamed error"))
             return "busy" if busy_name(name) else "error"
     return ""

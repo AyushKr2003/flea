@@ -70,6 +70,33 @@ fn a_large_batch_is_trashed_in_chunks_each_under_the_wait() {
     assert_eq!(calls.load(Ordering::Relaxed), 2, "one chunk per bound, not one call for the batch");
 }
 
+// 3.g16: after a chunk gio refuses, the later chunks are not sent; their paths stay where they are and count as failed under gio's own line.
+#[test]
+fn a_refused_chunk_stops_the_batch_and_leaves_the_rest_in_place() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let d = crate::backend::testdir::TestDir::new("trash-chunk-refused");
+    let paths: Vec<PathBuf> = (0..TRASH_CHUNK * 2 + 2).map(|n| d.file(&format!("f{n}.txt"), "x")).collect();
+    let calls = Rc::new(AtomicUsize::new(0));
+    let seen = Rc::clone(&calls);
+    let _stand = StandIn::hold(Rc::new(move |args: &[&str]| {
+        if args.contains(&"--list") {
+            return Some(ok_output());
+        }
+        if seen.fetch_add(1, Ordering::Relaxed) == 0 {
+            for path in &args[2..] {
+                std::fs::remove_file(path).unwrap();
+            }
+            return Some(ok_output());
+        }
+        Some(std::process::Output { status: std::process::ExitStatus::from_raw(256), stdout: Vec::new(), stderr: b"gio: Error 1: Permission denied\n".to_vec() })
+    }));
+    let (ok, failed, reason) = trash_checked(&paths, None).expect("a refused chunk is not an error");
+    assert_eq!(calls.load(Ordering::Relaxed), 2, "the third chunk is never sent");
+    assert_eq!((ok.len(), failed), (TRASH_CHUNK, TRASH_CHUNK + 2));
+    assert_eq!(reason, "gio: Error 1: Permission denied");
+    assert!(paths[TRASH_CHUNK..].iter().all(|p| p.exists()), "every refused or unsent path is still there");
+}
+
 #[test]
 fn a_path_still_present_after_success_is_not_already_gone() {
     let d = crate::backend::testdir::TestDir::new("trash-still-there");

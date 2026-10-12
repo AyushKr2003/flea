@@ -164,7 +164,7 @@ fn a_replace_is_stamped_before_gio_starts_trashing_it() {
     let _stand = StandIn::hold(slow);
     let mut deferred = crate::backend::mergeapply::Deferred::begin();
     let mut steps = Vec::new();
-    let landed = crate::backend::mergeapply::replacing_deferred(&file, &mut steps, &mut deferred, |_| Ok(()));
+    let landed = crate::backend::mergeapply::replacing_deferred(&file, &mut steps, &mut deferred, &std::sync::atomic::AtomicBool::new(false), |_| Ok(()));
     assert!(landed.is_ok(), "the Replace lands: {landed:?}");
     deferred.settle(&mut steps);
     let [crate::backend::undo::Step::Trashed(entry)] = &steps[..] else { panic!("one Trashed step: {steps:?}") };

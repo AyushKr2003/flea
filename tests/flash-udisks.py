@@ -160,6 +160,29 @@ luks = [("/disk", {"Device": "/dev/sda", "MountPoints": [], "Encrypted": False, 
 check("cleartext unmount then lock", (helper.unmount_all(luks, "sda"), helper.lock_all(luks, "sda"), calls),
       ("", "", [("/dm1", "Unmount"), ("/sda1", "Lock")]))
 
+# A volume unmounted since the list was read (the password prompt waits) is no busy drive; only a real refusal stops the pass.
+refusals = {"/p1": "org.freedesktop.UDisks2.Error.NotMounted", "/p2": "org.freedesktop.UDisks2.Error.DeviceBusy"}
+tried = []
+
+
+class Refuser:
+    def __init__(self, path):
+        self.path = path
+
+    def call_sync(self, method, *args):
+        tried.append(self.path)
+        raise helper.GLib.Error("GDBus.Error:%s: refused" % refusals[self.path])
+
+
+helper.iface_at = lambda path, iface: Refuser(path)
+mounted = [("/disk", {"Device": "/dev/sdb", "MountPoints": [], "Encrypted": False, "Cleartext": "/", "Backing": "/"}),
+           ("/p1", {"Device": "/dev/sdb1", "MountPoints": ["/run/media/gm/a"], "Encrypted": False, "Cleartext": "/", "Backing": "/"}),
+           ("/p2", {"Device": "/dev/sdb2", "MountPoints": ["/run/media/gm/b"], "Encrypted": False, "Cleartext": "/", "Backing": "/"})]
+check("a volume already unmounted is passed over, a busy one stops the pass", (helper.unmount_all(mounted, "sdb"), tried), ("busy", ["/p1", "/p2"]))
+tried.clear()
+check("an unmounted volume alone is no refusal", (helper.unmount_all(mounted[:2], "sdb"), tried), ("", ["/p1"]))
+helper.iface_at = lambda path, iface: Recorder(path)
+
 # A-r2 F3: eject asks the daemon's own system verdict again, so a removable disk udisks hints as system is never powered off.
 import contextlib
 import io

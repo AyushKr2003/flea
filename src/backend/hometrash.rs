@@ -4,19 +4,14 @@ use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-// No GVFS backend implements trash, so gio trash refuses every path under its FUSE folder (sample: /run/user/1000/gvfs/smb-share:server=192.168.21.25,share=data/photos).
+// No GVFS backend implements trash, so gio trash refuses every path under its FUSE root /run/user/<uid>/gvfs (sample: .../gvfs/smb-share:server=192.168.21.25,share=data/photos); a folder named gvfs elsewhere is plain.
 pub fn trashable(path: &Path) -> bool {
-    let mut after_gvfs = false;
-    for part in path.components() {
-        let name = part.as_os_str().to_string_lossy();
-        if after_gvfs && names_a_mount(&name) {
-            return false;
-        }
-        after_gvfs = name.eq_ignore_ascii_case("gvfs");
+    match crate::backend::extclass::gvfs_root(path) {
+        Some(share) => !names_a_mount(&share.file_name().unwrap_or_default().to_string_lossy()),
+        None => true,
     }
-    true
 }
 
 // Sample input: "mtp:host=SAMSUNG_Android", a type of letters, digits and hyphens before the first colon.
@@ -83,35 +78,7 @@ pub(crate) fn sentence_for_io(error: &std::io::Error) -> &'static str {
     if error.raw_os_error() == Some(ENOSPC) { HOME_TRASH_FULL } else { HOME_TRASH_FAILED }
 }
 
-#[repr(C)]
-struct WallClock {
-    sec: i32,
-    min: i32,
-    hour: i32,
-    mday: i32,
-    mon: i32,
-    year: i32,
-    wday: i32,
-    yday: i32,
-    isdst: i32,
-    gmtoff: i64,
-    zone: *const u8,
-}
-
-extern "C" {
-    fn time(t: *mut i64) -> i64;
-    fn localtime_r(timep: *const i64, result: *mut WallClock) -> *mut WallClock;
-}
-
-// Stamps a .trashinfo DeletionDate in local time, the way the desktop's own trash names it.
-pub(crate) fn deletion_date_local() -> String {
-    let now = unsafe { time(std::ptr::null_mut()) };
-    let mut out = WallClock { sec: 0, min: 0, hour: 0, mday: 0, mon: 0, year: 0, wday: 0, yday: 0, isdst: 0, gmtoff: 0, zone: std::ptr::null() };
-    if unsafe { localtime_r(&now, &mut out) }.is_null() {
-        return "1970-01-01T00:00:00".to_string();
-    }
-    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}", out.year + 1900, out.mon + 1, out.mday, out.hour, out.min, out.sec)
-}
+pub(crate) use crate::backend::trashdate::deletion_date_local;
 
 #[cfg(test)]
 thread_local! {
@@ -231,13 +198,17 @@ fn home_entry(original: &Path, candidate: &OsStr) -> Entry {
 }
 
 // Moves one replaced item into the home Trash the freedesktop way and answers its trash:/// entry.
-pub(crate) fn trash_to_home(original: &Path) -> Result<Entry, String> {
+pub(crate) fn trash_to_home(original: &Path, cancel: &AtomicBool) -> Result<Entry, String> {
+    // A cancel that landed before the copy starts costs no Trash entry at all.
+    if cancel.load(Ordering::Relaxed) {
+        return Err(crate::backend::collide::CANCELLED.to_string());
+    }
     let Some(root) = home_trash_root() else { return Err(HOME_TRASH_FAILED.to_string()) };
     let (files, info) = trash_dirs(&root).map_err(|e| sentence_for_io(&e).to_string())?;
     let Some(name) = original.file_name() else { return Err(HOME_TRASH_FAILED.to_string()) };
     let (candidate, info_path) = reserve(&files, &info, original, name, true).map_err(|e| sentence_for_io(&e).to_string())?;
     let files_path = files.join(&candidate);
-    if let Err(reason) = place_copy(original, &files_path, &files) {
+    if let Err(reason) = place_copy(original, &files_path, &files, cancel) {
         drop_orphan(&files_path, &info_path);
         return Err(reason);
     }
@@ -348,13 +319,14 @@ pub(crate) fn sync_folders(unsynced: &mut std::collections::BTreeSet<PathBuf>) {
 }
 
 // Copies the original into the Trash files folder whole, a symlink as a link and never followed.
-fn place_copy(original: &Path, files_path: &Path, room: &Path) -> Result<(), String> {
-    let idle = AtomicBool::new(false);
+fn place_copy(original: &Path, files_path: &Path, room: &Path, cancel: &AtomicBool) -> Result<(), String> {
     let mut sink = |_: u64, _: u64| {};
-    let mut progress = crate::backend::copyfile::Progress { cancel: &idle, on_bytes: &mut sink, tree: None,
+    let mut progress = crate::backend::copyfile::Progress { cancel, on_bytes: &mut sink, tree: None,
         partial: None, manifest: None, durability: None, for_move: false };
     match crate::backend::copyfile::copy_any(original, files_path, &mut progress) {
         Ok(()) => Ok(()),
+        // A cancel keeps its own word, which is what the transfer counts it by; copy_any already removed the partial.
+        Err(_) if cancel.load(Ordering::Relaxed) => Err(crate::backend::collide::CANCELLED.to_string()),
         // The room is read off the Trash folder itself, which stands whatever the copy left behind.
         Err(_) => Err(sentence_after_copy(free_bytes(room)).to_string()),
     }

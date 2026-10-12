@@ -74,13 +74,13 @@ cap_collide_pointer() {
 }
 # One open card, pointer parked: rest, then focus walked to every button (the card has no disabled button to shoot).
 cap_collide_card() {
-    local name="$1" focus walked=" "
+    local name="$1" focus step walked=" "
     cap_collide_park
     shot "$name-rest"
     key h >/dev/null
     key h >/dev/null
     menus_expect collideState '.focus == "cancel"' "h twice reaches Cancel on $name"
-    while :; do
+    for step in 1 2 3 4 5 6 7 8; do  # a card has fewer than 8 buttons, so a Replace out of reach fails instead of looping
         focus=$(ipc collideState | jq -r '.focus')
         [[ "$walked" != *" $focus "* ]] || fail "cap_collide: the focus walk on $name came round to $focus before it reached replace"
         walked+="$focus "
@@ -90,6 +90,7 @@ cap_collide_card() {
         key l >/dev/null
         menus_expect collideState ".focus != \"$focus\"" "l leaves $focus on $name"
     done
+    [[ "$focus" == replace ]] || fail "cap_collide: l never reached Replace on $name"
     key -k Escape >/dev/null
     menus_expect collideState '.opened | not' "Escape cancels the $name card"
 }

@@ -32,7 +32,10 @@ pub fn exclude_absent_vendors() {
     if owned(std::env::var_os(DISABLE).as_deref(), std::env::var_os(MARKER).as_deref()) {
         std::env::remove_var(DISABLE);
     }
-    std::env::remove_var(MARKER);
+    // A launch with nothing to remove writes nothing: a setenv racing another thread's getenv is the hazard.
+    if std::env::var_os(MARKER).is_some() {
+        std::env::remove_var(MARKER);
+    }
     if let Some(filter) = filter {
         std::env::set_var(DISABLE, &filter);
         std::env::set_var(MARKER, &filter);

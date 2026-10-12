@@ -12,6 +12,8 @@ Flickable {
     property var values: ({})
     property int cursor: 0
     property string side: "pane"
+    // The idle walk that builds the sections nobody has shown yet.
+    readonly property alias walk: idleBuild
     readonly property real compactHeight: sections.count > 0 && sections.itemAt(0) ? sections.itemAt(0).implicitHeight : 0
 
     signal activated(int index)
@@ -117,6 +119,24 @@ Flickable {
             root.contentY = Math.max(0, Math.min(root.contentHeight - root.height, bottom - root.height))
     }
 
+    // The first open builds View and the open section only; from the pane's creation this walk builds one more section per 150 ms tick, and a section shown sooner builds when shown.
+    Timer {
+        id: idleBuild
+        interval: 150
+        repeat: true
+        running: true
+        property int next: 1
+        onTriggered: {
+            while (idleBuild.next < sections.count && sections.itemAt(idleBuild.next).built)
+                idleBuild.next++
+            if (idleBuild.next >= sections.count) {
+                idleBuild.stop()
+                return
+            }
+            sections.itemAt(idleBuild.next).built = true
+        }
+    }
+
     Repeater {
         id: sections
         // Keep View's measurement intact while its Columns subpage is open.
@@ -125,13 +145,18 @@ Flickable {
         delegate: Column {
             id: column
             required property var modelData
+            required property int index
             readonly property alias rows: rowItems
+            // View always, because compactHeight reads it; a built section is never torn down.
+            property bool built: false
             width: root.width
             visible: modelData.id === root.section
+            onVisibleChanged: if (visible) built = true
+            Component.onCompleted: if (visible || index === 0) built = true
 
             Repeater {
                 id: rowItems
-                model: Settings.rows(column.modelData.id, root.values)
+                model: column.built ? Settings.rows(column.modelData.id, root.values) : []
 
                 delegate: Flea.SettingsRow {
                     required property var modelData

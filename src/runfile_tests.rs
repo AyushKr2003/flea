@@ -73,6 +73,19 @@ fn a_noexec_mount_refuses_instead_of_asking() {
 }
 
 #[test]
+fn a_script_missing_its_bit_on_a_noexec_mount_still_opens_with_its_handler() {
+    let dir = crate::backend::testdir::TestDir::new("runfile-noexec-plain");
+    let plain = write(&dir, "plain.sh", b"#!/bin/sh\ntrue\n", 0o644);
+    let mut elf = b"\x7fELF".to_vec();
+    elf.extend_from_slice(&[0u8; 64]);
+    let binary = write(&dir, "tool", &elf, 0o644);
+    let root = dir.path().display().to_string();
+    let mounts = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n2 1 0:99 / {} rw,noexec - tmpfs tmpfs rw\n", root);
+    assert_eq!(decide_with(&plain, &mounts), Decision::MakeExecutable(Kind::Script));
+    assert_eq!(decide_with(&binary, &mounts), Decision::RefuseNoExec);
+}
+
+#[test]
 fn hostile_names_run_as_the_literal_file() {
     // R2: each hostile name runs as the literal file, writing its own argv[0] and nothing else.
     for (n, nasty) in ["-e", ";rm -rf x", "$(touch pwned)", "two\nlines.sh"].iter().enumerate() {

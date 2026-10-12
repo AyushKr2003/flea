@@ -173,8 +173,14 @@ Item {
     // Frames drawn with the card showing during the hold; tests/ui.sh lookopen and tests/quicklook-hold.sh read them.
     property int lookEmptyFrames: 0
     property int revealCaps: 0
+    // The cap's start stamp and the sequence number of show()'s return, ordered by openSeq so tests/quicklook-firstkind.qml reads arm-before-show or after with no clock.
+    property var revealCapStart: null
+    property int openSeq: 0
+    property int shownSeq: 0
+    // The kinds whose Loader item this window has built once, so a repeat of one is a warm open.
+    property var builtKinds: ({})
     function openState() {
-        return { revealed: root.revealed, revealedEarly: root.revealedEarly, landed: root.landed, lookEmptyFrames: root.lookEmptyFrames, revealCaps: root.revealCaps }
+        return { revealed: root.revealed, revealedEarly: root.revealedEarly, landed: root.landed, lookEmptyFrames: root.lookEmptyFrames, revealCaps: root.revealCaps, revealCapStart: root.revealCapStart, shownSeq: root.shownSeq }
     }
     // A move still settling lands nothing, and followSettle reruns this once it stops, so what reveals is the cursor's own file.
     // Past the cap, content that is ready waits out the loading state's minimum, so it never blinks for under 100 ms.
@@ -203,13 +209,14 @@ Item {
         root.revealedEarly = false
         root.loadingSince = 0
         root.landed = false
-        revealCap.stop()
         minShow.stop()
-        if (root.active)
+        if (!root.active)
+            revealCap.stop()
+        else
             Qt.callLater(root.revealIfReady)
     }
     onLookReadyChanged: root.revealIfReady()
-    // Armed by load() once show() returns, beside the swap's own cap.
+    // Armed by load(): before show() for a warm kind, after it for a kind's first build, beside the swap's own cap.
     Timer {
         id: revealCap
         objectName: "revealCap"
@@ -330,6 +337,7 @@ Item {
     // Dropping the loader's source is what stops playback: media dies with the loader.
     function close() {
         if (root.swap) root.swap.cancel()
+        root.revealCapStart = null
         followSettle.stop()
         root.lastMoveKey = ""
         root.pendingThumb = ""
@@ -366,13 +374,17 @@ Item {
         var isPdf = Kinds.quickLookKind(newIcon, newPath) === Kinds.PDF
         var swapItem = root.ensureSwap()
         var show = function () {
+            // A warm kind counts from the key, before show() builds the Loader items; a kind's first build (a PDF's compile above all) is outside the cap, which starts once show() returns; a move during the hold keeps the open's deadline.
+            var kindKey = root.kindFor(newPath, newIcon, newThumb, newRow)
+            var arm = (!root.active || !root.revealed) && !revealCap.running
+            var warm = root.builtKinds[kindKey] === true
+            if (arm && warm) root.armRevealCap(isPdf)
             root.show(newPath, newIcon, newSize, newKind, newThumb, newRow)
             if (swapItem) swapItem.start(isPdf)
-            // Counted from here, so a cold first PDF's compile is not inside it; a move during the hold keeps the open's deadline.
-            if (root.unrevealed && !revealCap.running) {
-                revealCap.interval = PreviewSwap.capMs(isPdf)
-                revealCap.start()
-            }
+            root.shownSeq = ++root.openSeq
+            root.builtKinds[kindKey] = true
+            if (arm && !warm) root.armRevealCap(isPdf)
+            else if (!arm && !revealCap.running) root.revealCapStart = null
         }
         if (swapItem && (swapItem.holding || swapItem.capturing))
             swapItem.hold(show, newPath, true)
@@ -387,10 +399,21 @@ Item {
         return row !== null && root.pane.join(Search.baseOf(root.pane), row.n) === path ? row : null
     }
 
+    function kindFor(newPath, newIcon, newThumb, newRow) {
+        var row = root.namedRow(newRow, newPath)
+        return Kinds.quickLookKind(newIcon, newPath, (row !== null && row.t === true) || (newThumb || "").length > 0)
+    }
+
+    function armRevealCap(isPdf) {
+        revealCap.interval = PreviewSwap.capMs(isPdf)
+        revealCap.start()
+        root.revealCapStart = { seq: ++root.openSeq }
+    }
+
     function show(newPath, newIcon, newSize, newKind, newThumb, newRow) {
         var row = root.namedRow(newRow, newPath)
         root.inlineMarkdownPath = row !== null && Prepared.readsInline(row, root.pane.storageClass, root.pane.storageKnown) ? newPath : ""
-        root.kind = Kinds.quickLookKind(newIcon, newPath, (row !== null && row.t === true) || (newThumb || "").length > 0)
+        root.kind = root.kindFor(newPath, newIcon, newThumb, newRow)
         // A pane of another kind goes before the path moves, or it tries to open a file it cannot draw: an image
         // pane handed a video logged "Unsupported image format" on every move from a picture to a clip.
         if (!root.isMedia) mediaLoader.source = ""

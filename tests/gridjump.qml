@@ -1,17 +1,18 @@
 //@ pragma ShellId flea-gridjump-test
 
 import QtQuick
+import QtTest
 import Quickshell
 import "flea" as Flea
 import "flea/js/Filter.js" as Filter
 import "flea/js/Marks.js" as Marks
 import "flea/js/Selection.js" as Selection
 
-// gridjump: a real ui/GridArea.qml on 2000 rows counts what a far jump and a held j sweep rebind and how many window asks the sweep sends beside a real ui/List.qml; counts only, no time.
+// gridjump: a real ui/GridArea.qml on 10000 rows counts what a far jump and a held j sweep rebind and how many window asks the sweep sends beside a real ui/List.qml; counts only, no time.
 ShellRoot {
     id: root
 
-    readonly property int files: 2000
+    readonly property int files: 10000
     readonly property int areaWidth: 2368
     readonly property int areaHeight: 1350
     readonly property int sweepSteps: 70
@@ -23,7 +24,7 @@ ShellRoot {
     property int warmStable: 0
     property int warmLast: -1
     // Every tile the probe has met with the counters its change signals feed; mutated in place, so no binding reads them.
-    readonly property var meta: ({ tiles: [], reuse: 0, redundant: 0 })
+    readonly property var meta: ({ tiles: [], reuse: 0, redundant: 0, blanked: 0 })
 
     function log(line) { console.log("GRIDJUMP " + line) }
     function check(name, ok, detail) { if (!ok) { root.failures.push(name); root.log("FAIL " + name + " " + detail) } }
@@ -43,17 +44,19 @@ ShellRoot {
             property int asks: 0
             property int replies: 0
             property real heldListing: 1
-            // "sync" answers inside the call, a reply that beats the layout; "late" answers on a timer, after it.
+            // Window ask outcome: "sync" in the call, "late" on a timer, "fail" an error line, "lost" never, "short" rows that stop before the cursor's row.
             property string mode: "late"
+            signal failed(string where, string input, string message, int mode)
             function thumb(rows, cacheOnly) {}
             function thumbcancel(rows) {}
             function dirsize(rows) {}
             function dirsizecancel() {}
             function window(start, count) {
                 be.asks += 1
+                if (be.mode === "fail") { be.failed("window", "/probe", "/probe is not responding.", 0); return }
                 be.queue.push({ start: start, count: count })
                 if (be.mode === "sync") be.reply()
-                else answer.start()
+                else if (be.mode !== "lost") answer.start()
             }
             // A reply is a parse, every row a new object, and the two writes are PaneSwap's: held first, rows second.
             function reply() {
@@ -61,7 +64,7 @@ ShellRoot {
                 if (ask === undefined) return
                 var from = Math.max(0, Math.min(ask.start, be.pane.total))
                 be.pane.held = from
-                be.pane.rows = root.rowsFrom(from, Math.min(be.pane.total, from + ask.count))
+                be.pane.rows = root.rowsFrom(from, Math.min(be.pane.total, from + (be.mode === "short" ? 10 : ask.count)))
                 be.replies += 1
             }
             property Timer answer: Timer {
@@ -136,10 +139,9 @@ ShellRoot {
             function selectionCount() { return 0 }
             function thumbFor(index) { return "" }
             function setCursor(index, context) { Filter.setCursor(p, index, context) }
-            // ui/Pane.qml showRow: the grid keeps Contain, the list its own scroll-off.
+            // ui/Pane.qml showRow: the list and the grid each move through their own showCursor.
             function showRow(view, context) {
-                if (p.viewMode === "list") p.area.showCursor(view, context)
-                else p.area.positionViewAtIndex(view, GridView.Contain)
+                p.area.showCursor(view, context)
                 p.area.restartCoalesce()
             }
             function slowClickWasSole(index) { return false }
@@ -185,6 +187,7 @@ ShellRoot {
         implicitWidth: root.areaWidth
         implicitHeight: root.areaHeight
         color: "black"
+        TestEvent { id: driver }
         Flea.GridArea { id: grid; width: root.areaWidth; height: root.areaHeight; pane: root.gridPane; menu: root.stubMenu }
     }
 
@@ -213,6 +216,8 @@ ShellRoot {
             mine.rows += 1
             // The same listing row as at the last change, already drawn: whatever this change was, it drew nothing new.
             if (tile.listingIndex === mine.idx && mine.drawn) m.redundant += 1
+            // A live tile that drew a row and now draws none is a blank frame, whatever the window does next.
+            if (tile.live && mine.drawn && tile.row === null) m.blanked += 1
             mine.idx = tile.listingIndex
             mine.drawn = tile.row !== null
         })
@@ -221,15 +226,16 @@ ShellRoot {
     function snap() {
         root.adopt()
         return { asks: root.gridBackend.asks, replies: root.gridBackend.replies, objects: root.tiles().length + grid.prebuild.parkedCount, reuse: root.meta.reuse,
-                 redundant: root.meta.redundant, isSelected: root.gridPane.tally.isSelected, rows: root.meta.tiles.map(function (t) { return t.rows }) }
+                 redundant: root.meta.redundant, blanked: root.meta.blanked, isSelected: root.gridPane.tally.isSelected, rows: root.meta.tiles.map(function (t) { return t.rows }) }
     }
     // A tile met only after the first snapshot counts from zero.
     function delta(a, b) {
-        var d = { created: b.objects - a.objects, reused: b.reuse - a.reuse, asks: b.asks - a.asks, replies: b.replies - a.replies,
-                  unchanged: b.redundant - a.redundant, isSelected: b.isSelected - a.isSelected, rebound: 0, max: 0, changes: 0 }
+        var d = { created: b.objects - a.objects, reused: b.reuse - a.reuse, asks: b.asks - a.asks, replies: b.replies - a.replies, twice: 0,
+                  unchanged: b.redundant - a.redundant, blanked: b.blanked - a.blanked, isSelected: b.isSelected - a.isSelected, rebound: 0, max: 0, changes: 0 }
         for (var i = 0; i < b.rows.length; i++) {
             var n = b.rows[i] - (i < a.rows.length ? a.rows[i] : 0)
             if (n > 0) d.rebound += 1
+            if (n > 1) d.twice += 1
             d.max = Math.max(d.max, n)
             d.changes += n
         }
@@ -237,7 +243,7 @@ ShellRoot {
     }
     function line(name, d) {
         return name + " created=" + d.created + " reused=" + d.reused + " windows=" + d.asks + " replies=" + d.replies + " tilesRebound=" + d.rebound
-            + " maxRebindsPerTile=" + d.max + " rowChanges=" + d.changes + " unchangedRowRebinds=" + d.unchanged + " isSelectedCalls=" + d.isSelected
+            + " maxRebindsPerTile=" + d.max + " tilesRebound2x=" + d.twice + " rowChanges=" + d.changes + " unchangedRowRebinds=" + d.unchanged + " blankedTiles=" + d.blanked + " isSelectedCalls=" + d.isSelected
     }
 
     // The actions are ui/js/Focus.js act() and ui/js/Grid.js arrow(): one filter move or set, then the selection follows.
@@ -254,10 +260,13 @@ ShellRoot {
     function measure(name, action) {
         var a = root.snap()
         action()
+        // What the action did before the event loop turned: a late reply has not landed, so a view that moved bound its tiles to no rows.
+        var early = root.delta(a, root.snap())
         root.script.unshift(function () {
             var d = root.delta(a, root.snap())
+            d.early = early
             root.moves[name] = d
-            root.log(root.line("grid " + name, d))
+            root.log(root.line("grid " + name, d) + " movedBeforeWindow=" + early.reused + "/" + early.changes)
             root.runNext()
         })
         root.later(450)
@@ -317,13 +326,17 @@ ShellRoot {
     }
 
     function verdict() {
-        // A late reply (a piped backend) lands after the layout: a tile clears, then takes the row, and the first G builds one tile; a sync reply beats the layout.
+        // A late reply (a piped backend) lands after the key: the view waits for it, so no tile clears and the first G builds one tile; a sync reply lands inside the ask.
         ["G", "g", "End", "Home"].forEach(function (name) {
-            [{ key: name, created: name === "G" ? 1 : 0, rebinds: 2 }, { key: name + ".sync", created: 0, rebinds: 1 }].forEach(function (bound) {
+            [{ key: name, created: name === "G" ? 1 : 0, own: 1 }, { key: name + ".sync", created: 0, own: 0 }].forEach(function (bound) {
                 var d = root.moves[bound.key]
                 root.check(bound.key + ": a far jump creates at most " + bound.created + " tile once the pool is warm", d.created <= bound.created, "created=" + d.created)
-                root.check(bound.key + ": a far jump rebinds a tile at most " + bound.rebinds + " times", d.max <= bound.rebinds, "max=" + d.max)
+                root.check(bound.key + ": a far jump rebinds a tile twice for at most the cursor's own tile (" + bound.own + ")", d.twice <= bound.own, "twice=" + d.twice)
+                root.check(bound.key + ": a far jump blanks no tile but at most the cursor's own (" + bound.own + ")", d.blanked <= bound.own, "blanked=" + d.blanked)
+                root.check(bound.key + ": a far jump gives each tile it moves its row once, the cursor's own aside", d.changes <= d.reused + d.created + bound.own, "changes=" + d.changes + " reused=" + d.reused + " created=" + d.created)
                 root.check(bound.key + ": a far jump asks one window", d.asks === 1, "windows=" + d.asks)
+                if (bound.key === name)
+                    root.check(bound.key + ": a far jump moves no tile before its window lands", d.early.reused <= bound.own && d.early.changes <= bound.own, "reused=" + d.early.reused + " changes=" + d.early.changes)
             })
         })
         var g = root.sweeps.grid70, ref = root.sweeps["list" + (root.sweepSteps * grid.columns)]
@@ -332,6 +345,103 @@ ShellRoot {
         root.check("no rows replacement redraws a row a tile already drew", g.unchanged === 0, "unchanged=" + g.unchanged)
         root.check("a held sweep rebinds a tile about once per reuse", g.changes <= g.reused + 2 * grid.columns, "changes=" + g.changes + " reused=" + g.reused)
         root.runNext()
+    }
+
+    function scroller() {
+        var kids = grid.children
+        for (var i = 0; i < kids.length; i++) if (kids[i].objectName === "fleaScroll") return kids[i]
+        return null
+    }
+    // A far jump whose window ask meets the given outcome, then the operator scrolls: the grid must stop waiting and ask a window again.
+    function outcome(name, mode) {
+        var s = root.script, last = root.files - 1, mine = { asks: 0 }
+        s.push(function () { root.gridPane.land(); root.warm() })
+        s.push(function () {
+            root.gridBackend.mode = mode
+            root.gridBackend.queue = []
+            mine.asks = root.gridBackend.asks
+            root.moveTo(root.gridPane, last)
+            root.later(300)
+        })
+        s.push(function () {
+            var parked = mode === "lost"
+            // An outcome that frees the wait may be followed by a drift ask for the rows the view now shows, so only a held wait is exactly one.
+            root.check(name + ": the jump asked its window", parked ? root.gridBackend.asks - mine.asks === 1 : root.gridBackend.asks - mine.asks >= 1, "windows=" + (root.gridBackend.asks - mine.asks))
+            root.check(name + ": the wait " + (parked ? "holds while the reply is out" : "ends on the ask's outcome"), grid.landingWait === parked, "landingWait=" + grid.landingWait)
+            var wheel = root.scroller()
+            root.check(name + ": the grid has a wheel handler to hear", wheel !== null && wheel.wheeled !== undefined, "")
+            if (parked && wheel !== null && wheel.wheeled !== undefined) {
+                grid.contentY = 0
+                driver.mouseWheel(grid, grid.width / 2, grid.height / 2, Qt.NoButton, Qt.NoModifier, 0, -120, 1)
+                root.check(name + ": a wheel ends a wait nothing answers", !grid.landingWait, "landingWait=" + grid.landingWait)
+            }
+            root.gridBackend.mode = "sync"
+            grid.contentY = 0
+            root.later(60)
+        })
+        s.push(function () {
+            mine.asks = root.gridBackend.asks
+            grid.contentY = Math.max(0, grid.contentHeight - grid.height)
+            root.later(150)
+        })
+        s.push(function () {
+            root.check(name + ": a scroll asks a window after it", root.gridBackend.asks > mine.asks, "windows=" + (root.gridBackend.asks - mine.asks))
+            root.check(name + ": the scrolled-to rows land", root.gridPane.rowFor(last) !== null, "held=" + root.gridPane.held)
+            root.gridBackend.mode = "late"
+            root.runNext()
+        })
+    }
+
+    // A far jump whose window is lost, then the operator takes the view by act(): the wait ends at once, and the late window reveals nothing; a flick may coast on, a reveal lands a half content away.
+    function takeover(name, act) {
+        var s = root.script, last = root.files - 1, mine = { y: 0 }
+        s.push(function () { root.gridPane.land(); root.warm() })
+        s.push(function () {
+            root.gridBackend.mode = "lost"
+            root.gridBackend.queue = []
+            root.moveTo(root.gridPane, last)
+            root.later(300)
+        })
+        s.push(function () {
+            root.check(name + ": the wait holds while the reply is out", grid.landingWait, "landingWait=" + grid.landingWait)
+            grid.contentY = grid.contentHeight / 2
+            root.check(name + ": a position write alone keeps the wait", grid.landingWait, "landingWait=" + grid.landingWait)
+            act()
+            root.check(name + ": the operator's scroll ends the wait", !grid.landingWait, "landingWait=" + grid.landingWait)
+            mine.y = grid.contentY
+            root.gridBackend.mode = "late"
+            root.gridBackend.reply()
+            root.later(250)
+        })
+        s.push(function () {
+            root.check(name + ": the late window does not reveal the cursor back", Math.abs(grid.contentY - mine.y) < grid.height && grid.contentY < grid.contentHeight - 2 * grid.height,
+                "contentY=" + grid.contentY + " at=" + mine.y)
+            root.runNext()
+        })
+    }
+    // A press on a tile, which the band lets through to the view, then moves past the drag threshold, then the release.
+    function dragView() {
+        var px = -1, py = -1
+        for (var y = grid.height / 2; y < grid.height - 10 && px < 0; y += 3)
+            for (var x = 10; x < grid.width - 40; x += 3)
+                if (grid.tileAt(x + grid.contentX, y + grid.contentY) >= 0) { px = x; py = y; break }
+        root.check("a tile exists to drag from", px >= 0, "px=" + px)
+        if (px < 0) return
+        driver.mousePress(grid, px, py, Qt.LeftButton, Qt.NoModifier, -1)
+        for (var i = 1; i <= 12; i++)
+            driver.mouseMove(grid, px, py - 12 * i, -1, Qt.LeftButton, Qt.NoModifier)
+        driver.mouseRelease(grid, px, py - 144, Qt.LeftButton, Qt.NoModifier, -1)
+    }
+    function dragBar() {
+        var bar = grid.scrollBar, knob = bar.knobItem
+        var at = knob.mapToItem(bar, knob.width / 2, knob.height / 2)
+        driver.mousePress(bar, at.x, at.y, Qt.LeftButton, Qt.NoModifier, -1)
+        driver.mouseMove(bar, at.x, at.y + 30, -1, Qt.LeftButton, Qt.NoModifier)
+        driver.mouseRelease(bar, at.x, at.y + 30, Qt.LeftButton, Qt.NoModifier, -1)
+    }
+    function wheelBar() {
+        var bar = grid.scrollBar
+        driver.mouseWheel(bar, bar.width / 2, bar.height / 2, Qt.NoButton, Qt.NoModifier, 0, -120, 1)
     }
 
     function build() {
@@ -382,6 +492,12 @@ ShellRoot {
         step(function () { root.gridPane.land(); root.warm() })
         step(root.staleCheck)
         step(root.verdict)
+        root.outcome("failed window", "fail")
+        root.outcome("short window", "short")
+        root.outcome("lost window", "lost")
+        root.takeover("lost window, view drag", root.dragView)
+        root.takeover("lost window, bar drag", root.dragBar)
+        root.takeover("lost window, bar wheel", root.wheelBar)
     }
 
     function finish() {

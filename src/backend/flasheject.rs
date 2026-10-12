@@ -16,7 +16,8 @@ fn bare_kernel_name(dev: &str) -> bool {
 // Eject through the helper; the rail's own lsblk verdict still writes the sentence the user reads.
 pub fn handle_flasheject(out: &mut dyn std::io::Write, dev: &str, seq: u64) {
     let (exe, ui) = roots_for_production();
-    let roots = Roots { sys: Path::new("/sys"), dev: Path::new("/dev"), exe: &exe, ui: &ui };
+    let loop_root = crate::backend::flasheligible::seam_root();
+    let roots = Roots { sys: Path::new("/sys"), dev: Path::new("/dev"), exe: &exe, ui: &ui, loop_root: loop_root.as_deref() };
     let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
     let swaps = std::fs::read_to_string("/proc/swaps").unwrap_or_default();
     eject_with(out, dev, seq, &roots, (&mountinfo, &swaps), &mut crate::backend::flashhelper::eject);

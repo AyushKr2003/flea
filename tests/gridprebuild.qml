@@ -205,7 +205,8 @@ ShellRoot {
             root.fail("b: landing built " + built + " delegates in its turn, want 0")
         var cols = grid.columns, first = 0
         var rows = Math.ceil(grid.height / grid.cellHeightPx)
-        var last = Math.min(grid.count - 1, (rows + 1) * cols - 1)
+        // The row past the viewport is cache, and cache rows grow back in frame steps after the landing.
+        var last = Math.min(grid.count - 1, rows * cols - 1)
         var bad = 0
         for (var i = first; i <= last; i++) {
             var it = grid.itemAtIndex(i)

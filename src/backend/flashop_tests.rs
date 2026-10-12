@@ -266,7 +266,7 @@ fn every_answer_path_flushes_its_line() {
     assert!(out.flushes >= 1, "the flashimage line is flushed");
     let f = fake("flashop-flush-eject");
     let (exe, ui) = roots();
-    let r = crate::backend::flasheligible::Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui };
+    let r = crate::backend::flasheligible::Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui, loop_root: None };
     stick(&f.sys);
     let mut gone_out = Counting { flushes: 0, bytes: Vec::new() };
     eject_with(&mut gone_out, "sdz", 2, &r, ("", NO_SWAPS), &mut |_| Ok(()));
@@ -285,7 +285,7 @@ fn eject_never_runs_the_helper_for_a_system_disk_or_a_path() {
     system(&f.sys);
     stick(&f.sys);
     let (exe, ui) = roots();
-    let r = crate::backend::flasheligible::Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui };
+    let r = crate::backend::flasheligible::Roots { sys: &f.sys, dev: &f.dev, exe: &exe, ui: &ui, loop_root: None };
     let info = root_mountinfo();
     let mut ran: Vec<String> = Vec::new();
     for dev in ["nvme0n1", "sda/../nvme0n1", "../block/nvme0n1"] {

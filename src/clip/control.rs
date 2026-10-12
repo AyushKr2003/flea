@@ -278,8 +278,9 @@ pub fn clear_on(conn: &mut Conn, token: &str) -> Result<bool, String> {
     null_selection_if_current(conn, selection.offer)
 }
 
-pub fn clear(token: &str) -> Result<bool, String> {
-    let mut conn = Conn::connect()?;
+// Production passes None, the session's display; a test names the fake compositor's socket.
+pub fn clear(token: &str, socket: Option<&std::path::Path>) -> Result<bool, String> {
+    let mut conn = Conn::open(socket)?;
     clear_on(&mut conn, token)
 }
 
@@ -296,8 +297,8 @@ pub fn clear_cut_on(conn: &mut Conn, wanted: &[String]) -> Result<bool, String> 
     null_selection_if_current(conn, selection.offer)
 }
 
-pub fn clear_cut(wanted: &[String]) -> Result<bool, String> {
-    let mut conn = Conn::connect()?;
+pub fn clear_cut(wanted: &[String], socket: Option<&std::path::Path>) -> Result<bool, String> {
+    let mut conn = Conn::open(socket)?;
     clear_cut_on(&mut conn, wanted)
 }
 

@@ -24,10 +24,21 @@ pub fn scan_with(
     prefetch: Option<crate::gvfsprefetch::Prefetch>,
     gio: &str,
 ) -> Result<(Listing, f64), FleaError> {
+    scan_in(path, hidden, prefetch, gio, &crate::gvfsprefetch::runtime_dir)
+}
+
+// The runtime dir rides in as a getter, read only for a gvfs path, so a test names it too.
+pub(crate) fn scan_in(
+    path: &str,
+    hidden: bool,
+    prefetch: Option<crate::gvfsprefetch::Prefetch>,
+    gio: &str,
+    runtime: &dyn Fn() -> Option<std::path::PathBuf>,
+) -> Result<(Listing, f64), FleaError> {
     // One prefix check: local and USB paths take exactly today's code past it.
     if super::gvfslist::is_gvfs(std::path::Path::new(path)) {
         // The launcher's head start on this exact path; anything else takes today's gio path.
-        if let Some(found) = prefetch.as_ref().and_then(|p| crate::gvfsprefetch::adopt_matching(path, hidden, p)) {
+        if let Some(found) = prefetch.as_ref().and_then(|p| crate::gvfsprefetch::adopt_matching_in(path, hidden, p, runtime().as_deref())) {
             return Ok(found);
         }
         // Any gio failure falls back to readdir unchanged and says nothing to the user.

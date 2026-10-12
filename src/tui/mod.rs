@@ -64,6 +64,8 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
         // The listing goes out before the terminal is entered, so gio runs beside raw mode, keymap and theme.
         model.open(path, &mut wire)?;
         let mut terminal = terminal::Terminal::enter()?;
+        // Rebound after the terminal so it drops first on every exit: mpv's relay writes before the screen is restored.
+        let mut model = model;
         let map = keymap::Map::load();
         let theme = theme::Theme::load();
         let mut decoder = input::Decoder::default();

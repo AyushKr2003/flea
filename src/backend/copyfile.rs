@@ -128,6 +128,10 @@ fn copy_file_at(src: At, dst: At, total: u64, p: &mut Progress) -> Result<(), Fl
         }
         #[cfg(test)]
         super::durable::test_log("write-dest");
+        #[cfg(test)]
+        if CANCEL_AFTER_WRITE.with(|v| v.get()) {
+            p.cancel.store(true, Ordering::Relaxed);
+        }
         done += n as u64;
         if !durable {
             let (reported, against) = match p.tree {
@@ -233,6 +237,17 @@ fn copy_file_at(src: At, dst: At, total: u64, p: &mut Progress) -> Result<(), Fl
     }
     record_open(p, dst.named, &w);
     Ok(())
+}
+
+#[cfg(test)]
+thread_local! {
+    static CANCEL_AFTER_WRITE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+// Sample input: test_cancel_after_write(true) raises the copy's own cancel after its first chunk lands; false clears it.
+#[cfg(test)]
+pub(crate) fn test_cancel_after_write(on: bool) {
+    CANCEL_AFTER_WRITE.with(|v| v.set(on));
 }
 
 #[cfg(test)]

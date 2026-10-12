@@ -87,9 +87,9 @@ function trashable(path, writable) {
     return !underGvfs(path)
 }
 
-// A path inside a GVFS FUSE folder, where the "scheme:" segment names the mount.
+// A path inside the GVFS FUSE root /run/user/<uid>/gvfs, where the "scheme:" segment names the mount; a folder named gvfs elsewhere is plain.
 function underGvfs(path) {
-    return /\/gvfs\/[a-z0-9-]+:/i.test(String(path || ""))
+    return /^\/run\/user\/[^/]+\/gvfs\/[A-Za-z0-9-]+:/.test(String(path || ""))
 }
 
 // Sample input: the operator's real bookmarks file, ui/js/Places.js "bookmarks" reads the same lines.

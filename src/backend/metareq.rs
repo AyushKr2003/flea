@@ -13,12 +13,6 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-// std offers no way to kill a child from another thread without owning it, so the signal is declared
-// here rather than taking a crate, the same call ops.rs makes for renameat2.
-extern "C" {
-    fn kill(pid: i32, sig: i32) -> i32;
-}
-
 const SIGKILL: i32 = 9;
 
 pub struct Meta {
@@ -141,7 +135,7 @@ fn list_archive(path: &Path, formats: &Formats) -> Contents {
             if !done.load(Ordering::Relaxed) {
                 // The group ends bwrap and the sandbox pid ends the tool --new-session hid; the child is still ours until wait() reaps it.
                 crate::backend::jail::kill_sandbox(&sandbox_pid, pid);
-                unsafe { kill(-pid, SIGKILL) };
+                let _ = crate::procsignal::signal_group(pid, SIGKILL);
             }
         })
     };
@@ -156,7 +150,7 @@ fn list_archive(path: &Path, formats: &Formats) -> Contents {
     // A read cut short at its deadline leaves the tool alive, so the kills happen BEFORE done stands the watchdog down.
     if contents.failed {
         crate::backend::jail::kill_sandbox(&jailed.sandbox_pid, jailed.child.id() as i32);
-        unsafe { kill(-(jailed.child.id() as i32), SIGKILL) };
+        let _ = crate::procsignal::signal_group(jailed.child.id() as i32, SIGKILL);
     }
     done.store(true, Ordering::Relaxed);
     let _ = watchdog.join();

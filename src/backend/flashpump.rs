@@ -134,5 +134,10 @@ pub(crate) fn drive(feed: Feed, job: &Job, on_progress: &mut dyn FnMut(u64, u64)
     } else {
         let _ = reader.join();
     }
-    exit.map(|()| (table, offset))
+    // A stream that ends clean with no bytes wrote nothing, which no flash may call ok.
+    exit.and_then(|()| match (offset, unpacker.is_some()) {
+        (0, true) => Err(Fail::Decompress("the unpacker produced no bytes".to_string())),
+        (0, false) => Err(Fail::Io("the image holds no bytes".to_string())),
+        _ => Ok((table, offset)),
+    })
 }

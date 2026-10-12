@@ -126,9 +126,10 @@ fn gvfs_trash(d: &TestDir, xdg: &Path) -> StandIn {
     StandIn
 }
 
-// A destination folder shaped like a GVFS sftp mount, which has no Trash of its own.
+// A destination folder shaped like a GVFS sftp mount under a fake run root, which has no Trash of its own; the seam clears with the test thread.
 fn gvfs_dest(d: &TestDir) -> PathBuf {
-    d.dir("gvfs/sftp:host=slot.test/home/gm")
+    crate::backend::gvfsroot::set_test_run_user(Some(&d.dir("run")));
+    d.dir("run/1000/gvfs/sftp:host=slot.test/home/gm")
 }
 
 #[test]
@@ -139,13 +140,26 @@ fn every_gvfs_mount_refuses_and_every_ordinary_folder_keeps_its_trash() {
         "/run/user/1000/gvfs/mtp:host=SAMSUNG_RQGL705T0NR/DCIM",
         "/run/user/1000/gvfs/gphoto2:host=usb%3A001%2C014/store",
         "/run/user/1000/gvfs/afc:host=00008130-001641411883401C/DCIM",
-        "/run/user/1000/GVFS/dav:host=slot,ssl=true/notes",
     ] {
         assert!(!trashable(Path::new(refused)), "{refused} has no Trash");
     }
-    for kept in ["/home/gm/Downloads", "/home/gm/src/gvfs/daemon", "/run/user/1000/gvfs", "/"] {
+    for kept in ["/home/gm/Downloads", "/home/gm/src/gvfs/daemon", "/run/user/1000/gvfs", "/", "/run/user/1000/GVFS/dav:host=slot,ssl=true/notes"] {
         assert!(trashable(Path::new(kept)), "{kept} keeps its Trash");
     }
+}
+
+// A plain folder named gvfs, even one holding a scheme-shaped folder, is no mount: only the root under /run/user/<uid> is.
+#[test]
+fn a_folder_named_gvfs_outside_the_run_root_keeps_its_trash() {
+    for kept in ["/home/u/mirror/gvfs/proj/a.txt", "/home/u/mirror/gvfs/smb-share:server=n,share=x/a.txt", "/home/u/gvfs/sftp:host=box/f",
+        "/run/user/1000/home/gvfs/mtp:host=X/DCIM", "/run/user/gvfs/mtp:host=X"] {
+        assert!(trashable(Path::new(kept)), "{kept} keeps its Trash");
+    }
+    let d = TestDir::new("gvfs-fake-root");
+    crate::backend::gvfsroot::set_test_run_user(Some(&d.dir("run")));
+    assert!(!trashable(&d.dir("run/1000/gvfs/smb-share:server=n,share=x/a")), "the seam's run root holds a real gvfs root");
+    assert!(trashable(&d.dir("mirror/gvfs/smb-share:server=n,share=x/a")), "the same shape off the run root is a plain folder");
+    crate::backend::gvfsroot::set_test_run_user(None);
 }
 
 // A colon alone never names a mount: only letters, digits and hyphens may stand before it.
@@ -166,7 +180,7 @@ fn replace_on_a_location_with_no_trash_keeps_the_old_item_in_the_home_trash() {
     d.dir("from");
     assert!(!trashable(&dest), "the GVFS-shaped destination has no Trash");
     let photo = d.file("from/my photo.png", "yours");
-    let there = d.file("gvfs/sftp:host=slot.test/home/gm/my photo.png", "there");
+    let there = d.file("run/1000/gvfs/sftp:host=slot.test/home/gm/my photo.png", "there");
     let _root = test_trash_root(&xdg.join("Trash"));
     let _trash = gvfs_trash(&d, &xdg);
     let (ok, failed, _, errors, entry) = transfer(false, &[&photo], &dest, chosen("replace", asked(1, &[&photo], &dest), &dest));
@@ -192,8 +206,8 @@ fn a_replaced_folder_on_a_location_with_no_trash_lands_whole_in_the_home_trash()
     let dest = gvfs_dest(&d);
     d.dir("from/album");
     d.file("from/album/new.txt", "new");
-    d.dir("gvfs/sftp:host=slot.test/home/gm/album");
-    d.file("gvfs/sftp:host=slot.test/home/gm/album/old.txt", "old");
+    d.dir("run/1000/gvfs/sftp:host=slot.test/home/gm/album");
+    d.file("run/1000/gvfs/sftp:host=slot.test/home/gm/album/old.txt", "old");
     let album = d.path().join("from/album");
     let _root = test_trash_root(&xdg.join("Trash"));
     let _trash = gvfs_trash(&d, &xdg);
@@ -231,7 +245,7 @@ fn a_failed_home_trash_copy_leaves_no_partial_and_the_original_in_place() {
     let dest = gvfs_dest(&d);
     d.dir("from");
     let photo = d.file("from/photo.png", "yours");
-    let there = d.file("gvfs/sftp:host=slot.test/home/gm/photo.png", "there");
+    let there = d.file("run/1000/gvfs/sftp:host=slot.test/home/gm/photo.png", "there");
     std::fs::set_permissions(&there, std::fs::Permissions::from_mode(0o000)).unwrap();
     let _root = test_trash_root(&xdg.join("Trash"));
     let _trash = gvfs_trash(&d, &xdg);
@@ -253,7 +267,7 @@ fn a_home_trash_name_collision_gets_a_unique_name() {
     let dest = gvfs_dest(&d);
     d.dir("from");
     let photo = d.file("from/photo.png", "yours");
-    let there = d.file("gvfs/sftp:host=slot.test/home/gm/photo.png", "there");
+    let there = d.file("run/1000/gvfs/sftp:host=slot.test/home/gm/photo.png", "there");
     std::fs::create_dir_all(xdg.join("Trash/files")).unwrap();
     std::fs::create_dir_all(xdg.join("Trash/info")).unwrap();
     std::fs::write(xdg.join("Trash/files/photo.png"), "earlier").unwrap();
@@ -283,7 +297,7 @@ fn undo_restores_a_home_trashed_replace_to_its_gvfs_path() {
     let dest = gvfs_dest(&d);
     d.dir("from");
     let photo = d.file("from/photo.png", "yours");
-    let there = d.file("gvfs/sftp:host=slot.test/home/gm/photo.png", "there");
+    let there = d.file("run/1000/gvfs/sftp:host=slot.test/home/gm/photo.png", "there");
     let _root = test_trash_root(&xdg.join("Trash"));
     let _trash = gvfs_trash(&d, &xdg);
     let (ok, _, _, errors, entry) = transfer(false, &[&photo], &dest, chosen("replace", asked(1, &[&photo], &dest), &dest));
@@ -370,7 +384,7 @@ fn without_an_override_a_test_never_names_a_real_trash() {
     set_test_trash_root(None);
     let d = TestDir::new("replace261-no-override");
     let there = d.file("photo.png", "there");
-    assert_eq!(trash_to_home(&there).expect_err("no override names no Trash"), HOME_TRASH_FAILED);
+    assert_eq!(trash_to_home(&there, &std::sync::atomic::AtomicBool::new(false)).expect_err("no override names no Trash"), HOME_TRASH_FAILED);
     assert_eq!(text(&there), "there", "the original never moved");
     assert!(!d.path().join("Trash").exists(), "no Trash directory was created in the sandbox");
 }
