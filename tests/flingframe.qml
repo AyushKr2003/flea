@@ -294,7 +294,7 @@ ShellRoot {
         // The stroke is the frame: a mid start has a full pool, and the rows it may reveal are those the pixels it moved cross.
         var per = (Math.ceil(Math.abs(v.contentY - y0) / root.rowH()) + 1) * root.columnsOf()
         measure.judge(tag, measure.flat(moved), per, true, root.wheelUpdates).forEach(root.fail)
-        if (root.cursorOutside() && moved.tally.cursor < 1) root.fail(tag + "the cursor started above the view and the stroke never pulled it, so the clamp write is not exercised")
+        if (root.cursorOutside() && (moved.tally.clamped < 1 || moved.tally.cursor < 1)) root.fail(tag + "the cursor started above the view and no clamp pulled it, so the clamp write is not exercised")
         return true
     }
 

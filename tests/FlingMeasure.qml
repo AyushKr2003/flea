@@ -65,7 +65,7 @@ QtObject {
         if (m.texts > entering + slack) out.push(tag + m.texts.toFixed(2) + " rows changed text a frame, entering " + entering.toFixed(2))
         if (m.rowFor > 2 * entering + slack) out.push(tag + m.rowFor.toFixed(2) + " row reads a frame, entering " + entering.toFixed(2))
         if (m.isSelected > entering + slack) out.push(tag + m.isSelected.toFixed(2) + " selection reads a frame, entering " + entering.toFixed(2))
-        if (m.cursor > clamps + capHair || m.clamped > clamps + capHair) out.push(tag + "cursor moved " + m.cursor.toFixed(2) + " and clamped " + m.clamped.toFixed(2) + " a frame, want at most " + clamps + " of each")
+        if (m.cursor > m.clamped + capHair || m.clamped > clamps + capHair) out.push(tag + "cursor moved " + m.cursor.toFixed(2) + " and clamped " + m.clamped.toFixed(2) + " a frame, want at most one move per clamp and " + clamps + " clamps")
         return out
     }
 }
