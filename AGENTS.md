@@ -712,9 +712,11 @@ mutates under the picture and then calls `start(isPdf)`, held j joins the hold w
 staying, and `close()` calls `cancel()` so nothing queued runs. Space's own open takes no picture: its card and
 dim wait for the content's first frame (`lookReady`, which sets `landed`), and `revealed` is `landed || revealedEarly`.
 The hold ends early over the loading state, shown at once (`heldOff`) for every kind, when the `revealCap` single-shot
-fires at `capMs` counted from after `show()` returns, beside the swap's own `start()`, so a cold first PDF compile is not
-inside it, or when a press or the wheel lands anywhere on the overlay: the top `holdShield` takes it, through its own
-release, so no click reaches a card that never drew. A move during the hold takes no picture and keeps the open's cap;
+fires at `Swap.CAP_MS` (66 ms) counted from after `show()` returns, beside the swap's own `start()`, so a cold first PDF
+compile is not inside it, or when a press or the wheel lands anywhere on the overlay: the top `holdShield` takes it, through
+its own release, so no click reaches a card that never drew. That early loading state stands `Swap.MIN_SHOW_MS` from
+`loadingSince`: `revealIfReady` asks `Swap.showLeft`, and content ready sooner lands when the `minShow` timer ends, while
+content ready before the reveal lands at once. A move during the hold takes no picture and keeps the open's cap;
 an idle one loads at once and a burst still trails on `followSettle`, which `revealIfReady` waits out, so whatever
 reveals is the cursor's own file and a held key asks nothing per row. The card and dim read opacity 0 for the whole hold
 and share one `fade`, so a reopen inside the close fade cuts it. `lookEmptyFrames` in `previewSwapState`'s `lookOpen`

@@ -21,7 +21,7 @@ cp tests/quicklook-hold.qml "$test_root/config/shell.qml" || exit 1
 # A picture whose decode starts only once show() returns and takes a few ms, far inside the cap counted from there.
 ffmpeg -y -f lavfi -i "testsrc=size=1600x1200" -frames:v 1 "$test_root/fixture/b-mid.jpg" >/dev/null 2>&1 \
     || { printf 'FAIL quicklook-hold: ffmpeg could not make b-mid.jpg\n'; exit 1; }
-# Two 8000x8000 pictures decode for far longer than the 150 ms cap; Quick Look draws its own decode uncached, so a reopen waits again.
+# Two 8000x8000 pictures decode for far longer than the cap; Quick Look draws its own decode uncached, so a reopen waits again.
 for name in d-large.png e-large.png; do
     ffmpeg -y -f lavfi -i "testsrc=size=8000x8000" -frames:v 1 "$test_root/fixture/$name" >/dev/null 2>&1 \
         || { printf 'FAIL quicklook-hold: ffmpeg could not make %s\n' "$name"; exit 1; }
