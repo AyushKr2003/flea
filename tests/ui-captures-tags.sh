@@ -260,6 +260,33 @@ else:
     raise SystemExit("user.xdg.tags appeared on the untagged row")
 EOF
     shot tags-noop
+    # the same Return on the same row clears a tagged row, which only the activation does: the Removed line and the bare file prove it fired
+    key 5 >/dev/null
+    for waited in $(seq 1 100); do
+        [[ "$(ipc statusPrimary)" == *"Tagged 1 item Blue"* ]] && break
+        sleep 0.05
+    done
+    [[ "$(ipc statusPrimary)" == *"Tagged 1 item Blue"* ]] \
+        || fail "cap_tags: digit 5 tagged no Blue on noop.txt, status reads $(ipc statusPrimary)"
+    cap_menu_expect '.opened and .submenu and .submenuEntries[.submenuCursor].label == "Remove all tags"' "tags: the digit moved the flyout cursor off Remove all tags"
+    key -k Return >/dev/null
+    for waited in $(seq 1 100); do
+        [[ "$(ipc statusPrimary)" == *"Removed all tags from 1 item"* ]] && break
+        sleep 0.05
+    done
+    [[ "$(ipc statusPrimary)" == *"Removed all tags from 1 item"* ]] \
+        || fail "cap_tags: Return on Remove all tags cleared nothing, status reads $(ipc statusPrimary)"
+    [[ "$dir/plain-sub/noop.txt" == "$fixture_root/"* ]] || fail "cap_tags: refusing a path outside the fixture root"
+    python3 - "$dir/plain-sub/noop.txt" <<'EOF2' || fail "cap_tags: Return left the Blue tag on noop.txt"
+import os
+import sys
+try:
+    os.getxattr(sys.argv[1], "user.xdg.tags")
+except OSError as e:
+    assert e.errno == 61, e
+else:
+    raise SystemExit("user.xdg.tags stayed on noop.txt")
+EOF2
     key -k Escape >/dev/null
     settle
     key -k Escape >/dev/null

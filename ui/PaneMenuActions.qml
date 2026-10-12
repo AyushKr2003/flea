@@ -134,6 +134,8 @@ Loader {
     property bool ready: false
     property string pendingAction: ""
     property bool pendingActivation: false
+    // Tag toggles chosen while the first still awaits its snapshot, kept in press order; any other pending action drops them.
+    property var queuedTags: []
     property bool activationUsed: false
     // The request a keymap sheet activation runs under, which lists hidden rows; the next snapshot moves requestId past it.
     property int sheetRequest: 0
@@ -207,6 +209,7 @@ Loader {
         ready = false
         pendingAction = ""
         pendingActivation = false
+        queuedTags = []
         activationUsed = false
         identity = pane.menuSelectionIdentity()
         folder = pane.path
@@ -279,6 +282,11 @@ Loader {
             return
         }
         // A tag toggle repeats inside one open menu; every other choice closes it, so one activation is all it gets.
+        if (action.indexOf("tags:") === 0 && pendingActivation && pendingAction.indexOf("tags:") === 0) {
+            queuedTags = queuedTags.concat([action])
+            return
+        }
+        queuedTags = []
         activationUsed = action.indexOf("tags:") !== 0
         providerValidated = false
         pendingAction = action
@@ -305,6 +313,12 @@ Loader {
         }
         pane.backend.send({c: "menuaction", op: "activate", id: requestId, action: action,
             dest: pane.dropboxService ? pane.dropboxService.dropboxPath : ""})
+        if (queuedTags.length > 0) {
+            pendingAction = queuedTags[0]
+            queuedTags = queuedTags.slice(1)
+            pendingActivation = true
+            validateActivation()
+        }
     }
     function show(action) {
         pendingAction = ""
@@ -411,6 +425,7 @@ Loader {
                             && !root.pendingAction && !root.pendingActivation
                     root.pendingAction = ""
                     root.pendingActivation = false
+                    root.queuedTags = []
                     root.providersRefreshing = false
                     root.identity = ""
                     if (!retired)
@@ -453,6 +468,7 @@ Loader {
             root.identity = ""
             root.pendingAction = ""
             root.pendingActivation = false
+            root.queuedTags = []
             root.providersRefreshing = false
             if (root.opened || root.deleting) root.item.receive({id: root.requestId, op: root.deleting ? "delete" : "", ok: false, error: message})
         }

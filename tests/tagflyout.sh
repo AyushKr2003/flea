@@ -21,6 +21,8 @@ mkdir -p "$test_root"/{home,config,state,data,cache,runtime} "$test_root/home/fi
 chmod 700 "$test_root/runtime" || exit 1
 printf 'one\n' > "$test_root/home/fixture/a.txt"
 printf 'two\n' > "$test_root/home/fixture/b.txt"
+# Enough more rows that a selection of the first and the last cannot sit inside one held window.
+touch "$test_root/home/fixture"/f{001..500}.txt || exit 1
 # One of the two files carries Blue, so Blue reads mixed over both; a filesystem without user xattrs cannot hold the fixture.
 python3 - "$test_root/home/fixture/a.txt" <<'PY' || { echo 'FAIL tagflyout: the fixture filesystem stores no user.xdg.tags'; exit 1; }
 import os, sys
@@ -44,7 +46,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLE
     timeout 60 dbus-run-session -- qs -p "$test_root/config" 2>&1)
 status=$?
 
-# Sample input: "  INFO qml: TAGFLYOUT PASS 5 toggles keep the flyout open" then "TAGFLYOUT PASS 40 checks", then the probe's own SIGTERM (143).
+# Sample input: "  INFO qml: TAGFLYOUT PASS 70 checks" then "  INFO qml: TAGFLYOUT DONE failures=0", then the probe's own SIGTERM (143); a failed check logs "TAGFLYOUT FAIL <name>".
 readonly qs_status=143
 if [ "$status" -ne "$qs_status" ] || ! printf '%s\n' "$output" | grep -aq 'TAGFLYOUT DONE failures=0' \
         || printf '%s\n' "$output" | grep -aq 'TAGFLYOUT FAIL'; then

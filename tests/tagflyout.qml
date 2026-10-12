@@ -5,7 +5,7 @@ import Quickshell
 import "flea" as Flea
 import "flea/js/Tags.js" as Tags
 
-// tests/tagflyout.sh: the real pane over the real backend toggles tags from an open flyout, which stays open with its cursor and redraws each box in place.
+// tests/tagflyout.sh: the real pane over the real backend toggles tags from an open flyout, which stays open with its cursor and redraws each box in place, over rows inside the held window and past it.
 ShellRoot {
     id: root
     readonly property var pane: body.currentPane
@@ -30,6 +30,10 @@ ShellRoot {
     property int windows: 0
     property int windowsBefore: 0
     property var refusals: []
+    // What TagState held a turn after the last settagged answer, once its own handler had run.
+    property var afterWrite: null
+    property bool readyAtOpen: true
+    property bool readHeld: false
     property int checks: 0
     property int failures: 0
 
@@ -72,13 +76,15 @@ ShellRoot {
     }
     // One toggle lands when its settagged answer has come back and the held window has answered after it.
     function toggleLanded() { return landed > landedBefore && windows > windowsBefore }
-    function toggled() { landedBefore = landed; windowsBefore = windows }
+    function toggled() { landedBefore = landed; windowsBefore = windows; afterWrite = null }
+    function noteWrite() { var held = pane.tagState; afterWrite = held === null ? null : { asked: held.asked !== null, asking: held.asking !== null } }
 
     function build() {
         return [
             { name: "open the flyout over two files, one carrying Blue",
               act: function () {
-                  pane.selectAll()
+                  pane.selectOnly(0)
+                  pane.toggleSelectAt(1)
                   pane.listArea.forceActiveFocus()
                   driver.keyClickChar("T", Qt.ShiftModifier, -1)
               },
@@ -180,6 +186,54 @@ ShellRoot {
                   check("ground: the flyout closed", !menu.submenuOpen)
                   check("ground: focus returned to the listing", pane.listArea.activeFocus)
               } },
+            { name: "two choices made before the menu snapshot answers both apply, in order",
+              act: function () {
+                  pane.selectOnly(0)
+                  pane.toggleSelectAt(1)
+                  pane.listArea.forceActiveFocus()
+                  // Direct calls, because a TestEvent key spins the event loop and lets the snapshot answer between presses.
+                  pane.tags().openMenu()
+                  readyAtOpen = pane.menuActions.ready
+                  toggled()
+                  menu.chooseSub("Yellow")
+                  menu.chooseSub("Green")
+              },
+              ready: function () { return landed >= landedBefore + 2 && windows > windowsBefore },
+              verify: function () {
+                  check("3 and 4: both choices landed before the snapshot answered", !readyAtOpen)
+                  check("3 and 4: the flyout stays open", flyoutStands())
+                  check("3 and 4: Yellow reads applied", state("Yellow") === Tags.APPLIED)
+                  check("3 and 4: Green reads applied", state("Green") === Tags.APPLIED)
+                  check("3 and 4: nothing was refused", refusals.length === 0)
+                  menu.close()
+              } },
+            { name: "pick the first row and the last, which the held window does not hold together",
+              act: function () {
+                  pane.selectOnly(0)
+                  pane.toggleSelectAt(pane.total - 1)
+                  pane.listArea.forceActiveFocus()
+              },
+              ready: function () { return !pane.listInFlight && pane.selectedIndices().length === 2 },
+              verify: function () {
+                  check("past the window: one picked row is outside the held rows", pane.tags().filesFor(pane.selectedIndices()) === null)
+              } },
+            { name: "T over the picked rows reads their tags from the backend",
+              act: function () { driver.keyClickChar("T", Qt.ShiftModifier, -1) },
+              ready: function () { return flyoutStands() && pane.tags().asked !== null },
+              verify: function () {
+                  check("past the window: Yellow reads mixed, carried by the first row alone", state("Yellow") === Tags.MIXED)
+                  check("past the window: Red reads empty", state("Red") === Tags.ABSENT)
+              } },
+            { name: "digit 1 over the picked rows keeps the read up and asks again",
+              act: function () { toggled(); driver.keyClickChar("1", Qt.NoModifier, -1) },
+              ready: toggleLanded,
+              verify: function () {
+                  check("past the window: the read was kept through the write", afterWrite !== null && afterWrite.asked)
+                  check("past the window: a fresh read was asked at once", afterWrite !== null && afterWrite.asking)
+                  check("past the window: Red reads applied from the fresh read", state("Red") === Tags.APPLIED)
+                  check("past the window: the flyout stays open", flyoutStands())
+                  menu.close()
+              } },
             { name: "Copy as still closes on a choice",
               act: function () {
                   pane.listArea.forceActiveFocus()
@@ -191,6 +245,21 @@ ShellRoot {
                   menu.chooseSub("copyName")
                   check("Copy as: a choice closes the menu", !menu.opened)
                   check("Copy as: a choice closes the flyout", !menu.submenuOpen)
+              } },
+            { name: "T over the picked rows again",
+              act: function () {
+                  pane.listArea.forceActiveFocus()
+                  driver.keyClickChar("T", Qt.ShiftModifier, -1)
+              },
+              ready: function () { return flyoutStands() && pane.tags().asked !== null },
+              verify: function () { check("T reopens the flyout over the picked rows", flyoutStands()) } },
+            { name: "a failed backend read drops the kept read",
+              act: function () { readHeld = pane.tags().asked !== null; pane.backend.failed("read", "", "the read stopped", 0) },
+              verify: function () {
+                  check("failure: a read was held before it", readHeld)
+                  check("failure: the kept read is gone", pane.tags().asked === null)
+                  check("failure: the read still out is gone", pane.tags().asking === null)
+                  check("failure: no change stays pending", pane.tags().pending.length === 0)
               } }
         ]
     }
@@ -236,7 +305,7 @@ ShellRoot {
 
     Connections {
         target: root.pane ? root.pane.backend : null
-        function onSettagged(message) { root.landed += 1 }
+        function onSettagged(message) { root.landed += 1; Qt.callLater(root.noteWrite) }
     }
     Connections {
         target: root.pane
