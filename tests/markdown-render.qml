@@ -5,6 +5,7 @@ import QtTest
 import Quickshell
 import "flea" as Flea
 import "flea/js/Buttons.js" as Buttons
+import "flea/js/Focus.js" as Focus
 import "markdown-render.js" as Checks
 import "markdown-centre.js" as Centre
 import "markdown-board.js" as Board
@@ -38,9 +39,16 @@ ShellRoot {
     readonly property int probeColumns: 4
     property int suiteBody: 0
     property bool larger: false
-    // The narrowest Quick Look the bar is held to, and the views the pointer asked for.
+    // The narrowest Quick Look the bar is held to, and the views the bar asked Quick Look for.
     readonly property int quickLookMinWidth: 480
     property var asked: []
+    // What Focus.handleKey reads of a pane while Quick Look is open: the open Quick Look and a listing that owns nothing.
+    readonly property var keyHost: ({ preview: quick, renameEditor: function () { return null } })
+
+    Connections {
+        target: quick.markdownShown
+        function onViewRequested(which) { shell.asked.push(which) }
+    }
 
     FontMetrics { id: listMetrics; font.family: Flea.Theme.font.family; font.pixelSize: Flea.Theme.font.body }
 
@@ -78,7 +86,7 @@ ShellRoot {
     FloatingWindow {
         id: window
         implicitWidth: 560
-        implicitHeight: 1120
+        implicitHeight: 1560
         color: "#101315"
 
         Item {
@@ -177,6 +185,16 @@ ShellRoot {
             view: "rendered"
         }
 
+        // The bar without its segment, as a code or text pane draws it, over a name too long for it.
+        Flea.QuickLookBar {
+            id: plainBar
+            width: 900
+            visible: false
+            markName: "file"
+            name: shell.longFixture.substring(shell.longFixture.lastIndexOf("/") + 1)
+            countLabel: "12 lines"
+        }
+
         // A name too long for any bar, so it elides and the room the name may take is tested.
         Flea.MarkdownPane {
             id: longNamePane
@@ -188,24 +206,30 @@ ShellRoot {
             size: 1
         }
 
-        // The bar a pointer drives, under the grab: Preview answers a chosen word with toggleMarkdownView, which this flips the same way.
-        Flea.MarkdownPane {
-            id: clickPane
-            x: 40
+        // Quick Look itself, open on the fixture under the grab: a bar click and the r and Tab keys reach its pane through ui/Preview.qml's own wiring.
+        Item {
+            id: quickHost
             y: grabRoot.height
             width: shell.quickLookMinWidth
             height: window.implicitHeight - grabRoot.height
-            active: true
-            path: shell.fixture
-            size: 1
-            view: "rendered"
-            onViewRequested: function (which) {
-                shell.asked.push(which)
-                clickPane.view = clickPane.view === "source" ? "rendered" : "source"
+
+            Flea.Preview {
+                id: quick
+                active: true
+                kind: "text"
+                path: shell.fixture
+                size: 1
             }
         }
 
-        TestEvent { id: clicker }
+        // The key sink the window's Pane is: its Keys.onPressed hands the event to Focus.handleKey.
+        Item {
+            id: keySink
+            focus: true
+            Keys.onPressed: function (event) { event.accepted = Focus.handleKey(event, shell.keyHost, null) }
+        }
+
+        TestEvent { id: events }
 
         Flea.MarkdownFigure {
             id: fallbackProbe
@@ -379,8 +403,11 @@ ShellRoot {
         var g = pane.barGeometry ? pane.barGeometry() : null
         var tokens = shell.barTokens()
         shell.check(Bar.barError(g, tokens), "Quick Look bar order")
-        shell.check("", "Quick Look segment measures " + (g && g.rendered ? g.rendered.height : -1) + " px in a " + tokens.chromeHeight + " px bar")
+        var segHeight = g && g.rendered ? g.rendered.height : -1
+        shell.check(segHeight > 0 && segHeight < tokens.chromeHeight ? "" : "the segment is " + segHeight + " px tall in a " + tokens.chromeHeight + " px bar",
+            "Quick Look segment fits inside the bar")
         shell.check(Bar.nameRoomError(longNamePane.barGeometry ? longNamePane.barGeometry() : null, tokens), "Quick Look name takes the freed room")
+        shell.check(Bar.plainBarError(plainBar.geometry(), tokens), "Quick Look bar without the segment keeps its count one gap before close")
         shell.barSqueezed(tokens)
         shell.barDriven(tokens)
     }
@@ -406,16 +433,18 @@ ShellRoot {
     }
 
     function clickWord(cell) {
-        clicker.mouseClick(cell, cell.width / 2, cell.height / 2, Qt.LeftButton, Qt.NoModifier, 0)
+        events.mouseClick(cell, cell.width / 2, cell.height / 2, Qt.LeftButton, Qt.NoModifier, 0)
     }
 
-    // A pointer on the words, then r, then Tab, each read back off the drawn cells beside the body's own view.
+    // A pointer on the words, then a request, then r, then Tab, each read back off the drawn cells beside the body's own view.
     function barDriven(tokens) {
-        var g = clickPane.barGeometry()
+        var shown = quick.markdownShown
+        var g = shown.barGeometry()
         shell.asked = []
+        keySink.forceActiveFocus()
         function reads(view, asks, name) {
-            var why = clickPane.shownView === view && shell.asked.join() === asks ? Bar.inkError(clickPane.barGeometry(), view, tokens)
-                : "the body shows " + clickPane.shownView + " and was asked for [" + shell.asked.join() + "], want " + view + " and [" + asks + "]"
+            var why = shown.shownView === view && shell.asked.join() === asks ? Bar.inkError(shown.barGeometry(), view, tokens)
+                : "the body shows " + shown.shownView + " and was asked for [" + shell.asked.join() + "], want " + view + " and [" + asks + "]"
             shell.check(why, name)
         }
         reads("rendered", "", "bar at rest: Rendered shows and nothing was asked")
@@ -425,17 +454,27 @@ ShellRoot {
         reads("source", "source", "a second click on Source asks nothing")
         shell.clickWord(g.rendered)
         reads("rendered", "source,rendered", "a click on Rendered returns")
-        clickPane.view = "source"
-        reads("source", "source,rendered", "r flips the words in the frame it flips the body")
-        clickPane.view = "rendered"
-        reads("rendered", "source,rendered", "r flips them back")
+        events.keyClickChar("r", Qt.NoModifier, -1)
+        reads("source", "source,rendered", "the r key flips the words in the frame it flips the body")
+        events.keyClickChar("r", Qt.NoModifier, -1)
+        reads("rendered", "source,rendered", "the r key flips them back")
+        shell.asked = []
+        shown.viewRequested("rendered")
+        reads("rendered", "rendered", "a request for the view already shown leaves it")
+        shown.viewRequested("source")
+        reads("source", "rendered,source", "a request for the other view switches once")
+        shown.viewRequested("source")
+        reads("source", "rendered,source,source", "a repeated request leaves it")
+        shown.viewRequested("rendered")
+        reads("rendered", "rendered,source,source,rendered", "and a request for the first view returns")
         shell.check(Bar.hoverError(g), "a word shows the pointing hand over it and no wash or frame")
-        var rest = clickPane.closeState().focused
-        clickPane.closeFocused = true
-        var onClose = clickPane.closeState().focused && clickPane.barGeometry().close.keyboardFocused
-        clickPane.closeFocused = false
-        shell.check(rest === false && onClose === true ? Bar.tabWalkError(g) : "the close mark was focused at rest " + rest + ", with the keyboard " + onClose,
-            "Tab lands on the close mark and the segment is not in the walk")
+        var rest = quick.markdownCloseFocused || shown.closeState().focused
+        events.keyClick(Qt.Key_Tab, Qt.NoModifier, -1)
+        var onClose = quick.markdownCloseFocused && shown.closeState().focused && shown.barGeometry().close.keyboardFocused
+        shell.check(rest ? "the close mark held the keyboard before any Tab" : !onClose ? "Tab did not put the keyboard on the close mark"
+            : !keySink.activeFocus ? "Tab moved Qt focus off the key sink" : Bar.tabWalkError(g), "Tab lands on the close mark and the segment is not in the walk")
+        events.keyClick(Qt.Key_Tab, Qt.NoModifier, -1)
+        shell.check(quick.markdownCloseFocused || shown.closeState().focused ? "a second Tab left the keyboard on the close mark" : "", "a second Tab takes the keyboard off the close mark")
     }
 
     function fail(why) {
@@ -476,7 +515,7 @@ ShellRoot {
             }
             if (shell.fixture.length === 0)
                 shell.fail("no fixture arrived in FLEA_MARKDOWN_FIXTURE")
-            else if (!md.contentReady || !pane.contentReady || !longNamePane.contentReady || !clickPane.contentReady || !colMd.contentReady)
+            else if (!md.contentReady || !pane.contentReady || !longNamePane.contentReady || !quick.markdownShown || !quick.markdownShown.contentReady || !colMd.contentReady)
                 shell.fail("the document never loaded")
             else if (md.flickContentHeight > md.height)
                 shell.fail("the fixture overflowed its frame")
@@ -485,6 +524,7 @@ ShellRoot {
                     + " border=" + md.borderHex + " ink=" + md.inkHex + " chrome=" + md.chromeHex
                     + " run0=" + JSON.stringify(String(md.blockList[0].text).slice(0, 120))
                     + " content=" + Math.round(md.flickContentHeight))
+                quick.revealNow()
                 driver.start()
             }
         }

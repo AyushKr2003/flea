@@ -1,8 +1,7 @@
 import QtQuick
 import "." as Flea
 
-// The Quick Look strip: kind mark, name, count, the Rendered | Source segment where the kind has both views, and close.
-// No fill of its own: Quick Look's surface is already the chrome colour and rounds the corners this bar sits under.
+// Quick Look's strip: mark, name, count, the Rendered | Source segment where a kind has both views, and close; no fill, the chrome surface under it rounds its corners.
 Item {
     id: root
 

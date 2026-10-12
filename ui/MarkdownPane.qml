@@ -17,7 +17,7 @@ Item {
     property bool closeFocused: false
 
     signal closeRequested
-    // The view a pointer chose on the bar; the host flips its own state, which comes back as view.
+    // The view a pointer chose on the bar; the host sets its own state to it, which comes back as view.
     signal viewRequested(string view)
 
     readonly property var bodyItem: doc.bodyItem

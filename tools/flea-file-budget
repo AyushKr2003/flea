@@ -92,7 +92,7 @@ tests/gridmark.qml 419
 tests/columnsfilter.qml 400
 tests/columnsfolder.qml 399
 tests/quicklook-firstframe.qml 438
-tests/markdown-render.qml 874
+tests/markdown-render.qml 914
 tests/markdown-linearity.qml 679
 tests/markdown-preview-state.qml 474
 tests/markdown-tables.qml 401
@@ -133,7 +133,7 @@ ui/PaneMenuActions.qml 490
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 797
-ui/Preview.qml 740
+ui/Preview.qml 745
 ui/PreviewColumn.qml 585
 ui/PickerChrome.qml 426
 ui/DeviceMounts.qml 528

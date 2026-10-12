@@ -138,6 +138,28 @@ function nameRoomError(g, tokens) {
     return "";
 }
 
+// The bar with views off, as the code and text panes draw it: no word of the segment shows and the count ends one gap before close.
+function plainBarError(g, tokens) {
+    if (!g)
+        return "the plain bar exposes no geometry";
+    if (g.segment !== null)
+        return "the plain bar still exposes a segment";
+    if (g.rendered.visible || g.source.visible)
+        return "the plain bar still draws a word of the segment";
+    if (g.markName !== "file")
+        return "the plain bar mark is " + g.markName + ", want file";
+    if (!(g.name.width < g.name.implicitWidth))
+        return "the plain bar's name did not elide (" + g.name.width + "/" + g.name.implicitWidth + ")";
+    if (!g.countShown)
+        return "the plain bar hides its count";
+    if (!(g.mark.x < g.name.x && g.name.x < g.lines.x && g.lines.x < g.close.x))
+        return "order by x is mark " + g.mark.x + " name " + g.name.x + " count " + g.lines.x + " close " + g.close.x;
+    var rightGap = g.close.x - (g.lines.x + g.lines.implicitWidth);
+    if (rightGap !== tokens.gap)
+        return "the count ends " + rightGap + " px before close, want " + tokens.gap;
+    return "";
+}
+
 // What a bar draws that must not move or shrink when the room does, as numbers that outlive the width change.
 function fixedSizes(g) {
     return { rendered: g.rendered.width, source: g.source.width, segment: g.segment.width, close: g.close.width, height: g.segment.height,

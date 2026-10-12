@@ -154,9 +154,6 @@ function run(check) {
         Source.slice(barSrc, "id: barClose", "onActivated").indexOf("keyboardFocused: root.closeFocused") >= 0, true)
     check("the pane hands the bar the keyboard state", paneSrc.indexOf("closeFocused: root.closeFocused") >= 0, true)
     check("previewCloseState reports focused", barSrc.indexOf("focused: barClose.keyboardFocused") >= 0, true)
-    // RenderedPreviews: a word of the segment asks for the other view, and Quick Look answers with the flip r makes.
-    check("a chosen word is answered with the flip r makes",
-        quickSrc.indexOf("item.viewRequested.connect(root.toggleMarkdownView)") >= 0, true)
     check("the Quick Look hands the toggle to the pane",
         quickSrc.indexOf("function toggleMarkdownClose()") >= 0 && quickSrc.indexOf("readonly property bool markdownCloseFocused") >= 0, true)
     runThumbThreading(check)
