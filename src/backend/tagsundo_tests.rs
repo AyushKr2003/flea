@@ -82,6 +82,7 @@ fn undo_leaves_a_file_replaced_by_another_carrying_the_same_tags() {
 
 // Longer than one tick of the coarse clock file times are stamped from (10 ms at HZ 100, the slowest common setting).
 const COARSE_TICK_MS: u64 = 25;
+const REUSE_TRIES: usize = 8;
 
 #[test]
 fn redo_skips_a_file_retagged_since_undo_and_refuses_a_replaced_one() {
@@ -139,27 +140,67 @@ fn redo_refuses_a_file_recreated_on_the_freed_inode() {
         let (dev, ino) = (meta.dev(), meta.ino());
         let before = None;
         let after = Some(crate::backend::tags::join(&["Red".to_string()]));
-        let saved = crate::backend::undo::Step::Tags { path: file.clone(), before: before.clone(), after: after.clone(), dev, ino, born: Some((0, 0)) };
+        let saved = crate::backend::undo::Step::Tags { path: file.clone(), before: before.clone(), after: after.clone(), dev, ino, born: Some((0, 0)), generation: None };
         let mut steps = Vec::new();
-        let err = crate::backend::tagsundo::replay(&file, &before, &after, (dev, ino), Some((0, 0)), &saved, &mut steps)
+        let err = crate::backend::tagsundo::replay(&file, &before, &after, (dev, ino), (Some((0, 0)), None), &saved, &mut steps)
             .expect_err("a step with a different birth time refuses");
         assert!(err.msg.contains("replaced"), "{}", err.msg);
         assert!(steps.is_empty(), "the refusal records nothing");
     }
     let old_ino = meta.ino();
     crate::backend::opsdispatch::do_undo(&mut out, &mut o);
-    std::fs::remove_file(&file).unwrap();
-    let file = d.file("a.txt", "other body");
+    // A file born in the same timestamp tick as the one it replaces has the same birth time, so the generation alone tells them apart.
+    let old_generation = crate::backend::filegen::of_path(&file);
+    // ext4 hands the freed inode to the next create; a few tries cover an allocator that skips it once.
+    let mut file = file;
+    for _ in 0..REUSE_TRIES {
+        std::fs::remove_file(&file).unwrap();
+        file = d.file("a.txt", "other body");
+        if file.symlink_metadata().unwrap().ino() == old_ino {
+            break;
+        }
+    }
     let meta = file.symlink_metadata().unwrap();
     if meta.ino() != old_ino {
         eprintln!("skipped the inode-reuse leg: the filesystem did not hand back inode {old_ino}");
         return;
     }
-    if crate::backend::permissions::born_of(&meta).is_none() {
-        eprintln!("skipped the inode-reuse leg: the filesystem keeps no birth time");
+    if old_generation.is_none() && crate::backend::permissions::born_of(&meta).is_none() {
+        eprintln!("skipped the inode-reuse leg: the filesystem keeps neither a birth time nor an inode generation");
         return;
     }
     let refused = o.journal.redo(1, &stop, &tx).expect_err("redo onto a recreated file refuses");
     assert!(refused.msg.contains("replaced"), "{}", refused.msg);
     assert_eq!(crate::backend::tags::read(&file).unwrap(), Vec::<String>::new(), "the new file stays untagged");
+}
+
+// The generation check itself never depends on the filesystem handing the inode back.
+#[test]
+fn redo_refuses_a_file_whose_inode_generation_differs_though_inode_and_birth_match() {
+    use std::os::unix::fs::MetadataExt;
+    let _guard = crate::backend::tags::SEAM.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let d = TestDir::new("tagsredogeneration");
+    let file = d.file("a.txt", "body");
+    let meta = file.symlink_metadata().unwrap();
+    let (dev, ino, born) = (meta.dev(), meta.ino(), crate::backend::permissions::born_of(&meta));
+    let Some(generation) = crate::backend::filegen::of_path(&file) else {
+        eprintln!("skipped: the filesystem or sandbox gives no file handle");
+        return;
+    };
+    let before = None;
+    let after = Some(crate::backend::tags::join(&["Red".to_string()]));
+    let saved = crate::backend::undo::Step::Tags { path: file.clone(), before: before.clone(), after: after.clone(), dev, ino, born, generation: Some(generation.wrapping_add(1)) };
+    let mut steps = Vec::new();
+    let err = crate::backend::tagsundo::replay(&file, &before, &after, (dev, ino), (born, Some(generation.wrapping_add(1))), &saved, &mut steps)
+        .expect_err("a step with another inode generation refuses");
+    assert_eq!(err.msg, "the file was replaced, so redo left its tags in place");
+    assert!(steps.is_empty(), "the refusal records nothing");
+    assert_eq!(crate::backend::tags::read(&file).unwrap(), Vec::<String>::new(), "the file stays untagged");
+    let reverse = crate::backend::tagsundo::reverse(&file, &before, &after, (dev, ino), (born, Some(generation.wrapping_add(1))))
+        .expect_err("undo refuses the same way");
+    assert_eq!(reverse.msg, "the file was replaced, so undo left its tags in place");
+    let same = crate::backend::undo::Step::Tags { path: file.clone(), before: before.clone(), after: after.clone(), dev, ino, born, generation: Some(generation) };
+    crate::backend::tagsundo::replay(&file, &before, &after, (dev, ino), (born, Some(generation)), &same, &mut steps)
+        .expect("the same generation still redoes");
+    assert_eq!(crate::backend::tags::read(&file).unwrap(), vec!["Red"]);
 }

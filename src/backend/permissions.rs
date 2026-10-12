@@ -183,18 +183,18 @@ pub fn apply_many(items: &[(PathBuf, String)]) -> Result<Vec<crate::backend::und
                 .map_err(|e| format!("Could not inspect permissions: {}.", crate::error::io_message(&e)))?;
             check_shape(&before).map_err(str::to_string)?;
             let (dev, ino, before_bits) = (before.dev(), before.ino(), before.mode() & 0o777);
-            let born = born_of(&before);
-            chmod_pinned(path, dev, ino, born, before_bits, *requested)
+            let (born, generation) = (born_of(&before), super::filegen::of_path(path));
+            chmod_pinned(path, dev, ino, (born, generation), before_bits, *requested)
                 .map_err(|e| format!("Could not change mode: {}.", e))?;
-            Ok(crate::backend::undo::Step::Mode { path: path.clone(), before: before_bits, after: *requested, dev, ino, born })
+            Ok(crate::backend::undo::Step::Mode { path: path.clone(), before: before_bits, after: *requested, dev, ino, born, generation })
         })();
         match outcome {
             Ok(step) => steps.push(step),
             Err(failure) => {
                 let mut stuck = Vec::new();
                 for step in steps.iter().rev() {
-                    if let crate::backend::undo::Step::Mode { path, before, after, dev, ino, born } = step {
-                        if fail_restore() || crate::backend::undo::restore_mode(path, *dev, *ino, *born, *after, *before).is_err() {
+                    if let crate::backend::undo::Step::Mode { path, before, after, dev, ino, born, generation } = step {
+                        if fail_restore() || crate::backend::undo::restore_mode(path, *dev, *ino, (*born, *generation), *after, *before).is_err() {
                             stuck.push(step.clone());
                         }
                     }
@@ -232,35 +232,35 @@ fn refusal_for(path: &Path) -> String {
 }
 
 // The held O_PATH descriptor is identity-checked and changed by fchmodat2, never by pathname.
-pub(crate) fn chmod_pinned(path: &Path, dev: u64, ino: u64, born: Option<(u64, u32)>, expected: u32, target: u32) -> Result<(), String> {
+pub(crate) fn chmod_pinned(path: &Path, dev: u64, ino: u64, birth: super::filegen::Birth, expected: u32, target: u32) -> Result<(), String> {
     let current = path.symlink_metadata().map_err(|e| crate::error::io_message(&e))?;
     if current.file_type().is_symlink() {
         return Err("Permissions takes one file or folder, not a link.".into());
     }
-    same_identity(&current, dev, ino, born, expected)?;
+    same_identity(&current, super::filegen::of_path(path), (dev, ino), birth, expected)?;
     swap_hook(path);
     let file = OpenOptions::new().read(true).custom_flags(O_NOFOLLOW | O_PATH)
         .open(path).map_err(|e| crate::error::io_message(&e))?;
     let meta = file.metadata().map_err(|e| crate::error::io_message(&e))?;
-    same_identity(&meta, dev, ino, born, expected)?;
+    same_identity(&meta, super::filegen::of_fd(&file), (dev, ino), birth, expected)?;
     fchmod_fd(&file, target)?;
     // tests/fs-matrix.sh c_perms on vfat pins this readback with "refused mode stays put" after a successful no-op chmod.
     verify_applied_fd(&file, path, target)?;
     Ok(())
 }
 
-// Same device, inode, mode and birth the caller saw; a replaced file keeps its current mode.
-fn same_identity(meta: &Metadata, dev: u64, ino: u64, born: Option<(u64, u32)>, expected: u32) -> Result<(), String> {
+// Same device, inode, mode, birth and inode generation (`now`, read from the same object as `meta`) the caller saw; a replaced file keeps its current mode.
+fn same_identity(meta: &Metadata, now: Option<u64>, (dev, ino): (u64, u64), (born, generation): super::filegen::Birth, expected: u32) -> Result<(), String> {
     if meta.dev() != dev || meta.ino() != ino {
         return Err("the item was replaced, so its mode was left in place.".into());
     }
     if meta.mode() & 0o7777 != expected {
         return Err("the mode changed since, so it was left in place.".into());
     }
-    if let (Some(was), Some(now)) = (born, born_of(meta)) {
-        if was != now {
-            return Err("the item was replaced, so its mode was left in place.".into());
-        }
+    // Both files can be born in one timestamp tick, so the inode generation tells them apart where the filesystem keeps it.
+    let reborn = matches!((born, born_of(meta)), (Some(was), Some(now)) if was != now);
+    if reborn || super::filegen::differs(generation, now) {
+        return Err("the item was replaced, so its mode was left in place.".into());
     }
     Ok(())
 }
@@ -518,7 +518,7 @@ mod tests {
         let born = born_of(&before);
         std::fs::remove_file(&item).unwrap();
         std::os::unix::fs::symlink(&victim, &item).unwrap();
-        let refused = chmod_pinned(&item, dev, ino, born, 0o644, 0o600);
+        let refused = chmod_pinned(&item, dev, ino, (born, None), 0o644, 0o600);
         assert!(refused.is_err(), "a path swapped for a link is refused, got {:?}", refused);
         assert!(item.symlink_metadata().unwrap().file_type().is_symlink(), "the swap is still a link");
         assert_eq!(victim.metadata().unwrap().mode() & 0o777, 0o640, "the swap target keeps its mode");
@@ -547,7 +547,7 @@ mod tests {
         // The old file stays open across the swap, so the swap cannot reuse its inode.
         let held = File::open(&item).unwrap();
         test_swap_hook(Some(swap_to_same_mode_file));
-        let refused = chmod_pinned(&item, dev, ino, born, 0o644, 0o600);
+        let refused = chmod_pinned(&item, dev, ino, (born, None), 0o644, 0o600);
         test_swap_hook(None);
         drop(held);
         assert!(refused.is_err(), "a file swapped after the checks is refused, got {:?}", refused);
@@ -566,7 +566,7 @@ mod tests {
         // The old file stays open across the swap, so the swap cannot reuse its inode.
         let held = File::open(&item).unwrap();
         test_swap_hook(Some(swap_to_link_of_hardlink));
-        let refused = chmod_pinned(&item, dev, ino, born, 0o644, 0o600);
+        let refused = chmod_pinned(&item, dev, ino, (born, None), 0o644, 0o600);
         test_swap_hook(None);
         drop(held);
         assert!(refused.is_err(), "a link swapped after the checks is refused, got {:?}", refused);
@@ -581,7 +581,7 @@ mod tests {
         let before = a.symlink_metadata().unwrap();
         let born = match born_of(&before) { Some(b) => b, None => return };
         let wrong = (born.0.wrapping_add(1), born.1);
-        let refused = chmod_pinned(&a, before.dev(), before.ino(), Some(wrong), 0o644, 0o600);
+        let refused = chmod_pinned(&a, before.dev(), before.ino(), (Some(wrong), None), 0o644, 0o600);
         assert!(refused.is_err(), "a file with another birth time is refused, got {:?}", refused);
         assert_eq!(a.metadata().unwrap().mode() & 0o777, 0o644, "the mode stays until the identity matches");
     }
