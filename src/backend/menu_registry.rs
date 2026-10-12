@@ -155,7 +155,13 @@ impl Drop for OwnedChild {
     }
 }
 
+// Test builds only: an errno terminate answers with instead of signalling, so a test drives a refused stop and no signal is ever sent.
+#[cfg(test)]
+thread_local! { static REFUSED_KILL: std::cell::Cell<Option<i32>> = const { std::cell::Cell::new(None) }; }
+
 fn terminate(pid: i32, group: bool) -> Result<(), std::io::Error> {
+    #[cfg(test)]
+    if let Some(errno) = REFUSED_KILL.with(|refused| refused.get()) { return Err(std::io::Error::from_raw_os_error(errno)); }
     if unsafe { kill(if group { -pid } else { pid }, SIGKILL) } != 0 {
         let error = std::io::Error::last_os_error();
         if error.raw_os_error() != Some(ESRCH) { return Err(error); }

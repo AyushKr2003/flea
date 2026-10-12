@@ -1,4 +1,4 @@
-// Why a name is refused, one sentence per fault, so a refusal never names a character the name does not hold.
+// Why a name is refused, one clause per fault, so a refusal never names a character the name does not hold.
 pub fn name_refusal(name: &str) -> Option<&'static str> {
     if name.is_empty() { Some("a name cannot be empty") }
     else if name == "." || name == ".." { Some("a name cannot be a single dot or a double dot") }

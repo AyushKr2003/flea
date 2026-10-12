@@ -40,13 +40,19 @@ fn a_launch_fault_never_blames_the_application_list_and_a_list_fault_never_blame
     }
 }
 
-// A cancel whose kill is refused says the stop failed, never that the launch could not be observed. The test never sends a real signal: a refused kill needs another user's process, and a test that signals one can take down the box it runs on.
+// A cancel whose kill is refused says the stop failed, never that the launch could not be observed. REFUSED_KILL answers for terminate, so no signal is sent, and the pid past pid_max means even a lost hook signals nothing.
 #[test]
 fn a_cancel_that_cannot_stop_the_child_says_the_stop_failed() {
     let refused = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
     assert_eq!(Work::List.unstopped(&refused), "Could not stop the application list: permission denied.");
-    assert_eq!(Work::Launch.unstopped(&refused), "The application could not be stopped: permission denied.");
-    assert!(!Work::Launch.unstopped(&refused).contains("tell whether"));
+    let registry = Registry::default();
+    let pidfd = OwnedFd::from(std::fs::File::open("/dev/null").unwrap());
+    *registry.running.lock().unwrap() = Some(Running { pid: i32::MAX, pidfd, work: Work::Launch });
+    REFUSED_KILL.with(|refusal| refusal.set(Some(1)));
+    let error = registry.cancel().unwrap_err();
+    REFUSED_KILL.with(|refusal| refusal.set(None));
+    registry.running.lock().unwrap().take();
+    assert_eq!(error, "The application could not be stopped: permission denied.");
 }
 
 #[test]
