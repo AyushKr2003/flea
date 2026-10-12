@@ -7,11 +7,11 @@ import "flea/js/Filter.js" as Filter
 import "flea/js/Marks.js" as Marks
 import "flea/js/Selection.js" as Selection
 
-// gridjump: a real ui/GridArea.qml on 2000 rows counts what a far jump and a held j sweep rebind and how many window asks the sweep sends beside a real ui/List.qml; counts only, no time.
+// gridjump: a real ui/GridArea.qml on 10000 rows counts what a far jump and a held j sweep rebind and how many window asks the sweep sends beside a real ui/List.qml; counts only, no time.
 ShellRoot {
     id: root
 
-    readonly property int files: 2000
+    readonly property int files: 10000
     readonly property int areaWidth: 2368
     readonly property int areaHeight: 1350
     readonly property int sweepSteps: 70
@@ -23,7 +23,7 @@ ShellRoot {
     property int warmStable: 0
     property int warmLast: -1
     // Every tile the probe has met with the counters its change signals feed; mutated in place, so no binding reads them.
-    readonly property var meta: ({ tiles: [], reuse: 0, redundant: 0 })
+    readonly property var meta: ({ tiles: [], reuse: 0, redundant: 0, blanked: 0 })
 
     function log(line) { console.log("GRIDJUMP " + line) }
     function check(name, ok, detail) { if (!ok) { root.failures.push(name); root.log("FAIL " + name + " " + detail) } }
@@ -136,10 +136,9 @@ ShellRoot {
             function selectionCount() { return 0 }
             function thumbFor(index) { return "" }
             function setCursor(index, context) { Filter.setCursor(p, index, context) }
-            // ui/Pane.qml showRow: the grid keeps Contain, the list its own scroll-off.
+            // ui/Pane.qml showRow: the list and the grid each move through their own showCursor.
             function showRow(view, context) {
-                if (p.viewMode === "list") p.area.showCursor(view, context)
-                else p.area.positionViewAtIndex(view, GridView.Contain)
+                p.area.showCursor(view, context)
                 p.area.restartCoalesce()
             }
             function slowClickWasSole(index) { return false }
@@ -213,6 +212,8 @@ ShellRoot {
             mine.rows += 1
             // The same listing row as at the last change, already drawn: whatever this change was, it drew nothing new.
             if (tile.listingIndex === mine.idx && mine.drawn) m.redundant += 1
+            // A live tile that drew a row and now draws none is a blank frame, whatever the window does next.
+            if (tile.live && mine.drawn && tile.row === null) m.blanked += 1
             mine.idx = tile.listingIndex
             mine.drawn = tile.row !== null
         })
@@ -221,15 +222,16 @@ ShellRoot {
     function snap() {
         root.adopt()
         return { asks: root.gridBackend.asks, replies: root.gridBackend.replies, objects: root.tiles().length + grid.prebuild.parkedCount, reuse: root.meta.reuse,
-                 redundant: root.meta.redundant, isSelected: root.gridPane.tally.isSelected, rows: root.meta.tiles.map(function (t) { return t.rows }) }
+                 redundant: root.meta.redundant, blanked: root.meta.blanked, isSelected: root.gridPane.tally.isSelected, rows: root.meta.tiles.map(function (t) { return t.rows }) }
     }
     // A tile met only after the first snapshot counts from zero.
     function delta(a, b) {
-        var d = { created: b.objects - a.objects, reused: b.reuse - a.reuse, asks: b.asks - a.asks, replies: b.replies - a.replies,
-                  unchanged: b.redundant - a.redundant, isSelected: b.isSelected - a.isSelected, rebound: 0, max: 0, changes: 0 }
+        var d = { created: b.objects - a.objects, reused: b.reuse - a.reuse, asks: b.asks - a.asks, replies: b.replies - a.replies, twice: 0,
+                  unchanged: b.redundant - a.redundant, blanked: b.blanked - a.blanked, isSelected: b.isSelected - a.isSelected, rebound: 0, max: 0, changes: 0 }
         for (var i = 0; i < b.rows.length; i++) {
             var n = b.rows[i] - (i < a.rows.length ? a.rows[i] : 0)
             if (n > 0) d.rebound += 1
+            if (n > 1) d.twice += 1
             d.max = Math.max(d.max, n)
             d.changes += n
         }
@@ -237,7 +239,7 @@ ShellRoot {
     }
     function line(name, d) {
         return name + " created=" + d.created + " reused=" + d.reused + " windows=" + d.asks + " replies=" + d.replies + " tilesRebound=" + d.rebound
-            + " maxRebindsPerTile=" + d.max + " rowChanges=" + d.changes + " unchangedRowRebinds=" + d.unchanged + " isSelectedCalls=" + d.isSelected
+            + " maxRebindsPerTile=" + d.max + " tilesRebound2x=" + d.twice + " rowChanges=" + d.changes + " unchangedRowRebinds=" + d.unchanged + " blankedTiles=" + d.blanked + " isSelectedCalls=" + d.isSelected
     }
 
     // The actions are ui/js/Focus.js act() and ui/js/Grid.js arrow(): one filter move or set, then the selection follows.
@@ -254,10 +256,13 @@ ShellRoot {
     function measure(name, action) {
         var a = root.snap()
         action()
+        // What the action did before the event loop turned: a late reply has not landed, so a view that moved bound its tiles to no rows.
+        var early = root.delta(a, root.snap())
         root.script.unshift(function () {
             var d = root.delta(a, root.snap())
+            d.early = early
             root.moves[name] = d
-            root.log(root.line("grid " + name, d))
+            root.log(root.line("grid " + name, d) + " movedBeforeWindow=" + early.reused + "/" + early.changes)
             root.runNext()
         })
         root.later(450)
@@ -317,13 +322,17 @@ ShellRoot {
     }
 
     function verdict() {
-        // A late reply (a piped backend) lands after the layout: a tile clears, then takes the row, and the first G builds one tile; a sync reply beats the layout.
+        // A late reply (a piped backend) lands after the key: the view waits for it, so no tile clears and the first G builds one tile; a sync reply lands inside the ask.
         ["G", "g", "End", "Home"].forEach(function (name) {
-            [{ key: name, created: name === "G" ? 1 : 0, rebinds: 2 }, { key: name + ".sync", created: 0, rebinds: 1 }].forEach(function (bound) {
+            [{ key: name, created: name === "G" ? 1 : 0, own: 1 }, { key: name + ".sync", created: 0, own: 0 }].forEach(function (bound) {
                 var d = root.moves[bound.key]
                 root.check(bound.key + ": a far jump creates at most " + bound.created + " tile once the pool is warm", d.created <= bound.created, "created=" + d.created)
-                root.check(bound.key + ": a far jump rebinds a tile at most " + bound.rebinds + " times", d.max <= bound.rebinds, "max=" + d.max)
+                root.check(bound.key + ": a far jump rebinds a tile twice for at most the cursor's own tile (" + bound.own + ")", d.twice <= bound.own, "twice=" + d.twice)
+                root.check(bound.key + ": a far jump blanks no tile but at most the cursor's own (" + bound.own + ")", d.blanked <= bound.own, "blanked=" + d.blanked)
+                root.check(bound.key + ": a far jump gives each tile it moves its row once, the cursor's own aside", d.changes <= d.reused + d.created + bound.own, "changes=" + d.changes + " reused=" + d.reused + " created=" + d.created)
                 root.check(bound.key + ": a far jump asks one window", d.asks === 1, "windows=" + d.asks)
+                if (bound.key === name)
+                    root.check(bound.key + ": a far jump moves no tile before its window lands", d.early.reused <= bound.own && d.early.changes <= bound.own, "reused=" + d.early.reused + " changes=" + d.early.changes)
             })
         })
         var g = root.sweeps.grid70, ref = root.sweeps["list" + (root.sweepSteps * grid.columns)]

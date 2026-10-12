@@ -772,12 +772,11 @@ FocusScope {
     // A click carries context 0; a keyboard move keeps the default 3.
     function setCursor(index, context) { Filter.setCursor(root, index, context) }
     // The cursor keeps three rows of context above and below: the list and the columns view hold
-    // it through their own showCursor, and the grid keeps Contain, whose tiles are not rows.
-    // ListView.Contain has no name inside a .pragma library, so the scroll itself stays here.
+    // it through their own showCursor, and the grid keeps Contain after its landing window, whose tiles are not rows.
     function showRow(view, context) {
         if (root.viewMode === "columns" && root.columnsArea) root.columnsArea.activeColumn().showCursor(view, context)
         else if (root.viewMode === "list") list.showCursor(view, context)
-        else root.listArea.positionViewAtIndex(view, ListView.Contain)
+        else root.listArea.showCursor(view, context)
         root.listArea.restartCoalesce()
     }
 

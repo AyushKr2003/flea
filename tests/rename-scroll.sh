@@ -12,7 +12,7 @@ fi
 # The probe's showRow stub copies these Pane.showRow branches, so a Pane that drops them must fail here, loudly.
 for marker in 'if (root.viewMode === "columns" && root.columnsArea) root.columnsArea.activeColumn().showCursor(view, context)' \
               'else if (root.viewMode === "list") list.showCursor(view, context)' \
-              'else root.listArea.positionViewAtIndex(view, ListView.Contain)'; do
+              'else root.listArea.showCursor(view, context)'; do
     if ! grep -qF -- "$marker" ui/Pane.qml; then
         printf 'FAIL ui/Pane.qml no longer carries the showRow branch the probe stubs: %s\n' "$marker"
         exit 1

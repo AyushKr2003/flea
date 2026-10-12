@@ -98,6 +98,7 @@ tests/columnrow-geom.qml 426
 tests/dialog-board.qml 654
 tests/columnscost.qml 416
 tests/rowcost.qml 417
+tests/gridjump.qml 409
 tests/gridmark.qml 419
 tests/columnsfilter.qml 402
 tests/columnsfolder.qml 400
@@ -126,7 +127,7 @@ ui/ColumnsArea.qml 547
 ui/ColumnPane.qml 450
 ui/ContextMenu.qml 781
 ui/ConvertDialog.qml 453
-ui/GridArea.qml 491
+ui/GridArea.qml 516
 ui/Ipc.qml 984
 tests/gridprebuild.qml 458
 tests/columnsprebuild.qml 416
