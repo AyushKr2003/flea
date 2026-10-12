@@ -39,10 +39,12 @@ case $fs in
         check "the ext4 inode count is zeroed" "$(od -A n -t u4 -j 1024 -N 4 "$img" | tr -d ' ')" 0
         ;;
 esac
-# A second path is refused rather than overwritten.
-if cap_mountfail_image "$img" 2>/dev/null; then
+# A second path is refused by the path guard itself, not by mkfs meeting the first image's signature.
+if refusal=$(cap_mountfail_image "$img" 2>&1 >/dev/null); then
     echo "FAIL: an existing image path was rebuilt over"
     failed=$((failed + 1))
+else
+    check "the guard names the existing path" "$refusal" "cap_mountfail_image: $img is not a new absolute path"
 fi
 [ "$failed" -eq 0 ] || exit 1
 echo "mountfail-image: ok ($fs)"

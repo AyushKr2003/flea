@@ -150,9 +150,59 @@ function steps(root, pane, state, theme) {
             root.check("mount-fail: a repeated click shows the error again", bar.errors.length, 2)
             bar.errors = prior
             return true
-        }
+        },
+        mountExits(root, pane)
     ]
     return tests.concat(clicks(root, pane, "list"), clicks(root, pane, "grid"), clicks(root, pane, "columns"), RailPress.steps(root, pane, state))
+}
+
+// MountFail: each exit handler of the rail's DeviceMounts runs for real on a fake gio that fails with stderr; the bar must show the handler's headline and gio's reason.
+function mountExits(root, pane) {
+    var damaged = "Error mounting /dev/sdb1 at /run/media/user/DATA #2: wrong fs type, bad option, bad superblock on /dev/sdb1, missing codepage or helper program, or other error"
+    var busy = "Error unmounting /dev/sdb1 at /run/media/user/Vault: target is busy"
+    var refused = "Error ejecting /dev/sdb at /run/media/user/Stick: Not authorized"
+    var runs = [
+        { name: "a refused mount", process: "mountProcess", stderr: damaged, label: "DATA #2", detail: "wrong fs type, bad option, bad superblock on /dev/sdb1, missing codepage or helper program, or other error",
+          state: { _pendingOpenDevice: "/dev/sdb1", _pendingOpenLabel: "DATA #2", _mountErr: "" }, op: "mount" },
+        { name: "a refused unmount", process: "unmountProcess", stderr: busy, label: "Vault", detail: "target is busy",
+          state: { _unmountLabel: "Vault", _unmountEndedLate: false, _powerOffDisk: "" }, op: "unmount" },
+        { name: "a refused unmount in a power-off chain", process: "unmountProcess", stderr: busy, label: "Stick", detail: "target is busy",
+          state: { _ejectLabel: "Stick", _unmountEndedLate: false, _powerOffDisk: "/dev/sdb" }, op: "unmount" },
+        { name: "a refused power-off eject", process: "ejectProcess", stderr: refused, label: "Stick", detail: "Not authorized",
+          state: { _ejectLabel: "Stick", _ejectEndedLate: false, _powerOffDisk: "/dev/sdb" }, op: "eject" }
+    ]
+    var at = 0, started = false, devices = null, prior = null
+    return function () {
+        if (devices === null) {
+            for (var i = 0; i < pane.sidebar.data.length; i++)
+                if (typeof pane.sidebar.data[i].reportFailure === "function") devices = pane.sidebar.data[i]
+            root.check("mount-exit: the rail holds its DeviceMounts", devices !== null, true)
+            if (devices === null) return true
+            prior = pane.statusBar.errors
+        }
+        var bar = pane.statusBar, run = runs[at]
+        if (!started) {
+            var process = null
+            for (var j = 0; j < devices.data.length; j++)
+                if (devices.data[j].objectName === run.process) process = devices.data[j]
+            root.check("mount-exit: " + run.name + " finds its process", process !== null, true)
+            if (process === null) return true
+            for (var key in run.state) devices[key] = run.state[key]
+            bar.errors = []
+            process.command = ["sh", "-c", "printf '%s' \"$0\" >&2; exit 1", run.stderr]
+            process.running = true
+            started = true
+            return false
+        }
+        if (bar.errors.length === 0) return false
+        root.check("mount-exit: " + run.name + " shows the handler's headline", bar.errors.map(function (e) { return e.text }), [Devices.mountError(run.op, 1, run.stderr, run.label)])
+        root.check("mount-exit: " + run.name + " carries gio's reason", bar.errorDetail, run.detail)
+        started = false
+        at++
+        if (at < runs.length) return false
+        bar.errors = prior
+        return true
+    }
 }
 
 function clicks(root, pane, mode) {

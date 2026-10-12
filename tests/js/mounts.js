@@ -264,6 +264,9 @@ function run(check) {
     check("the detail drops a gio: prefix and the lead", Devices.mountDetail("gio: " + damaged + "\n"), "wrong fs type, bad option, bad superblock on /dev/sdb1, missing codepage or helper program, or other error")
     check("a reason with no lead keeps itself", Devices.mountDetail("gio: Error 1: target is busy"), "Error 1: target is busy")
     check("a multi-line reason is one line", Devices.mountDetail("Not authorized\n  to perform operation\n"), "Not authorized to perform operation")
+    check("an unmount reason drops its lead", Devices.mountDetail("Error unmounting /dev/sdb1 at /run/media/u/Vault: target is busy"), "target is busy")
+    check("an eject reason drops its lead", Devices.mountDetail("gio: Error ejecting /dev/sdb at /run/media/u/Stick: Not authorized\n"), "Not authorized")
+    check("an unmount refusal with no lead keeps itself", Devices.mountDetail("Not authorized"), "Not authorized")
     check("an empty stderr has no detail", Devices.mountDetail(""), "")
     check("a missing stderr has no detail", Devices.mountDetail(undefined), "")
 

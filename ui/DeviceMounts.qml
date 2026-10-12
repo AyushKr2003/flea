@@ -443,6 +443,7 @@ Item {
 
     Process {
         id: mountProcess
+        objectName: "mountProcess"
         stderr: StdioCollector { onStreamFinished: root._mountErr = this.text }
         onExited: function (exitCode) {
             // The wait starts here, not at launch: an admin polkit prompt longer than the
@@ -468,6 +469,7 @@ Item {
 
     Process {
         id: unmountProcess
+        objectName: "unmountProcess"
         stderr: StdioCollector { onStreamFinished: root._unmountErr = this.text }
         // A spawn that fails raises this and never exited, so the flag ends here with every other end.
         onRunningChanged: if (!unmountProcess.running) root._unmounting = false
@@ -502,6 +504,7 @@ Item {
 
     Process {
         id: ejectProcess
+        objectName: "ejectProcess"
         stderr: StdioCollector { onStreamFinished: root._ejectErr = this.text }
         onExited: function (exitCode) {
             // A refused stop says so at once; a stop that ran is judged on the listing that

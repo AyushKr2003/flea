@@ -338,10 +338,7 @@ function mountError(op, exitCode, stderr, label) {
     return name + " could not be mounted."
 }
 
-// gio's own reason for a failed mount, unmount or eject, as the status bar's detail line. Sample stderr:
-// "Error mounting /dev/sdb1 at /run/media/user/DATA #2: wrong fs type, bad option, bad superblock on /dev/sdb1, missing
-// codepage or helper program, or other error" gives "wrong fs type, bad option, bad superblock on /dev/sdb1, missing
-// codepage or helper program, or other error"; "gio: Error 1: target is busy" keeps "Error 1: target is busy"; "" gives "".
+// gio's own reason as the status bar's detail line; sample "Error mounting /dev/sdb1 at /run/media/u/DATA #2: wrong fs type, bad superblock" gives "wrong fs type, bad superblock", "" gives "".
 function mountDetail(stderr) {
     var lines = String(stderr || "").split("\n").map(function (line) { return line.trim() }).filter(function (line) { return line.length > 0 })
     return lines.join(" ").replace(/^gio:\s*/, "").replace(/^Error (?:mounting|unmounting|ejecting) \S+ at .*?:\s+/, "").trim()

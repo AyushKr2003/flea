@@ -1,11 +1,9 @@
-# Mount-failure board capture (outside the default wanted list); tests/ui.sh supplies fixture, helpers and shots.
-# Reuses cap_unlock_lsblk_shim from ui-captures-unlock.sh, which lists a loop device as a removable stick.
+# Mount-failure board capture, by name only; reuses cap_unlock_lsblk_shim, which lists a loop device as a removable stick.
 
 # The scope polkit trusts: an ssh-started process is an inactive subject, so loop-setup, unmount and loop-delete run in the graphical slice like Flea.
 cap_mountfail_wrap=(systemd-run --user --scope --quiet --slice=app-graphical.slice)
 
-# Builds the 64 MiB image at an absolute, not yet existing IMG and prints its filesystem (btrfs, else ext4).
-# blkid drops a btrfs whose checksum is wrong and then udisks offers no mount at all, so the corruption keeps the checksum valid and breaks what only the kernel reads: the superblock's own byte number (btrfs), the geometry before the magic (ext4).
+# Builds the 64 MiB image at a new absolute IMG and prints its filesystem (btrfs, else ext4); blkid drops a bad checksum, so only what the kernel alone reads is broken.
 cap_mountfail_image() {
     local img="$1" fs="" seen=""
     local PATH="$PATH:/usr/sbin:/sbin"
@@ -67,12 +65,12 @@ cap_mountfail_cleanup() {
     sandbox_remove "$box"
 }
 
-# The rail index of the volume with this device path, waited on the lsblk poll, never counted.
+# Sets cap_mountfail_at to the rail index of the volume with this device path, waited on the lsblk poll; no substitution, so its fail reaches the log.
 cap_mountfail_row() {
     local dev="$1" index="" end=$((SECONDS + 30))
     while (( SECONDS < end )); do
         index=$(ipc railEntries 2>/dev/null | jq -r --arg dev "$dev" '[to_entries[] | select(.value.device == $dev) | .key][0] // ""' 2>/dev/null || printf "")
-        [[ -n "$index" ]] && { printf '%s' "$index"; return 0; }
+        [[ -n "$index" ]] && { cap_mountfail_at="$index"; return 0; }
         sleep 0.2
     done
     fail "cap_mountfail: no rail row for $dev, entries $(ipc railEntries | jq -c 'map({label,device,fstype,mounted})')"
@@ -116,7 +114,8 @@ case_cap_mountfail() {
     wait_listing 2
     cap_resize 880 700
     cap_mountfail_still 880 700
-    index=$(cap_mountfail_row "$dev")
+    cap_mountfail_row "$dev"
+    index="$cap_mountfail_at"
     row=$(ipc railEntries | jq -c --argjson at "$index" '.[$at] | {label,device,fstype,mounted}')
     ipc railEntries | jq -e --argjson at "$index" --arg label "$label" --arg fs "$fs" '.[$at] | .label == $label and .fstype == $fs and .mounted == false' >/dev/null \
         || fail "cap_mountfail: the rail row is $row, not an unmounted $fs volume named $label"
