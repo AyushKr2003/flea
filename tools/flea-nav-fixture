@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Nav and preview fixtures for tools/flea-field-nav, built inside a root the plan names.
 
-  flea-nav-fixture ROOT   build nav500, enter/big, nav10k, nav100k, preview and print facts JSON
+  flea-nav-fixture ROOT   build nav500, enter/big, nav10k, nav100k, preview, qltable and print facts JSON
 
 Layout: nav500 holds NAV500 empty files (one Down step each); enter holds only big, which holds
 ENTER1000 empty files (Enter enters it, the back key leaves it); nav10k and nav100k hold that many
 empty files (the launch columns); preview holds one file of each preview kind in cursor order
-(jpg, png, pdf, md, txt, video). A PDF and Markdown are written by hand; jpg, png and mp4 need
-ImageMagick and ffmpeg, and a kind with no maker is skipped loudly in the facts rather than faked.
+(jpg, png, pdf, md, txt, video); qltable holds one folder per Quick Look document (ql_md_table_first,
+ql_md_plain, ql_md_plain_b), each a single 4096 byte Markdown file, the first opening with a 40-row table. A PDF
+and Markdown are written by hand; jpg, png and mp4 need ImageMagick and ffmpeg, and a kind with no maker is skipped
+loudly in the facts rather than faked.
 Sample facts: {"root": "R", "nav500": 500, "enter1000": 1000}.
 """
 import json
@@ -98,6 +100,28 @@ A paragraph with **bold** and `code`, then a list:
 """
 
 
+QL_BYTES = 4096  # bytes of each Quick Look Markdown fixture, the table one and its controls alike
+QL_TABLE_ROWS = 40  # body rows of the table the first fixture opens with
+QL_KINDS = ("ql_md_table_first", "ql_md_plain", "ql_md_plain_b")  # folder and file stem of each, plain_b the negative control's twin
+QL_TAIL = "Body text that follows the opening block and is the same in every document.\n"
+
+
+def ql_texts():
+    """The three Quick Look documents, name to text: a 40-row table first, then two byte-identical tableless controls of the same size."""
+    lines = ["| Item   | Label            | Count |", "| ------ | ---------------- | ----- |"]
+    lines += ["| Row %02d | alpha beta gamma | %5d |" % (i, i * 7) for i in range(1, QL_TABLE_ROWS + 1)]
+    table = "\n".join(lines) + "\n\n"
+    # Same bytes line for line: pipes become commas and dashes become x, so the control opens with one plain paragraph.
+    plain = table.translate(str.maketrans("|-", ",x"))
+    pad = QL_BYTES - len(table)
+    tail = (QL_TAIL * (pad // len(QL_TAIL) + 1))[:pad - 1] + "\n"
+    out = {"ql_md_table_first": table + tail, "ql_md_plain": plain + tail, "ql_md_plain_b": plain + tail}
+    sizes = {len(v.encode()) for v in out.values()}
+    if sizes != {QL_BYTES}:
+        raise SystemExit("flea-nav-fixture: the Quick Look documents differ in size: %s" % sorted(sizes))
+    return out
+
+
 def refuse_tmpfs(root):
     """Refuse a root findmnt calls tmpfs or cannot name; cold pages on tmpfs are unevictable."""
     target = os.path.abspath(root)
@@ -154,6 +178,10 @@ def build(root):
         f.write(MD_TEXT)
     with open(os.path.join(prev, "e_text.txt"), "w") as f:
         f.write("plain text fixture\nsecond line\n")
+    for name, text in ql_texts().items():
+        os.makedirs(os.path.join(root, "qltable", name), exist_ok=True)
+        with open(os.path.join(root, "qltable", name, name + ".md"), "w") as f:
+            f.write(text)
     if have("ffmpeg"):
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi",
                         "-i", "testsrc=duration=%d:size=%dx%d:rate=10" % (MP4_SECS, MP4_W, MP4_H),
@@ -170,7 +198,8 @@ def build(root):
              "nav100k": len(os.listdir(os.path.join(root, "nav100k"))),
              "enter_children": sorted(os.listdir(os.path.join(root, "enter"))),
              "preview": got, "preview_order": [n for n in order if n in got],
-             "preview_kinds": {n: kinds[n] for n in order if n in got}, "gaps": gaps}
+             "preview_kinds": {n: kinds[n] for n in order if n in got},
+             "qltable": {n: QL_BYTES for n in QL_KINDS}, "gaps": gaps}
     return facts
 
 

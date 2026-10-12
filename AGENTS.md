@@ -4305,6 +4305,10 @@ waits for its consumer.
   stdin for `drop_caches`, and it launches Flea through `$FLEA_BIN --gui`, never `qs` directly:
   measuring Flea by a path no user takes cost a whole field run, since `qs` alone misses the
   `prctl` in `exec_qs` and reads 104 MB against the real path's 45 MB.
+- `tools/flea-field-nav measure` with the `ql` column journeys Quick Look on a 40-row-table-first Markdown document
+  (`ql_md_table_first`) against a tableless one of the same 4096 bytes (`ql_md_plain`) and a byte-identical twin as
+  the negative control (`ql_md_plain_b`), each in a fresh launch, key to `settled_ms`, and `report` prints SHIP or
+  HOLD.
 - **The tested Flea starts from its own caches, as an installed one does after its first launch.** Its
   QML units go to `target/qmlcache` of the tree under test (`QML_DISK_CACHE_PATH`), and
   `tools/flea-field-bench` parks the operator's `~/.cache/flea/prefetch` for the run and restores it

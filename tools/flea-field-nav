@@ -28,6 +28,11 @@ bottom edge, quiet, then 12 timed Downs that each scroll), nav.enter.<view> and 
 (one Down selects the folder, quiet, Enter into its 1000 entries, quiet, the back key out), preview.<kind>
 (quicklook: Space on the file; pane: the Down that lands on it, watched in the preview heuristic
 region, the right 40 percent of the content region, refined per entrant with explore).
+The ql column times Quick Look on a 4096 byte Markdown document that opens with a 40-row table (ql_md_table_first)
+against a tableless one of the same size (ql_md_plain), each in a launch of its own so every sample is a first open,
+the key to settled_ms, the last change before 2 s of quiet, which is the completed preview and not a loading frame;
+a byte-identical twin (ql_md_plain_b) is the negative control. report prints SHIP when the table range overlaps the
+plain one or its p95 is lower, else HOLD.
 An entrant without the preview feature gets a "no feature" row, never a silent gap.
 The NAV key table's copies live under .flea-local/ref/apps/ and are close to the installed
 versions; every chord is checked on the operator's box with explore before measuring, and a
@@ -165,6 +170,10 @@ NAV = {
                          "preview": "no feature: only a GtkFileChooser img preview in src/desktop.c:5368, not a file preview",
                          "views": "owed"}),
 }
+
+# Quick Look Markdown journeys, each a folder of one file under the plan's qltable fixture; plain_b is the negative control's twin.
+QL_KINDS = ["ql_md_table_first", "ql_md_plain", "ql_md_plain_b"]
+QL_TABLE, QL_PLAIN, QL_TWIN = QL_KINDS
 
 # Preview kinds in cursor order of the fixture builder's preview folder.
 PREVIEW_FILES = [("jpg", "a_photo.jpg"), ("png", "b_graphic.png"), ("pdf", "c_doc.pdf"),
@@ -401,9 +410,9 @@ def run_enter_back(arm, fixture, ctx, keys, view, opts):
         end_proc(proc)
 
 
-def preview_index(kind, files):
+def preview_index(kind, files, table=None):
     """The cursor index of kind in the fixture's sorted order; None when the kind is missing."""
-    for want, name in PREVIEW_FILES:
+    for want, name in (table or PREVIEW_FILES):
         if want == kind and name in files:
             return sorted(files).index(name)
     return None
@@ -506,8 +515,8 @@ def ensure_pane_panel(keys, rec, entrant):
                        "so the pane walk is refused" % (was, now))
 
 
-def run_preview(arm, fixture, ctx, keys, view, mode, kinds, opts):
-    """One row per preview kind, or a no feature row where the entrant has no preview."""
+def run_preview(arm, fixture, ctx, keys, view, mode, kinds, opts, table=None):
+    """One row per preview kind, or a no feature row where the entrant has no preview; table names the kind to file pairs."""
     if mode == "none":
         return [{"arm": arm["id"], "entrant": arm["entrant"], "view": view,
                  "column": "preview", "first_ms": "no feature",
@@ -522,7 +531,7 @@ def run_preview(arm, fixture, ctx, keys, view, mode, kinds, opts):
         rows = []
         pane_ready = False
         for kind in kinds:
-            idx = preview_index(kind, files)
+            idx = preview_index(kind, files, table)
             if idx is None:
                 rows.append({"arm": arm["id"], "entrant": arm["entrant"], "view": view,
                              "column": "preview." + kind, "first_ms": "missing file",
@@ -577,6 +586,49 @@ def run_preview(arm, fixture, ctx, keys, view, mode, kinds, opts):
             rec.stop()
         if proc:
             end_proc(proc)
+
+
+def run_ql(arm, qroot, ctx, keys, view, kinds, opts):
+    """Quick Look on each Markdown document in a process of its own, so every number is a first open; settled_ms is the completed preview."""
+    rows = []
+    for kind in kinds:
+        folder = os.path.join(qroot, kind)
+        mode = "quicklook" if NAV[arm["entrant"]]["preview_quicklook"] else "none"
+        rows += run_preview(arm, folder, ctx, keys, view, mode, [kind], opts, [(kind, kind + ".md")])
+    return rows
+
+
+def p95(vals):
+    """Nearest-rank 95th percentile; None for no values."""
+    vals = sorted(vals)
+    return vals[max(0, -(-95 * len(vals) // 100) - 1)] if vals else None
+
+
+def ql_values(rows, arm, kind, col="settled_ms"):
+    return [r[col] for r in rows if r.get("arm") == arm and r.get("column") == "preview." + kind
+            and isinstance(r.get(col), (int, float))]
+
+
+def ranges_overlap(a, b):
+    return min(a) <= max(b) and min(b) <= max(a)
+
+
+def ql_verdict(rows, arm):
+    """Lines for one arm: p95 and range of the table document against the plain one and the plain twin; SHIP when the table range overlaps the plain one or its p95 is lower."""
+    t, p, w = (ql_values(rows, arm, k) for k in QL_KINDS)
+    if not (t and p):
+        return []
+    def cell(v):
+        return "p95 %.1f range [%.1f..%.1f] n=%d" % (p95(v), min(v), max(v), len(v))
+    ship = p95(t) <= p95(p) or ranges_overlap(t, p)
+    out = ["ql settled %s: %s %s | %s %s | %s" % (arm, QL_TABLE, cell(t), QL_PLAIN, cell(p), "SHIP" if ship else "HOLD")]
+    if w:
+        out.append("ql control %s: %s %s | %s %s | %s" % (arm, QL_PLAIN, cell(p), QL_TWIN, cell(w),
+                                                         "ok" if ranges_overlap(p, w) else "INSTRUMENT-NOISE"))
+    tf, pf = (ql_values(rows, arm, k, "first_ms") for k in (QL_TABLE, QL_PLAIN))
+    if tf and pf:
+        out.append("ql first %s: %s p95 %.1f | %s p95 %.1f" % (arm, QL_TABLE, p95(tf), QL_PLAIN, p95(pf)))
+    return out
 
 
 def run_launch(arm, fixture, ctx, view, size, opts):
@@ -691,10 +743,11 @@ def preview_default(entrant):
 def measure(plan_path):
     """measure PLAN.json: {"out": JSONL, "runs": N, "fixtures": {"nav500": D, "enter": D, "preview": D,
     "nav10k": D, "nav100k": D, "navscroll"?: D}, "arms": [{"id", "entrant", "flea_dir"?, "view"?, "preview"?}],
-    "columns": [cursor|cursor_inview|cursor_scroll|enter|back|preview|launch], "kinds": [...],
+    "columns": [cursor|cursor_inview|cursor_scroll|enter|back|preview|ql|launch], "kinds": [...],
     "inview_steps": 7, "scroll_steps": 12, "pace_ms": 400, "ink_rows": 25, "cache": "warm"|"cold"}.
-    cursor runs both cursor series; the scroll series uses navscroll, else nav10k. An older plan's "steps"
-    is ignored, since 20 Downs from the top run past the first screen of some views. Cold is prepared by the
+    ql needs a "qltable" fixture (the tool's qltable folder) and runs QL_KINDS, each in its own launch, the order
+    rotated per round; report prints the ql verdict. cursor runs both cursor series; the scroll series uses navscroll,
+    else nav10k. An older plan's "steps" is ignored, since 20 Downs from the top run past the first screen of some views. Cold is prepared by the
     caller; the plan only stamps it. Rounds interleave the arms and rotate their order."""
     # Sample plan line: {"out": "o.jsonl", "runs": 1, "fixtures": {"nav500": "D/nav500"}}.
     with open(plan_path) as f:
@@ -762,6 +815,9 @@ def measure(plan_path):
                         mode = arm.get("preview") or preview_default(arm["entrant"])
                         rows += run_preview(arm, plan["fixtures"]["preview"], ctx, keys, view,
                                             mode, kinds, opts)
+                    if "ql" in columns:
+                        kq = QL_KINDS[r % len(QL_KINDS):] + QL_KINDS[:r % len(QL_KINDS)]
+                        rows += run_ql(arm, plan["fixtures"]["qltable"], ctx, keys, view, kq, opts)
                     if "launch" in columns:
                         lopts = dict(opts, cache=plan.get("cache", "warm"),
                                      ink_rows=plan.get("ink_rows", INK_ROWS))
@@ -931,6 +987,9 @@ def report(path):
                     column, subject, col_kind, S.rng(mine, 1), runner, S.rng(rvals, 1),
                     S.status_vs(mine, rvals) if rvals else "n/a"))
         out.append("")
+    for arm in arms:
+        lines = ql_verdict(rows, arm)
+        out += lines + [""] * bool(lines)
     errors = [r for r in rows if "error" in r]
     notes = [r for r in rows if isinstance(r.get("first_ms"), str)]
     for r in notes:
@@ -1015,6 +1074,32 @@ def selftest():
     # Preview order matches the fixture builder's names.
     check("kinds", [k for k, _ in PREVIEW_FILES], ["jpg", "png", "pdf", "md", "txt", "video"])
     check("order_sorted", [n for _, n in PREVIEW_FILES] == sorted(n for _, n in PREVIEW_FILES), True)
+    # Quick Look table journeys: documents of one size, a table or not, and a verdict that reads a shift.
+    from importlib.machinery import SourceFileLoader as _L
+    fx = _L("flea_nav_fixture", os.path.join(HERE, "flea-nav-fixture")).load_module()
+    docs = fx.ql_texts()
+    check("ql_kinds", sorted(docs), sorted(QL_KINDS))
+    check("ql_sizes", {len(v.encode()) for v in docs.values()}, {fx.QL_BYTES})
+    check("ql_table_first", docs[QL_TABLE].startswith("| Item") and docs[QL_TABLE].count("\n| Row ") == fx.QL_TABLE_ROWS, True)
+    check("ql_plain_no_table", "|" not in docs[QL_PLAIN] and docs[QL_PLAIN] == docs[QL_TWIN], True)
+    check("ql_index", preview_index(QL_PLAIN, [QL_PLAIN + ".md"], [(QL_PLAIN, QL_PLAIN + ".md")]), 0)
+    check("p95", (p95([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), p95([5]), p95([])), (10, 5, None))
+    # An injected 50 ms delay in the last frame shows in settled_ms (key at 100 ms, frame 30 ms later, then 50 ms later still).
+    base = S.search_columns([(0, -1), (130 * ms, 40), (900 * ms, 0)], [100 * ms], 5000 * ms, NAV_QUIET_NS, NAV_CAP_NS)
+    slow = S.search_columns([(0, -1), (180 * ms, 40), (900 * ms, 0)], [100 * ms], 5000 * ms, NAV_QUIET_NS, NAV_CAP_NS)
+    check("ql_delay_in_number", slow["settled_ms"] - base["settled_ms"], 50.0)
+    def ql_rows(shift_table):
+        out = []
+        for i in range(10):
+            for kind, add in ((QL_TABLE, shift_table), (QL_PLAIN, 0), (QL_TWIN, 0)):
+                out.append({"arm": "a", "column": "preview." + kind, "settled_ms": 100.0 + i + add, "first_ms": 20.0 + i})
+        return out
+    same = ql_verdict(ql_rows(0), "a")
+    check("ql_control_same", (same[0].endswith("SHIP"), same[1].endswith("ok")), (True, True))
+    check("ql_faster_ships", ql_verdict(ql_rows(-30), "a")[0].endswith("SHIP"), True)
+    check("ql_delay_holds", ql_verdict(ql_rows(50), "a")[0].endswith("HOLD"), True)
+    check("ql_noise_flagged", ql_verdict([dict(r, settled_ms=r["settled_ms"] + 90) if r["column"].endswith(QL_TWIN) else r for r in ql_rows(0)], "a")[1].endswith("INSTRUMENT-NOISE"), True)
+    check("ql_missing_none", ql_verdict([], "a"), [])
     # Report smoke: cursor medians read off per-step firsts, the ratio to Strata and the status against the next arm print.
     import io
     from contextlib import redirect_stdout
@@ -1153,6 +1238,35 @@ def selftest():
         globals().update(saved_fns)
         S.require_idle, S.fixture_facts, S.monitor = saved_s[:3]
         S.UI_TOKENS[:] = saved_s[3]
+    # The ql column hands run_ql the qltable root and rotates the document order each round.
+    seen = []
+    def fake_ql(arm, qroot, ctx, keys, view, kinds, opts):
+        seen.append((qroot, list(kinds)))
+        return [{"arm": arm["id"], "column": "preview." + kinds[0], "settled_ms": 1.0}]
+    saved_ql, saved_fns2 = globals()["run_ql"], {n: globals()[n] for n in ("make_ctx",)}
+    ql_dir = tempfile.mkdtemp(prefix="nav-ql-")
+    ql_out = os.path.join(ql_dir, "o.jsonl")
+    ql_plan = os.path.join(ql_dir, "plan.json")
+    with open(ql_plan, "w") as f:
+        json.dump({"out": ql_out, "runs": 2, "fixtures": {"qltable": ql_dir},
+                   "arms": [{"id": "f", "entrant": "flea"}], "columns": ["ql"]}, f)
+    globals()["run_ql"] = fake_ql
+    globals()["make_ctx"] = fake_ctx
+    S.require_idle = lambda: None
+    S.fixture_facts = lambda p: {}
+    S.monitor = lambda: {"name": "t", "width": 1, "height": 1, "refreshRate": 60, "scale": 1}
+    try:
+        with redirect_stdout(io.StringIO()):
+            measure(ql_plan)
+        check("ql_rotates", [k for _, k in seen], [QL_KINDS, QL_KINDS[1:] + QL_KINDS[:1]])
+        check("ql_root", {q for q, _ in seen}, {ql_dir})
+    finally:
+        globals()["run_ql"] = saved_ql
+        globals().update(saved_fns2)
+        S.require_idle, S.fixture_facts, S.monitor = saved_s[:3]
+        S.UI_TOKENS[:] = saved_s[3]
+        if os.path.isabs(ql_dir) and ql_dir.startswith(tempfile.gettempdir() + os.sep) and "nav-ql-" in ql_dir:
+            shutil.rmtree(ql_dir)
     # View arms: a known flea view passes, an unknown one refuses, a rival plans default.
     check("view_ok", check_arm_view({"id": "f", "entrant": "flea", "view": "grid"}), None)
     try:
