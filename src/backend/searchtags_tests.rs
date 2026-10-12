@@ -339,6 +339,66 @@ fn a_finished_pass_with_unread_rows_answers_partial_and_retries_them() {
     assert!(!tags.prepare(&terms, &index, d.path(), "", false), "with every row read the answer is whole");
 }
 
+// A two-row pass over `holiday` on a remote body, the way the first worker sees it.
+fn remote_pass(d: &TestDir) -> (Arc<Pass>, Arc<Mutex<Index>>) {
+    let mut index = Index::new();
+    index.push("holiday.jpg", false);
+    index.push("notes.txt", false);
+    (Pass::new(2, Bound::new(d.path(), &remote_body(d))), Arc::new(Mutex::new(index)))
+}
+
+#[test]
+fn a_failed_first_read_leaves_its_rows_unread_and_raises_the_flag() {
+    let d = holiday("tagreadfail");
+    let (pass, index) = remote_pass(&d);
+    let (tx, _rx) = channel();
+    let _stuck = crate::backend::iomount::test_hold_stuck(d.path().to_path_buf());
+    read_all(&pass, &index, 2, &tx);
+    assert!(pass.names.lock().unwrap().iter().all(Option::is_none), "a failed chunk leaves both rows unread, not untagged");
+    assert!(pass.unread_failed.load(Ordering::Relaxed), "the failed chunk raises the flag");
+}
+
+#[test]
+fn a_failed_reread_drops_the_old_names_and_raises_the_flag() {
+    let d = holiday("tagrereadfail");
+    let (pass, index) = remote_pass(&d);
+    let (tx, _rx) = channel();
+    read_all(&pass, &index, 2, &tx);
+    assert!(!pass.unread_failed.load(Ordering::Relaxed) && pass.names.lock().unwrap()[0].is_some(), "the first read answered whole");
+    let _stuck = crate::backend::iomount::test_hold_stuck(d.path().to_path_buf());
+    reread(&pass, &index, rels(&["holiday.jpg"]));
+    let names = pass.names.lock().unwrap();
+    assert!(names[0].is_none(), "a slot whose rewrite re-read failed no longer answers on its stale tags");
+    assert!(names[1].is_some(), "a row not re-read keeps its names");
+    assert!(pass.unread_failed.load(Ordering::Relaxed), "the failed re-read raises the flag");
+}
+
+#[test]
+fn a_stuck_mount_gets_one_retry_per_query_and_never_a_cycle() {
+    let d = holiday("tagstuckcycle");
+    let (mut s, rx) = opened(&d);
+    s.body = remote_body(&d);
+    crate::backend::iomount::mark_stuck(d.path());
+    // Every landing the loop would answer, until the channel stays quiet; a cycle never goes quiet.
+    let settle = |s: &mut Session| {
+        let mut landings = 0;
+        while rx.recv_timeout(std::time::Duration::from_millis(300)).is_ok() {
+            landings += 1;
+            assert!(landings < 20, "a stuck mount keeps announcing: the retry cycles");
+            if s.poll_walked() {
+                let answer = s.re_answer_standing();
+                assert!(!answer.is_some_and(|answer| !answer.walking), "unread rows keep every answer partial");
+            }
+        }
+        landings
+    };
+    assert!(s.query(1, "tag:Red", 50).expect("answers").walking);
+    assert_eq!(settle(&mut s), 2, "the first read lands once and its one retry lands once");
+    assert_eq!(s.tags.reads(), 2 * s.indexed(), "every row was read once and retried once");
+    assert!(s.query(2, "tag:Red", 50).expect("answers").walking, "a still-unread answer stays partial");
+    assert_eq!(settle(&mut s), 1, "a new query arms exactly one more retry");
+}
+
 // A local sandbox whose `nas` folder is a nested nfs mount; both files carry Red and the body names the mount.
 fn nested_remote(tag: &str) -> (TestDir, String) {
     let d = TestDir::new(tag);
