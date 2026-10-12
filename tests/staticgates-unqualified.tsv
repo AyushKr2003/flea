@@ -1264,8 +1264,6 @@ ui/PaneRail.qml	208	root	Declared QML id; component context access is valid at r
 ui/PaneRail.qml	209	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	210	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	211	root	Declared QML id; component context access is valid at runtime.
-ui/PaneRail.qml	210	root	Declared QML id; component context access is valid at runtime.
-ui/PaneRail.qml	211	root	Declared QML id; component context access is valid at runtime.
 ui/PaneWire.qml	80	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	83	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	84	pane	Declared QML property; enclosing component context supplies it.
@@ -1390,11 +1388,8 @@ ui/PaneWire.qml	430	pane	Declared QML property; enclosing component context supp
 ui/PaneWire.qml	431	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	432	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	430	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	435	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	434	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	435	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	435	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	447	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	447	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	448	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	449	pane	Declared QML property; enclosing component context supplies it.
@@ -1430,8 +1425,6 @@ ui/PaneWire.qml	536	pane	Declared QML property; enclosing component context supp
 ui/PaneWire.qml	540	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	541	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	548	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	549	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	551	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	550	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	551	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	552	pane	Declared QML property; enclosing component context supplies it.
@@ -2810,8 +2803,6 @@ ui/PaneRail.qml	208	root	Declared QML id; component context access is valid at r
 ui/PaneRail.qml	209	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	210	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	211	root	Declared QML id; component context access is valid at runtime.
-ui/PaneRail.qml	210	root	Declared QML id; component context access is valid at runtime.
-ui/PaneRail.qml	211	root	Declared QML id; component context access is valid at runtime.
 ui/PaneWire.qml	80	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	83	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	84	pane	Declared QML property; enclosing component context supplies it.
@@ -2936,11 +2927,8 @@ ui/PaneWire.qml	430	pane	Declared QML property; enclosing component context supp
 ui/PaneWire.qml	431	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	432	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	430	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	435	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	434	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	435	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	435	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	447	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	447	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	448	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	449	pane	Declared QML property; enclosing component context supplies it.
@@ -2976,8 +2964,6 @@ ui/PaneWire.qml	536	pane	Declared QML property; enclosing component context supp
 ui/PaneWire.qml	540	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	541	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	548	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	549	pane	Declared QML property; enclosing component context supplies it.
-ui/PaneWire.qml	551	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	550	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	551	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	552	pane	Declared QML property; enclosing component context supplies it.
