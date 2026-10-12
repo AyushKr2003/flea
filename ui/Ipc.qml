@@ -199,11 +199,12 @@ QtObject {
         function menuDialogState(): string {
             var dialog = root.pane.menuActions.item
             if (!dialog) return JSON.stringify({opened: false})
-            // Two dialogs load into that one Loader, and the application rows belong to Open with alone.
+            // Two dialogs load into that one Loader: the application rows belong to Open with alone, the live count lines to the other.
             var applications = dialog.applications !== undefined ? dialog.applications : []
+            var liveLines = dialog.liveLines !== undefined ? dialog.liveLines : {}
             var cursor = dialog.cursor !== undefined ? dialog.cursor : 0
             return JSON.stringify({opened: dialog.opened, action: dialog.action, busy: dialog.busy,
-                committing: dialog.committing, error: dialog.errorText, facts: dialog.facts,
+                committing: dialog.committing, error: dialog.errorText, facts: dialog.facts, liveLines: liveLines,
                 applications: applications, cursor: cursor, rect: root.fleaWindow.rectOf(dialog.cardItem),
                 controls: [root.controlState("Cancel", dialog.closeItem),
                     Object.assign(root.controlState("Submit", dialog.submitItem), {enabled: dialog.canSubmit}),

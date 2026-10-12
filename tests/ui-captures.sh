@@ -997,6 +997,69 @@ case_cap_permissions() {
     kill_flea
 }
 
+# PropertiesCount: Format.js size() for a byte total, round half up on the double's exact value as toFixed does.
+cap_propcount_size() {
+    python3 -I - "$1" <<'EOF2' || fail "cap_propcount: the expected size did not derive from $1"
+import sys
+from decimal import Decimal, ROUND_HALF_UP
+b = int(sys.argv[1])
+units = ["B", "kB", "MB", "GB", "TB"]
+if b < 1000:
+    print("%d B (%d bytes)" % (b, b))
+else:
+    v, u = float(b), 0
+    while v >= 1000 and u < 4:
+        v, u = v / 1000, u + 1
+    print("%s %s (%d bytes)" % (Decimal(v).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP), units[u], b))
+EOF2
+}
+
+# PropertiesCount: Properties on a folder of known contents shows the exact size and item count once its walk is done.
+case_cap_properties_count() {
+    local dir="$fixture_root/cap-propcount" counted total_bytes total_items want_size want_items state shown_size shown_items end
+    local settle_limit_s=15
+    counted="$dir/counted"
+    sandbox_scratch "$dir"
+    mkdir -p "$counted/sub" || fail "cap_propcount: the fixture folders failed"
+    head -c 1000 /dev/zero > "$counted/a.bin"
+    head -c 2500 /dev/zero > "$counted/b.bin"
+    head -c 40 /dev/zero > "$counted/c.bin"
+    head -c 700 /dev/zero > "$counted/sub/d.bin"
+    head -c 1 /dev/zero > "$counted/sub/e.bin"
+    # The walk counts the folder's own entry and every entry below it by lstat size, and the items below it alone.
+    total_bytes=$(find "$counted" -printf '%s\n' | awk '{ sum += $1 } END { print sum }')
+    total_items=$(find "$counted" -mindepth 1 | wc -l)
+    [[ "$total_items" == "6" ]] || fail "cap_propcount: the fixture holds $total_items entries, not 6"
+    want_size=$(cap_propcount_size "$total_bytes")
+    want_items="6 items"
+    seed_ui_state "$fixture_root/cap-propcount-state" '{"keys":"default","view":"list","menu":{"hidden":["delete","openTerminal","moveto","copyto","permissions","copyAs","pasteAs","invertSelection"]}}'
+    launch "$dir"
+    wait_listing 1
+    click_row 0 right
+    settle
+    [[ "$(ipc contextMenuVisible)" == "true" ]] || fail "cap_propcount: the folder menu never opened"
+    menu_seek "Properties"
+    key -k Return >/dev/null
+    # The count is done when the Contains line has lost its counting tail; until the reply the card has no lines at all.
+    end=$((SECONDS + settle_limit_s))
+    state=""
+    while (( SECONDS < end )); do
+        state=$(ipc menuDialogState) || fail "cap_propcount: the dialog reader failed"
+        jq -e '.opened and .action == "properties" and .facts.directory == true and .liveLines.contains.tail == ""' <<< "$state" >/dev/null && break
+        sleep 0.05
+    done
+    jq -e '.liveLines.size.value and .liveLines.contains.value' <<< "$state" >/dev/null \
+        || fail "cap_propcount: the card never finished counting, or menuDialogState carries no liveLines, last state $state"
+    shown_size=$(jq -er '.liveLines.size.value' <<< "$state")
+    shown_items=$(jq -er '.liveLines.contains.value' <<< "$state")
+    shot cap-properties-count
+    printf 'CAP_PROPERTIES_COUNT size=%s items=%s expected=%s,%s\n' "$shown_size" "$shown_items" "$want_size" "$want_items"
+    [[ "$shown_size" == "$want_size" ]] || fail "cap_propcount: Size reads [$shown_size], the fixture holds [$want_size]"
+    [[ "$shown_items" == "$want_items" ]] || fail "cap_propcount: Contains reads [$shown_items], the fixture holds [$want_items]"
+    key -k Escape >/dev/null
+    kill_flea
+}
+
 # Sidebar040: Settings Places at defaults with two favourites, Recent switched on and listed as the current place, then a favourites reorder held mid-drag; the Flea home and its recently-used.xbel are the fixture's own, so paths read home-relative as the board writes them.
 case_cap_sidebar() {
     local home="$fixture_root/cap-sidebar-home"

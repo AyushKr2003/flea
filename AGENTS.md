@@ -9016,3 +9016,5 @@ The Columns prebuild convergence fix moves two ceilings, each re-derived with `w
 The shared prebuild driver (`ui/PrebuildDriver.qml`, 146 lines, under the QML cap) moves five ceilings, each re-derived with `wc -l`: `ui/List.qml` 589 to 480, `ui/GridArea.qml` 506 to 461 and `ui/ColumnPane.qml` 534 to 438, whose three drivers it replaces; `tests/listprebuild.qml` 413 to 412; `tests/gridprebuild.qml` 456 to 458 for the way back from 50 rows, which now checks that the next landing builds nothing.
 
 The key log's tick cap check moves one ceiling, re-derived with `wc -l`: `tests/columnsprebuild.qml` 415 to 416 for the check that fails once the tick log reaches `keepTicks`, where a key's stored tick index no longer holds.
+
+The Properties count capture moves one ceiling and the first-frame bytes, each re-derived: `ui/Ipc.qml` 966 to 967 (`wc -l`) for `menuDialogState`'s `liveLines`, the Size and Contains lines the Properties card shows, which `case_cap_properties_count` waits on, and the `bytes` line in `tests/startup-units.txt` from 1,596,965 to 1,597,101 (+136, no unit added) for the same field; no code or comment was cut.
