@@ -8,6 +8,14 @@ const MAX_ENTRIES: u16 = 1024;
 const MAX_DEPTH: u8 = 4;
 const ENTRY_LEN: usize = 12;
 
+// What a pointer found in an IFD leads to, walked after that IFD.
+#[derive(Clone, Copy, PartialEq)]
+enum Next {
+    Exif,
+    Sub,
+    OlySettings,
+}
+
 // Any byte source the walk can bound: the file through the header budget, or a slice in hand.
 pub(crate) trait Src {
     fn get(&mut self, off: u64, n: usize) -> Option<Vec<u8>>;
@@ -150,7 +158,7 @@ pub(crate) fn walk_ifd<S: Src>(src: &mut S, w: &mut Walk, loc: &IfdLoc, ifd: u64
     let mut strip = (None, None, None);
     let mut rw2: Option<(u64, u64)> = None;
     let mut oly: Vec<(u16, u64)> = Vec::new();
-    let mut after: Vec<(u8, u64)> = Vec::new();
+    let mut after: Vec<(Next, u64)> = Vec::new();
     let mut notes: Vec<(u16, u32, [u8; 4])> = Vec::new();
     for i in 0..count as usize {
         let e = eb.get(i * ENTRY_LEN..i * ENTRY_LEN + ENTRY_LEN)?;
@@ -201,7 +209,7 @@ pub(crate) fn walk_ifd<S: Src>(src: &mut S, w: &mut Walk, loc: &IfdLoc, ifd: u64
             }
             t if t == ex::STRIP_LEN => strip.1 = ex::one_u32(src, base, le, typ, cnt, val),
             t if t == ex::COMPRESSION => strip.2 = ex::one_u32(src, base, le, typ, cnt, val),
-            t if t == ex::RW2_JPGFROMRAW && (typ == 1 || typ == 7) => {
+            t if t == ex::RW2_JPGFROMRAW && (typ == 1 || typ == ex::UNDEFINED) => {
                 // The tag's value bytes are the JPEG, which can be far past MAX_VALUE.
                 if let Some((off, n)) = ex::blob_at(base, le, cnt, val) {
                     if n >= 20 {
@@ -216,23 +224,23 @@ pub(crate) fn walk_ifd<S: Src>(src: &mut S, w: &mut Walk, loc: &IfdLoc, ifd: u64
             }
             t if t == ex::OLY_SETTINGS && loc.olympus == Oly::Note => {
                 // A typed IFD or LONG holds the offset; an UNDEFINED value is the IFD itself, so its pointer is.
-                let p = match typ == 7 && cnt > 4 {
+                let p = match typ == ex::UNDEFINED && cnt > ex::INLINE_BYTES {
                     true => rd32(val, le).map(u64::from),
                     false => ex::one_u32(src, base, le, typ, cnt, val),
                 };
                 if let Some(p) = p {
-                    after.push((3, p));
+                    after.push((Next::OlySettings, p));
                 }
             }
             t if t == ex::EXIF_IFD_PTR => {
                 if let Some(p) = ex::one_u32(src, base, le, typ, cnt, val) {
-                    after.push((1, p));
+                    after.push((Next::Exif, p));
                 }
             }
             t if t == ex::SUB_IFD => {
                 if let Some(ps) = ex::offsets(src, base, le, typ, cnt, val) {
                     for p in ps {
-                        after.push((2, p));
+                        after.push((Next::Sub, p));
                     }
                 }
             }
@@ -279,8 +287,8 @@ pub(crate) fn walk_ifd<S: Src>(src: &mut S, w: &mut Walk, loc: &IfdLoc, ifd: u64
             depth: loc.depth + 1,
             in_sub_ifd: true,
             index_in_chain: 0,
-            is_exif: kind == 1,
-            olympus: if kind == 3 { Oly::Settings } else { Oly::No },
+            is_exif: kind == Next::Exif,
+            olympus: if kind == Next::OlySettings { Oly::Settings } else { Oly::No },
         };
         let _ = walk_ifd(src, w, &child, p);
     }
