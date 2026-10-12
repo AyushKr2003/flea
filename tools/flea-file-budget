@@ -59,8 +59,8 @@ src/tui/input.rs 455
 src/tui/model.rs 1266
 src/tui/mod.rs 416
 src/tui/render.rs 889
-src/uischema.rs 547
-src/uistate.rs 783
+src/uischema.rs 549
+src/uistate.rs 810
 src/uistore.rs 551
 src/vulkan.rs 751
 tests/js/columns.js 687
@@ -150,11 +150,11 @@ ui/SettingsPanel.qml 543
 ui/SettingsRow.qml 409
 ui/Sidebar.qml 729
 ui/StatusBar.qml 463
-ui/Theme.qml 443
+ui/Theme.qml 446
 ui/TrashView.qml 468
 ui/UnlockDialog.qml 441
 ui/ViewState.qml 542
-ui/WindowBody.qml 744
+ui/WindowBody.qml 803
 ui/js/Anchor.js 379
 ui/js/ColumnsCarry.js 94
 ui/js/Devices.js 380
