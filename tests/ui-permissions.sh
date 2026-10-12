@@ -546,7 +546,12 @@ permissions_eligibility() {
         permissions_expect selectionCount "$batch_count"
     done
 
-    click_row "$first" left
+    # A click made while a re-read is out is refused as Loading, so it is repeated until one lands; a click made before the re-read keeps its mark.
+    for permissions_try in 1 2 3 4 5 6 7 8; do
+        click_row "$first" left
+        sleep 0.5
+        [[ "$(ipc selectionCount)" == 1 ]] && break
+    done
     permissions_expect selectionCount 1
     click_row "$(row_index_of link)" left --mods ctrl
     permissions_expect selectionCount "$batch_count"
