@@ -214,6 +214,11 @@ for id in "${ids[@]}"; do
   esac
   # Every entrant's version parses before a single line of the report is printed.
   short_version "$id" > /dev/null
+  # A comma inside a field shifts every later column, write_clean too, so the raw rows are checked before the guard filter.
+  while IFS= read -r row; do
+    cols=$(printf '%s\n' "$row" | tr ',' '\n' | grep -c .)
+    [ "$cols" -le "$header_n" ] || die "$id's row has $cols fields against the header's $header_n, so a field holds a comma: $(printf '%s' "$row" | cut -d, -f"$ranked_col")"
+  done < <(awk -F, -v id="$id" 'NR > 1 && $1 == id' "$CSV")
   # An entrant the write guard dropped in full has nothing to rank or average, which is not a disagreement.
   if [ -z "$(id_rows "$id")" ]; then
     if [ -n "$write_clean_col" ]; then
@@ -223,10 +228,6 @@ for id in "${ids[@]}"; do
   fi
   n=$(id_rows "$id" | cut -d, -f"$ranked_col" | sort -u | grep -c .)
   [ "$n" -eq 1 ] || die "$id carries $n different 'ranked' verdicts across its counted runs"
-  # Every column here is cut on a comma, so one inside a verdict shifts every column to its right
-  # and the failure surfaces against whichever column the shifted row lands in.
-  cols=$(id_row1 "$id" | tr ',' '\n' | grep -c .)
-  [ "$cols" -le "$header_n" ] || die "$id's row has $cols fields against the header's $header_n, so a field holds a comma: $(ranked_of "$id")"
 done
 
 # Every value in a counted column is a whole number or one of the harness's did-not-happen markers.

@@ -147,6 +147,8 @@ bench_header=$(sed -n 's/^echo "\(id,run,[^"]*\)".*/\1/p' "$repo/tools/flea-fiel
 declare -A CELL
 emit_row() {
   local out="" name
+  # The report counts only write_clean 1 rows, so a fixture row is a counted run unless it says otherwise.
+  CELL[write_clean]=${CELL[write_clean]-1}
   while IFS= read -r name; do
     out="${out:+$out,}${CELL[$name]:--}"
   done < <(printf '%s\n' "$bench_header" | tr ',' '\n')
@@ -326,6 +328,20 @@ cp "$man" "${comma_csv%.csv}.manifest.md"
 "$repo/tools/flea-bench-report" "$comma_csv" >/dev/null 2>"$scratch/comma.err"
 check "a comma inside a verdict is refused" 1 $?
 holds "and the refusal names the field that holds it" "so a field holds a comma" "$scratch/comma.err"
+# A dirty row's comma sits in ranked, so the raw check names it only while ranked comes before write_clean.
+ranked_at=$(printf '%s\n' "$bench_header" | tr ',' '\n' | grep -n '^ranked$' | cut -d: -f1)
+clean_at=$(printf '%s\n' "$bench_header" | tr ',' '\n' | grep -n '^write_clean$' | cut -d: -f1)
+[ "${ranked_at:-0}" -ge 1 ] && [ "${ranked_at:-0}" -lt "${clean_at:-0}" ]
+check "the bench header still orders ranked before write_clean" 0 $?
+dirtycomma_csv="$scratch/dirtycomma.csv"
+cp "$csv" "$dirtycomma_csv"
+CELL=([id]=flea [run]=2 [thumbs_n]=36 [thumbs_by_format]="jpg=2;png=0;txt=0;none=0;unknown=0" [ranked]="unranked: writes in flight, dirty" [preview_ms]=- [write_clean]=0)
+emit_row >> "$dirtycomma_csv"
+cp "$man" "${dirtycomma_csv%.csv}.manifest.md"
+"$repo/tools/flea-bench-report" "$dirtycomma_csv" >/dev/null 2>"$scratch/dirtycomma.err"
+check "a comma in a dirty row the guard would drop is refused" 1 $?
+holds "and the dirty refusal names the field that holds it" "so a field holds a comma" "$scratch/dirtycomma.err"
+holds "and the dirty refusal is the raw check naming the row" "flea's row has" "$scratch/dirtycomma.err"
 
 # The two CSVs this repo ships. Their values are not asserted here, only that the report can read
 # them: rows have been spliced into these by hand and a lost column is the failure that produces.
