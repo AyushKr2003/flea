@@ -15,6 +15,11 @@ var PDF_ZOOM_MIN = 1
 var PDF_ZOOM_MAX = 4
 var PDF_ZOOM_STEP = 0.25
 
+// A zoom after steps presses (negative steps down), kept on the ladder; the image pane walks the same rungs as the PDF.
+function zoomStep(zoom, steps) {
+    return Math.max(PDF_ZOOM_MIN, Math.min(PDF_ZOOM_MAX, zoom + steps * PDF_ZOOM_STEP))
+}
+
 function pdfAction(action, viewer) {
     var controls = viewer.pdfControls
     if (action === "focusNext" || action === "focusPrevious") {
@@ -80,6 +85,7 @@ function act(action, root) {
     case "pageForward": root.preview.turnPage(1); return
     case "zoomOut": root.preview.zoomBy(-1); return
     case "zoomIn": root.preview.zoomBy(1); return
+    case "zoomFit": root.preview.zoomFit(); return
     case "expand": root.preview.toggleExpand(); return
     // MediaMute rule 5: the flag is the preview's to flip, and it silences without pausing.
     case "mute": root.preview.toggleMute(); return

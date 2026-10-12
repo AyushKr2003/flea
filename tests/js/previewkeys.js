@@ -1,3 +1,4 @@
+.import "../../ui/js/Focus.js" as Focus
 .import "../../ui/js/PreviewKeys.js" as PreviewKeys
 .import "../../ui/js/Keymap.js" as Keymap
 .import "sourcefixture.js" as Source
@@ -155,6 +156,7 @@ function run(check) {
     check("the Quick Look hands the toggle to the pane",
         quickSrc.indexOf("function toggleMarkdownClose()") >= 0 && quickSrc.indexOf("readonly property bool markdownCloseFocused") >= 0, true)
     runThumbThreading(check)
+    runImageZoom(check)
 }
 
 // The cached thumbnail rides into Quick Look in memory, with zero new file work.
@@ -190,4 +192,73 @@ function runThumbThreading(check) {
     PreviewKeys.open(hidden.root)
     PreviewKeys.follow(hidden.root)
     check("Space with zero matches opens nothing hidden", hidden.calls.length, 0)
+}
+
+// Quick Look's image zoom: the PDF's ladder (fit is 1, a quarter a press, 4 at most), + and - on it, 0 back to fit, and nothing but an image or a PDF takes the keys; e expands a PDF only.
+function runImageZoom(check) {
+    var rung = 1
+    var up = []
+    for (var i = 0; i < 14; i++) { rung = PreviewKeys.zoomStep(rung, 1); up.push(rung) }
+    check("+ climbs from fit in quarter steps and stops at 4", up.join(","), "1.25,1.5,1.75,2,2.25,2.5,2.75,3,3.25,3.5,3.75,4,4,4")
+    var down = []
+    for (i = 0; i < 14; i++) { rung = PreviewKeys.zoomStep(rung, -1); down.push(rung) }
+    check("- steps back down and stops at fit", down.join(","), "3.75,3.5,3.25,3,2.75,2.5,2.25,2,1.75,1.5,1.25,1,1,1")
+    check("the PDF keeps its own three constants",
+        PreviewKeys.PDF_ZOOM_MIN + "," + PreviewKeys.PDF_ZOOM_MAX + "," + PreviewKeys.PDF_ZOOM_STEP, "1,4,0.25")
+
+    var log = []
+    var preview = { revealStrip: function () {}, zoomBy: function (steps) { log.push("by " + steps) }, zoomFit: function () { log.push("fit") } }
+    PreviewKeys.act("zoomIn", { preview: preview })
+    PreviewKeys.act("zoomOut", { preview: preview })
+    PreviewKeys.act("zoomFit", { preview: preview })
+    check("zoomIn, zoomOut and zoomFit reach the preview as one step up, one step down and fit", log.join(","), "by 1,by -1,fit")
+
+    var viewer = { pdfControlIndex: -1, pdfControls: [], zoomBy: function (steps) { log.push("pdf " + steps) }, zoomFit: function () { log.push("pdf fit") } }
+    log = []
+    PreviewKeys.pdfAction("zoomIn", viewer)
+    PreviewKeys.pdfAction("zoomOut", viewer)
+    PreviewKeys.pdfAction("zoomFit", viewer)
+    check("a PDF still zooms by its ladder and has no fit key", log.join(","), "pdf 1,pdf -1")
+
+    var none = Qt.NoModifier
+    var plus = { key: Qt.Key_Plus, text: "+", modifiers: Qt.ShiftModifier }
+    var minus = { key: Qt.Key_Minus, text: "-", modifiers: none }
+    var zero = { key: Qt.Key_0, text: "0", modifiers: none }
+    var expand = { key: Qt.Key_E, text: "e", modifiers: none }
+    var kinds = [
+        ["an image", { active: true, isMedia: false, isPdf: false, isImage: true }, "zoomIn,zoomOut,zoomFit,"],
+        ["a PDF", { active: true, isMedia: false, isPdf: true, isImage: false }, "zoomIn,zoomOut,,expand"],
+        ["a text file", { active: true, isMedia: false, isPdf: false, isImage: false }, ",,,"],
+        ["a Markdown file", { active: true, isMedia: false, isPdf: false, isImage: false, isMarkdown: true }, ",,,"],
+        ["an archive", { active: true, isMedia: false, isPdf: false, isImage: false, isArchive: true }, ",,,"],
+        ["a video", { active: true, isMedia: true, isPdf: false, isImage: false }, ",,,"],
+        ["no preview", { active: false, isMedia: false, isPdf: false, isImage: false }, ",,,"]
+    ]
+    var wasPreset = Keymap.preset
+    for (var preset of Keymap.PRESETS) {
+        Keymap.setPreset(preset)
+        for (var kind of kinds) {
+            var pane = { focusView: "list", shown: null, viewMode: "list", searchMode: "", recentMode: "", preview: kind[1] }
+            check(preset + ": +, -, 0 and e over " + kind[0] + " mean " + kind[2],
+                [Focus.lookup(plus, pane), Focus.lookup(minus, pane), Focus.lookup(zero, pane), Focus.lookup(expand, pane)].join(","), kind[2])
+        }
+    }
+    Keymap.setPreset(wasPreset)
+
+    // The map binds e in a PDF only, so Focus.lookup's own gate is what keeps expand off every other kind should a row ever bind it wider: bind it into the preview context here and ask.
+    var bound = Keymap.PRESET_KEYS.filter(function (row) { return row.action === "expand" && row.context === "pdf" })[0]
+    var wide = {}
+    for (var field in bound) wide[field] = bound[field]
+    wide.context = "preview,pdf"
+    Keymap.PRESET_KEYS.push(wide)
+    try {
+        for (kind of kinds) {
+            pane = { focusView: "list", shown: null, viewMode: "list", searchMode: "", recentMode: "", preview: kind[1] }
+            var want = kind[1].isPdf ? "expand" : ""
+            check("e bound into the preview context still means \"" + want + "\" over " + kind[0], Focus.lookup(expand, pane), want)
+        }
+    } finally {
+        Keymap.PRESET_KEYS.pop()
+    }
+    check("the widened e row is gone again", Keymap.PRESET_KEYS.indexOf(wide), -1)
 }
