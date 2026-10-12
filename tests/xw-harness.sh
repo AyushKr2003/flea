@@ -2,8 +2,8 @@
 # Headless pins for the two-window UI case's pointer targeting and exit cleanup.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
-repo=$(cd "$(dirname "$0")/.." && pwd) || exit 1
-. "$repo/tests/lib/hypr-dispatch.sh"
+repo=$(pwd)
+. "$repo/tests/lib/hypr-dispatch.sh" || exit 1
 tmp=$(mktemp -d) || exit 1
 trap 'rm -rf "$tmp"' EXIT
 source_file=${XW_HARNESS_SOURCE:-$repo/tests/ui.sh}
