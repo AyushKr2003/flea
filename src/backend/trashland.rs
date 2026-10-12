@@ -57,8 +57,15 @@ pub(crate) fn land(out: &mut impl Write, ops: &mut Ops, msg: OpMsg) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::dirsizeworker::Worker;
+    use crate::backend::events::Event;
+    use crate::backend::flashslot;
     use crate::backend::opsdispatch::{do_rename, do_undo, start_trash};
+    use crate::backend::run::drain;
+    use crate::backend::state::{State, Tables};
     use crate::backend::testdir::TestDir;
+    use crate::backend::thumbcache::Cache;
+    use crate::backend::thumbs::Pool;
 
     fn created(path: &std::path::Path) -> Entry {
         Entry { op: "trash".to_string(), steps: vec![Step::Created { path: path.to_path_buf() }] }
@@ -195,5 +202,58 @@ mod tests {
         assert_eq!(o.journal.len(), 1, "the rename journals and the empty entry adds nothing");
         assert!(undone(&mut o).contains(r#""t":"undone""#), "undo is free again");
         assert!(x.exists() && !d.join("y.txt").exists());
+    }
+
+    // A quit's drain over the parts it reads; the worker keeps its own channel, so dropping the sender closes the loop's.
+    fn quit_rig(d: &TestDir) -> (State, Pool, Cache, std::sync::mpsc::Sender<Event>, std::sync::mpsc::Receiver<Event>, flashslot::Ctx) {
+        let tb = Tables::load();
+        let (done_tx, _done_rx) = std::sync::mpsc::channel();
+        let pool = Pool::new(1, done_tx, d.join("thumbs"), std::sync::Arc::clone(&tb.aliases), std::sync::Arc::clone(&tb.thumbs));
+        let (worker_tx, _worker_rx) = std::sync::mpsc::channel();
+        let (ev_tx, ev_rx) = std::sync::mpsc::channel();
+        let (flash_tx, _flash_rx) = std::sync::mpsc::channel();
+        (State::new(Worker::new(worker_tx)), pool, Cache::at(d.join("cache")), ev_tx, ev_rx, flashslot::Ctx::new(flash_tx))
+    }
+
+    #[test]
+    fn a_quit_in_the_settle_window_waits_for_the_trash_entry_and_files_the_rename_behind_it() {
+        let d = TestDir::new("trashland-quit-wait");
+        let (x, trashed) = (d.file("x.txt", "x"), d.file("trashed.txt", "t"));
+        let (mut st, pool, cache, ev_tx, ev_rx, mut flash) = quit_rig(&d);
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let mut o = Ops::new(tx);
+        let (id, _) = o.claim_transfer();
+        let mut buf: Vec<u8> = Vec::new();
+        land(&mut buf, &mut o, announced(id, &trashed));
+        do_rename(&mut buf, &mut o, &x.to_string_lossy(), "y.txt");
+        let late = journaled(id, &trashed);
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            let _ = ev_tx.send(Event::Op(late));
+        });
+        drain(&mut buf, &mut st, &mut o, &mut flash, &ev_rx, &pool, &cache);
+        assert_eq!(o.journal.len(), 2, "the drain left before the settle list landed, so the trash entry died with the window");
+        assert!(undone(&mut o).contains(r#""t":"undone""#));
+        assert!(x.exists() && trashed.exists(), "the rename is still the last action after the quit");
+    }
+
+    #[test]
+    fn a_quit_cut_short_before_the_settle_list_lands_still_files_the_rename_behind_it() {
+        let d = TestDir::new("trashland-quit-cut");
+        let (x, trashed) = (d.file("x.txt", "x"), d.file("trashed.txt", "t"));
+        let (mut st, pool, cache, ev_tx, ev_rx, mut flash) = quit_rig(&d);
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let mut o = Ops::new(tx);
+        let (id, _) = o.claim_transfer();
+        let mut buf: Vec<u8> = Vec::new();
+        land(&mut buf, &mut o, announced(id, &trashed));
+        do_rename(&mut buf, &mut o, &x.to_string_lossy(), "y.txt");
+        drop(ev_tx);
+        drain(&mut buf, &mut st, &mut o, &mut flash, &ev_rx, &pool, &cache);
+        assert_eq!(o.journal.len(), 1, "the rename held behind the open place died with the window");
+        // The window that undoes it next owes no settle list, as a fresh backend over the shared journal would not.
+        o.settling.clear();
+        assert!(undone(&mut o).contains(r#""t":"undone""#));
+        assert!(x.exists() && !d.join("y.txt").exists(), "the filed entry is the rename");
     }
 }

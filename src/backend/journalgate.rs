@@ -38,6 +38,11 @@ impl Gate {
         }
     }
 
+    // A quit whose drain ran out keeps every ready entry, oldest first, and drops the places nothing will fill now.
+    pub(crate) fn release(&mut self) -> Vec<Entry> {
+        self.queue.drain(..).filter_map(|slot| if let Slot::Ready(entry) = slot { Some(entry) } else { None }).collect()
+    }
+
     // Every ready entry ahead of the first open reservation, oldest first.
     pub(crate) fn flush(&mut self) -> Vec<Entry> {
         let open = self.queue.iter().position(|slot| matches!(slot, Slot::Reserved(_))).unwrap_or(self.queue.len());
@@ -84,6 +89,17 @@ mod tests {
         assert!(gate.flush().is_empty());
         gate.fill(1, entry("a"));
         assert_eq!(ops(gate.flush()), ["a", "b"]);
+    }
+
+    #[test]
+    fn a_release_keeps_every_ready_entry_in_order_and_drops_the_open_places() {
+        let mut gate = Gate::default();
+        gate.reserve(1);
+        assert!(gate.hold(entry("rename")).is_none());
+        gate.reserve(2);
+        assert!(gate.hold(entry("mkdir")).is_none());
+        assert_eq!(ops(gate.release()), ["rename", "mkdir"]);
+        assert!(gate.hold(entry("later")).is_some(), "nothing is left to wait behind");
     }
 
     #[test]

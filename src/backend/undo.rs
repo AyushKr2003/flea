@@ -301,6 +301,13 @@ impl Journal {
         }
     }
 
+    // A quit files what the gate still holds, so a write accepted in the settle window keeps its entry past the window.
+    pub(crate) fn release_held(&mut self) {
+        for ready in self.gate.release() {
+            self.file(ready);
+        }
+    }
+
     // An operation that changed nothing records nothing, so undo never reports a no-op as work.
     fn file(&mut self, entry: Entry) {
         let shared = match &self.shared {

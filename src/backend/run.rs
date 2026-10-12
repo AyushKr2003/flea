@@ -861,7 +861,8 @@ pub(crate) fn drain(
     if let Some(id) = flash.slot.running() {
         flash.slot.cancel(id);
     }
-    while st.outstanding > 0 || ops.live.running().is_some() || !ops.detached.is_empty() || flash.slot.running().is_some() {
+    // A trash batch past its announce has freed the slot but still owes its journal entry, so the drain waits for it too.
+    while st.outstanding > 0 || ops.live.running().is_some() || !ops.settling.is_empty() || !ops.detached.is_empty() || flash.slot.running().is_some() {
         match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
             Ok(Event::Thumb(d)) => report_done(out, st, d),
             Ok(Event::Op(m)) => report_op(out, ops, m),
@@ -870,6 +871,7 @@ pub(crate) fn drain(
             Err(_) => break,
         }
     }
+    ops.journal.release_held();
     pool.cancel_all();
     // The queue is empty now, so no worker can start a new job and the temps still on disk are exactly the abandoned ones.
     if st.outstanding > 0 {
