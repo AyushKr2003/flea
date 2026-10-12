@@ -137,6 +137,7 @@ impl Session {
         if gen <= self.last_answered_gen {
             return None;
         }
+        self.tags.arm();
         let mut answer = self.answer(query, count);
         answer.gen = gen;
         self.last_query = query.to_string();
