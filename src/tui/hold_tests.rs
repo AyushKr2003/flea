@@ -138,8 +138,8 @@ fn held_frame_swallows_a_trash_key() {
     model.held = hold.hold(&model, launched, launched);
     assert!(model.held, "the frame is held for the parent column");
     press_twice(&mut model, &mut wire, &delete);
-    assert_eq!(trashes(&mut wire), 0, "a trash key acted on a row the held frame never drew");
-    assert_eq!(trashes(&mut wire), 0, "a trash key acted on a row the held frame never drew");
+    let out = sent(&mut wire);
+    assert!(out.is_empty(), "the held frame sent {} request(s) for keys on rows it never drew", out.len());
     peek_landed(&mut model, &mut wire, "/");
     model.held = hold.hold(&model, launched, launched);
     assert!(!model.held);
