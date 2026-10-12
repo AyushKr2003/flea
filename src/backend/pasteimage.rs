@@ -244,8 +244,9 @@ mod tests {
     fn a_failing_tool_reads_as_the_empty_clipboard() {
         let d = TestDir::new("pasteimage-failing");
         let dest = d.dir("dest");
-        let (line, entry) = execute(&dest, "a.png", &["false".to_string()]);
-        assert!(line.contains(r#""code":"emptyclipboard""#), "a non-zero exit rides the empty code, got {}", line);
+        let argv = ["sh".to_string(), "-c".to_string(), "printf PNGDATA; exit 1".to_string()];
+        let (line, entry) = execute(&dest, "a.png", &argv);
+        assert!(line.contains(r#""code":"emptyclipboard""#), "a non-zero exit rides the empty code even with bytes, got {}", line);
         assert!(entry.is_none());
         assert!(std::fs::symlink_metadata(dest.join("a.png")).is_err(), "nothing was written");
     }
