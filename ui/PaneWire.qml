@@ -441,9 +441,9 @@ Item {
         // Recent spans mounts and asks for no figures of its own, so a late answer for its base is refused with the stale ones.
         function onFsInfo(fs, free, path, storageClass, tagable, systemVolume) {
             // The line follows its listing's, but a loading mark makes the rows wait, so pane.path still names the folder left while the listing out is the one this line answers.
-            var ours = (path.length === 0 || path === pane.path || (pane.listInFlight && path === pane.listingPath)) && pane.recentMode.length === 0
-            pane.fsName = ours ? fs : ""; pane.fsFree = ours ? free : 0
-            pane.fsAnswered = true
+            var ours = (path.length === 0 || path === root.pane.path || (root.pane.listInFlight && path === root.pane.listingPath)) && root.pane.recentMode.length === 0
+            root.pane.fsName = ours ? fs : ""; root.pane.fsFree = ours ? free : 0
+            if (ours || !root.pane.listInFlight) root.pane.fsAnswered = true
             if (ours) {
                 pane.storageClass = storageClass || ""
                 pane.systemVolume = systemVolume === true
