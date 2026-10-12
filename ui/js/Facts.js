@@ -157,8 +157,7 @@ function archiveMore(meta, shown) {
     return Math.max(0, meta.entries - archiveEntries(meta, shown).length)
 }
 
-// TallPreviews: the kinds whose frame fills the column from its top down to the name. The shape follows the row's
-// kind and never its load state, so a tall row is tall while loading, ready, blank or failed.
+// TallPreviews: the kinds whose frame fills the column down to the name, by the row's kind and never its load state.
 var TALL_STATES = [TEXT, CODE, ARCHIVE]
 
 function tall(st) {

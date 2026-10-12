@@ -461,8 +461,7 @@ action = "tabNew"
 char = "T"
 action = "tags"
 
-# Swaps the preview column's one compact facts line for the full table and back, remembered in ui.json as
-# previewFacts. It does nothing unless that column is on screen (ui/js/Focus.js), and plain i was bound to nothing.
+# Swaps the preview column's compact facts line for the full table (ui.json previewFacts); a no-op unless that column is on screen.
 [[text]]
 char = "i"
 action = "factsToggle"
