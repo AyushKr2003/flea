@@ -44,6 +44,28 @@ function flyoutClose(check, body) {
     check("flyout close clears provider debt", menu.refreshOwed, false)
 }
 
+// A repeater of rows with the given pressed flags, as far as anyPressed reads one.
+function rowsOf(flags) {
+    return {count: flags.length, itemAt: function (i) { return {pressed: flags[i]} }}
+}
+
+// anyPressed's answer, or "threw" so a broken guard fails a named check instead of the harness.
+function pressedAnswer(main, flyout) {
+    try { return MenuRefresh.anyPressed(main, flyout) } catch (error) { return "threw" }
+}
+
+// A closed flyout passes null, so its held rows no longer count as pressed; an open one still does.
+function anyPressedBranches(check) {
+    var idle = rowsOf([false, false])
+    var held = rowsOf([false, true])
+    check("a pressed main row counts", pressedAnswer(held, null), true)
+    check("a pressed flyout row counts while the flyout is passed", pressedAnswer(idle, held), true)
+    check("a pressed flyout row is ignored once null is passed", pressedAnswer(idle, null), false)
+    check("no pressed row answers false", pressedAnswer(idle, rowsOf([false])), false)
+    check("a gone delegate holds nothing", pressedAnswer({count: 1, itemAt: function () { return null }}, null), false)
+    check("an empty main repeater never throws", pressedAnswer(rowsOf([]), null), false)
+}
+
 // The real Undo stage of tests/permissions-focus.qml, run against a root where Apply's watch re-read has landed.
 function undoGuard(check, body) {
     var selections = 0
@@ -121,6 +143,7 @@ function searchRefresh(check, body, pane, apply) {
 
 function run(check, body, pane, apply) {
     flyoutClose(check, body)
+    anyPressedBranches(check)
     undoGuard(check, body)
     searchRefresh(check, body, pane, apply)
 }
