@@ -464,7 +464,7 @@ Item {
     function refreshProviderRows() {
         if (!root.opened || root.forRail || root.forHeader || root.forLocked) return
         // Replacing a pressed delegate destroys its grab before release can activate it.
-        if (MenuRefresh.anyPressed(menuRows, subRows)) {
+        if (MenuRefresh.anyPressed(menuRows, root.submenuOpen ? subRows : null)) {
             root.refreshOwed = true
             return
         }

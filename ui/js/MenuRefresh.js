@@ -38,9 +38,9 @@ function pressChanged(menu, pressed) {
         Qt.callLater(function() { if (menu.refreshOwed) menu.refreshProviderRows() })
 }
 
-// Only live delegates can hold a refresh; a destroyed pressed row leaves no state behind.
+// Only live delegates can hold a refresh; a destroyed pressed row leaves no state behind. A null flyout is a closed one, whose held rows only fade.
 function anyPressed(main, flyout) {
-    var repeaters = [main, flyout]
+    var repeaters = flyout === null ? [main] : [main, flyout]
     for (var group = 0; group < repeaters.length; group++) {
         var rows = repeaters[group]
         for (var i = 0; i < rows.count; i++) {
