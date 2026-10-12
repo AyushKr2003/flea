@@ -32,13 +32,11 @@ Item {
         }
         return null
     }
-    // The lift handler builds with the row: DragHandler precedes any Loader in RowDrag,
+    // The lift handler builds with the row: RowDrag declares its DragHandler directly (no Loader stands in RowDrag, pinned below),
     // and the grid delegate holds RowDrag outside any Loader.
     function liftBuiltIn() {
         var drag = Source.source("ui/RowDrag.qml")
-        var handlerAt = drag.indexOf("DragHandler {")
-        var loaderAt = drag.indexOf("Loader {")
-        if (handlerAt < 0 || (loaderAt >= 0 && loaderAt < handlerAt)) return false
+        if (drag.indexOf("DragHandler {") < 0) return false
         var area = Source.source("ui/GridArea.qml")
         var delegateAt = area.indexOf("delegate: Flea.GridTile {")
         var rowDragAt = area.indexOf("Flea.RowDrag {", delegateAt)
@@ -91,8 +89,12 @@ Item {
         }
         root.check("lift handler builds with the tile", root.liftBuiltIn(), true)
         root.check("slim tile keeps its lift gate", slim.enabled, true)
-        root.check("local tile arms its drop area", root.dropAreaIn(full) !== null && root.dropAreaIn(full).enabled, true)
-        root.check("shared-area tile leaves its own inert", root.dropAreaIn(slim) !== null && root.dropAreaIn(slim).enabled, false)
+        // Both tiles share one session, so one pane and one dropScope: only dropsLocal tells their areas apart.
+        var fullArea = root.dropAreaIn(full), slimArea = root.dropAreaIn(slim)
+        root.check("local tile builds its drop area", fullArea !== null, true)
+        root.check("shared-area tile builds its drop area too", slimArea !== null, true)
+        root.check("local tile arms its drop area", fullArea !== null && fullArea.enabled, true)
+        root.check("shared-area tile leaves its own inert", slimArea !== null && slimArea.enabled === false, true)
         root.check("no Loader stands in front of the area", Source.source("ui/RowDrag.qml").indexOf("Loader {") < 0, true)
         root.check("drop API answers", typeof full.enterAt === "function" && typeof full.leaveAt === "function"
                   && typeof full.moveAt === "function" && typeof full.dropAt === "function", true)

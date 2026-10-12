@@ -234,7 +234,7 @@ ShellRoot {
         showSize: false
     }
 
-    // One lazy frame, label and mark without the wrapper, and the chevron built only where drawn; measured ceiling pins idle row cost.
+    // One lazy frame, label and mark without the wrapper, and the chevron built on first draw, so a row at rest holds none; measured ceiling pins idle row cost.
     readonly property int columnRowMax: 15
 
     // Delegates are built on the polish pass, so the read waits one turn like mount-listing.qml.
