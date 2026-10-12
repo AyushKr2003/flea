@@ -130,7 +130,7 @@ pub fn extract(
     if cancel.load(Ordering::Relaxed) {
         return Err(op_err("archive", &archive.to_string_lossy(), "cancelled"));
     }
-    if archivepass::reads_password(formats, archive) {
+    if archivepass::runs_on_seven(formats, archive, password) {
         if let Some(f) = archivepass::run_boxed_cancellable_password("archive", inner, archive, &mut work, password, cancel)? {
             let said = archivepass::extract_verdict(f.code, password.is_some(), || archiveenc::password_needed(archive, formats, cancel));
             // A cancel during the guarded re-probe killed it; the job is cancelled, whatever the extract's exit said.

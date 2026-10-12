@@ -37,7 +37,8 @@ pub fn check(archive_leaf: &str, unpacked: u64, dest: &std::path::Path) -> Optio
     }
     let parent = dest.parent().unwrap_or(dest);
     let info = fsinfo::read(parent)?;
-    if !refuses(unpacked, info.free) {
+    // A zero-block statfs is unknown room, as copyfile's precheck reads it, so a gvfs or FUSE share never refuses.
+    if info.blocks == 0 || !refuses(unpacked, info.free) {
         return None;
     }
     let target = parent.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "/".to_string());
@@ -87,6 +88,12 @@ mod tests {
         let d = TestDir::new("archivefreefit");
         assert_eq!(check("empty.tar", 0, d.path()), None, "an empty archive always fits");
         assert_eq!(check("small.tar", 1, d.path()), None, "one byte fits on any test filesystem");
+    }
+
+    // procfs answers a statfs with zero blocks and zero free, the shape of a gvfs share that omits its room.
+    #[test]
+    fn a_filesystem_that_reports_no_blocks_is_unknown_room_and_refuses_nothing() {
+        assert_eq!(check("a.tar", 10, std::path::Path::new("/proc/self/out")), None);
     }
 
     #[test]
