@@ -25,6 +25,7 @@ import "js/SlowClick.js" as SlowClick
 import "js/Sort.js" as Sort
 import "js/Tabs.js" as Tabs
 import "js/Thumbs.js" as Thumbs
+import "js/FolderViews.js" as FolderViews
 
 FocusScope {
     id: root
@@ -182,6 +183,8 @@ FocusScope {
     property bool paneFocused: true
     property bool listOnly: false
     signal focusRequested()
+    // A list-only pane draws no view of its own, so a view chosen on it goes to the window, which routes it as its chrome does.
+    signal viewRequested(string mode)
     // Which view Tab last handed the keyboard to; the rail's own cursor is read the same way.
     property string focusView: Focus.LIST
     readonly property int railCursor: root.sidebar ? root.sidebar.cursorIndex : 0
@@ -326,16 +329,27 @@ FocusScope {
 
     // "list", "columns" or "grid"; the chrome's own buttons write it and the views read it.
     property string viewMode: "list"
-    property bool preferencesReady: false
-    Component.onCompleted: {
-        root.viewMode = root.listOnly ? "list" : ViewState.view
-        root.preferencesReady = true
+    Component.onCompleted: root.viewMode = root.desiredView(root.path)
+    // A view switch takes the filter with it; only chooseView() and adoptView() persist, so a restored view writes nothing.
+    onViewModeChanged: Filter.close(root)
+    // The folder a view belongs to; a search, Recent or Trash standing over it is not that folder.
+    readonly property string viewFolder: root.searchMode.length === 0 && root.recentMode.length === 0 && !trashHost.opened ? root.path : ""
+    // Dual draws lists in both panes, and a folder's own view applies only while it is remembered.
+    function desiredView(path) {
+        return root.listOnly || root.dualMode ? "list" : FolderViews.viewFor(ViewState.folderViews, path, ViewState.view,
+                                                                              ViewState.rememberViewPerFolder)
     }
-    // A view switch takes the filter with it, as a navigation does.
-    onViewModeChanged: {
-        Filter.close(root)
-        if (root.preferencesReady && !root.listOnly && (!root.dualMode || root.viewMode !== "list") && ViewState.state.view !== root.viewMode)
-            ViewState.changeKey("view", root.viewMode)
+    function restoreView(path) {
+        var desired = root.desiredView(path)
+        if (root.viewMode !== desired)
+            root.viewMode = desired
+    }
+    // A tab brings back the view it held: a remembered folder keeps its own, any other view becomes the standing one.
+    function adoptView(path, mode) {
+        var own = ViewState.rememberViewPerFolder && FolderViews.has(ViewState.folderViews, path)
+        if (!own && !root.dualMode)
+            ViewState.changeKey("view", mode)
+        root.restoreView(path)
     }
     readonly property string listingPreferences: JSON.stringify([ViewState.state.hidden, ViewState.state.sort,
         ViewState.state.foldersFirst, ViewState.state.groupByKind, ViewState.state.hiddenLast, ViewState.state.rememberSort])
@@ -367,14 +381,13 @@ FocusScope {
         }
     }
     onListInFlightChanged: if (!root.listInFlight) { preferences.restart(); Sort.applyPending(root); listingWait.stop() } else listingWait.restart()
-    onSearchModeChanged: if (root.searchMode.length === 0) preferences.restart()
+    onSearchModeChanged: preferences.restart()
     onRecentModeChanged: if (root.recentMode.length === 0) preferences.restart()
     Timer {
         id: preferences
         interval: 0
         onTriggered: {
-            var desired = root.listOnly ? "list" : ViewState.view
-            if (root.viewMode !== desired) root.viewMode = desired
+            root.restoreView(root.viewFolder)
             if (!root.visible || !root.path || root.listInFlight || root.searchMode.length > 0
                     || root.recentMode.length > 0
                     || root.appliedListingPreferences === root.listingPreferences) return
@@ -963,7 +976,27 @@ FocusScope {
         // The preview follows rather than loads, so a class just switched off holds instead of decoding.
         if (root.viewMode === "columns" && columnsLoader.item) columnsLoader.item.askMeta()
     }
-    function chooseView(mode) { ViewState.changeKey("view", mode) }
+    function chooseView(mode) {
+        if (FolderViews.MODES.indexOf(mode) < 0 && mode !== "dual")
+            return
+        if (root.listOnly) {
+            root.viewRequested(mode)
+            return
+        }
+        // Dual is a window layout and no folder's view: choosing it, or any view while in it, sets the standing view first.
+        if (mode === "dual" || root.dualMode)
+            ViewState.changeKey("view", mode)
+        if (mode === "dual")
+            return
+        root.viewMode = mode
+        if (FolderViews.shouldRemember(ViewState.rememberViewPerFolder, root.viewFolder)) {
+            var leaf = {}
+            leaf[root.viewFolder] = mode
+            ViewState.changeMapEntries("folderViews", leaf, FolderViews.set(ViewState.folderViews, root.viewFolder, mode))
+        } else if (ViewState.state.view !== mode) {
+            ViewState.changeKey("view", mode)
+        }
+    }
     function focusPreviewColumn() {
         if (!ViewState.previewColumn || root.dualMode) return
         if (root.viewMode === "columns" && columnsLoader.item) columnsLoader.item.focusPreview()

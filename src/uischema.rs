@@ -13,6 +13,8 @@ pub const DEFAULTS: &str = r#"{
   "sort": { "key": "name", "reverse": false },
   "rememberSort": true,
   "folderSorts": {},
+  "rememberViewPerFolder": false,
+  "folderViews": {},
   "dual": { "paths": [], "focus": 0 },
   "foldersFirst": true,
   "groupByKind": false,
@@ -89,6 +91,8 @@ pub enum Rule {
     Version,
     // A folder path to its own sort order, at most MAX_FOLDER_SORTS entries; see folderSorts above.
     FolderSorts,
+    // A folder path to one browser view, at most MAX_FOLDER_VIEWS entries; see folderViews above.
+    FolderViews,
     Group(&'static [(&'static str, Rule)]),
 }
 
@@ -109,6 +113,7 @@ pub const SORT_KEYS: [&str; 4] = ["name", "size", "date", "kind"];
 // Tabs040 callout 2: at most one entry per tab ui/js/Tabs.js MAX allows, in tab order.
 pub const MAX_LAST_TABS: usize = 9;
 pub const MAX_FOLDER_SORTS: usize = 500;
+pub const MAX_FOLDER_VIEWS: usize = 500;
 
 pub const DUAL: &[(&str, Rule)] = &[("paths", Rule::Pair), ("focus", Rule::Count(0.0, 1.0))];
 
@@ -180,6 +185,8 @@ pub const SCHEMA: &[(&str, Rule)] = &[
     ("sort", Rule::Group(SORT)),
     ("rememberSort", Rule::Bool),
     ("folderSorts", Rule::FolderSorts),
+    ("rememberViewPerFolder", Rule::Bool),
+    ("folderViews", Rule::FolderViews),
     ("dual", Rule::Group(DUAL)),
     ("foldersFirst", Rule::Bool),
     ("groupByKind", Rule::Bool),
@@ -270,7 +277,7 @@ mod tests {
         assert_eq!(
             keys,
             [
-                "view", "pickerView", "density", "columns", "columnsLimit", "columnWidths", "addressBar", "sort", "rememberSort", "folderSorts",
+                "view", "pickerView", "density", "columns", "columnsLimit", "columnWidths", "addressBar", "sort", "rememberSort", "folderSorts", "rememberViewPerFolder", "folderViews",
                 "dual", "foldersFirst", "groupByKind", "hidden", "hiddenLast", "highlightToday", "wrapAtEnds", "escapeUp", "openMode", "clickRename", "openFoldersWhileDragging", "keyHints", "startIn", "startFolder",
                 "lastPath", "lastTabs", "newTab", "trashAutoEmpty", "trashSweptOn", "places", "shelf",
                 "preview", "keys",
@@ -313,6 +320,8 @@ mod tests {
         assert_eq!(d.get("hiddenLast").and_then(Json::as_bool), Some(false));
         assert_eq!(d.get("rememberSort").and_then(Json::as_bool), Some(true));
         assert_eq!(d.get("folderSorts").and_then(Json::as_object).map(<[(String, Json)]>::len), Some(0));
+        assert_eq!(d.get("rememberViewPerFolder").and_then(Json::as_bool), Some(false));
+        assert_eq!(d.get("folderViews").and_then(Json::as_object).map(<[(String, Json)]>::len), Some(0));
         assert_eq!(d.get("dual").and_then(|s| s.get("paths")).and_then(Json::as_array).map(<[Json]>::len), Some(0));
         assert_eq!(d.get("dual").and_then(|s| s.get("focus")).and_then(Json::as_f64), Some(0.0));
         // The shelf ships off, and its switch is what installs the plugin.
@@ -410,6 +419,41 @@ mod tests {
         assert_eq!(map.len(), MAX_FOLDER_SORTS);
         assert!(map.iter().all(|(k, _)| k != "/d000" && k != "/d001"), "the two oldest go");
         assert!(map.iter().any(|(k, _)| k == "/d501"), "the newest stays");
+    }
+
+    // Folder views are opt-in and only name layouts one pane can draw. Dual is a window layout.
+    #[test]
+    fn folder_views_hold_places_to_browser_modes_and_heal_past_the_cap() {
+        let current = crate::uistate::from_file("{}");
+        let takes = |patch: &str| crate::uistate::patched(&current, &jsondoc::parse(patch).expect("patch parses"));
+        for good in [r#"{"rememberViewPerFolder":true}"#,
+                     r#"{"folderViews":{"/home/gm/Pictures":"grid","smb://nas/docs":"columns"}}"#] {
+            assert!(takes(good).is_ok(), "{} is a value its key takes", good);
+        }
+        for (bad, named) in [(r#"{"folderViews":[]}"#, "folderViews"),
+                             (r#"{"folderViews":{"Pictures":"grid"}}"#, "folderViews"),
+                             (r#"{"folderViews":{"/a":"dual"}}"#, "folderViews"),
+                             (r#"{"folderViews":{"/a":"tiles"}}"#, "folderViews"),
+                             (r#"{"rememberViewPerFolder":1}"#, "rememberViewPerFolder")] {
+            let message = takes(bad).expect_err("the patch must be refused");
+            assert!(message.contains(named), "{} should name {}, got {}", bad, named, message);
+        }
+        let read = crate::uistate::from_file(r#"{"folderViews":{"/home/gm/Pictures":"grid","Pictures":"list","/home/gm/Docs":"dual"},"hidden":true}"#);
+        let map = read.get("folderViews").and_then(Json::as_object).expect("folderViews");
+        assert_eq!(map.len(), 1, "only bad entries go");
+        assert_eq!(map.iter().next().map(|(key, value)| (key.as_str(), value.as_str())), Some(("/home/gm/Pictures", Some("grid"))));
+        assert_eq!(read.get("hidden").and_then(Json::as_bool), Some(true));
+        let mut big = String::from(r#"{"folderViews":{"#);
+        for i in 0..MAX_FOLDER_VIEWS + 2 {
+            if i > 0 { big.push(','); }
+            big.push_str(&format!(r#""/d{:03}":"grid""#, i));
+        }
+        big.push_str("}}");
+        let kept = takes(&big).expect("a long map still patches");
+        let map = kept.get("folderViews").and_then(Json::as_object).expect("folderViews");
+        assert_eq!(map.len(), MAX_FOLDER_VIEWS);
+        assert!(map.iter().all(|(key, _)| key != "/d000" && key != "/d001"));
+        assert!(map.iter().any(|(key, _)| key == "/d501"));
     }
 
     // The rules nothing else reached: an exact stop, a non-empty path, and the four shipped presets.

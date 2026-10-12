@@ -184,7 +184,8 @@ Rectangle {
         onSearchRequested: view.currentPane.act("search")
         onFilterRequested: view.currentPane.act("filter")
         onSortRequested: view.currentPane.act("sortNext")
-        onViewChosen: function (mode) { ViewState.changeKey("view", mode) }
+        // The primary pane is the one the window keeps after Dual, so every view choice, the secondary pane's keys included, lands there.
+        onViewChosen: function (mode) { primaryPane.chooseView(mode) }
         // The path bar's four. The primaryPane navigates and answers for the keyboard exactly as it
         // does for every other route in, so a path typed and a row opened end the same way.
         // Issue 194: a typed smb:// (or other network) address mounts through the window-long
@@ -357,6 +358,7 @@ Rectangle {
                 settingsPanel: primaryPane.settingsPanel
                 statusBar: bar
                 onFocusRequested: view.focusPane(1)
+                onViewRequested: function (mode) { chrome.viewChosen(mode) }
                 onSwitchPane: view.focusPane(0)
         onPathChanged: view.rememberPaths()
                 onClipboardChanged: if (primaryPane.clipboard !== clipboard) primaryPane.clipboard = clipboard

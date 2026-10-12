@@ -82,6 +82,10 @@ function openWithoutHistory(pane, newPath, options) {
     Search.leaveWalk(pane)
     pane.listInFlight = true
     pane.listedSeen = false
+    // A hop into another view clears at once like a tab switch, so held rows never draw in a view they were not listed in.
+    var shown = pane.viewMode
+    if (pane.restoreView)
+        pane.restoreView(newPath)
     // A manual reload's notice belongs to its own re-read: a navigation that lands first spends it.
     pane.reloadFrom = -1
     // The path is not written here. A refused listing never answers a listed line, so leaving the
@@ -94,6 +98,7 @@ function openWithoutHistory(pane, newPath, options) {
     // Until fsinfo answers, the class, system and tag verdicts are the left directory's, so a settle in between would spend them; a re-read keeps them.
     if (newPath !== pane.path) { pane.storageClass = ""; pane.storageKnown = false; pane.systemVolume = false; pane.canTag = false }
     var ask = options || {}
+    if (pane.viewMode !== shown) ask.clearAtOnce = true
     // A walk closed above keeps its rows and its strip until this listing lands.
     if (pane.searchLeaving === true) ask.holdWalk = true
     // A settled listing stays drawn until the new rows land, see AGENTS.md "The listing swap".
