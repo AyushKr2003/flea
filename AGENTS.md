@@ -8926,7 +8926,7 @@ The release-line join of the approved fix, bench, search, picker and Flash strip
 
 The Network Tab ring moves three ceilings, each re-derived with `wc -l`: `ui/NetworkDialog.qml` 447 to 457 for the ids, `tabHandle` and `onTabbed` lines that put Cancel, the primary and Install Dropbox in the form's walk after the TLS box, with Escape moved from the form to the card's content so a focused button closes the dialog too, and `ui/NetworkForm.qml` 406 to 413 for the `trailing` prop, the joined ring, the pass-over step and the button labels in `focusName`, and `tests/button-members.qml` 445 to 485 for the trailing-walk checks that Tab from TLS reaches each button and wraps to the first chip, Backtab returns, an unavailable button is passed over and `focusName` names the focused button.
 
-The Q8 copy pass of 0.3.10 moves the first-frame `bytes` line in `tests/startup-units.txt` from 1596965 to 1597264 (+299, no unit added): `ui/Pane.qml` names the no-window sentence once in `noWindowSentence` and shows `Menu.EMPTY_CLIPBOARD` for an empty Paste as, both of which the first window already loads.
+The Q8 copy pass of 0.3.10 moves the first-frame `bytes` line in `tests/startup-units.txt` from 1596965 to 1597296 (+331, no unit added): `ui/Pane.qml` names the no-window sentence once in `noWindowSentence` and shows `Menu.EMPTY_CLIPBOARD` for an empty Paste as, both of which the first window already loads. The round 1 fix fills the "Could not open" refusal in `ui/js/Places.js` in one pass, so a favourite label holding `%2` or `$&` prints literally, for the remaining +32.
 
 ## The image flasher
 

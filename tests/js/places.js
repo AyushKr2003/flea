@@ -39,6 +39,13 @@ function run(check) {
     check("tilde expands only for consumption", Places.storedEntries([{label:"Home",path:"~/docs"}], "/home/test")[0].path, "/home/test/docs")
     check("stored tilde stays intact", Places.storedEntries([{label:"Home",path:"~/docs"}], "/home/test")[0].storedPath, "~/docs")
 
+    var sent = []
+    var ports = { message: function (text, bad) { sent.push(text) } }
+    Places.openEntry({ kind: "favourite", label: "50%2 off", path: "/x", original: 17 }, ports)
+    check("a label holding %2 stays literal in the refusal", sent[0], "Could not open 50%2 off \u00b7 invalid favorite record")
+    Places.openEntry({ kind: "favourite", label: "a$&b", path: "/x", original: 17 }, ports)
+    check("a label holding $& stays literal in the refusal", sent[1], "Could not open a$&b \u00b7 invalid favorite record")
+
     var dirs = 'XDG_DESKTOP_DIR="$HOME/"\n'
              + 'XDG_DOWNLOAD_DIR="$HOME/Downloads"\n'
              + 'XDG_DOCUMENTS_DIR="$HOME/Documents"\n'

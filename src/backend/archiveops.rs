@@ -38,8 +38,11 @@ pub fn compress(formats: &Formats, parent: &Path, names: &[String], format: &str
         if !formats.has_7z() {
             return Err(op_err("archive", format, "a password needs 7-Zip, which is not installed"));
         }
-        if !formats.offers(format) || (format != "7z" && format != "zip") {
+        if format != "7z" && format != "zip" {
             return Err(op_err("archive", format, "a password needs the 7z or zip format"));
+        }
+        if !formats.offers(format) {
+            return Err(op_err("archive", format, "this box offers no tool for that format"));
         }
     }
     let mut work = Work::new(parent, "arc")?;

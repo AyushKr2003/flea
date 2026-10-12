@@ -174,7 +174,7 @@ function openEntry(entry, ports) {
     if (!entry) return
     if (entry.kind === "trash") { ports.trash(); return }
     var error = entry.kind === "favourite" ? recordError(entry.original) : ""
-    if (error) { ports.message("Could not open %1 · %2".replace("%1", entry.label).replace("%2", error), true); return }
+    if (error) { ports.message("Could not open %1 · %2".replace(/%([12])/g, function (m, n) { return n === "1" ? entry.label : error }), true); return }
     if (entry.path.indexOf("://") >= 0 && entry.path.indexOf("file://") !== 0) {
         var host = ports.networkHost()
         if (host) host.openChildShare(entry.path, entry.label, ports.pane)

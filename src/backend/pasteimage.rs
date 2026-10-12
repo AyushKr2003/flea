@@ -241,6 +241,16 @@ mod tests {
     }
 
     #[test]
+    fn a_failing_tool_reads_as_the_empty_clipboard() {
+        let d = TestDir::new("pasteimage-failing");
+        let dest = d.dir("dest");
+        let (line, entry) = execute(&dest, "a.png", &["false".to_string()]);
+        assert!(line.contains(r#""code":"emptyclipboard""#), "a non-zero exit rides the empty code, got {}", line);
+        assert!(entry.is_none());
+        assert!(std::fs::symlink_metadata(dest.join("a.png")).is_err(), "nothing was written");
+    }
+
+    #[test]
     fn a_missing_tool_names_itself() {
         let d = TestDir::new("pasteimage-notool");
         let dest = d.dir("dest");
