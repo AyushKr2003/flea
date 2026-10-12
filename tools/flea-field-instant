@@ -1456,8 +1456,9 @@ def parts(fx, samples):
         cyc([{"journey": "open.ql.txt", "in": k("space")}, {"in": k("space"), "quiet": 2.0, "cap": 8}],
             setup=[k("home"), k("down")], first_suffix=".first")]
     out["p7-load"] = []
-    for load in ("a", "b", "c"):
-        for s in load_series:
+    for load in ("a", "b", "d", "c"):
+        # Load d is raw dd with no Flea copy, so it takes the nav pair only, to tell a slow frame in the stick's own writes from one in Flea's copy.
+        for s in (load_series[:1] if load == "d" else load_series):
             out["p7-load"].append({"fixture": L, "view": "dual", "region": "left", "load": load, "series": [s]})
     names = sorted(NAV500_NAME % i for i in range(fx["nav"]["nav500"]))
     out["p8-rename"] = [{"fixture": n500, "view": v, "region": "content", "series": [rename_cycle(v, names)]}
@@ -1490,7 +1491,7 @@ def parts(fx, samples):
 PARTS = ["smoke", "p1-cursor", "p2-held", "p3-navigate", "p4-open", "p5-heavy", "p6-ops", "p7-load", "p8-rename"]
 # Minutes of minipc per part at 20 samples, from the series' own pacing (keys at 400 ms, quiet gaps, launches).
 ESTIMATE_MIN = {"smoke": 5, "p1-cursor": 16, "p2-held": 8, "p3-navigate": 14, "p4-open": 14, "p5-heavy": 13,
-                "p6-ops": 13, "p7-load": 16, "p8-rename": 34}
+                "p6-ops": 13, "p7-load": 17, "p8-rename": 34}
 
 
 def journeys_of(sessions):
@@ -1882,6 +1883,28 @@ def load_renew(sess, load, ctx):
     return None
 
 
+LOAD_D_NAME = "load-d.bin"
+LOAD_D_MIB = 4000  # bs=4M count=1000, the size of load b's file
+
+
+def load_d_command(sink):
+    """Load d's writer: direct 4 MiB writes, so the stick's own rate is the load and the page cache holds none of it."""
+    return ["dd", "if=/dev/zero", "of=" + sink, "bs=4M", "count=1000", "oflag=direct"]
+
+
+def load_stop(sess):
+    """End a load-d writer still running, so no write reaches the stick once the session's series is over."""
+    proc = getattr(sess, "load_proc", None)
+    if proc is None or proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+
+
 def load_start(sess, load, ctx):
     """Start a load in the right pane; (probe, note). probe() changes while the load runs."""
     roots = ctx["roots"]
@@ -1901,6 +1924,14 @@ def load_start(sess, load, ctx):
         def probe():
             return sum(os.path.getsize(os.path.join(dst, f)) for f in os.listdir(dst))
         return probe, "copy of a %d MiB file to the USB stick from the right pane" % LONG_MIB
+    if load == "d":
+        sink = os.path.join(os.path.realpath(sess.right), LOAD_D_NAME)
+        sess.load_proc = subprocess.Popen(load_d_command(sink), stdin=subprocess.DEVNULL,
+                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        def probe():
+            return os.path.getsize(sink) if os.path.exists(sink) else 0
+        return probe, "dd of %d MiB to the USB stick, no Flea copy, the right pane lists its folder" % LOAD_D_MIB
 
     def right_listing():
         """(list requests, listing in flight) of the right pane, from the dualState IPC; (None, False) when unreadable."""
@@ -1941,13 +1972,13 @@ def run_session(spec, ctx, out):
         if spec.get("load"):
             right = load_right(spec["load"], ctx)
             if right is None:
-                raise RuntimeError("load %s needs a %s fixture" % (spec["load"], "USB" if spec["load"] == "b" else "NAS"))
+                raise RuntimeError("load %s needs a %s fixture" % (spec["load"], "USB" if spec["load"] in ("b", "d") else "NAS"))
         sess = Session(ctx, fixture, spec["view"], spec["region"], right,
                        os.path.join(ctx["out_dir"], "flea-%s.log" % ctx["tag"]))
     except (RuntimeError, OSError, subprocess.CalledProcessError) as e:
         emit(out, {"journey": "session", "view": spec.get("view"), "fixture": where,
                    "error": "%s: %s" % (type(e).__name__, e)})
-        if spec.get("load") == "b" and right is not None:
+        if spec.get("load") in ("b", "d") and right is not None:
             drop_load_dst(right, ctx["roots"])
         return
     sess.right = right
@@ -1961,8 +1992,9 @@ def run_session(spec, ctx, out):
                 r.setdefault("fixture", where)
                 emit(out, r)
     finally:
+        load_stop(sess)
         sess.close()
-        if spec.get("load") == "b" and right is not None:
+        if spec.get("load") in ("b", "d") and right is not None:
             drop_load_dst(right, ctx["roots"])
 
 
@@ -1988,9 +2020,9 @@ def setup_op_dirs(spec, ctx):
 
 
 def drop_load_dst(path, roots):
-    """Remove a load-b session's own dst directory, by the same checks as every sandbox removal."""
+    """Remove a load-b or load-d session's own dst directory, by the same checks as every sandbox removal."""
     if not os.path.basename(path).startswith("dst-"):
-        raise SystemExit("refusing to remove %s: not a load-b dst directory" % path)
+        raise SystemExit("refusing to remove %s: not a load-b or load-d dst directory" % path)
     sandbox_rm(path, roots)
 
 
@@ -2001,7 +2033,7 @@ def load_right(load, ctx):
         for f in os.listdir(os.path.join(ctx["root"], "load", "cold-src")):
             os.link(os.path.join(ctx["root"], "load", "cold-src", f), os.path.join(d, f))
         return d
-    if load == "b":
+    if load in ("b", "d"):
         return tempfile.mkdtemp(prefix="dst-", dir=os.path.join(ctx["fx"]["usb"], "dst")) if ctx["fx"].get("usb") else None
     return os.path.join(ctx["fx"]["nas"], "stream") if ctx["fx"].get("nas") else None
 
@@ -2665,6 +2697,19 @@ def selftest():
     check("plan_p7_first", p7[("open.ql.txt.first", "dual", "local+load-a")], 1)
     check("plan_p7_plain", p7[("open.ql.txt", "dual", "local+load-a")], 19)
     check("plan_p7_pairs", p7[("nav.dual.down", "dual", "local+load-b")], 20)
+    check("plan_p7_pairs_d", (p7[("nav.dual.down", "dual", "local+load-d")], p7[("nav.dual.up", "dual", "local+load-d")]), (20, 20))
+    check("plan_p7_d_pairs_only", sorted(k[0] for k in p7 if k[2] == "local+load-d"), ["nav.dual.down", "nav.dual.up"])
+    check("plan_p7_d_beside_b", "".join(sp["load"] for sp in parts(PLAN_FX, 20)["p7-load"]), "aaaabbbbdcccc")
+    check("load_d_command", load_d_command("/u/dst-x/load-d.bin"),
+          ["dd", "if=/dev/zero", "of=/u/dst-x/load-d.bin", "bs=4M", "count=1000", "oflag=direct"])
+    class Holder:
+        pass
+    writer = Holder()
+    writer.load_proc = subprocess.Popen(["sleep", "60"])
+    load_stop(writer)
+    check("load_d_stopped", writer.load_proc.poll() is not None, True)
+    load_stop(writer)
+    load_stop(Holder())
     p4 = planned_counts("p4-open", 20)
     check("plan_p4_first", p4[("open.ql.txt.first", "list", "local")], 1)
     check("plan_p4_plain", p4[("open.ql.txt", "list", "local")], 20)

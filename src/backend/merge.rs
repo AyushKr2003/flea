@@ -35,6 +35,7 @@ pub(crate) fn menu_paths(question: &Question) -> Option<Vec<String>> {
 pub(crate) fn mergeable(paths: &[String], dest: &str) -> bool {
     let Ok(dest_path) = crate::backend::opsreq::usable_dest(dest) else { return false };
     let dest_real = dest_path.canonicalize().unwrap_or_else(|_| dest_path.clone());
+    let (mut parents, table) = (super::collide::Parents::default(), super::collide::Table::read(&dest_path));
     for raw in paths {
         let src = Path::new(raw);
         if !src.is_absolute() {
@@ -43,10 +44,10 @@ pub(crate) fn mergeable(paths: &[String], dest: &str) -> bool {
         let Some(name) = src.file_name().and_then(|n| n.to_str()) else { continue };
         let Ok(meta) = src.symlink_metadata() else { continue };
         let dst = dest_path.join(name);
-        if super::collide::already_there(src, name, &dst, &dest_real) {
+        if super::collide::already_there_in(src, name, &dst, &dest_real, &mut parents) {
             continue;
         }
-        let Ok(there) = ItemIdentity::inspect(&dst) else { continue };
+        let Ok(there) = super::collide::identity_in(&dst, &table) else { continue };
         if meta.is_dir() && !meta.file_type().is_symlink() && there.is_dir() {
             return true;
         }

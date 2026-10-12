@@ -178,7 +178,7 @@ pub(crate) fn cancel_transfer(_out: &mut impl Write, ops: &mut Ops, id: usize) {
 
 // One gate for every write: each resolved source and the destination wait while their mount holds a slow write.
 pub(crate) fn pending_on_any(ops: &Ops, sources: &[PathBuf], dests: &[PathBuf]) -> bool {
-    let body = mount_body();
+    let body = if ops.pending.is_empty() { return false } else { mount_body() };
     sources.iter().chain(dests.iter()).any(|p| pending_on(ops, &body, &p.to_string_lossy()))
 }
 

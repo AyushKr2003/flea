@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The real ui/Spinner.qml holds its mark still for its first second on screen, then crawls, and a hide resets it; offscreen.
+# The real ui/Spinner.qml holds its mark still for its first second on screen, then crawls, and a hide resets it; offscreen, with frames and dashOffset writes counted and never timed.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -28,8 +28,8 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     timeout 20 qs -p "$test_root/config" 2>&1)
 
-# Sample input, one probe line: "  INFO qml: SPINNERSTILL PASS 15 checks"
-expected_checks=15
+# Sample input, one probe line: "  INFO qml: SPINNERSTILL PASS 22 checks"
+expected_checks=22
 pass_count=$(printf '%s\n' "$output" | grep -c 'SPINNERSTILL PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'SPINNERSTILL FAIL')
 ran_checks=$(printf '%s\n' "$output" | grep -ao 'SPINNERSTILL PASS [0-9]* checks' | grep -o '[0-9]*')
@@ -39,4 +39,5 @@ if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ] || [ "${ran_checks:-0}" -n
     printf '%s\n' "$output" | grep -aE 'ERROR|error' | grep -av 'SPINNERSTILL' | head -20
     exit 1
 fi
+printf '%s\n' "$output" | grep -ao 'SPINNERSTILL rate.*'
 printf '%s\n' "$output" | grep -o 'SPINNERSTILL PASS.*'

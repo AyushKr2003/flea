@@ -506,7 +506,9 @@ under 66 ms never shows the mark; one that lists between 66 and 166 ms draws the
 whole folder at 166 ms; a slower one draws the mark at 66 ms and the folder when it lands. `describe()`
 reports how long the last mark stood as `shownMs`. A walk's matches never wait on the mark. The mark
 holds still for its first second on screen and crawls only after it (`ui/Spinner.qml`), so a load shorter
-than that never draws motion.
+than that never draws motion. `tests/spinner-still.sh` counts, never times, the frames the window swaps and the
+`dashOffset` writes per mark, so a resting mark that asks for frames, or a crawl written faster than the window
+draws (a timer in place of the animation), fails on any machine.
 
 **No row acts while a listing is out, held or not.** After the `list` request the backend numbers
 every row for the directory asked for, so an action on a row by its index would land on another file.
@@ -8979,6 +8981,8 @@ Quick Look's warm kind units keep `tests/startup-units.txt` at its 170 units whi
 The Quick Look image zoom keeps `tests/startup-units.txt` at its 170 units while its `bytes` line moves from 1596965 to 1597661, the sum the probe's tool takes over them with the image branch of the zoom keys in `ui/js/Focus.js` (its own gate for `e`, which stays a PDF key), the `0` row in `ui/js/Keymap.js` and the shared ladder step in `ui/js/PreviewKeys.js`.
 
 drp4 2026-10-11 raises the first-frame `bytes` line in `tests/startup-units.txt` from 1,596,985 to 1,598,921 (+1,936, no unit added): +1,260 are the recorded hover-open destination in `ui/FileDrag.qml` (`dropDest`, `dropDestDev`) and `ui/RowDrag.qml` (`lit()` and `landing()`, the recorded address `refuseDrop()` and `dropped()` read), both loaded by the first window; the other 676 were already over the old pin on the DRP3 head `4d1132c3`.
+
+The transfer close fix adds the closing-sample branch to the first-frame `ui/js/Transfer.js`, so `tests/startup-units.txt` keeps its units while its `bytes` line moves from 1596965 to 1597218, the sum the probe's tool takes over them; recompute again at merge, since IP208B edits the same line.
 
 ## The image flasher
 

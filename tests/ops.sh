@@ -158,6 +158,32 @@ check "undo removed both copies" "no" "$([ -e "$D/dest/c1.txt" ] || [ -e "$D/des
 check "undo left the sources alone" "one" "$(cat "$D/c1.txt")"
 stop_backend
 
+echo "--- a thousand small files share one progress window, and every item still answers ---"
+start_backend
+mkdir -p "$D/many" "$D/many-dest"
+items=1000
+for i in $(seq 1 "$items"); do printf 'f%s' "$i" > "$D/many/f$i.txt"; done
+paths=$(seq 1 "$items" | sed "s|.*|\"$D/many/f&.txt\"|" | paste -sd, -)
+began=$(date +%s%3N)
+send "{\"c\":\"transfer\",\"op\":\"copy\",\"paths\":[$paths],\"dest\":\"$D/many-dest\"}"
+await '"t":"transferdone"' || fail=1
+# No duration on the wire, so the stopwatch above is the bound.
+elapsed=$(( $(date +%s%3N) - began ))
+progress=$(grep '"t":"transferprogress"' "$D/out" | grep -vc '"phase":"writing"')
+# One window, from PROGRESS_EVERY in src/backend/opsreq.rs.
+progress_every_ms=150
+# A window sends the item's own line and at most one owed line beside it.
+progress_per_window=2
+# The first window has no owed line and the closing line takes its place, so the edge adds two.
+progress_edge_lines=2
+bound=$(( elapsed / progress_every_ms * progress_per_window + progress_edge_lines ))
+echo "ops.sh: many-file copy sent $progress progress lines in $elapsed ms, bound $bound"
+check "progress lines stay within the owed line and the item's own per window of the copy plus the edge lines" "yes" "$([ "$progress" -le "$bound" ] && echo yes || echo "no: $progress lines in $elapsed ms, bound $bound")"
+check "every item still answers its own terminal line" "$items" "$(seen '"t":"transferitem"')"
+check "done counts every item ok" "1" "$(seen "\"t\":\"transferdone\",\"id\":1,\"ok\":$items,\"failed\":0")"
+check "every copy landed" "$items" "$(find "$D/many-dest" -type f | wc -l | tr -d ' ')"
+stop_backend
+
 echo "--- move transfer, and undo moves it back ---"
 start_backend
 printf 'moving' > "$D/m.txt"; mkdir -p "$D/dest"
