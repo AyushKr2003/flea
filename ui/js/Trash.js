@@ -1,5 +1,6 @@
 .pragma library
 
+.import "Format.js" as Format
 .import "Ops.js" as Ops
 
 // The dd pair. A single d used to trash, and it sat in the middle of the letters a name is typed
@@ -29,4 +30,21 @@ function route(action) {
     if (action === "settings" || action === "sidebar") return "act"
     if (action.indexOf("tab") === 0) return "act"
     return "trash"
+}
+
+// The delete card's words come from a filled snapshot only (R0: the whole filled card or nothing), so an unfilled one says no word at all.
+function filled(snapshot) {
+    return typeof snapshot.count === "number"
+}
+
+// "Empty Trash?", or one whole sentence per count; Format.fill takes the grouped count into the placeholder.
+function confirmTitle(snapshot) {
+    if (!filled(snapshot)) return ""
+    if (snapshot.all) return "Empty Trash?"
+    return snapshot.count === 1 ? "Delete 1 item permanently?" : Format.fill("Delete %1 items permanently?", Format.count(snapshot.count))
+}
+
+function confirmBody(snapshot, scope) {
+    if (!filled(snapshot)) return ""
+    return snapshot.all ? Ops.deleteAllLine(snapshot.count, Format.size(snapshot.bytes || 0)) : Ops.deleteScopeLine(scope, snapshot.count)
 }
