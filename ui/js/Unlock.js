@@ -73,7 +73,7 @@ function unlockArgv(device) {
     return ["udisksctl", "unlock", "--block-device", String(device || ""), "--key-file", "/dev/stdin"]
 }
 
-// Sample input: udisksctl's stderr after a refused unlock; only the daemon's Failed reads as a wrong passphrase, so a busy device reads the same.
+// Sample input: "Error unlocking /dev/sda1: GDBus.Error:org.freedesktop.UDisks2.Error.Failed: Incorrect passphrase." reads as a wrong passphrase; any other error name, NotAuthorized among them, reads as could not be unlocked.
 function refusalNote(stderr, label) {
     return parseDbusError(stderr) === "org.freedesktop.UDisks2.Error.Failed" ? wrongNote(label) : unlockFailedNote(label)
 }
