@@ -178,8 +178,9 @@ struct Job {
 
 #[derive(Default)]
 struct Queue {
-    // The running job's sequence, which an older request is answered against, and the waiters it answers.
-    running: Option<(u64, Vec<Waiter>)>,
+    // The running job's waiters, and the newest sequence started, which the job's end does not clear: an older request that lands late is answered against it.
+    running: Option<Vec<Waiter>>,
+    started: u64,
     queued: Option<Job>,
 }
 
@@ -245,10 +246,10 @@ impl Service {
         self.enqueue(Job { key, program, input, mtime, seq, waiters: vec![Waiter { wire, reg, tx: tx.clone() }] });
     }
 
-    // The running job is never replaced; a request older than it is answered replaced, as is the lower sequence of two queued, and the same file shares one job.
+    // The running job is never replaced; a request older than the newest started is answered replaced, as is the lower sequence of two queued, and the same file shares one job.
     fn enqueue(self: &Arc<Self>, mut job: Job) {
         let mut q = self.locked();
-        if q.running.as_ref().is_some_and(|r| job.seq < r.0) {
+        if job.seq < q.started {
             return answer(job.waiters, Err("replaced by a newer request".to_string()));
         }
         if let Some(old) = q.queued.take() {
@@ -264,7 +265,8 @@ impl Service {
             q.queued = Some(job);
             return;
         }
-        q.running = Some((job.seq, std::mem::take(&mut job.waiters)));
+        q.running = Some(std::mem::take(&mut job.waiters));
+        q.started = job.seq;
         let me = Arc::clone(self);
         std::thread::spawn(move || me.work(job));
     }
@@ -273,10 +275,11 @@ impl Service {
         loop {
             let outcome = self.convert(&job);
             let mut q = self.locked();
-            let done = q.running.take().map(|r| r.1).unwrap_or_default();
+            let done = q.running.take().unwrap_or_default();
             let mut next = q.queued.take();
             if let Some(n) = next.as_mut() {
-                q.running = Some((n.seq, std::mem::take(&mut n.waiters)));
+                q.running = Some(std::mem::take(&mut n.waiters));
+                q.started = n.seq;
             }
             drop(q);
             answer(done, outcome);

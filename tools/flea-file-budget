@@ -24,7 +24,7 @@ src/backend/localsend.rs 406
 src/backend/menu_actions.rs 641
 src/backend/menu_registry.rs 564
 src/backend/meta.rs 551
-src/backend/officepdf.rs 401
+src/backend/officepdf.rs 404
 src/backend/metareq.rs 416
 src/backend/movebatch.rs 477
 src/backend/movebatch_tests.rs 752

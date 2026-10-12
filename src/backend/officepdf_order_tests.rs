@@ -61,7 +61,26 @@ fn a_request_older_than_the_running_job_is_dropped_and_never_converts() {
     assert_eq!(ends.iter().map(|e| e.0).collect::<Vec<_>>(), vec![1, 3]);
     assert!(ends.iter().all(|e| e.1.contains(r#""state":"ready""#)), "{ends:?}");
     assert_eq!(r.jobs(), 2, "the older request never ran, the newer one did");
-    assert!(r.svc.locked().running.is_none(), "the running sequence is cleared when the work ends");
+    assert!(r.svc.locked().running.is_none(), "the running waiters are cleared when the work ends");
+}
+
+#[test]
+fn an_older_request_whose_probe_lands_after_the_newer_job_finished_starts_no_conversion() {
+    let d = TestDir::new("officepdf-late");
+    let r = rig(&d, MAKE_PDF, CONVERT_TIMEOUT);
+    let (late, fresh) = (d.file("late.docx", "l"), d.file("fresh.docx", "f"));
+    r.svc.request(1, 1, 2, &fresh, &r.tx);
+    assert!(matches!(r.rx.recv_timeout(BOUND), Ok(OpMsg::Meta { line }) if line == converting_line(1)));
+    let (reg, line) = r.end();
+    assert!(reg == 1 && line.contains(r#""state":"ready""#), "the newer job finished: {reg} {line}");
+    while r.svc.locked().running.is_some() {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    r.svc.request(2, 2, 1, &late, &r.tx);
+    assert!(matches!(r.rx.recv_timeout(BOUND), Ok(OpMsg::Meta { line }) if line == converting_line(2)));
+    let (reg, line) = r.end();
+    assert!(reg == 2 && line.contains(r#""state":"failed""#) && line.contains("replaced"), "the late older request is answered replaced: {reg} {line}");
+    assert_eq!(r.jobs(), 1, "the late older request started no conversion");
 }
 
 #[test]
