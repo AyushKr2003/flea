@@ -132,21 +132,32 @@ Item {
             : hover.hovered ? Theme.washHover : 0
         readonly property color washInk: control.primary ? Theme.color.accent : Theme.color.foreground
 
-        Rectangle {
-            anchors.fill: parent
-            color: Qt.alpha(control.washInk, control.wash)
-            border.width: Theme.spacing.hairline
-            border.color: control.frame
-        }
+        // A framed control in a ruled strip keeps the control inset from the strip top and its rule; the host gives the strip top in this item's coordinates so the frame lands on whole pixels.
+        property real stripTop: 0
+        readonly property real frameHeight: Math.min(control.height, Theme.chromeControlHeight)
+        readonly property real frameY: control.stripTop + Math.round((Theme.chromeHeight - Theme.spacing.hairline - control.frameHeight) / 2)
 
-        Text {
-            id: caption
-            anchors.centerIn: parent
-            text: control.label
-            color: control.ink
-            font.family: Theme.font.family
-            font.pixelSize: Theme.font.caption
-            textFormat: Text.PlainText
+        Item {
+            y: control.frameY
+            width: parent.width
+            height: control.frameHeight
+
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.alpha(control.washInk, control.wash)
+                border.width: Theme.spacing.hairline
+                border.color: control.frame
+            }
+
+            Text {
+                id: caption
+                anchors.centerIn: parent
+                text: control.label
+                color: control.ink
+                font.family: Theme.font.family
+                font.pixelSize: Theme.font.caption
+                textFormat: Text.PlainText
+            }
         }
 
         HoverHandler {
@@ -378,6 +389,7 @@ Item {
                     Framed {
                         required property var modelData
                         label: modelData.label
+                        stripTop: -types.y
                         primary: modelData.index === root.picker.filterIndex
                         available: !root.picker.backendUnavailable && !root.picker.submitting
                         onActiveFocusChanged: if (activeFocus) types.reveal(this)

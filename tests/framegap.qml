@@ -20,6 +20,12 @@ ShellRoot {
     readonly property int sideHostWidth: 600
     // One copy in flight, as the transfer card and the Flash step read it.
     readonly property var inFlight: ({ id: 1, moving: false, n: 2, index: 1, name: "a.txt", running: true, done: 0, bytes: 1024, total: 4096, moved: 0, writing: false, drive: "" })
+    // The picker's path strip with two chips, one chosen: every stop the Display section offers.
+    readonly property var chipStops: [9, 10, 11, 12, 14, 16, 20]
+    // Cancel, Accept, Back and Up, which PickerChrome.focusItems() lists before its chips.
+    readonly property int pickerPlainItems: 4
+    property int chipChecks: 0
+    property int chipFailed: 0
 
     property var plan: []
     property int at: 0
@@ -37,9 +43,11 @@ ShellRoot {
     function finish() {
         var hosts = Object.keys(root.seen).sort()
         root.log("HOSTS " + hosts.length + " " + hosts.join(","))
-        if (root.failed === 0 && root.controlMiss === 0 && root.focusMiss === 0)
+        if (root.chipChecks === 0) root.log("FAIL no picker chip row was read")
+        if (root.failed === 0 && root.controlMiss === 0 && root.focusMiss === 0 && root.chipChecks > 0 && root.chipFailed === 0)
             root.log("PASS " + root.checks + " checks over " + hosts.length + " hosts plus " + root.controls + " controls, every frame keeps the inset and every control is flagged")
         root.log("DONE checks=" + root.checks + " failed=" + root.failed + " controls=" + root.controls + " controlMiss=" + root.controlMiss + " focusMiss=" + root.focusMiss)
+        root.log("CHIPS checks=" + root.chipChecks + " failed=" + root.chipFailed)
         root.at = root.plan.length + 1
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
@@ -81,6 +89,49 @@ ShellRoot {
             root.log("FAIL " + line)
         }
     }
+
+    // The chips are the focus items after the plain controls.
+    function pickerChips() { return pickerChrome.focusItems().slice(root.pickerPlainItems) }
+
+    // Each picker chip frame against the path strip top and its rule, one row per side.
+    function chipMeasure(state, stop) {
+        var chips = root.pickerChips()
+        var strip = Probe.find(pickerChrome, "pickerWhere")
+        if (chips.length === 0 || chips.length !== pickerChrome.chips.length || !strip) {
+            root.chipChecks += 1
+            root.chipFailed += 1
+            root.log("FAIL PickerChips " + chips.length + " items for " + pickerChrome.chips.length + " chips, or no strip built at stop " + stop)
+            return
+        }
+        // An offscreen window is never active, so the focus a chip takes shows as focus and not activeFocus; a pass with none would re-measure rest.
+        if (state === "focus" && !chips.some(function (chip) { return chip.focus })) {
+            root.chipChecks += 1
+            root.chipFailed += 1
+            root.log("FAIL PickerChips no chip holds the focus at stop " + stop)
+        }
+        var stripTop = strip.mapToItem(pickerChrome, 0, 0).y
+        var ruleTop = stripTop + strip.height - Flea.Theme.spacing.hairline
+        chips.forEach(function (chip) {
+            var frame = Gap.chipFind(chip, "frame")
+            if (!frame) {
+                root.chipChecks += 1
+                root.chipFailed += 1
+                root.log("FAIL PickerChips no frame under " + chip.label + " at stop " + stop)
+                return
+            }
+            var box = frame.mapToItem(pickerChrome, 0, 0, frame.width, frame.height)
+            Gap.chipRows("PickerChips", chip.label, box, stripTop, ruleTop, Flea.Theme.spacing.hairline, Flea.Theme.chromeControlInset, state, stop, chip.focus).forEach(function (r) {
+                var line = [r.host, r.name, r.state, r.stop, r.side, r.rule, r.edge, r.inset, r.focused].join("\t")
+                root.chipChecks += 1
+                root.log("CHIPROW " + line)
+                if (!r.under) return
+                root.chipFailed += 1
+                root.log("FAIL " + line)
+            })
+        })
+    }
+    function chipRest() { parking.forceActiveFocus() }
+    function chipFocus(i) { root.pickerChips()[i].forceActiveFocus() }
 
     // A focused DialogButton frames itself in the rule's colour, read off Theme and never off focusFrame.
     function drawsFocus(button) {
@@ -178,6 +229,14 @@ ShellRoot {
                 })
             })
         })
+        root.chipStops.forEach(function (stop) {
+            plan.push(function () { root.stopState(stop) })
+            plan.push(function () { root.chipRest(); root.chipMeasure("rest", stop) })
+            plan.push(function () { root.chipFocus(0) })
+            plan.push(function () { root.chipMeasure("focus", stop) })
+            plan.push(function () { root.chipFocus(1) })
+            plan.push(function () { root.chipMeasure("focus", stop) })
+        })
         root.plan = plan
     }
 
@@ -226,6 +285,7 @@ ShellRoot {
             Flea.FlashStepRow { id: flashRow; width: parent.width; transfer: root.inFlight; words: ({ erase: "Erase Backup", action: "Flash" }); live: true; cursor: true }
             Flea.MediaStrip { id: framedStrip; width: parent.width; duration: 60000 }
             Flea.MediaStrip { id: bareStrip; width: parent.width; duration: 60000; framed: false }
+            Flea.PickerChrome { id: pickerChrome; width: parent.width; picker: mockPicker }
         }
 
         // The holders the dialogs read: a source, a list area, a backend that answers nothing, and the sheet's pane.
@@ -254,6 +314,27 @@ ShellRoot {
             function checkShebang() {}
             function message(text, sticky) {}
             function contextMenu() { return { listingContext: function () { return sheetHolder.context } } }
+        }
+        // The picker's own face as PickerChrome reads it, two chips with one chosen.
+        QtObject {
+            id: mockPicker
+            property var req: ({ mode: "open", title: "Choose file", app: "", accept: "", multiple: false, filters: [{ label: "Images" }] })
+            property color edge: "#444444"
+            property var marks: []
+            property bool canAccept: true
+            property var history: ["/a"]
+            property bool backendUnavailable: false
+            property bool submitting: false
+            property bool recent: false
+            property bool answered: false
+            property string path: "/home/x/y"
+            property string home: "/home/x"
+            property bool showHidden: false
+            property bool listingFailed: false
+            property int filterIndex: 0
+            property string viewMode: "list"
+            function stepFocus(from, back) {}
+            function control(name, item, available) { return { name: name } }
         }
         Item { id: parking; width: 10; height: 10; focus: true }
     }

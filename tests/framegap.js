@@ -129,6 +129,28 @@ function scrolls(item, host) {
     return false
 }
 
+// The bordered frame and the caption under a picker chip, whatever box the frame draws in.
+function chipFind(chip, key) {
+    var stack = [chip]
+    while (stack.length > 0) {
+        var o = stack.pop()
+        if (key === "frame" && o.border !== undefined && o.border.width > 0) return o
+        if (key === "caption" && o.text !== undefined && o.font !== undefined) return o
+        var kids = o.children !== undefined ? o.children : []
+        for (var i = 0; i < kids.length; i++) stack.push(kids[i])
+    }
+    return null
+}
+
+// One row per side for a picker chip frame against its strip top and rule, same judgement as rows().
+function chipRows(host, name, box, stripTop, ruleTop, hairline, inset, state, stop, focused) {
+    var top = round(box.y - stripTop)
+    var bottom = round(ruleTop - box.y - box.height)
+    var bottomEdge = round(bottom + hairline)
+    return [{ host: host, name: name, state: state, stop: stop, side: "top", rule: top, edge: top, inset: inset, under: top < inset, focused: focused },
+            { host: host, name: name, state: state, stop: stop, side: "bottom", rule: bottom, edge: bottomEdge, inset: inset, under: bottom < inset || bottomEdge < inset, focused: focused }]
+}
+
 // One row per frame and side: the nearest line and the host's edge, each against the inset.
 function rows(hostName, host, hairline, inset, state, stop) {
     var parts = split(collect(host, hairline), host)
