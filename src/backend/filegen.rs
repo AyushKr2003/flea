@@ -1,6 +1,4 @@
-// A file's inode generation, read as the file handle name_to_handle_at gives any user. A recreated file that takes a
-// freed inode gets a new generation where the filesystem keeps one, and birth time cannot say so when both files are
-// born in one timestamp tick. A filesystem or sandbox without handles reads None, which never refuses.
+// A file's inode generation from name_to_handle_at, which tells a file reborn on a freed inode within one birth tick from the original; no handle reads None.
 use super::undocodec::{get, n, parse_u64};
 use crate::jsondoc::Json;
 use std::ffi::CStr;
@@ -64,6 +62,7 @@ pub(crate) fn with_generation(mut pairs: Vec<(&str, Json)>, generation: Option<u
     pairs
 }
 
+// Sample input: {"gen":18446744073709551615} decodes to Some(Some(u64::MAX)); a record with no "gen" key decodes to Some(None).
 pub(crate) fn decode_generation(pairs: &[(String, Json)]) -> Option<Option<u64>> {
     match get(pairs, "gen") {
         None => Some(None),
@@ -75,6 +74,9 @@ pub(crate) fn decode_generation(pairs: &[(String, Json)]) -> Option<Option<u64>>
 mod tests {
     use super::*;
     use crate::backend::testdir::TestDir;
+
+    // Creates tried before a filesystem that never hands back a freed inode is skipped, as in tagsundo_tests.
+    const REUSE_TRIES: usize = 8;
 
     #[test]
     fn a_file_reads_the_same_generation_every_time_and_a_missing_one_reads_none() {
@@ -93,7 +95,7 @@ mod tests {
         assert!(!differs(None, Some(2)) && !differs(Some(1), None) && !differs(None, None), "an unknown side never refuses");
     }
 
-    // The old file stays open, so the next create cannot take its inode: two live files never share a generation either.
+    // Two files that both exist cannot share an inode, so they never share a generation either.
     #[test]
     fn two_live_files_read_different_generations() {
         let d = TestDir::new("filegen-two");
@@ -136,7 +138,7 @@ mod tests {
         let before = a.symlink_metadata().unwrap();
         let (dev, ino, birth) = (before.dev(), before.ino(), (born_of(&before), of_path(&a)));
         // ext4 hands the freed inode to the next create; a few tries cover an allocator that skips it once.
-        for _ in 0..8 {
+        for _ in 0..REUSE_TRIES {
             std::fs::remove_file(&a).unwrap();
             a = d.file("a.txt", "other");
             if a.symlink_metadata().unwrap().ino() == ino {

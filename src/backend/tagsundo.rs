@@ -7,7 +7,7 @@ use crate::jsondoc::Json;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
-// Sample input: {"k":"tg","path":"/a","before":[82,101,100],"after":null,"dev":2049,"ino":77}.
+// Sample input: {"k":"tg","path":"/a","before":[82,101,100],"after":null,"dev":2049,"ino":77,"born":[1791833358,458890562],"gen":12345}.
 pub(crate) fn encode(path: &Path, before: &Option<Vec<u8>>, after: &Option<Vec<u8>>, dev: u64, ino: u64, (born, generation): Birth) -> Json {
     obj(super::filegen::with_generation(vec![
         ("k", s("tg")), ("path", s(&path.to_string_lossy())),
