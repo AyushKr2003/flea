@@ -1,5 +1,6 @@
 .import "../../ui/js/Devices.js" as Devices
 .import "../../ui/js/Mounts.js" as Mounts
+.import "../../ui/js/Cloud.js" as Cloud
 .import "../../ui/js/RailMenu.js" as RailMenu
 .import "../../ui/js/Eject.js" as Eject
 .import "../../ui/js/Icons.js" as Icons
@@ -321,4 +322,6 @@ function run(check) {
           Mounts.sameEntries([kcifs], [Object.assign({}, kcifs, { fstype: "nfs" })]), false)
     check("the same fstype compares equal",
           Mounts.sameEntries([kcifs], [Object.assign({}, kcifs)]), true)
+    // An idle systemd automount is an autofs line and no row; on a triggered one the stacked nfs4 line wins the mountpoint.
+    check("idle automount no row, triggered one nfs4", Cloud.parseNetworkMounts("39 1 0:62 / /mnt/idle rw - autofs systemd-1 rw\n37 1 0:60 / /mnt/live rw - autofs systemd-1 rw\n38 37 0:61 / /mnt/live rw - nfs4 nas:/x rw\n").map(function (r) { return r.path + ":" + r.fstype }).join(","), "/mnt/live:nfs4")
 }
