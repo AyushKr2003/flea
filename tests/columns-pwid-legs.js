@@ -1,5 +1,4 @@
 // The pointer legs of tests/columns-pwid.qml that never store a lasting width: clicks and jitter on the preview column edge, a grab lost mid-drag, the edge hidden mid-drag, and a double click that jitters. Each leg runs one tick after the last.
-// legs(shell, driver, area) answers the list of leg functions for the harness's script, which starts them from the default third with the double click's 0 as the last save.
 function legs(shell, driver, area) {
     return [
         // A click or a jitter on the edge is not a drag: it writes nothing and keeps the default third.
@@ -71,10 +70,10 @@ function legs(shell, driver, area) {
             driver.mouseRelease(area, 500, 300, Qt.LeftButton, Qt.NoModifier, 0)
             shell.pointer(shell.edgeX(), 300)
         },
-        // A double click restores the default third, then its second press can jitter before the release: Qt raises doubleClicked and then pressed, so the restore is the zone's own signal here and the press, the 1 px move and the release are real.
+        // A double click restores the default third, then its second press can jitter before the release: Qt Quick delivers that press to the zone (pressed) and then doubleClicked, so the press is real, the restore is the zone's own signal while the button is held, and the 1 px move and the release follow.
         function () {
-            shell.edgeItem().restored()
             driver.mousePress(area, 800, 300, Qt.LeftButton, Qt.NoModifier, 0)
+            shell.edgeItem().restored()
             shell.dragTo(801, 300)
             driver.mouseRelease(area, 801, 300, Qt.LeftButton, Qt.NoModifier, 0)
         },
