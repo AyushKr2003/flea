@@ -1,6 +1,7 @@
 //@ pragma ShellId flea-gridjump-test
 
 import QtQuick
+import QtTest
 import Quickshell
 import "flea" as Flea
 import "flea/js/Filter.js" as Filter
@@ -43,8 +44,7 @@ ShellRoot {
             property int asks: 0
             property int replies: 0
             property real heldListing: 1
-            // "sync" answers inside the call, a reply that beats the layout; "late" answers on a timer, after it.
-            // "fail" answers an error line and no rows, "lost" never answers, "short" answers rows that stop before the cursor's row.
+            // Window ask outcome: "sync" in the call, "late" on a timer, "fail" an error line, "lost" never, "short" rows that stop before the cursor's row.
             property string mode: "late"
             signal failed(string where, string input, string message, int mode)
             function thumb(rows, cacheOnly) {}
@@ -187,6 +187,7 @@ ShellRoot {
         implicitWidth: root.areaWidth
         implicitHeight: root.areaHeight
         color: "black"
+        TestEvent { id: driver }
         Flea.GridArea { id: grid; width: root.areaWidth; height: root.areaHeight; pane: root.gridPane; menu: root.stubMenu }
     }
 
@@ -371,7 +372,7 @@ ShellRoot {
             root.check(name + ": the grid has a wheel handler to hear", wheel !== null && wheel.wheeled !== undefined, "")
             if (parked && wheel !== null && wheel.wheeled !== undefined) {
                 grid.contentY = 0
-                wheel.wheeled()
+                driver.mouseWheel(grid, grid.width / 2, grid.height / 2, Qt.NoButton, Qt.NoModifier, 0, -120, 1)
                 root.check(name + ": a wheel ends a wait nothing answers", !grid.landingWait, "landingWait=" + grid.landingWait)
             }
             root.gridBackend.mode = "sync"
