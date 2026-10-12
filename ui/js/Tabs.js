@@ -18,7 +18,7 @@ var MAX = 9
 function restingPath(pane) {
     if (pane.searchMode === "results" && (pane.searchFrom || "").length > 0)
         return pane.searchFrom
-    return RecentMode.restingPath(pane) || pane.path
+    return RecentMode.restingPath(pane) || Nav.place(pane)
 }
 
 var nextTabIdentity = 0
@@ -55,8 +55,9 @@ function snapshot(pane, path, identity, dropped) {
     }
 }
 
-function pack(items, index) {
-    return {
+// keep is the tabs object whose landing the current tab still owes, for a pack that leaves the current tab's listing out.
+function pack(items, index, keep) {
+    var tabs = {
         items: items,
         index: index,
         pendingCursor: -1,
@@ -65,6 +66,14 @@ function pack(items, index) {
         pendingSortBy: "",
         pendingSortDesc: false
     }
+    if (keep) {
+        tabs.pendingCursor = keep.pendingCursor
+        tabs.pendingCursorName = keep.pendingCursorName
+        tabs.pendingLocatePath = keep.pendingLocatePath
+        tabs.pendingSortBy = keep.pendingSortBy
+        tabs.pendingSortDesc = keep.pendingSortDesc
+    }
+    return tabs
 }
 
 function label(path, home) {
@@ -126,13 +135,6 @@ function closePreview(pane) {
         pane.preview.close()
 }
 
-function busy(pane) {
-    if (Nav.loading(pane)) {
-        sayPlain(pane, "A directory is already loading.")
-        return true
-    }
-    return false
-}
 // The mark names a standing notice's serial, never its sentence; a count change withdraws it.
 function sayCount(pane, text) {
     pane.message(text, false)
@@ -199,12 +201,14 @@ function apply(pane, item, dropped, cursor) {
         pane.clearSelection()
         return
     }
+    // The tab's own dotfile answer is restored above, so the listing keeps it rather than taking the
+    // standing preference. A tab in another view clears at once: these rows were never listed in that view.
+    pane.openWithoutHistory(item.path, { keepHidden: true, clearAtOnce: pane.viewMode !== shown, supersede: true })
+    // After the request: letting a listing go clears what an earlier switch owed, and this one is owed to the listing just asked for.
+    pane.tabs.pendingCursorName = cursor === undefined ? null : cursor
     pane.tabs.pendingCursor = cursor === undefined ? item.cursorIndex : 0
     pane.tabs.pendingSortBy = item.sortBy
     pane.tabs.pendingSortDesc = item.sortDesc
-    // The tab's own dotfile answer is restored above, so the listing keeps it rather than taking the
-    // standing preference. A tab in another view clears at once: these rows were never listed in that view.
-    pane.openWithoutHistory(item.path, { keepHidden: true, clearAtOnce: pane.viewMode !== shown })
 }
 
 function applyPending(pane) {
@@ -282,8 +286,6 @@ function currentItems(pane, here) {
 // A caller may name where the new tab lands, which is what the Places row menu's own row does;
 // without one it is Settings, View, Opening that decides, and that still defaults to this folder.
 function openNew(pane, where) {
-    if (busy(pane))
-        return
     // Before the preview and the search go: a refused tenth tab must cost the user nothing.
     if (count(pane) >= MAX) {
         sayCount(pane, "Nine tabs is the most.")
@@ -301,9 +303,9 @@ function openNew(pane, where) {
     items.push(snapshot(pane, target, undefined, dropped))
     pane.tabs = pack(items, items.length - 1)
     dropCount(pane)
-    // dropOverlay clears the search while its rows still stand, and a listing still out belongs to the tab being left, so both list the target again.
+    // dropOverlay clears the search while its rows still stand, and a listing still out belongs to the tab being left, so both list the target again, the one out let go.
     if (pane.path !== target || dropped || pane.listInFlight)
-        pane.openWithoutHistory(target)
+        pane.openWithoutHistory(target, { supersede: true })
 }
 
 // Ctrl+Return on the cursor row, the keyboard twin of Tap.tappedTab's middle
@@ -319,8 +321,6 @@ function openCursorTab(pane) {
 }
 
 function selectAt(pane, i) {
-    if (busy(pane))
-        return
     var here = restingPath(pane)
     var items = currentItems(pane, here)
     if (i < 0 || i >= items.length) {
@@ -338,8 +338,6 @@ function selectAt(pane, i) {
 }
 
 function closeAt(pane, i) {
-    if (busy(pane))
-        return
     var items = currentItems(pane)
     if (items.length <= 1) {
         sayCount(pane, "Can't close the last tab.")
@@ -362,20 +360,19 @@ function closeAt(pane, i) {
         pane.tabs = pack(items, next)
         apply(pane, items[next], dropped)
     } else {
-        pane.tabs = pack(items, next)
+        pane.tabs = pack(items, next, pane.tabs)
     }
     dropCount(pane)
 }
 
+// A move lists nothing, so the listing out lands for the tab it belongs to and that tab keeps what the landing owes.
 function move(pane, from, to) {
-    if (busy(pane))
-        return
     var items = currentItems(pane)
     if (items.length < 2)
         return
     var index = currentIndex(pane)
     items[index] = snapshot(pane, restingPath(pane), items[index].tabIdentity)
-    pane.tabs = pack(items, TabMove.reorder(items, from, to, index))
+    pane.tabs = pack(items, TabMove.reorder(items, from, to, index), pane.tabs)
 }
 
 // Tabs040 callout 1: { and } move the current tab with no re-list.
@@ -599,9 +596,9 @@ function catcherOutcome(rect, strip, x, y, tabWidth, tabCount) {
     return { outcome: "cancel", at: -1 }
 }
 
-// A listing in flight or a full strip refuses incoming tabs.
+// A full strip refuses incoming tabs; a listing out is let go by the tab received.
 function canReceive(pane) {
-    if (!pane || Nav.loading(pane))
+    if (!pane)
         return false
     return count(pane) < MAX
 }
@@ -612,8 +609,6 @@ function receiveTab(pane, payload, at) {
         return false
     var info = parseTabMime(payload)
     if (!info || isOwnTab(info))
-        return false
-    if (busy(pane))
         return false
     if (count(pane) >= MAX) {
         sayCount(pane, "Nine tabs is the most.")
@@ -676,8 +671,6 @@ function closeTabAfterMove(pane, index) {
         return "kept"
     var total = count(pane)
     if (index < 0 || index >= total)
-        return "kept"
-    if (busy(pane))
         return "kept"
     if (total <= 1)
         return "kept"

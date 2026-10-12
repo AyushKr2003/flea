@@ -491,7 +491,7 @@ reset to its top even between two folders holding the same number of rows.
 **The hold ends four ways.** The swap above. A failed or refused listing: `ui/PaneWire.qml onFailed`
 calls `Swap.failListing`, which runs `drop()` before it clears `listInFlight`, so `Nav.forget` runs and
 the failure then draws the error or Locked state it always drew; a `stale` refusal ended only its own
-request and ends nothing. An empty folder: its `rows` line rides right behind its `listed`
+request and ends nothing, and so does a `scan` failure naming a folder that is no longer the one asked for. An empty folder: its `rows` line rides right behind its `listed`
 line (docs/protocol.md invariant 1), so it swaps into the empty state at once. And a listing still out
 after `Swap.CAP_MS`, 66 ms, falls back: the cap runs `Nav.forget`, and `ui/LoadingState.qml` shows
 its mark at once through `heldOff`, because the hold already spent that mark's own hold-off, which
@@ -520,10 +520,9 @@ file. So the rule covers the whole of `listInFlight`, the hold, the fallen-back 
 slow network folder alike, in two layers. `ui/PaneStates.qml` lays a `MouseArea` over the header, the
 filter strip and the listing slot while a listing is out, which takes every press and wheel notch and
 says "A directory is already loading." on a press, and `ui/js/Focus.js handleKey` swallows every
-listing key but `Swap.ANSWERED_WHILE_LISTING` and says the same sentence: the navigations, which refuse
-themselves with it until the pane shows the listing waiting and then let that listing go (`ui/js/Nav.js` `loading`), escape, which touches no row, reload, which refuses itself the same way and past the wait retries the folder waited on (`ui/js/Reload.js` `begin`), and the view, rail, new-window and preview-column
-keys, which change the window rather than a file. The rail, the crumbs and the tab strip already
-refused a listing while one was out, a row drag already could not start, and the list and the grid
+listing key but `Swap.ANSWERED_WHILE_LISTING` and says the same sentence: the navigations, which take the place of the listing out instead (the next paragraph), escape, which touches no row, reload, which refuses itself the same way and past the wait retries the folder waited on (`ui/js/Reload.js` `begin`), and the view, rail, new-window and preview-column
+keys, which change the window rather than a file. The rail, the crumbs and the tab strip are navigations
+too, a row drag already could not start, and the list and the grid
 now ask for no `window` while one is out, the rule
 the columns view's active column already kept: a coalesce left running by a scroll just before the
 request would otherwise fetch the new listing's rows at the old scroll offset, and the swapped view,
@@ -556,10 +555,22 @@ older client, the picker and `tests/protocol.sh`'s own lines; `thumb`, `dirsize`
 only read and are not refused. This also closes the re-sort's window: between `s` and the reordered
 rows the pane still draws the old order, and a key that reached the backend there is now refused.
 
+**The newest navigation wins.** While a listing is out, the folder it asked for (`pane.listingPath`) is the
+pane's current place for every navigation (`ui/js/Nav.js place`): a second open, Back, Forward, Up, a tab
+switch, a Recent run or close, a rail row, a crumb, the folder jump and the path bar are each taken as the new
+request, pass `supersede` to `openWithoutHistory`, and move `listingPath` (a new tab and a tab received from another window do too; a tab move lists nothing and leaves the listing to land; tearing a tab out still refuses); two quick Backs step back twice,
+`open` pushes no place that never landed while a listing is out for another folder; when that listing is a Back or Forward whose entry put the drawn place on the stack `open` then clears (`pushedOnto` is `forwardHistory`), `open` pushes `BackReturn.drawn(pane)` onto history (`ui/js/Nav.js open`), and otherwise the drawn place was already pushed when that listing was asked for. Up climbs from the place asked for. The listing let go answers into nothing: its `listed`
+line names another folder and its rows follow it (`Swap.onListed`, `Swap.onRows`). A re-list of the folder
+drawn (sort, reload, the Esc relist) carries no `supersede` and keeps the refusal. On a stalled share the
+backend does not make the newest list wait: a `list` that arrives while the gate holds a plain remote list scan
+(not a search session's) replays the requests that waited, lets the scan go, and starts its own scan on a fresh
+thread (`Gate::let_go`, `src/backend/run.rs`); the let-go scan's late answer is discarded and its watch is
+released through `Event::AbandonWatch`, which the loop holds back while a newer scan is out and judges against the landed watch (`Gate::park_late`, inotify gives the same descriptor for the same folder). A tab switch's cursor, order and located row ride its landing (`pane.tabs.pending*`); a navigation that lets that listing go clears them (`BackReturn.dropOwed`).
+
 **What the older guarantees rest on now.** The path is still written only from the answer, now in
 `PaneSwap.applyListed`, so a refused hop never moves the breadcrumb. `listInFlight` is still set at the
 request, so `menuSelectionIdentity` changes then and a menu raised over the old rows refuses its next
-row, and the second-open guard still runs first, before any hold. `Nav.forget` still clears the rename,
+row, and the guard for a re-list of the folder drawn still runs first, before any hold. `Nav.forget` still clears the rename,
 the filter, the thumbnail and dirsize maps and the selection before the new rows are set; a filter line
 that has the caret when a hold starts is committed there, so a key typed over the held rows meets the
 key gate rather than a query the swap would then forget. `thumbed` and `dirsized` lines are still
@@ -9011,6 +9022,8 @@ The release-line join of the button frame line `075bb903` moves no ceiling past 
 The release-line join of the picker answer strip, the Flash file-menu identity and the bench Version column moves no ceiling past the side that set it, and `tests/startup-units.txt` keeps its 170 units while its `bytes` line moves from 1588235 to 1588400, the sum the probe's tool takes over them with the answer buttons' press area in `ui/DialogButton.qml` and the selection identity call in `ui/PaneMenuActions.qml`.
 
 The release-line join of the approved fix, bench, search, picker and Flash strip lines re-derives each ceiling both sides moved with `wc -l` on the merged tree: `src/backend/copyfile_tests.rs` 694, `ui/Pane.qml` 1180, `ui/PickerChrome.qml` 426, `ui/PickerWindow.qml` 797, `tests/button-members.qml` 488 and `tests/js/picker.js` 343, and records `tests/chromering.qml` at 413 for the Flash strip's Back checks beside the seven picker strip stops. `tests/startup-units.txt` keeps its 170 units, `ui/PathEntry.qml` leaving for the first edit and `ui/PrebuildDriver.qml` joining, while its `bytes` line moves from 1588400 to 1596965, the sum the probe's tool takes over them.
+
+The newest-navigation line moves the `bytes` line of `tests/startup-units.txt` from 1596965 to 1598938, the sum the probe's tool takes over the same 170 units after `ui/Pane.qml` and `ui/PaneWire.qml` took the `supersede` hop, the wait restart and the failed-scan guard; no unit joined or left. Ceilings, each re-derived with `wc -l`: `src/backend/run_gate_tests.rs` 399 and `ui/js/Nav.js` 324 stay under theirs, and the let-go scan's late-descriptor test lives in `src/backend/run_gate_alias_tests.rs` (85 lines) so `run_gate_tests.rs` stays under the 400 cap. The line moves again from 1598938 to 1599464 (+526, no unit added) for the later lines of this unit in `ui/js/Nav.js`, `ui/js/BackReturn.js`, `ui/js/Tabs.js`, `ui/js/RecentMode.js` and `ui/js/Swap.js` (the drawn-place return, the owed-return drop and the tab and Recent routes through `supersede`), the sum `tests/startup-objects.sh` takes over the same 170 units.
 
 The Network Tab ring moves three ceilings, each re-derived with `wc -l`: `ui/NetworkDialog.qml` 447 to 457 for the ids, `tabHandle` and `onTabbed` lines that put Cancel, the primary and Install Dropbox in the form's walk after the TLS box, with Escape moved from the form to the card's content so a focused button closes the dialog too, and `ui/NetworkForm.qml` 406 to 413 for the `trailing` prop, the joined ring, the pass-over step and the button labels in `focusName`, and `tests/button-members.qml` 445 to 485 for the trailing-walk checks that Tab from TLS reaches each button and wraps to the first chip, Backtab returns, an unavailable button is passed over and `focusName` names the focused button.
 

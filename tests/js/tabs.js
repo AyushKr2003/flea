@@ -175,12 +175,12 @@ function run(check) {
     Tabs.act("tabNext", cycling)
     check("next steps forward before wrapping", Tabs.currentIndex(cycling), 1)
     cycling.listInFlight = true
-    var heldTabs = cycling.tabs
     Tabs.act("tabPrevious", cycling)
+    check("previous while a listing is loading switches tab without refusing", Tabs.currentIndex(cycling) + "|" + cycling.said.join("|"), "0|")
+    cycling.superseded = false
     Tabs.act("tabNext", cycling)
-    check("both cycle directions retain tab ownership while a listing is loading", cycling.tabs === heldTabs, true)
-    check("both loading refusals explain why the key did not switch",
-          cycling.said.join("|"), "A directory is already loading.|A directory is already loading.")
+    check("next while a listing is loading switches tab without refusing", Tabs.currentIndex(cycling) + "|" + cycling.said.join("|"), "1|")
+    check("a tab switch asks for its folder as a navigation, so a listing out gives way", cycling.superseded, true)
 
     var single = Fixture.pane("/tmp/only")
     single.preview.active = true
@@ -219,8 +219,8 @@ function run(check) {
     var loading = Fixture.pane()
     loading.listInFlight = true
     Tabs.act("tabNew", loading)
-    check("t while a listing is in flight uses the same sentence navigation does",
-          loading.said.join(""), "A directory is already loading.")
+    check("t while a listing is in flight opens the tab, says nothing and lets that listing go",
+          Tabs.count(loading) + "|" + loading.said.join("") + "|" + loading.listed.join(",") + "|" + loading.superseded, "2||/home/gm/Work|true")
 
     var previewing = Fixture.pane()
     previewing.preview.active = true
@@ -387,10 +387,8 @@ function run(check) {
     check("this window's own drag never receives", Tabs.count(own), 1)
     var busyReceiver = Fixture.pane("/tmp/r")
     busyReceiver.listInFlight = true
-    check("a loading window refuses the drop", Tabs.receiveTab(busyReceiver, foreign, 0), false)
-    check("with navigation's own sentence",
-          busyReceiver.said[busyReceiver.said.length - 1], "A directory is already loading.")
-    check("and the refusal names no count notice", busyReceiver.tabCountNotice, -1)
+    check("a loading window takes the drop and says nothing", Tabs.receiveTab(busyReceiver, foreign, 0) + "|" + busyReceiver.said.join(""), "true|")
+    check("and the tab's listing takes the place of the one out", busyReceiver.listed[busyReceiver.listed.length - 1] + "|" + busyReceiver.superseded, "/tmp/folder|true")
     var fullReceiver = Fixture.pane("/tmp/r")
     var nineFull = []
     for (var f = 0; f < 9; f++) nineFull.push({ path: "/tmp/" + f })
@@ -420,10 +418,7 @@ function run(check) {
     Tabs.setOwnPid("")
     var kept = BarFixture.pair("/tmp/one")
     kept.listInFlight = true
-    check("a loading source keeps its tab", Tabs.closeTabAfterMove(kept, 0), "kept")
-    check("loading move keeps both tabs", Tabs.count(kept), 2)
-    Tabs.closeAt(kept, 0)
-    check("loading direct close keeps both tabs", Tabs.count(kept), 2)
+    check("a loading source closes the tab that moved", Tabs.closeTabAfterMove(kept, 0) + "|" + Tabs.count(kept), "closed|1")
     check("no such tab keeps everything", Tabs.closeTabAfterMove(pair, 5), "kept")
     check("no such tab keeps both tabs", Tabs.count(pair), 2)
 
@@ -640,7 +635,7 @@ function run(check) {
     loadingPane.listInFlight = true
     check("a loading listing refuses", Tabs.tearRefusal(loadingPane), "A directory is already loading.")
     check("a strip with room receives", Tabs.canReceive(Fixture.pane()), true)
-    check("a loading strip does not", Tabs.canReceive(loadingPane), false)
+    check("a loading strip receives too", Tabs.canReceive(loadingPane), true)
     check("a full strip does not", Tabs.canReceive(fullReceiver), false)
 
     // A foreign drag offers formats at enter with no payload until drop.
@@ -767,11 +762,8 @@ function run(check) {
     Tabs.act("tabClose", loadPane)
     loadPane.listInFlight = true
     Tabs.act("tabNew", loadPane)
-    check("a loading refusal names no count notice", loadPane.tabCountNotice, -1)
-    loadPane.listInFlight = false
-    Tabs.act("tabNew", loadPane)
-    check("a loading refusal replaces the count verdict, so the later tab withdraws nothing",
-          loadPane.statusBar.notice, "A directory is already loading.")
+    check("a new tab with a listing out withdraws the count verdict and says nothing",
+          loadPane.statusBar.notice + "|" + loadPane.tabCountNotice + "|" + Tabs.count(loadPane), "|-1|2")
     // A withdrawal names its own notice, so an error and a later notice both stand through it.
     var errPane = Fixture.pane("/tmp/err")
     Tabs.act("tabClose", errPane)

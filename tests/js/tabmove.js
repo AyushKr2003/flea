@@ -76,15 +76,20 @@ function run(check) {
     check("a step left clamps at the near end", TabMove.step(0, -1, 3), 0)
     check("a step right clamps at the far end", TabMove.step(2, 1, 3), 2)
 
-    // No row acts while a listing is out, so a move then refuses like selectAt does.
+    // A move lists nothing, so a listing out is left to land and the tab it belongs to keeps what its landing owes.
     var busyMove = three("/tmp/b", 1)
     busyMove.listInFlight = true
     busyMove.tabs.pendingSortBy = "size"
     busyMove.tabs.pendingCursor = 7
     Tabs.move(busyMove, 2, 0)
-    check("a move while a listing is out is refused",
-        order(busyMove) + "|" + busyMove.said[busyMove.said.length - 1], "/tmp/a,/tmp/b,/tmp/c|A directory is already loading.")
+    check("a move while a listing is out reorders and says nothing",
+        order(busyMove) + "|" + busyMove.said.join(""), "/tmp/c,/tmp/a,/tmp/b|")
     check("and it keeps the pending restore", busyMove.tabs.pendingSortBy + "|" + busyMove.tabs.pendingCursor, "size|7")
+    var closing = three("/tmp/b", 1)
+    closing.listInFlight = true
+    closing.tabs.pendingCursor = 6
+    Tabs.closeAt(closing, 0)
+    check("closing another tab leaves what the current tab's landing owes", closing.tabs.pendingCursor + "|" + Tabs.currentIndex(closing), "6|0")
     // The rail's favourite drag answers its landing and its line from the same helper.
     var down = TabMove.railReorder(30, 1, 30, 5)
     check("a rail drag down one lands one lower", down.to, 2)

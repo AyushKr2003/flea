@@ -18,7 +18,7 @@ function drawing(viewOf) {
     pane.rows = [{ n: "one" }, { n: "two" }]
     pane.searchMode = ""
     pane.restoreView = function (path) { pane.sent.push("view " + path); if (viewOf[path]) pane.viewMode = viewOf[path] }
-    pane.swap = { hold: function (ask) { phase = Swap.begin(phase, pane.listingState, pane.searchMode, ask, 0); return phase.holding } }
+    pane.swap = { stopWaiting: function () {}, hold: function (ask) { phase = Swap.begin(phase, pane.listingState, pane.searchMode, ask, 0); return phase.holding } }
     var screen = { pane: pane, frames: [] }
     // One drawn frame: the rows on show and the view they are drawn in. A wrong-view frame draws rows in a view they were not listed in.
     screen.frame = function () {
@@ -58,8 +58,8 @@ function hops(check) {
     blocked.pane.listInFlight = true
     Nav.open(blocked.pane, "/b")
     blocked.frame()
-    check("a hop refused for a listing in flight leaves the origin folder's path, view and rows",
-          blocked.pane.path + "|" + blocked.pane.viewMode + "|" + blocked.pane.rows.length + "|" + wrongFrames(blocked), "/a|grid|2|0")
+    check("a hop that takes the place of a listing out into another view draws none of the origin folder's rows in it",
+          blocked.pane.path + "|" + blocked.pane.viewMode + "|" + blocked.pane.rows.length + "|" + wrongFrames(blocked), "/b|list|0|0")
 }
 
 function run(check) {

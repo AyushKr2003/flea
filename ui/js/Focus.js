@@ -150,7 +150,7 @@ function act(action, root, menuId, paths) {
     case "escape":
         if (root.filterTyping || root.filterQuery.length > 0) Filter.close(root)
         else if (root.searchMode.length > 0 && root.focusView === LIST) Search.abort(root)
-        else if (root.recentMode.length > 0 && root.focusView === LIST) { if (root.listInFlight) root.message("A directory is already loading.", false); else RecentMode.close(root) }
+        else if (root.recentMode.length > 0 && root.focusView === LIST) RecentMode.close(root)
         else if (root.statusBar && root.statusBar.escapePressed()) return
         else if (escapeUp(root)) root.openParent()
         else root.escapePressed()
