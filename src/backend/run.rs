@@ -564,7 +564,7 @@ fn handle_line(
                 else { super::opsdispatch::do_menu_rename(out, ops, &path, &to, menu_id) };
             patch_session_paths(st, touched);
         }
-        Request::BulkRename { paths, names } => super::bulkrename::do_bulkrename(out, ops, paths, names),
+        Request::BulkRename { paths, names } => patch_session_paths(st, super::bulkrename::do_bulkrename(out, ops, paths, names)),
         Request::MkDir { path, name } => patch_session_paths(st, do_mkdir(out, ops, &path, &name)),
         Request::NewFile { path, name, id } => patch_session_paths(st, do_newfile(out, ops, &path, &name, id)),
         Request::Duplicate { path, menu_id } => start_duplicate(out, ops, &path, menu_id),
