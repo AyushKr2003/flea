@@ -685,6 +685,10 @@ def names(state):
     return [row["n"] for row in state["rows"]]
 
 
+def ui_json():
+    return json.loads(state_file.read_text())
+
+
 def test_sorting():
     # The fixture's name, size, modified and kind orders all differ, so a marked order over other rows is caught by names.
     ordered = guard(root / "ordered")
@@ -718,6 +722,8 @@ def test_sorting():
     reverse_kind = ["refused", "folder", "charlie.txt", "bravo.txt", "alpha.txt", "photo.png"]
     sorting.until("S reverses an inherited kind order", lambda state: state["sortBy"] == "kind" and state["sortDesc"]
                   and state["state"] == "ready" and names(state) == reverse_kind)
+    # The first sort fills every shipped default into ui.json (src/uistate.rs patched), so the expectation starts from that whole file.
+    first_write = wait("SP11 the first sort lands in ui.json", lambda: ui_json() if ui_json().get("sort") == {"key": "kind", "reverse": True} and "folderSorts" in ui_json() else None)
     sorting.key("s")
     sorting.until("s leaves kind for name", lambda state: state["sortBy"] == "name" and not state["sortDesc"] and names(state) == by_name)
     sorting.key("s")
@@ -781,7 +787,9 @@ def test_sorting():
     sorting.capture("recent")
     sorting.click("Back")
     sorting.until("leaving Recent restores the chosen order", lambda state: state["path"] == str(ordered) and names(state) == by_modified)
-    check("SP11 ui.json is byte for byte what the window saved", state_file.read_text() == saved, state_file.read_text())
+    # a3c7508f6: every sort writes the sort leaf and its folder's entry over the first write's whole file, and nothing else.
+    expected = {**first_write, "sort": {"key": "date", "reverse": False}, "folderSorts": {str(ordered): {"key": "date", "reverse": False}}}
+    check("SP11 ui.json holds the last sort and the folder's remembered order, nothing else", json.loads(state_file.read_text()) == expected, state_file.read_text())
     guard(root / "data/recently-used.xbel").unlink()
     # The two requests below start from name, the order a box with nothing saved opens in.
     guard(state_file).unlink()
