@@ -44,14 +44,15 @@ pub fn text_editor() -> String {
     }
 }
 
-// Sample line: "Default application for 'text/plain': nvim.desktop" names one, "No default applications for 'text/plain'" names none, anything else is claimed.
+// Sample line: "Default application for 'text/plain': nvim.desktop" names nvim.desktop; "No default applications for 'text/plain'", a translated line and an id without ".desktop" name none.
+pub(crate) fn default_id(line: &str) -> &str {
+    line.strip_prefix("Default application for ").and_then(|rest| rest.rsplit_once(':')).map(|(_, id)| id.trim()).filter(|id| id.ends_with(".desktop")).unwrap_or_default()
+}
+
+// Sample output: "Default application for 'text/plain': nvim.desktop\nRegistered applications:\n\tnvim.desktop"; only the first line can name the default.
 pub fn handler_of(output: &str) -> String {
-    let line = output.trim();
-    match line.strip_prefix("Default application for ") {
-        // Only the first line names the default; the registry rows gio lists behind it carry no id of their own.
-        Some(rest) => rest.lines().next().and_then(|first| first.rsplit_once(':')).map(|(_, id)| id.trim().to_string()).unwrap_or_default(),
-        None => String::new(),
-    }
+    let line = output.lines().next().unwrap_or_default().trim();
+    default_id(line).to_string()
 }
 
 // Sample output: "Default application for 'x': a.desktop" runs gio, "No default ..." asks, and a failed lookup is claimed so a refused launch keeps its sentence.
@@ -164,6 +165,13 @@ mod tests {
         assert_eq!(handler_of(""), "");
     }
 
+    // An id gio prints without ".desktop" is no desktop id, so it names no handler.
+    #[test]
+    fn an_id_without_desktop_names_none() {
+        assert_eq!(handler_of("Default application for 'x': foo"), "");
+        assert_eq!(default_id("Default application for 'x': foo"), "");
+    }
+
     #[test]
     fn the_registry_rows_behind_the_default_are_not_part_of_the_id() {
         assert_eq!(
@@ -172,6 +180,7 @@ mod tests {
         assert_eq!(
             handler_of("Default application for 'text/plain': org.gnome.TextEditor.desktop\n\torg.gnome.TextEditor.desktop\n"),
             "org.gnome.TextEditor.desktop");
+        assert_eq!(handler_of("No default applications for 'application/vnd.appimage'\nNo registered applications\nNo recommended applications"), "");
     }
 
     #[test]

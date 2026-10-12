@@ -5660,11 +5660,13 @@ PY
 case_dd() {
     local dir="$fixture_root/dd"
     sandbox_scratch "$dir"
-    local i
+    local i dd_trash
     for i in 1 2 3 4 5 6; do printf 'body\n' > "$dir/f$i.txt"; done
     # The trash this case fills is its own, inside the sandbox this case owns, never the operator's.
     export XDG_DATA_HOME="$fixture_root/dd-data"
     mkdir -p "$XDG_DATA_HOME"
+    # GLib trashes to the home store or the fixture mount's top trash by device; both stay off the operator's.
+    dd_trash=$(sandbox_trash_files_dir "$dir/f2.txt") || fail "dd: no GLib trash directory for $dir/f2.txt"
 
     launch "$dir"
     wait_listing 6
@@ -5675,14 +5677,15 @@ case_dd() {
     key J >/dev/null
     settle
     [[ "$(ipc selectedIndices)" == "1,2" ]] || fail "dd: the block is $(ipc selectedIndices), not rows 1,2"
+    trash_trap_own "$dd_trash" "$dir" "dd" f2.txt f3.txt
     key d >/dev/null
     wait_message "Press d again to trash, or Delete on its own."
     key d >/dev/null
     for _attempt in $(seq 1 40); do [[ -e "$dir/f3.txt" ]] || break; sleep 0.25; done
     [[ -e "$dir/f3.txt" ]] && fail "dd: the block was not trashed, the bar reads $(ipc lastMessage)"
     # Hard rule 9 in the case itself: the rows went to this case's own trash and not the operator's.
-    [[ -s "$XDG_DATA_HOME/Trash/files/f2.txt" && -s "$XDG_DATA_HOME/Trash/files/f3.txt" ]] \
-        || fail "dd: the block did not land in $XDG_DATA_HOME/Trash/files, which holds $(ls -A "$XDG_DATA_HOME/Trash/files" 2>&1)"
+    [[ -s "$dd_trash/f2.txt" && -s "$dd_trash/f3.txt" ]] \
+        || fail "dd: the block did not land in $dd_trash, which holds $(ls -A "$dd_trash" 2>&1)"
     wait_listing 4
     settle
     [[ "$(ipc cursor)" == "1" ]] \
@@ -5697,6 +5700,7 @@ case_dd() {
     seek_row_named "f5.txt"
     local at
     at=$(ipc cursor)
+    trash_trap_own "$dd_trash" "$dir" "dd" f5.txt
     key d >/dev/null
     wait_message "Press d again to trash, or Delete on its own."
     key d >/dev/null
@@ -5719,6 +5723,7 @@ case_dd() {
     echo "-- the last row clamps rather than running past the end --"
     seek_row_named "f6.txt"
     at=$(ipc cursor)
+    trash_trap_own "$dd_trash" "$dir" "dd" f6.txt
     key d >/dev/null
     wait_message "Press d again to trash, or Delete on its own."
     key d >/dev/null
@@ -5731,13 +5736,18 @@ case_dd() {
     [[ "$(ipc rowAt "$(ipc cursor)")" == "f4.txt|"* ]] \
         || fail "dd: the clamped cursor sits on $(ipc rowAt "$(ipc cursor)")"
     kill_flea
+    # A mount-top trash is shared, so only this run's own entries go, each pair checked in the command.
+    if [[ "$dd_trash" != "$XDG_DATA_HOME/Trash/files" ]]; then
+        sandbox_trash_remove_own "$dd_trash" "$dir" f2.txt f3.txt f5.txt f6.txt \
+            || fail "dd: owned entries could not be removed from $dd_trash"
+    fi
 }
 
 # A click followed by a plain Down moves the lone selection with the cursor, so the dd after
 # it trashes the cursor row and not the clicked one: list, then grid, each asserting the clicked
 # file is still in the fixture and the cursor row is in this case's own Trash, case_dd's pattern.
 case_ddclick() {
-    local view dir count cur want stride
+    local view dir count cur want stride ddclick_trash
     for view in list grid; do
         dir="$fixture_root/ddclick-$view"
         sandbox_scratch "$dir"
@@ -5747,6 +5757,8 @@ case_ddclick() {
         for i in $(seq 0 $((count - 1))); do printf 'body\n' > "$dir/f$i.txt"; done
         export XDG_DATA_HOME="$fixture_root/ddclick-$view-data"
         mkdir -p "$XDG_DATA_HOME"
+        # GLib trashes to the home store or the fixture mount's top trash by device.
+        ddclick_trash=$(sandbox_trash_files_dir "$dir/f0.txt") || fail "ddclick ($view): no GLib trash directory for $dir/f0.txt"
 
         launch "$dir"
         wait_listing "$count"
@@ -5773,6 +5785,7 @@ case_ddclick() {
         fi
         [[ "$(ipc selectedIndices)" == "$cur" ]] || fail "ddclick ($view): the lone selection is $(ipc selectedIndices), not the cursor row $cur"
         want="f$cur.txt"
+        trash_trap_own "$ddclick_trash" "$dir" "ddclick ($view)" "$want"
         key d >/dev/null
         wait_message "Press d again to trash, or Delete on its own."
         key d >/dev/null
@@ -5780,10 +5793,15 @@ case_ddclick() {
         [[ -e "$dir/$want" ]] && fail "ddclick ($view): $want survived, the bar reads $(ipc lastMessage)"
         [[ -e "$dir/f0.txt" ]] || fail "ddclick ($view): the clicked f0.txt went to Trash instead of the cursor row"
         # Hard rule 9 in the case itself: the row went to this case's own trash and not the operator's.
-        [[ -s "$XDG_DATA_HOME/Trash/files/$want" ]] \
-            || fail "ddclick ($view): $want did not land in $XDG_DATA_HOME/Trash/files, which holds $(ls -A "$XDG_DATA_HOME/Trash/files" 2>&1)"
+        [[ -s "$ddclick_trash/$want" ]] \
+            || fail "ddclick ($view): $want did not land in $ddclick_trash, which holds $(ls -A "$ddclick_trash" 2>&1)"
         printf 'DDCLICK view=%s kept=f0.txt trashed=%s cursor=%s\n' "$view" "$want" "$cur"
         kill_flea
+        # A mount-top trash is shared, so only this run's own entry goes, each pair checked in the command.
+        if [[ "$ddclick_trash" != "$XDG_DATA_HOME/Trash/files" ]]; then
+            sandbox_trash_remove_own "$ddclick_trash" "$dir" "$want" \
+                || fail "ddclick ($view): owned entries could not be removed from $ddclick_trash"
+        fi
     done
 }
 
@@ -5791,7 +5809,7 @@ case_ddclick() {
 # what the card says. Replace fills this case's own trash, inside the sandbox, and Undo empties it again.
 # Every collide-<state> shot is one the canvas board draws, for the maintainer to compare by eye.
 case_collide() {
-    local dir="$fixture_root/collide" menus_checks=0 name wx wy rx ry
+    local dir="$fixture_root/collide" menus_checks=0 name wx wy rx ry collide_trash
     sandbox_scratch "$dir"
     mkdir -p "$dir/to"
     for name in a b c d; do printf 'yours %s\n' "$name" > "$dir/$name.txt"; done
@@ -5801,6 +5819,8 @@ case_collide() {
     printf 'there\n' > "$dir/to/photo.txt"
     export XDG_DATA_HOME="$fixture_root/collide-data"
     sandbox_scratch "$XDG_DATA_HOME"
+    # GLib trashes to the home store or the fixture mount's top trash by device.
+    collide_trash=$(sandbox_trash_files_dir "$dir/photo.txt") || fail "collide: no GLib trash directory for $dir/photo.txt"
     # Undo finds a replaced item through gio trash --list, which only a gvfsd started with this XDG_DATA_HOME answers, so the window gets a private session bus.
     local bus
     mapfile -t bus < <(dbus-daemon --session --fork --print-address=1 --print-pid=1)
@@ -5923,15 +5943,18 @@ case_collide() {
     key l >/dev/null
     menus_expect collideState '.focus == "replace"' "l moves the focus to Replace"
     shot collide-one-replace
+    trash_trap_own "$collide_trash" "$dir" "collide" photo.txt
     key -k Return >/dev/null
     collide_said "Copied 6 items · z undoes"
     collide_holds "$dir/to/photo.txt" yours || fail "collide: Replace did not put the incoming photo.txt in place"
-    collide_holds "$XDG_DATA_HOME/Trash/files/photo.txt" there \
-        || fail "collide: the replaced photo.txt is not in this case's trash: $(ls -A "$XDG_DATA_HOME/Trash/files" 2>&1)"
+    # The trash landing trails the status line, so it is awaited bounded instead of asserted once.
+    for _attempt in $(seq 1 300); do collide_holds "$collide_trash/photo.txt" there && break; sleep 0.05; done
+    collide_holds "$collide_trash/photo.txt" there \
+        || fail "collide: the replaced photo.txt is not in $collide_trash: $(ls -A "$collide_trash" 2>&1)"
     shot collide-replaced
     key z >/dev/null
     collide_until "Undo did not restore the replaced photo.txt" collide_untouched
-    collide_absent "$XDG_DATA_HOME/Trash/files/photo.txt" || fail "collide: Undo left the old photo.txt in Trash as well"
+    collide_absent "$collide_trash/photo.txt" || fail "collide: Undo left the old photo.txt in $collide_trash as well"
 
     echo "-- several names, all of them listed --"
     for name in a b; do printf 'there %s\n' "$name" > "$dir/to/$name.txt"; done
@@ -5972,6 +5995,11 @@ case_collide() {
     key -k Escape >/dev/null
     menus_expect collideState '.opened | not' "Escape cancels at the largest stop"
     kill_flea
+    # A mount-top trash is shared, so only this run's own entry goes, each pair checked in the command.
+    if [[ "$collide_trash" != "$XDG_DATA_HOME/Trash/files" ]]; then
+        sandbox_trash_remove_own "$collide_trash" "$dir" photo.txt \
+            || fail "collide: owned entries could not be removed from $collide_trash"
+    fi
 }
 
 case_grid() {

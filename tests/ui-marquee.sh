@@ -415,14 +415,15 @@ marquee_targets() {
         [[ "$(ipc path)" == "$dir" ]] || fail "marquee: refusing deletion outside the current owned listing"
         for i in 0 1 2 3; do marquee_guard "$dir/file-$i.txt"; done
         marquee_guard "$XDG_DATA_HOME/Trash"
-        trash_guard_store 0
+        # The window runs under the fixture HOME, so the provider saw that HOME's device.
+        trash_guard_store 0 "$marquee_home"
         key dd >/dev/null || fail "marquee: protected trash pair delivery failed"
         wait_listing 0
         for i in 0 1 2 3; do [[ ! -e "$dir/file-$i.txt" ]] || fail "marquee: dd did not trash every banded file"; done
-        trash_guard_store 4
+        trash_guard_store 4 "$marquee_home"
         key z >/dev/null || fail "marquee: undo key delivery failed"
         wait_listing 4
-        trash_guard_store 0
+        trash_guard_store 0 "$marquee_home"
         for i in 0 1 2 3; do
             [[ "$(cat "$dir/file-$i.txt")" == "keyboard $i" ]] || fail "marquee: undo did not restore exact banded contents"
         done
