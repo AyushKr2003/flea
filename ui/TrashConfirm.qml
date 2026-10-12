@@ -1,8 +1,7 @@
 import QtQuick
 import qs.Commons
 import "." as Flea
-import "js/Format.js" as Format
-import "js/Ops.js" as Ops
+import "js/Trash.js" as Trash
 
 // The destructive choice must be reached deliberately; a reflexive Enter activates Cancel.
 FocusScope {
@@ -90,7 +89,7 @@ FocusScope {
                 Text {
                     id: title
                     width: parent.width - alertMark.width - parent.spacing
-                    text: root.snapshot.all ? "Empty Trash?" : "Delete " + Ops.items(root.snapshot.count) + " permanently?"
+                    text: Trash.confirmTitle(root.snapshot)
                     textFormat: Text.PlainText
                     wrapMode: Text.Wrap
                     color: Theme.color.foreground
@@ -119,9 +118,7 @@ FocusScope {
             Text {
                 id: bodyLabel
                 width: parent.width
-                text: root.snapshot.all
-                    ? Ops.deleteAllLine(root.snapshot.count, Format.size(root.snapshot.bytes || 0))
-                    : Ops.deleteScopeLine(root.scopeName, root.snapshot.count)
+                text: Trash.confirmBody(root.snapshot, root.scopeName)
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
                 color: Theme.color.foreground
