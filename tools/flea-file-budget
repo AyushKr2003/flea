@@ -100,6 +100,7 @@ tests/columnsfilter.qml 402
 tests/columnsfolder.qml 400
 tests/quicklook-firstframe.qml 452
 tests/markdown-render.qml 795
+tests/rename-cost.qml 482
 tests/markdown-linearity.qml 679
 tests/markdown-preview-state.qml 474
 tests/markdown-tables.qml 401

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Every cursor key after a rename ends with Enter, Escape, the path field taking focus or a view switch reaches the pane's key handler, in the real WindowBody, offscreen.
+# Every cursor key after a rename ends with Enter, Escape, the path field taking focus or a view switch reaches the pane's key handler and costs no more work than before it, in the real WindowBody, offscreen.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 . "$PWD/tools/flea-sandbox-guard"
@@ -58,8 +58,8 @@ env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLEA_SELECT 
     FLEA_PATH="$probe/home/fixture" FLEA_BIN="$bin" QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic \
     QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 setsid dbus-run-session -- qs -p "$probe/config" >"$log" 2>&1 </dev/null &
 qs_pid=$!
-# Seven cases of two measured phases or three view legs each, polled every 0.1 s for at most three minutes.
-receipt_ticks=1800
+# Fifteen cases of two measured phases, three view legs or four control scrolls each, polled every 0.1 s for at most 390 s: 26 s per case, the budget the first seven cases had in 180 s.
+receipt_ticks=3900
 for ((tick = 0; tick < receipt_ticks; tick++)); do
     grep -aq 'RENAMECOST DONE checks=[0-9]* failed=[0-9]*' "$log" && break
     sleep 0.1
@@ -68,7 +68,7 @@ stop_qs || exit 1
 printf 'rename-cost: owned process group gone\n'
 grep -aE 'RENAMECOST|TypeError|ReferenceError|ERROR|Cannot assign' "$log"
 tally=$(grep -ao 'RENAMECOST DONE checks=[0-9]* failed=[0-9]*' "$log" | tail -1)
-[[ -n "$tally" ]] || { printf 'FAIL rename-cost produced no completion receipt inside 180s; log tail:\n'; tail -20 "$log"; exit 1; }
+[[ -n "$tally" ]] || { printf 'FAIL rename-cost produced no completion receipt inside 390s; log tail:\n'; tail -20 "$log"; exit 1; }
 [[ "$tally" == *' failed=0' ]] || exit 1
 if grep -aqE 'TypeError|ReferenceError|ERROR|Cannot assign' "$log"; then
     echo 'FAIL rename-cost logged an engine error beside its receipt'
