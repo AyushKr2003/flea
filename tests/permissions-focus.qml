@@ -276,7 +276,8 @@ ShellRoot {
             }
             next("dismissed")
         } else if (stage === "dismissed") {
-            if (dialog().opened || pane.listInFlight) return
+            // A re-read still owed after a metadata write lands later and restores the marks it took, over any click made first.
+            if (dialog().opened || pane.listInFlight || JSON.parse(ipcObject().seam.permissionsState()).rereadOwed !== false) return
             if (!closedAt) closedAt = Date.now()
             // The 140 ms fade-out keeps the dialog drawn after opened flips; past fadeLimitMs a dialog still drawn fails the check below.
             if (dialog().visible && Date.now() - closedAt < fadeLimitMs) return
