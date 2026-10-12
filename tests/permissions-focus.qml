@@ -14,6 +14,7 @@ ShellRoot {
     readonly property string draftMode: "0777"
     readonly property int pollMs: 20
     readonly property int stageLimitMs: 5000
+    readonly property int fadeLimitMs: 1000
     readonly property int pointerEventMs: 1
     readonly property int ownerExecuteBit: 0o100
     readonly property var markedRows: [1, 3]
@@ -273,8 +274,9 @@ ShellRoot {
             }
             next("dismissed")
         } else if (stage === "dismissed") {
-            // The 140 ms fade-out keeps the dialog drawn after opened flips, so wait it out before asserting it is hidden.
-            if (dialog().opened || dialog().visible || pane.listInFlight) return
+            if (dialog().opened || pane.listInFlight) return
+            // The 140 ms fade-out keeps the dialog drawn after opened flips; past fadeLimitMs a dialog still drawn fails the check below.
+            if (dialog().visible && Date.now() - started < fadeLimitMs) return
             check("dialog is hidden", dialog().visible, false)
             console.log("PERMFOCUS focus " + label() + " " + ipcObject().seam.keyDeliveryState())
             check("listing owns keyboard", pane.listArea.activeFocus, true)
