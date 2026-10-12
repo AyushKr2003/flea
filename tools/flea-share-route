@@ -58,19 +58,7 @@ if [ "$dry" = yes ]; then
   for i in 1 2 3 4 5; do : > "$root/kernel/f$i.txt"; : > "$root/gvfs/f$i.txt"; done
   # The stub starts a child that outlives it, and records its own pid (exec keeps it) after the child's, so a settled listing means both files exist.
   printf '#!/bin/bash\nd=%q\necho "$2" > "$d/cur.path"; date +%%s%%3N > "$d/cur.t0"\nsleep 600 < /dev/null > /dev/null 2>&1 &\necho $! > "$d/child.pid"; echo $$ > "$d/flea.pid"; exec sleep 600\n' "$root/stub" > "$root/stub/flea"
-  cat > "$root/stub/qs" <<EOS
-#!/bin/bash
-d=$root/stub
-[ "\$3" = "\$(cat \$d/flea.pid)" ] || exit 1
-path=\$(cat \$d/cur.path); t0=\$(cat \$d/cur.t0); delay=\$(cat "\$path/.delay"); up=\$(( \$(date +%s%3N) - t0 >= delay ))
-case \$6 in
-  path) echo "\$path" ;;
-  state) [ "\$up" = 1 ] && echo ready || echo loading ;;
-  listInFlight) [ "\$up" = 1 ] && echo false || echo true ;;
-  total) echo 5 ;;
-  firstRowsAt) echo \$(( t0 + delay / 2 )) ;;
-esac
-EOS
+  printf '#!/bin/bash\nd=%q\n[ "$3" = "$(cat "$d/flea.pid")" ] || exit 1\npath="$(cat "$d/cur.path")"; t0="$(cat "$d/cur.t0")"; delay="$(cat "$path/.delay")"; up=$(( $(date +%%s%%3N) - t0 >= delay ))\ncase $6 in\n  path) echo "$path" ;;\n  state) [ "$up" = 1 ] && echo ready || echo loading ;;\n  listInFlight) [ "$up" = 1 ] && echo false || echo true ;;\n  total) echo 5 ;;\n  firstRowsAt) echo $(( t0 + delay / 2 )) ;;\nesac\n' "$root/stub" > "$root/stub/qs"
   chmod +x "$root/stub/flea" "$root/stub/qs"
   export PATH="$root/stub:$PATH" FLEA_BIN="$root/stub/flea" FLEA_UI="$root/ui"
 else
