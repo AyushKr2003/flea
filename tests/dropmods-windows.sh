@@ -2,6 +2,7 @@
 # tests/ui.sh and tests/ui-captures-dropmods.sh window helpers against hyprctl, omarchy-drive and ipc doubles: geometry, focus, keys and the cursor seek are per qs pid, and a lookup or a key that fails ends the case.
 set -u
 cd "$(dirname "$0")/.." || exit 1
+repo=$(cd "$(dirname "$0")/.." && pwd) || exit 1
 
 failed=0
 ok() { printf 'ok   %s\n' "$*"; }
@@ -39,10 +40,11 @@ hyprctl() {
     case "$*" in
         "clients -j") printf '%s\n' "$clients" ;;
         "activewindow -j") printf '{"class":"%s","pid":%s}\n' "$active_class" "$active" ;;
+        *'focus({ window = "address:0x'*) printf 'ok\n' ;;
         *) return 1 ;;
     esac
 }
-hypr_window_focus() { return 0; }
+. "$repo/tests/lib/hypr-dispatch.sh"
 sleep() { :; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 # The listing answers a seek reads: the cursor is the j keys the driver took since its last g.
