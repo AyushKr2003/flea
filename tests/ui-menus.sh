@@ -694,8 +694,9 @@ case_menuscoverage() (
         menus_expect selectionCount '. == 2' "Ctrl-click creates two selected items before menu eligibility"
         menus_expect dualState ".panes[.focused].selected == [$first_index,$second_index]" "selected identities are a.txt and b.txt"
         click_row "$(row_index_of a.txt)" right
-        # Permissions takes the whole selection (board Permissions040), so two regular files enable it; the four single-item rows stay disabled.
-        menus_expect menuState '.opened and .hasRow and .snapshotReady and (.snapshotId > 0) and (.entries as $entries | ["rename","duplicate","openWith","properties"] | all(.[]; . as $action | any($entries[]; .action == $action and .disabled)))' "multi-selection single-item rows stay disabled"
+        # Permissions (board Permissions040) and bulk rename take the whole selection, so two regular files enable both; the three single-item rows stay disabled.
+        menus_expect menuState '.opened and .hasRow and .snapshotReady and (.snapshotId > 0) and (.entries as $entries | ["duplicate","openWith","properties"] | all(.[]; . as $action | any($entries[]; .action == $action and .disabled)))' "multi-selection single-item rows stay disabled"
+        menus_expect menuState 'any(.entries[]; .action == "rename" and (.disabled == false) and .label == "Rename 2 items\u2026")' "two files offer bulk rename by count"
         menus_expect menuState 'any(.entries[]; .action == "permissions" and (.disabled == false) and (.errored | not))' "two regular files keep Permissions enabled without error"
         key -k Escape >/dev/null
         # permissionsEntry refuses the whole selection for one row that is neither a regular file nor a directory.
@@ -709,7 +710,7 @@ case_menuscoverage() (
             menus_expect dualState "(.panes[.focused].selected | sort) == ([$first_index,$second_index] | sort)" "Permissions pair holds the a.txt and $target identities"
             click_row "$first_index" right
             if [[ "$target" == folder ]]; then
-                menus_expect menuState '.opened and .hasRow and .snapshotReady and (.snapshotId > 0) and (.entries as $entries | ["rename","duplicate","openWith","properties"] | all(.[]; . as $action | any($entries[]; .action == $action and .disabled))) and any(.entries[]; .action == "permissions" and (.disabled == false) and (.errored | not))' "a file and a directory keep Permissions enabled without error in the several-items menu"
+                menus_expect menuState '.opened and .hasRow and .snapshotReady and (.snapshotId > 0) and (.entries as $entries | ["duplicate","openWith","properties"] | all(.[]; . as $action | any($entries[]; .action == $action and .disabled))) and any(.entries[]; .action == "rename" and (.disabled == false)) and any(.entries[]; .action == "permissions" and (.disabled == false) and (.errored | not))' "a file and a directory keep Permissions enabled without error in the several-items menu"
             else
                 menus_expect menuState '.opened and .hasRow and .snapshotReady and (.snapshotId > 0) and any(.entries[]; .action == "permissions" and .disabled and .errored and .hint == "symlink")' "one symlink disables and errors Permissions for the whole selection"
             fi
