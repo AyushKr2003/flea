@@ -144,6 +144,20 @@ pub(crate) fn batch_syncfs_for(dest: &Path, body: &str, durable: bool, rclone: b
     }
 }
 
+// dest_is_durable classifies the resolved path, so rclone and the batch decision read that mount too: a link into a stick batches like the stick.
+// A mount that can wedge a syscall (a share, a FUSE mount) is never resolved here, the order extclass::classify_in keeps.
+fn resolved_dest(dest: &Path, body: &str) -> PathBuf {
+    let wedges = crate::backend::mountinfo::mount_entry_in(dest, body).is_some_and(|e| crate::backend::netfs::can_wedge(&e.fstype));
+    if wedges {
+        return dest.to_path_buf();
+    }
+    crate::backend::extclass::resolved(dest)
+}
+
+fn rclone_in(dest: &Path, body: &str) -> bool {
+    crate::backend::mountinfo::mount_entry_in(dest, body).is_some_and(|e| fstype_is_rclone(&e.fstype))
+}
+
 // The done line's own words for a folder the drive would not confirm, printable as-is.
 pub const DIR_UNCONFIRMED: &str = "copied, but the drive did not confirm the folder";
 
@@ -244,10 +258,11 @@ impl Durability {
 
     // Sample input: Some("... vfat /dev/sda1 ...") batches a durable dest, None never does without a mount table.
     fn begin_from(dest: &Path, mountinfo: Option<&str>) -> Durability {
-        let rclone = dest_is_rclone(dest);
+        let real = mountinfo.map_or_else(|| dest.to_path_buf(), |body| resolved_dest(dest, body));
+        let rclone = mountinfo.map_or_else(|| dest_is_rclone(dest), |body| rclone_in(dest, body) || rclone_in(&real, body));
         let durable = !rclone && dest_is_durable(dest);
         let batch_syncfs = match mountinfo {
-            Some(body) => batch_syncfs_for(dest, body, durable, rclone),
+            Some(body) => batch_syncfs_for(dest, body, durable, rclone) || batch_syncfs_for(&real, body, durable, rclone),
             None => false,
         };
         Durability { durable, rclone, file_failed: false, batch_syncfs, rename_fat: false, unsettled: false, held: Vec::new(),

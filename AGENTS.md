@@ -6722,6 +6722,8 @@ item's sentence, the first entry and the count.
 `src/backend/movebatch.rs` stages each copy and only removes a batch's sources after one confirm.
 On a block vfat stick each copy holds its file and skips its own fsync.
 Elsewhere each copy fsyncs its file as today.
+The stick is found from the destination's resolved path, the one `dest_is_durable` already classifies, so a destination reached through a symlink batches like the stick and a link into an rclone mount stays rclone; a mount that can wedge a syscall is never resolved.
+That resolved-path decision moves two ceilings, each re-derived with `wc -l`: `src/backend/durable.rs` 803 to 818 for the decision and `src/backend/durable_tests.rs` 1305 to 1360 for its three gates.
 A confirm runs one syncfs on a clone of the first held file while every original is open, drops the clone, hands the held files to a close wave and returns, then runs one folder fsync.
 The wave closes its files on background threads while the next batch copies and confirms.
 It is joined before the next wave starts, so two batches of descriptors are the most ever open, and before the operation reports its result, so no descriptor is left on the drive when the done line goes out.
