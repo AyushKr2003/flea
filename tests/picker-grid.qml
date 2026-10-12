@@ -126,6 +126,19 @@ ShellRoot {
         if (!root.win || !root.win.thumbState || !root.win.thumbState.file) return false
         return Object.keys(root.win.thumbState.file).length > 0
     }
+    // The cursor tile is Picker040's frame: an accent hairline over an accent wash. A marked tile keeps its wash and takes no frame.
+    function checkTileFrames() {
+        var cursorTile = grid.itemAtIndex(0), markedTile = grid.itemAtIndex(1)
+        if (!cursorTile || !markedTile) { root.fail("tiles 0 and 1 were not built to check their frames"); return }
+        var edge = cursorTile.children[0].children[0], wash = markedTile.children[0].children[0]
+        var accent = Flea.Theme.color.accent
+        if (edge.border.width !== Flea.Theme.spacing.hairline) root.fail("the cursor tile's frame is " + edge.border.width + " px, want the hairline")
+        if (!Qt.colorEqual(edge.border.color, accent)) root.fail("the cursor tile's frame is " + edge.border.color + ", want the accent")
+        if (edge.color.a <= 0 || Math.abs(edge.color.r - accent.r) > 0.01 || Math.abs(edge.color.g - accent.g) > 0.01 || Math.abs(edge.color.b - accent.b) > 0.01)
+            root.fail("the cursor tile's wash is " + edge.color + ", want the accent at some alpha")
+        if (wash.border.width !== 0) root.fail("a marked tile off the cursor draws a " + wash.border.width + " px frame, want none")
+        if (wash.color.a <= 0) root.fail("a marked tile off the cursor draws no wash")
+    }
     // Delegates inside the viewport, independent of the grid's own tile arithmetic.
     function visibleTiles() {
         var lo = grid.contentY, hi = grid.contentY + grid.height
@@ -156,6 +169,7 @@ ShellRoot {
                 return
             }
             root.stubPicker.storageKnown = true
+            root.stubPicker.marks = [{ path: Picker.rowPath(root.stubPicker.path, "photo1.jpg") }]
             grid.primeSettle()
             grid.restartSettle()
             root.stageSince = Date.now()
@@ -170,6 +184,7 @@ ShellRoot {
             var exp = root.visibleTiles()
             if (exp.length === 0) { root.fail("no delegate met the viewport on the first screen"); return }
             root.screenLast = exp[exp.length - 1]
+            root.checkTileFrames()
             root.stage1Batches = stubBackend.thumbAsks.length
             root.stage1Asks = root.flatAsks().length
             var first = root.flatAsks()
