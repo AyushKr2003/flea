@@ -27,8 +27,8 @@ function run(check) {
     check("Quick Look ground takes the wheel", look.indexOf("onWheel") >= 0, true)
     check("afterAnimating stays live until ready lands after a release", swap.indexOf("(root.capturing || root.holding || !root.ready) ? root.Window.window : null") >= 0, true)
     check("hold sink keeps Back for the window", swap.indexOf("Qt.AllButtons") < 0, true)
-    check("Quick Look asks image meta only with a thumb held",
-        look.indexOf('root.imageRow = root.isImage && (newThumb || "").length > 0') >= 0, true)
+    check("Quick Look asks image meta for every image row, thumb or not",
+        look.indexOf("root.imageRow = root.isImage && newRow !== undefined ? newRow : -1") >= 0, true)
     check("that ask runs once per show and never mid-burst",
         look.indexOf("if (root.imageRow < 0 || root.imageAsked || followSettle.running) return") >= 0, true)
     check("Quick Look keeps no EXIF turn", look.indexOf("imageTurn") < 0 && image.indexOf("property int turn") < 0, true)

@@ -9,6 +9,7 @@ import "js/MarkdownPrepared.js" as Prepared
 import "js/Motion.js" as Motion
 import "js/PreviewSettle.js" as PreviewSettle
 import "js/PreviewSwap.js" as PreviewSwap
+import "js/QuickLookRect.js" as QuickLookRect
 
 // The overlay lives inside the Flea window, Finder's Quick Look shape: a second window breaks omarchy-drive focus flea and every test that narrows on it.
 Item {
@@ -91,7 +92,7 @@ Item {
     // An interim cache thumbnail shown counts as whole, never as a half-built frame.
     readonly property bool lookReady: !root.active || PreviewSwap.lookReady(root.status, root.isPdf,
         root.pdfItem !== null && root.pdfItem.shownPage >= 0, root.pdfItem !== null && root.pdfItem.failed,
-        root.interimShown, root.isMarkdown && markdownLoader.item !== null && markdownLoader.item.firstScreen)
+        root.interimShown, root.isMarkdown && markdownLoader.item !== null && markdownLoader.item.firstScreen) && !root.sizeWait
     // The cached thumbnail held at open, drawn under the full decode at the final rect; the stamp retires a stale one.
     property string interimThumb: ""
     property string interimStamp: ""
@@ -111,6 +112,30 @@ Item {
     property int imageRow: -1
     // One meta ask per show; onRowsChanged never re-asks behind it.
     property bool imageAsked: false
+    // The card's inputs, see ui/js/QuickLookRect.js: shapeNext follows the file being shown and its size reply, and shape is what the card draws,
+    // taken once no swap holds a picture, so a held picture is never stretched and a shown card never resizes.
+    property var shapeNext: ({ kind: "", known: false, w: 0, h: 0, orient: 1 })
+    property var shape: root.shapeNext
+    readonly property var rectTokens: ({ fraction: Theme.preview.fraction, edge: Theme.preview.edge, bar: Theme.chromeHeight })
+    readonly property var rect: QuickLookRect.surface(root.shape, root.width, root.height, root.pdfExpanded, root.rectTokens)
+    readonly property var nextRect: QuickLookRect.surface(root.shapeNext, root.width, root.height, root.pdfExpanded, root.rectTokens)
+    readonly property bool held: root.swap !== null && (root.swap.holding || root.swap.capturing)
+    // The reveal waits for an image's size only while a reply is owed and inside the cap, so a silent backend costs today's frame.
+    // Plain, set by show() and cleared by the reply, an early reveal or the swap's release (a turn later, so the release is done): a binding on those loops.
+    property bool sizeWait: false
+    onHeldChanged: {
+        root.commitShape()
+        if (!root.held) Qt.callLater(function () { root.sizeWait = false })
+    }
+    function commitShape() { if (!root.held) root.shape = root.shapeNext }
+    // A size reply counts until the card shows or the swap lets go of its picture; a later one leaves the card alone.
+    function sizeArrived(w, h, orient, known) {
+        if (!root.revealed || root.held) {
+            root.shapeNext = { kind: root.kind, known: known, w: w, h: h, orient: orient }
+            root.commitShape()
+        }
+        root.sizeWait = false
+    }
     function swapState() {
         if (root.swap) return root.swap.describe()
         return { holding: false, capturing: false, fellBack: false, holds: 0, fallbacks: 0,
@@ -170,8 +195,10 @@ Item {
     }
     function revealNow() {
         root.revealIfReady()
-        if (root.unrevealed)
+        if (root.unrevealed) {
             root.revealedEarly = true
+            root.sizeWait = false
+        }
     }
     // The ready test runs after the open's own turn, because lookReady still reads the closed overlay inside this handler.
     onActiveChanged: {
@@ -191,6 +218,7 @@ Item {
                 return
             root.revealCaps += 1
             root.revealedEarly = true
+            root.sizeWait = false
         }
     }
     // afterAnimating runs just before each frame is synchronised, so it sees a frame that draws the card or dim with neither content nor the loading state.
@@ -363,11 +391,13 @@ Item {
         root.interimThumb = newThumb || ""
         root.interimStamp = newPath
         // The meta row is the one captured at open/follow, never the cursor now.
-        root.imageRow = root.isImage && (newThumb || "").length > 0 && newRow !== undefined ? newRow : -1
+        root.imageRow = root.isImage && newRow !== undefined ? newRow : -1
         root.imageW = 0
         root.imageH = 0
         root.imageOrient = 1
         root.imageAsked = false
+        root.shapeNext = { kind: root.kind, known: false, w: 0, h: 0, orient: 1 }
+        root.commitShape()
         root.path = newPath
         root.iconName = newIcon
         root.size = newSize
@@ -380,6 +410,7 @@ Item {
         root.askArchive()
         root.askMedia()
         root.askImage()
+        root.sizeWait = root.isImage && root.imageAsked && root.imageRow >= 0
         root.revealStrip()
         root.maybePrefetch()
     }
@@ -414,10 +445,10 @@ Item {
             root.pane.backend.askMeta(root.mediaRow, false, true, false)
     }
 
-    // The original's pixels, which size the interim like the final; only with a thumb to draw,
-    // once per show, and never while a held key is still bursting.
+    // The original's pixels, which size the interim like the final and the card; once per show,
+    // and never while a held key is still bursting.
     function askImage() {
-        if (!root.isImage || root.interimThumb.length === 0 || !root.pane) return
+        if (!root.isImage || !root.pane) return
         if (root.imageRow < 0 || root.imageAsked || followSettle.running) return
         // An insert or a re-sort between capture and ask moves another file to the index,
         // so the row must still name the shown file before anything is asked for it.
@@ -450,6 +481,7 @@ Item {
                 root.imageW = w
                 root.imageH = h
                 root.imageOrient = orient
+                root.sizeArrived(w, h, orient, true)
             }
         }
     }
@@ -513,10 +545,9 @@ Item {
         // Open rises into place and close only fades, faster, because the translation is enabled: root.active.
         property real rise: root.revealedOpen ? 0 : Motion.translateUpPx
         opacity: root.unrevealed ? 0 : root.fade
-        // Expand drops the Quick Look inset, which is the whole of the canvas's "expand fills the window".
-        readonly property real inset: root.pdfExpanded ? 1 : Theme.preview.fraction
-        width: Theme.cardSpan(parent.width * surface.inset, parent.width)
-        height: Theme.cardSpan(parent.height * surface.inset, parent.height)
+        // Tall kinds take the window's height less the edge, and Expand fills the window, which is the whole of the canvas's "expand fills the window".
+        width: Theme.cardSpan(root.rect.w, parent.width)
+        height: Theme.cardSpan(root.rect.h, parent.height)
         color: Theme.color.surface
         // Mirrors hyprland decoration:rounding; media fills the surface and keeps square corners, a visible corner only shows on text and audio panes.
         radius: Style.cornerRadius
@@ -530,7 +561,9 @@ Item {
         // builds. Moving to the next file holds this one's picture through the swap below until that one is whole.
         Item {
             id: panes
-            anchors.fill: parent
+            // The size the next card has, so a preview built under a held picture is whole at the size it lands on.
+            width: Theme.cardSpan(root.nextRect.w, root.width)
+            height: Theme.cardSpan(root.nextRect.h, root.height)
 
             Flea.PreviewText {
                 id: textPane
@@ -586,6 +619,8 @@ Item {
             Loader {
                 id: imageLoader
                 anchors.fill: parent
+                // With no thumbnail to show, built once the size reply lands or the cap passes, so the picture decodes once at the card's final size.
+                active: !root.sizeWait || root.interimThumb.length > 0
                 onLoaded: {
                     item.path = Qt.binding(function () { return root.path })
                     item.origW = Qt.binding(function () { return root.imageW })
@@ -617,6 +652,7 @@ Item {
             Connections {
                 target: pdfLoader.item
                 function onClosed() { root.close() }
+                function onPageAspectChanged() { root.sizeArrived(pdfLoader.item.pageAspect, 1, 1, pdfLoader.item.pageAspect > 0) }
             }
 
             // The canvas's Archive tile at Quick Look size: the name, the count the index gave, then the entries.
