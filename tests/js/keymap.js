@@ -229,7 +229,7 @@ function run(check) {
     var tabRow = Keymap.sheetFor("default", "gui").filter(function (row) { return row.action === "focusNext" })[0]
     check("the sheet reads Tab as scope / focus, with no pane-only wording", tabRow.keys + "|" + tabRow.label, "tab|scope / focus")
     var backRow = Keymap.sheetFor("default", "gui").filter(function (row) { return row.action === "focusPrevious" })[0]
-    check("and Shift+Tab as focus back, in the Move group", backRow.label, "focus back")
+    check("and Shift+Tab as focus back, in the Move group", backRow.label + "|" + (Keymap.SHEET_GROUPS.move.indexOf("focusPrevious") >= 0), "focus back|true")
     // One cap names one key. Joining every spelling an action answers to produced caps of 40
     // characters on Default and 78 on Mac, wider than the card, and they drew over the next column.
     var widestCap = 0, identifierLabel = ""
