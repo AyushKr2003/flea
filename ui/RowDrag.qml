@@ -17,6 +17,9 @@ Item {
     readonly property var targetPane: root.dropScope ? root.dropScope.pane : root.pane
     readonly property string targetDir: root.dropScope ? root.dropScope.dir : (root.pane ? Search.baseOf(root.pane) : "")
 
+    // The drop destination this delegate last recorded on the session, kept so leaving clears only its own record.
+    property string recorded: ""
+
     anchors.fill: parent
     // A peek column's row lifts through the session's peekSource; which drops it takes is the DropArea's call alone.
     enabled: !!root.row && (root.pane !== null ? !root.pane.listInFlight && root.listingIndex >= 0
@@ -59,20 +62,7 @@ Item {
                 root.hoverAt(drag)
             }
         }
-        onExited: {
-            if (root.lit()) {
-                root.session.dropIndex = -1
-                root.session.dropDest = ""
-                root.session.dropDestDev = 0
-                root.session.leaveTarget()
-            }
-            if (root.session.dragRows.length === 0) {
-                root.session.dragCopy = false
-                root.session.dragLink = false
-            }
-            root.session.hoverEnded()
-            DragOut.keys.leave()
-        }
+        onExited: root.leaveRow()
         onDropped: function (drop) {
             if (drop.getDataAsString(Tabs.TAB_MIME) !== "")
                 return
@@ -85,6 +75,23 @@ Item {
             }
             root.session.hoverEnded()
         }
+    }
+
+    // The pointer leaves this delegate: the destination it recorded goes, even when a swap reused the delegate on another row, and a destination another row recorded since stays.
+    function leaveRow() {
+        if (root.recorded.length > 0 && root.session.dropDest === root.recorded) {
+            root.session.dropIndex = -1
+            root.session.dropDest = ""
+            root.session.dropDestDev = 0
+            root.session.leaveTarget()
+        }
+        root.recorded = ""
+        if (root.session.dragRows.length === 0) {
+            root.session.dragCopy = false
+            root.session.dragLink = false
+        }
+        root.session.hoverEnded()
+        DragOut.keys.leave()
     }
 
     // One reset for every finished gesture, refused or dropped: the drag's keys end and the row goes dark again.
@@ -118,6 +125,7 @@ Item {
         // The drop's own address: the swap may rebuild this delegate on another row before the release.
         root.session.dropDest = dest
         root.session.dropDestDev = root.row.v || 0
+        root.recorded = dest
         DragOut.keys.enter(marker, lift)
         root.session.enterTarget(marker, urls, root.row.n, root.row.v, shelf, proposed)
         return true

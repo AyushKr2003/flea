@@ -47,8 +47,10 @@ sleep() { :; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 # The listing answers a seek reads: the cursor is the j keys the driver took since its last g.
 rows_reply() {
-    local cursor
-    cursor=$(awk '$1 == "g" { n = 0 } $1 == "j" { n++ } END { print n + 0 }' "$box/keys.ok")
+    local cursor=0 key
+    while IFS= read -r key; do
+        case $key in g) cursor=0 ;; j) cursor=$((cursor + 1)) ;; esac
+    done < "$box/keys.ok"
     case "$1" in
         total) printf '%s\n' "${#rows[@]}" ;;
         cursor) printf '%s\n' "$cursor" ;;
@@ -212,8 +214,7 @@ hotkey --global ctrl t flea
     && ok "a hotkey on the pinned window is sent as written" || bad "the hotkey argv must be unchanged, got: $(paste -sd'|' "$box/argv")"
 ipc_pid=""
 
-# Every glide ends with the 1 px out-and-back from inside the target, so the move
-# crossing into the other window is never the last motion its Qt surface sees.
+# Every glide ends with a 1 px out-and-back from inside the target, so the crossing move is never the last motion.
 . tests/lib/pointer-glide.sh
 glide_pos="0, 0"
 hyprctl() {
