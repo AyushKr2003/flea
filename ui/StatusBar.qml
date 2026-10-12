@@ -25,6 +25,8 @@ Item {
     property int selectionCount: 0
     property string fsName: ""
     property real fsFree: 0
+    // True while the pane's fs facts for its folder are still out, so the slot draws nothing yet.
+    property bool fsPending: false
     property string notice: ""
     // Each notice carries a serial, so a withdrawal names the notice it owns.
     property int noticeSerial: 0
@@ -247,10 +249,9 @@ Item {
         return root.itemText()
     }
 
-    // The one fact on this strip a result or an error may not evict, so a pane with no answer for
-    // it says unknown rather than describing the filesystem the pane just failed to leave.
+    // The one fact a result or an error may not evict: unknown once answered with nothing, never the folder failed to leave, and empty while the answer is out.
     function fsText() {
-        return root.fsName.length ? root.fsName + " · " + Format.size(root.fsFree) + " free" : "unknown"
+        return root.fsName.length ? root.fsName + " · " + Format.size(root.fsFree) + " free" : root.fsPending ? "" : "unknown"
     }
 
     function slot() {

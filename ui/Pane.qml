@@ -427,6 +427,8 @@ FocusScope {
     // The filesystem line the status bar draws, refreshed once per directory rather than per row.
     property string fsName: ""
     property real fsFree: 0
+    // False from a request for another folder until the backend's fsinfo line for it lands, so the strip says nothing, not unknown, before then.
+    property bool fsAnswered: false
     // ExtThumbs: src/backend/extclass.rs's own word for the directory being shown, network,
     // phone, usb or "", carried beside the fsinfo line once per directory change, never per row.
     // storageKnown is false until that line lands, so the first settle never spends unknown as local.
