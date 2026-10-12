@@ -19,6 +19,7 @@ ShellRoot {
     property int failures: 0
     property int stage: 0
     property double started: 0
+    readonly property int settleGraceMs: 5000
     property bool executing: false
     property int beforeLists: 0
     property int reloadStage: 0
@@ -169,6 +170,8 @@ ShellRoot {
             check("rail-board: " + kind.name + " elides at the end of its label", row.labelItem.elide, Text.ElideRight)
         }
     }
+    // The drive sizes land after the Trash count and a poll, the way a reply lands in the real rail.
+    Timer { id: lateSizes; interval: 250; onTriggered: Flea.ViewState.changeLeaf("places", { driveSize: true }) }
     Connections {
         target: root.pane
         // keyClick can deliver rows before returning, so record arming when it happens.
@@ -501,12 +504,22 @@ ShellRoot {
         function () {
             root.trashCountWas = (Flea.ViewState.state.places || {}).trashCount === true
             root.driveSizeWas = (Flea.ViewState.state.places || {}).driveSize === true
-            Flea.ViewState.changeLeaf("places", { trashCount: true, driveSize: true })
+            Flea.ViewState.changeLeaf("places", { trashCount: true, driveSize: false })
             return true
         },
         function () {
-            if (probeNumber.detail !== "3" || !root.railBoardReady()) return false
-            root.railBoardChecks()
+            var waiting = Extra.railBoardWaiting(railBoardRows, railBoard.width)
+            if (waiting !== Extra.FIRST_SIZE_ROW && Date.now() - root.started < root.settleGraceMs) return false
+            check("rail-board: before the sizes land the board waits on a drive size", waiting, Extra.FIRST_SIZE_ROW)
+            check("rail-board: before the sizes land the first drive size row draws no detail", Extra.firstSizeDetail(railBoardRows), "")
+            lateSizes.start()
+            return true
+        },
+        function () {
+            var waiting = probeNumber.detail !== "3" ? "the number probe" : Extra.railBoardWaiting(railBoardRows, railBoard.width)
+            if (waiting !== "" && Date.now() - root.started < root.settleGraceMs) return false
+            check("rail-board: no row still waits on its width or detail", waiting, "")
+            if (waiting === "") Extra.railBoardChecks(root, railBoardRows, Style.spacing.rowPaddingX, Style.spacing.rowGap, Flea.Theme.font.caption, Flea.Theme.railIconSize)
             var gap = Style.spacing.rowGap
             check("control: the square probe reserves its slot", probeSquare.indicatorSlot.width > 0, true)
             check("control: the mark probe reserves its slot", probeMark.indicatorSlot.width > 0, true)
