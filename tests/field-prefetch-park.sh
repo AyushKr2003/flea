@@ -137,10 +137,15 @@ harness=$!
 for _ in $(seq 100); do [ -s "$warm/pid" ] && break; sleep 0.1; done
 sleep 0.5
 kill -TERM "$harness"; wait "$harness"
-fake=$(cat "$warm/pid" 2>/dev/null || echo 0)
-for _ in $(seq 40); do kill -0 "$fake" 2>/dev/null || break; sleep 0.1; done
-alive=no; kill -0 "$fake" 2>/dev/null && alive=yes
-[ "$alive" = yes ] && kill "$fake"
+fake=$(cat "$warm/pid" 2>/dev/null)
+# A missing or bare pid would make kill reach this test's own process group, so only a real child pid is probed.
+if [[ "$fake" =~ ^[0-9]+$ ]] && [ "$fake" -gt 1 ]; then
+    for _ in $(seq 40); do kill -0 "$fake" 2>/dev/null || break; sleep 0.1; done
+    alive=no; kill -0 "$fake" 2>/dev/null && alive=yes
+    [ "$alive" = yes ] && kill "$fake"
+else
+    alive="no-pid:$fake"
+fi
 check "a signal during the warm launch ends the warm Flea through the EXIT trap" "alive=no" "alive=$alive"
 
 [ "$fail" = 0 ] && echo "field-prefetch-park: all passed" || echo "field-prefetch-park: failures above"
