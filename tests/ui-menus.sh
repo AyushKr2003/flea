@@ -110,6 +110,16 @@ menus_visit() {
     wait_listing "$count"
 }
 
+# Registers the trash entry made for ORIGINAL so the EXIT trap removes it from a mount-top trash, where GLib trashes off HOME's device.
+menus_trash_own() {
+    local original="$1" uri trash
+    # Sample list row: "trash:///trash.txt<TAB>/owned/fixture/trash.txt".
+    uri=$(/usr/bin/gio trash --list | awk -F'\t' -v path="$original" '$2 == path { print $1; exit }')
+    [[ "$uri" == trash:///* && "${uri#trash:///}" != */* ]] || fail "menus: no trash entry for $original"
+    trash=$(sandbox_trash_files_dir "$original") || fail "menus: no GLib trash directory for $original"
+    trash_trap_own "$trash" "$menu_box" menus "${uri#trash:///}"
+}
+
 menus_point() {
     local centre="$1" button="${2:-left}" cx cy wx wy ww wh
     read -r cx cy <<< "$centre"
@@ -441,6 +451,7 @@ menus_actions() {
     wait_listing 4
     menus_expect trashState ".count == $menus_trashed" "$preset Trash updates private count"
     trash_guard_store "$menus_trashed"
+    menus_trash_own "$directory/trash.txt"
     [[ ! -e "$directory/trash.txt" ]] || fail "menus: $preset Trash left its source"
     menus_equal "$preset Trash reaches the real private GIO provider" "$directory/trash.txt" "$(tail -n 1 "$menu_box/gio-trash.log")"
 
@@ -730,7 +741,8 @@ case_menuscoverage() (
     menus_hidden_copy_as
     printf 'MENUS_NATIVE_CHECKS=%s\n' "$menus_checks"
     printf 'MENUS_UNVERIFIED new-file/new-folder, archive/convert, provider states, hidden-row persistence, work-area/scale matrix, partial deletion failure, directory Permissions scope, concurrent windows\n'
-    trash_cleanup 0
+    # trash_cleanup clears the EXIT trap first, so exiting lets the trap remove the registered entries and then run it.
+    exit 0
 )
 
 # Qt 6.12 throttles frame-synchronous hover to 100 ms, so a list step (j, k) lands the late hover before c opens the menu with its Copy as flyout.
