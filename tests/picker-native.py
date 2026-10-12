@@ -685,11 +685,30 @@ def names(state):
     return [row["n"] for row in state["rows"]]
 
 
+# None while the window has not written ui.json yet, or while the write is half done.
 def ui_json():
-    return json.loads(state_file.read_text())
+    try:
+        return json.loads(state_file.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+# SCHEMA's top-level keys as src/uischema.rs spells them; a parse that finds no entries or an unknown constant raises.
+def schema_top_keys(source=REPO / "src/uischema.rs"):
+    text = source.read_text()
+    block = re.search(r"pub const SCHEMA: &\[\(&str, Rule\)\] = &\[\n(.*?)\n\];", text, re.S)
+    if block is None:
+        raise AssertionError(f"SCHEMA block not found in {source}")
+    body = block.group(1)
+    constants = dict(re.findall(r'pub const (\w+): &str = "([^"]*)";', text))
+    entries = re.findall(r'^    \((?:"([^"]+)"|([A-Z_]+)),', body, re.M)
+    if not entries or len(entries) != len(re.findall(r"^    \(", body, re.M)):
+        raise AssertionError(f"SCHEMA entry not parsed in {source}")
+    return {literal or constants[name] for literal, name in entries}
 
 
 def test_sorting():
+    schema_keys = schema_top_keys()
     # The fixture's name, size, modified and kind orders all differ, so a marked order over other rows is caught by names.
     ordered = guard(root / "ordered")
     for directory in [ordered, ordered / "folder", ordered / "refused"]:
@@ -704,7 +723,8 @@ def test_sorting():
     by_modified = ["folder", "refused", "photo.png", "bravo.txt", "charlie.txt", "alpha.txt"]
     by_modified_shown = by_modified + [".dot.txt"]
     by_kind = ["folder", "refused", "photo.png", "alpha.txt", "bravo.txt", "charlie.txt"]
-    saved = json.dumps({"sort": {"key": "kind", "reverse": False}})
+    # updates.autoCheck is seeded off, a nested value the picker never writes, so the first write must keep it.
+    saved = json.dumps({"sort": {"key": "kind", "reverse": False}, "updates": {"autoCheck": False}})
     write(state_file, saved)
     # Recent's newest-first order matches none of the fixture's sort orders, so a Recent that sorts is caught.
     recent_order = ["bravo.txt", "alpha.txt", "photo.png", "charlie.txt"]
@@ -723,7 +743,18 @@ def test_sorting():
     sorting.until("S reverses an inherited kind order", lambda state: state["sortBy"] == "kind" and state["sortDesc"]
                   and state["state"] == "ready" and names(state) == reverse_kind)
     # The first sort fills every shipped default into ui.json (src/uistate.rs patched), so the expectation starts from that whole file.
-    first_write = wait("SP11 the first sort lands in ui.json", lambda: ui_json() if ui_json().get("sort") == {"key": "kind", "reverse": True} and "folderSorts" in ui_json() else None)
+    def first_sort_written():
+        saved_file = ui_json()
+        if saved_file is not None and saved_file.get("sort") == {"key": "kind", "reverse": True} and "folderSorts" in saved_file:
+            return saved_file
+        return None
+    first_write = wait("SP11 the first sort lands in ui.json", first_sort_written)
+    # Wrong default values are pinned by src/uistate.rs unit tests on patched, so this checks the seeded value and the key set.
+    check("SP11 the first write keeps the seeded nested value", first_write.get("updates", {}).get("autoCheck") is False, first_write)
+    check("SP11 the first write's sort is kind, descending", first_write.get("sort") == {"key": "kind", "reverse": True}, first_write)
+    check("SP11 the first write's folderSorts is exactly this folder's kind order",
+          first_write.get("folderSorts") == {str(ordered): {"key": "kind", "reverse": True}}, first_write)
+    check("SP11 the first write holds exactly SCHEMA's top-level keys", set(first_write) == schema_keys, first_write)
     sorting.key("s")
     sorting.until("s leaves kind for name", lambda state: state["sortBy"] == "name" and not state["sortDesc"] and names(state) == by_name)
     sorting.key("s")
