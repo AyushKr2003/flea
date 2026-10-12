@@ -43,7 +43,7 @@ Item {
         height: hit.capSize
         color: "transparent"
         border.width: hit.modelData.keys.length > 0 ? Theme.spacing.hairline : 0
-        border.color: Qt.alpha(Theme.color.muted, hit.modelData.disabled === true ? Theme.disabledOpacity : 1)
+        border.color: Qt.alpha(Theme.color.mutedFrame, hit.modelData.disabled === true ? Theme.disabledOpacity : 1)
         Text {
             anchors.fill: parent
             anchors.margins: Theme.spacing.hairline

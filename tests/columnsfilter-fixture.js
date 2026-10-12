@@ -1,4 +1,5 @@
 .pragma library
+.import "flea/js/Contrast.js" as Contrast
 
 // Matches interleave with non-matches in name order, so a step from a kept row skips a hidden row: "ap" keeps rows 0, 2, 4, 6, 8 and 10, 6 of the 12 below.
 function buildRows() {
@@ -49,7 +50,13 @@ function inkFailures(probe, theme) {
     var fg = theme.color.foreground
     var folder = probe.folderItem()
     probe.hovered = false
-    if (String(folder.color) !== String(Qt.darker(fg, 1.4))) out.push("rest folder ink " + folder.color + ", want List's darker foreground")
+    var restRatio = Contrast.ratio(String(folder.color), String(theme.color.background))
+    // muted and metadata derive from one colour, so the role is told apart by moving muted away while the ink is read.
+    var kept = theme.color.muted
+    theme.color.muted = "#ff00ff"
+    if (!Qt.colorEqual(folder.color, theme.color.metadata)) out.push("rest folder ink " + folder.color + ", want List's rest ink " + theme.color.metadata)
+    theme.color.muted = kept
+    if (restRatio < 4.5) out.push("rest folder ink " + folder.color + " is " + restRatio.toFixed(2) + ":1 on the background, want at least 4.5:1")
     probe.cursor = true
     if (!Qt.colorEqual(folder.color, fg)) out.push("cursor folder ink " + folder.color + ", want foreground")
     probe.cursor = false

@@ -184,7 +184,7 @@ FocusScope {
         width: Theme.cardSpan(Theme.space(420) * Theme.dialogWidthRatio, root.width - 2 * Theme.spacing.gap)
         height: Theme.cardSpan(body.wanted + 2 * Theme.spacing.rowPaddingX, root.height - 2 * Theme.spacing.gap)
         color: Theme.color.surface
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
         border.width: Theme.spacing.hairline
         radius: Style.cornerRadius
         MouseArea {
@@ -205,7 +205,7 @@ FocusScope {
                     width: parent.width
                     text: root.title
                 }
-                Rectangle { width: parent.width; height: Theme.spacing.hairline; color: Theme.color.muted; opacity: 0.4 }
+                Rectangle { width: parent.width; height: Theme.spacing.hairline; color: Theme.color.mutedFrame; opacity: 0.4 }
                 Text {
                     width: parent.width
                     visible: root.inputAction
@@ -219,7 +219,7 @@ FocusScope {
                     width: parent.width
                     height: Theme.rowHeight - Theme.spacing.rowPaddingY
                     color: Theme.color.background
-                    border.color: field.activeFocus ? Theme.color.accent : Theme.color.muted
+                    border.color: field.activeFocus ? Theme.color.accent : Theme.color.mutedFrame
                     border.width: Theme.spacing.hairline
                     TextInput {
                         id: field

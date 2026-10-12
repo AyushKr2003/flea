@@ -33,7 +33,7 @@ Row {
             ruleRows: Theme.spacing.hairline
             glyph: modelData
             inputLive: root.inputLive
-            restingColor: root.viewMode === modelData ? Theme.color.foreground : Theme.color.muted
+            restingColor: root.viewMode === modelData ? Theme.color.foreground : Theme.color.mutedFrame
             onActivated: root.chosen(modelData)
         }
     }

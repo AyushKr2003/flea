@@ -90,7 +90,7 @@ Item {
     // A lifted row is the cursor, the pointer, or a selection member; all three take the same fill treatment, per qui Minimal.
     property bool lifted: root.cursor || root.hovered || root.selected || root.dropTarget
     // The OEM derives its secondary ink from the foreground rather than reading a separate palette key.
-    readonly property color dim: Qt.darker(Theme.color.foreground, 1.4)
+    readonly property color dim: Theme.color.metadata
     // One ink serves four cells, lifts metadata to foreground and carries cut dim without child opacity.
     readonly property color cellInk: Util.alpha(root.lifted || root.foregroundMetadata ? Theme.color.foreground : root.dim, root.dimOpacity)
     // A cut row dims its content, never the state fills, and every dimmed child reads this one value.
@@ -124,7 +124,7 @@ Item {
     Rectangle {
         width: Theme.spacing.hairline * 2
         height: parent.height
-        color: !root.cursor ? "transparent" : root.paneFocused ? Theme.color.accent : Theme.color.muted
+        color: !root.cursor ? "transparent" : root.paneFocused ? Theme.color.accent : Theme.color.mutedFrame
     }
 
     // One Loader for the drop frame, the drop label and the clip mark, so a row at rest builds none.
@@ -168,7 +168,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.verticalCenterOffset: -1
                 name: root.clipMark
-                color: Theme.color.muted
+                color: Theme.color.mutedFrame
             }
         }
     }
@@ -202,7 +202,7 @@ Item {
         width: root.markSlot
         height: root.markSlot
         name: root.row ? Icons.glyphForRow(root.row.i, root.row.p) : Icons.FALLBACK
-        color: root.dimmed(root.dualMode ? (root.cursor && root.paneFocused ? Theme.color.accent : Theme.color.muted) : root.lifted ? Theme.color.foreground : root.dim)
+        color: root.dimmed(root.dualMode ? (root.cursor && root.paneFocused ? Theme.color.accent : Theme.color.mutedFrame) : root.lifted ? Theme.color.foreground : Theme.color.metadataFrame)
     }
 
     // What the row actually draws, so a test catches the binding being cut and not only the lookup.
@@ -385,7 +385,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: parent.width * 0.3
         height: Theme.font.caption
-        color: Theme.color.muted
+        color: Theme.color.mutedFrame
         opacity: 0.2
     }
 

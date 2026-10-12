@@ -585,7 +585,7 @@ Item {
                     anchors.rightMargin: Style.spacing.rowPaddingX
                     anchors.verticalCenter: netHeading.verticalCenter
                     name: "plus"
-                    color: Theme.color.muted
+                    color: Theme.color.mutedFrame
                     width: Theme.font.caption
                     height: width
                 }

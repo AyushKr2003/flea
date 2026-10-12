@@ -304,7 +304,7 @@ Item {
             height: Math.max(0, Math.min(rows.implicitHeight + 2 * Theme.spacing.rowPaddingY, root.room))
             color: Theme.color.surface
             border.width: Theme.spacing.hairline
-            border.color: Theme.color.muted
+            border.color: Theme.color.mutedFrame
             radius: Style.cornerRadius
 
             function reveal(index) { scroll.reveal(rowItems.itemAt(index)) }

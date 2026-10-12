@@ -230,7 +230,7 @@ FocusScope {
         width: Theme.cardSpan(448, root.width - 2 * Theme.spacing.gap)
         height: Theme.cardSpan(body.wanted + card.cardPadding + card.cardBottomPadding, root.height - 2 * Theme.spacing.gap)
         color: Theme.color.surface
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
         border.width: Theme.spacing.hairline
         radius: Style.cornerRadius
         // The Unlock board's padding 16 16 12 and 6 px of air over the buttons, at its 13 px reference.

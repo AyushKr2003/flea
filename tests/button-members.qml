@@ -93,7 +93,7 @@ ShellRoot {
             var state = shell.states[i]
             shell.check(key + " " + state + ": outer height, frame height and label size", [r[state].outerHeight, r[state].frameHeight, r[state].labelSize], wantSizes)
             var off = state === "disabled"
-            var want = off ? Probe.rgba(Flea.Theme.color.muted) : state === "focus" ? focusFrame : frame
+            var want = off ? Probe.rgba(Flea.Theme.color.mutedFrame) : state === "focus" ? focusFrame : frame
             shell.check(key + " " + state + ": the frame is one hairline in " + (off ? "muted" : state === "focus" ? "the focus frame" : frame), [r[state].frameColor, r[state].frameWidth], [want, Flea.Theme.spacing.hairline])
             shell.check(key + " " + state + ": the label inks " + (off ? "muted" : ink), r[state].ink, off ? Probe.rgba(Flea.Theme.color.muted) : ink)
             shell.check(key + " " + state + ": the wash lies inside the frame at its width, so the frame never changes",
@@ -231,7 +231,7 @@ ShellRoot {
         var foreground = Probe.rgba(Flea.Theme.color.foreground)
         shell.check("the picked member keeps a foreground frame and label", [picked.frameColor, picked.ink, picked.washAlpha], [foreground, foreground, 0])
         shell.check("an unpicked member rests in a muted frame and label", [Probe.read(items[1]).frameColor, Probe.read(items[1]).ink],
-                    [Probe.rgba(Flea.Theme.color.muted), Probe.rgba(Flea.Theme.color.muted)])
+                    [Probe.rgba(Flea.Theme.color.mutedFrame), Probe.rgba(Flea.Theme.color.muted)])
         shell.focusFrames(items)
         items[1].takeFocus()
         driver.keyClick(Qt.Key_Return, Qt.NoModifier, shell.noDelay)
@@ -268,7 +268,7 @@ ShellRoot {
     function focusFrames(items) {
         var c = Flea.Theme.color, rgba = Probe.rgba
         parking.forceActiveFocus()
-        shell.check("an unfocused unpicked member's frame is muted and an unfocused picked one's is foreground", [Probe.read(items[1]).frameColor, Probe.read(items[0]).frameColor], [rgba(c.muted), rgba(c.foreground)])
+        shell.check("an unfocused unpicked member's frame is muted and an unfocused picked one's is foreground", [Probe.read(items[1]).frameColor, Probe.read(items[0]).frameColor], [rgba(c.mutedFrame), rgba(c.foreground)])
         // The borders a resting control draws; focus adds none.
         var rest = [items[1], items[0], plain].map(Probe.shownBordered)
         var seen = [items[1], items[0], plain].map(Probe.focusRead)
@@ -277,7 +277,7 @@ ShellRoot {
                     seen.map(function (r) { return [r.frameColor, r.frameWidth, r.ink, r.ringItem, r.borders] }),
                     [[rgba(c.accent), h, rgba(c.muted), false, rest[0]], [rgba(c.accent), h, rgba(c.foreground), false, rest[1]], [rgba(c.foreground), h, rgba(c.foreground), false, rest[2]]])
         spare.forceActiveFocus(); spare.available = false; spare.focused = true
-        shell.check("a focused disabled member draws no accent and no thick frame", [Probe.read(spare).frameColor, Probe.read(spare).frameWidth], [rgba(c.muted), Flea.Theme.spacing.hairline])
+        shell.check("a focused disabled member draws no accent and no thick frame", [Probe.read(spare).frameColor, Probe.read(spare).frameWidth], [rgba(c.mutedFrame), Flea.Theme.spacing.hairline])
         spare.focused = Qt.binding(function () { return spare.activeFocus }); spare.available = true
         parking.forceActiveFocus()
     }
@@ -289,7 +289,7 @@ ShellRoot {
         emptyBox.focused = false; fullBox.focused = false
         var restEmpty = [emptyBox.width, emptyBox.height]
         var restFull = [fullBox.width, fullBox.height]
-        shell.check("a resting empty box frames itself in muted", Probe.rgba(emptyBox.frameItem.border.color), rgba(c.muted))
+        shell.check("a resting empty box frames itself in muted", Probe.rgba(emptyBox.frameItem.border.color), rgba(c.mutedFrame))
         emptyBox.focused = true
         var eRing = Probe.find(emptyBox, "checkRing")
         shell.check("a focused empty box frames itself in the foreground", Probe.rgba(emptyBox.frameItem.border.color), rgba(c.foreground))
@@ -330,6 +330,7 @@ ShellRoot {
         var ask = shell.askOf(accept)
         var accentFrame = Probe.rgba(Flea.Theme.color.accentFrame)
         var muted = Probe.rgba(Flea.Theme.color.muted)
+        var mutedFrame = Probe.rgba(Flea.Theme.color.mutedFrame)
         var foreground = Probe.rgba(Flea.Theme.color.foreground)
         shell.check("Cancel and Open are the one control", [cancel.label, accept.label, cancel.primary, accept.primary], ["Cancel", "Open", false, true])
         shell.check("the answers sit inside the title strip", [cancel.height <= ask.height, accept.height <= ask.height], [true, true])
@@ -338,19 +339,19 @@ ShellRoot {
         var box = frame ? frame.mapToItem(ask, 0, 0) : null
         if (box) shell.log("info title strip " + ask.height + " tall, frame from " + box.y + " to " + (box.y + frame.height) + ", the strip's rule at " + (ask.height - Flea.Theme.spacing.hairline))
         shell.check("the focus frame stays inside the title strip", box !== null && box.y >= 0 && box.y + frame.height <= ask.height, true)
-        shell.check("the enabled primary is the accent frame, the secondary the muted one", [shell.readings.accept.rest.frameColor, shell.readings.cancel.rest.frameColor], [accentFrame, muted])
+        shell.check("the enabled primary is the accent frame, the secondary the muted one", [shell.readings.accept.rest.frameColor, shell.readings.cancel.rest.frameColor], [accentFrame, mutedFrame])
         var off = shell.readings.accept.disabled
-        shell.check("a disabled Open is the muted frame and label at 0.55, with no wash", [off.frameColor, off.ink, off.opacity, off.frameFill], [muted, muted, shell.rulingDisabled, 0])
+        shell.check("a disabled Open is the muted frame and label at 0.55, with no wash", [off.frameColor, off.ink, off.opacity, off.frameFill], [mutedFrame, muted, shell.rulingDisabled, 0])
         shell.check("keyboard focus on Open is the foreground hairline frame with no ring item", [focused.ringItem, focused.frameColor, focused.frameWidth], [false, foreground, Flea.Theme.spacing.hairline])
         shell.check("the primary's resting wash is the 14% accent", shell.near(shell.readings.accept.rest.frameFill, shell.rulingPress), true)
         parking.forceActiveFocus()
         driver.mouseClick(cancel, cancel.width / 2, cancel.height / 2, Qt.LeftButton, Qt.NoModifier, shell.noDelay)
-        shell.check("a click answers and takes no keyboard focus, so no focus frame", [shell.cancels, cancel.activeFocus, Probe.read(cancel).frameColor], [1, false, muted])
+        shell.check("a click answers and takes no keyboard focus, so no focus frame", [shell.cancels, cancel.activeFocus, Probe.read(cancel).frameColor], [1, false, mutedFrame])
         cancel.forceActiveFocus()
         driver.keyClick(Qt.Key_Tab, Qt.NoModifier, shell.noDelay)
         driver.keyClick(Qt.Key_Backtab, Qt.ShiftModifier, shell.noDelay)
         shell.check("Tab and Shift Tab on an answer report to the picker's own order", shell.stepped, [["Cancel", false], ["Cancel", true]])
-        shell.marks(muted, foreground)
+        shell.marks(mutedFrame, foreground)
     }
     // Back, Up and both view marks are frameless chrome marks: Back and Up rest in the foreground, the keyboard frames them, never boxed.
     function marks(muted, foreground) {
@@ -463,9 +464,10 @@ ShellRoot {
             shell.check("the harness draws at the reference text size", Flea.Theme.baseSize, shell.pinnedSize)
             shell.check("the harness runs with motion on, so the press scale is drawn", Flea.Theme.reducedMotion, false)
             var muted = Probe.rgba(Flea.Theme.color.muted)
+            var mutedFrame = Probe.rgba(Flea.Theme.color.mutedFrame)
             var answerSizes = [shell.rulingHeight, shell.askOf(accept).height - Flea.Theme.spacing.hairline - 2 * Flea.Theme.chromeControlInset, Flea.Theme.font.body]
-            shell.ladder("member", muted, muted, Probe.rgba(Flea.Theme.color.accent))
-            shell.ladder("cancel", Probe.rgba(Flea.Theme.color.foreground), muted, Probe.rgba(Flea.Theme.color.foreground), answerSizes)
+            shell.ladder("member", muted, mutedFrame, Probe.rgba(Flea.Theme.color.accent))
+            shell.ladder("cancel", Probe.rgba(Flea.Theme.color.foreground), mutedFrame, Probe.rgba(Flea.Theme.color.foreground), answerSizes)
             shell.ladder("plain", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground))
             shell.ladder("accept", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground), answerSizes)
             shell.members()

@@ -258,6 +258,9 @@ function run(check) {
     check("Apply is available as it can apply, and a Tab stop only then",
           [applyDrawn.indexOf("available: root.canApply") >= 0, applyDrawn.indexOf("tabStop: true") >= 0, applyDrawn.indexOf("enabled:") < 0].join(" "), "true true true")
     var seam = Source.source("ui/Ipc.qml"), stateFn = Source.slice(seam, "function controlState(", "function roleOf(")
+    var roleFn = Source.slice(seam, "function roleOf(", "function confirmationState(")
+    check("the seam names a frame's role mutedFrame and a caption's muted, so a frame left on muted is visible",
+          [roleFn.indexOf('Qt.colorEqual(color, Theme.color.mutedFrame) ? "mutedFrame"') >= 0, roleFn.indexOf('Qt.colorEqual(color, Theme.color.muted) ? "muted"') >= 0].join(" "), "true true")
     var permFn = Source.slice(seam, "function permissionsState()", "function trashState()")
     check("the seam reports a control enabled only while it is available",
           [/enabled: !!item && item\.enabled\s*&& \(item\.available === undefined \|\| item\.available\)/.test(stateFn),

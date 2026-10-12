@@ -215,6 +215,7 @@ ShellRoot {
     // The ruling itself, so two controls drifting together still fail.
     function ruling() {
         var muted = shell.rgba(Flea.Theme.color.muted)
+        var mutedFrame = shell.rgba(Flea.Theme.color.mutedFrame)
         var error = shell.rgba(Flea.Theme.color.error)
         var foreground = shell.rgba(Flea.Theme.color.foreground)
         var s = shell.readings.strip
@@ -223,7 +224,7 @@ ShellRoot {
             shell.check(state + ": the frame is one hairline", s[state].frameWidth, Flea.Theme.spacing.hairline)
             shell.check(state + ": a destructive label inks error (muted when disabled)", s[state].ink, state === "disabled" ? muted : error)
             if (state === "focus") shell.check(state + ": the frame is the foreground frame", s[state].frameColor, foreground)
-            else shell.check(state + ": the frame is the muted frame", s[state].frameColor, muted)
+            else shell.check(state + ": the frame is the muted frame", s[state].frameColor, mutedFrame)
         }
         shell.check("rest: no wash", s.rest.washAlpha, 0)
         shell.check("hover: the wash is 8% of the ink", Math.abs(s.hover.washAlpha - shell.rulingHover) < shell.alphaEpsilon, true)

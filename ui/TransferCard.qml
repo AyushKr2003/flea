@@ -101,7 +101,7 @@ Item {
         anchors.fill: parent
         color: Theme.color.surface
         border.width: Theme.spacing.hairline
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
         // Mirrors hyprland decoration:rounding, the same as the menu and the convert popup; 0 on a
         // stock box, and the bar inside stays square either way.
         radius: Style.cornerRadius
@@ -126,7 +126,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 width: Theme.chromeMarkSize
                 height: Theme.chromeMarkSize
-                color: Theme.color.muted
+                color: Theme.color.mutedFrame
             }
 
             Text {
@@ -164,7 +164,7 @@ Item {
 
             Rectangle {
                 anchors.fill: parent
-                color: Theme.color.muted
+                color: Theme.color.mutedFrame
                 opacity: root.trackOpacity
             }
 

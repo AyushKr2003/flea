@@ -23,7 +23,7 @@ Row {
         delegate: Rectangle {
             width: root.barWidth
             height: root.parts.length > 0 ? held.height : quoteText.implicitHeight
-            color: Theme.color.muted
+            color: Theme.color.mutedFrame
         }
     }
 

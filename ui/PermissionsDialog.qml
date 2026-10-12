@@ -79,7 +79,7 @@ FocusScope {
     component Rule: Rectangle {
         width: parent.width
         height: Theme.spacing.hairline
-        color: Theme.color.muted
+        color: Theme.color.mutedFrame
         opacity: 0.4
     }
     // No enabled keys: each item.enabled already carries every mode's answer, a copy could disagree.
@@ -342,7 +342,7 @@ FocusScope {
         width: Theme.cardSpan(Math.round(root.boardCardWidth * root.boardScale), root.width - 2 * Theme.spacing.gap)
         height: Theme.cardSpan(Theme.spacing.hairline + chrome.height + body.wanted + Theme.spacing.rowPaddingX + root.bodyInset, root.height - 2 * Theme.spacing.gap)
         color: Theme.color.surface
-        border.color: Theme.color.muted
+        border.color: Theme.color.mutedFrame
         border.width: Theme.spacing.hairline
         radius: Style.cornerRadius
         clip: true
@@ -391,7 +391,7 @@ FocusScope {
                 anchors.verticalCenter: parent.verticalCenter
                 glyph: "x"; gesturePolicy: TapHandler.ReleaseWithinBounds
                 // Muted at rest as the board draws the strip; the keyboard adds ChromeButton's own frame.
-                restingColor: Theme.color.muted
+                restingColor: Theme.color.mutedFrame
                 enabled: !root.applyLocked
                 accessName: "Close permissions"
                 activeFocusOnTab: true
@@ -422,7 +422,7 @@ FocusScope {
                     spacing: Theme.spacing.gap
                     // For several items the grid and Apply are the whole card, so the name row drops out.
                     visible: !root.isMulti
-                    Flea.Glyph { width: Theme.markSize; height: nameLabel.height; anchors.verticalCenter: parent.verticalCenter; name: root.facts.directory ? "folder" : "file"; color: Theme.color.muted }
+                    Flea.Glyph { width: Theme.markSize; height: nameLabel.height; anchors.verticalCenter: parent.verticalCenter; name: root.facts.directory ? "folder" : "file"; color: Theme.color.mutedFrame }
                     Text { id: nameLabel; width: parent.width - Theme.markSize - kindLabel.width - 2 * parent.spacing; anchors.verticalCenter: parent.verticalCenter; text: root.path.split("/").pop(); elide: Text.ElideMiddle; textFormat: Text.PlainText; color: Theme.color.foreground; font { family: Theme.font.family; pixelSize: Theme.font.body } }
                     Text { id: kindLabel; anchors.verticalCenter: parent.verticalCenter; text: root.facts.ok ? (root.facts.directory ? "directory" : "file") : ""; textFormat: Text.PlainText; color: Theme.color.foreground; font { family: Theme.font.family; pixelSize: Theme.font.caption } }
                 }
@@ -504,7 +504,7 @@ FocusScope {
                         y: Math.round((parent.height - height) / 2)
                         color: Theme.color.background
                         // A focused field is its own frame in the accent, and the error role where its line reports an error, as RenameField draws it.
-                        border.color: octal.activeFocus ? (errorLabel.visible && !root.busy ? Theme.color.error : Theme.color.accent) : Theme.color.muted
+                        border.color: octal.activeFocus ? (errorLabel.visible && !root.busy ? Theme.color.error : Theme.color.accent) : Theme.color.mutedFrame
                         TextInput {
                             id: octal
                             anchors.fill: parent
@@ -549,7 +549,7 @@ FocusScope {
                     visible: root.facts.directory === true && !root.isMulti
                     color: Theme.color.background
                     border.width: Theme.spacing.hairline
-                    border.color: Theme.color.muted
+                    border.color: Theme.color.mutedFrame
                     Flea.Glyph { id: scopeMark; x: Theme.spacing.gap; y: Theme.spacing.gap; width: Theme.font.bodySmall; height: width; name: "check"; color: Theme.color.accent }
                     Text {
                         id: directoryScope

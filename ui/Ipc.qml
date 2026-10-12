@@ -40,7 +40,7 @@ QtObject {
     }
     // Which role a frame draws in, so a capture asserts the frame's colour without knowing the theme.
     function roleOf(color) {
-        return Qt.colorEqual(color, Theme.color.error) ? "error" : Qt.colorEqual(color, Theme.color.accent) ? "accent" : Qt.colorEqual(color, Theme.color.muted) ? "muted" : "other"
+        return Qt.colorEqual(color, Theme.color.error) ? "error" : Qt.colorEqual(color, Theme.color.accent) ? "accent" : Qt.colorEqual(color, Theme.color.mutedFrame) ? "mutedFrame" : Qt.colorEqual(color, Theme.color.muted) ? "muted" : "other"
     }
     function confirmationState(item) {
         return item ? {opened: item.opened, token: item.snapshot.token || 0, count: item.snapshot.count || 0,
@@ -69,7 +69,7 @@ QtObject {
         function selectedFill(): string { return String(Style.selectedFill) }
         function palette(): string {
             var c = Theme.color;
-            return [c.background, c.surface, c.foreground, c.muted, c.accent, c.error, c.symlink, c.executable, c.accentFrame].join(" ");
+            return [c.background, c.surface, c.foreground, c.muted, c.accent, c.error, c.symlink, c.executable, c.accentFrame, c.mutedFrame].join(" ");
         }
         // The size running text really draws at, and a row name's own: the settings case pins both to the stop.
         function bodyPx(): int { return Theme.font.body }

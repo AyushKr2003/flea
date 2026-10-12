@@ -85,6 +85,6 @@ Rectangle {
     Rectangle {
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
         height: Theme.spacing.hairline
-        color: Theme.color.muted
+        color: Theme.color.mutedFrame
     }
 }

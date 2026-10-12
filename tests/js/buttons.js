@@ -200,15 +200,15 @@ function run(check) {
         Source.source("ui/DialogButton.qml").indexOf("root.inStrip ? Theme.chromeControlHeight : root.height") >= 0, true)
 
     // Decided 2026-10-03: a field's focus is its own hairline frame in the accent, as 0.3.6 drew it; the 2 px ring is the buttons' alone.
-    var accentFrame = "border.color: field.activeFocus ? Theme.color.accent : Theme.color.muted"
+    var accentFrame = "border.color: field.activeFocus ? Theme.color.accent : Theme.color.mutedFrame"
     // A refused passphrase is the one frame that changes, to the error role.
-    var accentErrorFrame = "border.color: root.error ? Theme.color.error : (field.activeFocus ? Theme.color.accent : Theme.color.muted)"
+    var accentErrorFrame = "border.color: root.error ? Theme.color.error : (field.activeFocus ? Theme.color.accent : Theme.color.mutedFrame)"
     var fields = {
         "ui/DialogField.qml": accentErrorFrame,
         "ui/MenuActionDialog.qml": accentFrame,
         "ui/OpenWithDialog.qml": accentFrame,
         "ui/PickerSave.qml": accentFrame,
-        "ui/PermissionsDialog.qml": "border.color: octal.activeFocus ? (errorLabel.visible && !root.busy ? Theme.color.error : Theme.color.accent) : Theme.color.muted",
+        "ui/PermissionsDialog.qml": "border.color: octal.activeFocus ? (errorLabel.visible && !root.busy ? Theme.color.error : Theme.color.accent) : Theme.color.mutedFrame",
         "ui/RenameField.qml": "border.color: root.errorText.length > 0 ? Theme.color.error : Theme.color.accent"
     }
     for (var file in fields) {

@@ -111,13 +111,13 @@ ShellRoot {
             root.fail(tag + ": live Up ink " + up.markItem.color + ", want foreground")
         if (back.enabled) root.fail(tag + ": Back is live with an empty history, want disabled")
         else {
-            if (!Qt.colorEqual(back.markItem.color, Flea.Theme.color.muted))
+            if (!Qt.colorEqual(back.markItem.color, Flea.Theme.color.mutedFrame))
                 root.fail(tag + ": dead Back ink " + back.markItem.color + ", want muted")
             if (Math.abs(back.markItem.opacity - Flea.Theme.disabledOpacity) > 0.001)
                 root.fail(tag + ": dead Back opacity " + back.markItem.opacity + ", want " + Flea.Theme.disabledOpacity)
         }
         if (list.lit) root.fail(tag + ": the list mark is lit in grid mode, want unlit")
-        else if (!Qt.colorEqual(list.markItem.color, Flea.Theme.color.muted))
+        else if (!Qt.colorEqual(list.markItem.color, Flea.Theme.color.mutedFrame))
             root.fail(tag + ": unlit list ink " + list.markItem.color + ", want muted")
         if (!grid.lit) root.fail(tag + ": the grid mark is unlit in grid mode, want lit")
         else if (!Qt.colorEqual(grid.markItem.color, Flea.Theme.color.foreground))

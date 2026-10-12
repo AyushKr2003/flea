@@ -16,7 +16,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: parent.width
         height: Theme.spacing.hairline * 2
-        color: Theme.color.muted
+        color: Theme.color.mutedFrame
     }
 
     Rectangle {

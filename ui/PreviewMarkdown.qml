@@ -37,7 +37,7 @@ Item {
     }
     // The host supplies the code surface colour for its page.
     property color codeSurface: Theme.color.surface
-    readonly property string borderHex: hexOf(Theme.color.muted)
+    readonly property string borderHex: hexOf(Theme.color.mutedFrame)
     readonly property string chromeHex: hexOf(root.codeSurface)
     // The render suite reads the ink it asserts beside the border, same assembly, no coercion.
     readonly property string inkHex: hexOf(Theme.color.foreground)

@@ -451,7 +451,7 @@ Rectangle {
             Rectangle {
                 width: Theme.spacing.hairline
                 height: parent.height
-                color: Theme.color.muted
+                color: Theme.color.mutedFrame
             }
             Flea.ResizeHandle {
                 id: handle

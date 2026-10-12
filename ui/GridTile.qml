@@ -126,7 +126,7 @@ Item {
             name: root.row ? Icons.glyphForRow(root.row.i, root.row.p) : "file"
             // ThemeRoles.dc.html gives accent the selection fill and edge and foreground the label
             // and the mark inside it, so the border carries the emphasis and the ink stays readable.
-            color: root.cursor || root.selected ? Theme.color.foreground : Theme.color.muted
+            color: root.cursor || root.selected ? Theme.color.foreground : Theme.color.mutedFrame
         }
     }
 
@@ -221,7 +221,7 @@ Item {
             width: root.clipPx
             height: root.clipPx
             name: root.clipMark
-            color: Theme.color.muted
+            color: Theme.color.mutedFrame
         }
     }
 
@@ -280,7 +280,7 @@ Item {
             height: tip.implicitHeight + Theme.spacing.gap
             color: Theme.color.surface
             border.width: Theme.spacing.hairline
-            border.color: Theme.color.muted
+            border.color: Theme.color.mutedFrame
 
             Text {
                 id: tip

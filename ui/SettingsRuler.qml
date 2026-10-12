@@ -65,7 +65,7 @@ Item {
                 y: Math.round(root.numberHeight)
                 width: tick.marked ? root.markedInk : root.tickInk
                 height: tick.marked ? root.markedHeight : root.tickHeight
-                color: root.active && tick.marked ? Theme.color.accent : Theme.color.muted
+                color: root.active && tick.marked ? Theme.color.accent : Theme.color.mutedFrame
                 opacity: tick.marked ? 1 : root.restOpacity
             }
 
