@@ -42,7 +42,7 @@ function parsePeers(raw) {
 // The code names the state for logic (statusFailed, invalid, signedOut, stopped, disabled, noPeers, or "" when ready); the reason is for people.
 // Sample input: {"BackendState":"Running","Self":{"CapMap":{"https://tailscale.com/cap/file-sharing":[]}},"Peer":{}}.
 function status(raw, exitCode, error) {
-    if (exitCode !== 0) return { peers: [], reason: String(error || "Tailscale status failed.").trim(), code: "statusFailed" }
+    if (exitCode !== 0) return { peers: [], reason: String(error || "Tailscale could not be checked").trim(), code: "statusFailed" }
     var data
     try { data = JSON.parse(raw) } catch (e) { return { peers: [], reason: "invalid status", code: "invalid" } }
     if (!data || typeof data !== "object") return { peers: [], reason: "invalid status", code: "invalid" }

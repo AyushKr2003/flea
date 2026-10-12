@@ -156,7 +156,7 @@ function run(check) {
     var favourite = rail([home], 0)
     RailKeys.act("menu", railing, favourite)
     check("a row with nothing to release says why instead of swallowing the key",
-          favourite.opened + "|" + railing.said, "0|Home has nothing to eject or unmount.")
+          favourite.opened + "|" + railing.said, "0|Home has nothing to eject or unmount")
     var empty = rail([], 0)
     railing.said = ""
     RailKeys.act("menu", railing, empty)
@@ -174,7 +174,7 @@ function run(check) {
     var favouriteRail = ejectPane("/home/user", [home, stick], 0)
     RailKeys.act("eject", favouriteRail, favouriteRail.sidebar)
     check("ctrl e on a favourite says why, and releases nothing",
-          favouriteRail.sidebar.released.length + "|" + favouriteRail.said, "0|Home has nothing to eject or unmount.")
+          favouriteRail.sidebar.released.length + "|" + favouriteRail.said, "0|Home has nothing to eject or unmount")
     // The release is picked by name, never by position: a share offers only Unmount, and a
     // phone leads with Open beside its Unmount the way a volume does, so rows[0] would open both.
     var share = { label: "isos", group: "network", kind: "share", uri: "smb://example.com/isos/", path: "", mounted: true }

@@ -46,6 +46,7 @@ function pane() {
     // ui/Pane.qml restoreView; the request log carries it so a check reads its order against the listing.
     p.restoreView = function (path) { p.sent.push("view " + path) }
     p.message = function (text, isError) { p.said.push(text) }
+    p.armPrompted = function (text, isError) { p.said.push(text) }
     // ui/Pane.qml cancelSlowClick stops the timer and clears the tap record.
     p.cancelSlowClick = function () { p.cancelled += 1; SlowClick.cancel(p) }
     p.listArea = { primeSettle: function () {} }

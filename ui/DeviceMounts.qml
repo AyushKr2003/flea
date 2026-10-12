@@ -195,7 +195,7 @@ Item {
 
     function mountVolume(e) {
         if (mountProcess.running) {
-            root.message("Another device is still mounting; wait for its result.", false)
+            root.message(Mounts.WORDS.anotherMounting, false)
             return
         }
         root._pendingOpenDevice = e.device
@@ -270,14 +270,14 @@ Item {
         ejectProcess.command = ["gio", "mount", "-e", e.path]
         ejectProcess.running = true
         // Replaces the arm prompt, and a stick mid-flush can take a while to come unmounted.
-        root.message("Ejecting " + e.label + ", do not unplug it yet.", false)
+        root.message(Format.fill(Mounts.WORDS.ejecting, e.label), false)
     }
 
     // Unmount every volume, then stop the drive, so nothing is left for udiskie to remount.
     function powerOff(e, disk) {
         // A user unmount already in flight owns unmountProcess; adopting it would skip the queue.
         if (unmountProcess.running) {
-            root.message(e.label + " is still unmounting; wait for its result.", false)
+            root.message(Format.fill(Mounts.WORDS.stillUnmountingTryAgain, e.label), false)
             return
         }
         root.quiesce(e.path)
@@ -285,7 +285,7 @@ Item {
         root._powerOffDisk = disk
         root._powerOffQueue = Devices.powerOffQueue(root.entries, disk)
         root._powerSectors = ""
-        root.message("Ejecting " + e.label + ", do not unplug it yet.", false)
+        root.message(Format.fill(Mounts.WORDS.ejecting, e.label), false)
         root.powerOffNext()
     }
 
@@ -359,7 +359,7 @@ Item {
             if (root._pendingOpenDevice.length === 0)
                 return
             root._pendingOpenDevice = ""
-            root.message(root._pendingOpenLabel + " mounted but never reported a folder to open.", true)
+            root.message(Format.fill(Mounts.WORDS.noFolder, root._pendingOpenLabel), true)
         }
     }
 
@@ -392,7 +392,7 @@ Item {
             root._powerOffQueue = []
             root._ejectDevice = ""
             // A verdict replaces the last one, so the next chain's safe sentence retires this error.
-            var text = label + " did not finish ejecting and is still mounted."
+            var text = Format.fill(Mounts.WORDS.ejectUnfinished, label)
             root.forgetMessage(root._lastVerdict)
             root._lastVerdict = text
             root.message(text, true)
@@ -458,7 +458,7 @@ Item {
             }
             mountTimeout.stop()
             root._pendingOpenDevice = ""
-            root.message(sentence.length > 0 ? sentence : label + " could not be mounted.", true)
+            root.message(sentence.length > 0 ? sentence : Format.fill(Mounts.WORDS.mountFailed, label), true)
         }
     }
 
@@ -514,7 +514,7 @@ Item {
                 root._powerOffQueue = []
                 root._ejectDevice = ""
                 ejectVerdictTimeout.stop()
-                root.message(sentence.length > 0 ? sentence : root._ejectLabel + " could not be ejected.", true)
+                root.message(sentence.length > 0 ? sentence : Format.fill(Mounts.WORDS.ejectFailed, root._ejectLabel), true)
                 root.poll()
                 return
             }

@@ -127,7 +127,7 @@ function run(check) {
     check("H11 deep indentation inside a fence is code, never nesting", types("```\n" + list(60) + "\n```"), "fence")
     check("H11 deep indentation of plain text is not nesting", types(" ".repeat(200) + "word") !== "deep", true)
     check("H11 a heading before the deep part is not drawn", types("# Title\n\n" + quote(40)), "deep")
-    check("H11 the notice names the limit", typeof Markdown.deepNotice === "function" ? Markdown.deepNotice() : "", "Rendered preview skipped: nesting is deeper than 32 levels. Showing the source.")
+    check("H11 the notice names the limit", typeof Markdown.deepNotice === "function" ? Markdown.deepNotice() : "", "This file nests deeper than 32 levels, so Flea shows its source.")
 
     // An HTML link draws in the text's ink like a Markdown link: the importer's own link blue never shows.
     var inked = '<a href="' + url + '"><font color="' + ink + '">Install</font></a>'

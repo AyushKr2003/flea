@@ -5,6 +5,18 @@
 // The model behind ui/TransferCard.qml, kept out of the QML so every state the card can draw is
 // checked without a window. The object each function takes is ui/js/Ops.js's transfer.
 
+// Whole phrases with "%1" for a value, filled by fill so each translates as one; a leading space is the join to the figure drawn before it.
+var WORDS = {
+    movedWaiting: " moved · waiting for the drive",
+    copiedWaiting: " copied · waiting for the drive",
+    moved: " moved",
+    copied: " copied",
+    writingTo: "Writing to %1",
+    moving: "Moving %1 of %2",
+    copying: "Copying %1 of %2",
+    redoing: "Redoing %3 %1 of %2"
+}
+
 // The byte sample for the item in flight. done is the count already finished, so it stays where it
 // was: a sample fills the item in, it does not complete it.
 function sampled(t, index, name, bytes, total, scanned) {
@@ -58,7 +70,7 @@ function byteParts(t, rate) {
         if (confirmed <= 0) {
             return []
         }
-        return [figure(Format.size(confirmed)), word((t.moving ? " moved" : " copied") + " · waiting for the drive")]
+        return [figure(Format.size(confirmed)), word(t.moving ? WORDS.movedWaiting : WORDS.copiedWaiting)]
     }
     var moved = movedBytes(t)
     if (moved <= 0) {
@@ -69,7 +81,7 @@ function byteParts(t, rate) {
     if (total > 0) {
         parts.push(word(" of "), figure(Format.size(total)))
     } else {
-        parts.push(word(t.moving ? " moved" : " copied"))
+        parts.push(word(t.moving ? WORDS.moved : WORDS.copied))
     }
     parts.push(word(" · "), figure(Format.size(rate) + "/s"))
     // Rule 3b: an estimate needs both a total and a rate, and a stall has neither to divide by.
@@ -96,11 +108,11 @@ function head(t) {
         return t.headText
     // The flush headline names the drive being waited on, with no percentage, because the kernel reports none.
     if (t.writing === true)
-        return "Writing to " + (t.drive && t.drive.length > 0 ? t.drive : "the drive")
+        return Format.fill(WORDS.writingTo, t.drive && t.drive.length > 0 ? t.drive : "the drive")
     // An extract has no items to count, so it names its verb alone.
     if (t.extract)
         return "Extracting"
-    return (t.redo ? "Redoing " + t.redo + " " : t.moving ? "Moving " : "Copying ") + Format.count(t.index + 1) + " of " + Format.count(t.n)
+    return Format.fill(t.redo ? WORDS.redoing : t.moving ? WORDS.moving : WORDS.copying, Format.count(t.index + 1), Format.count(t.n), t.redo)
 }
 
 // The card's second row: the item in flight and how big it is. total is 0 for a directory, whose

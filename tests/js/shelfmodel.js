@@ -244,7 +244,7 @@ function run(check) {
   check("a run that died before its first item still says the copy did not happen",
         Run.movedText("Copied", 0, 0, 0, "drafts", "") + "|" + Run.runFailedText("Copied")
         + "|" + Run.runFailedText("Moved"),
-        "|That copy did not run.|That move did not run.")
+        "|The items could not be copied.|The items could not be moved.")
   check("the other three actions say what they did",
         Run.zippedText(4) + "|" + Run.copiedPathsText(4) + "|" + Run.sentText(1, "macbookair"),
         "Zipped 4 items into one archive|Copied 4 paths|Sent 1 item to macbookair")

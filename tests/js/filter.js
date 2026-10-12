@@ -205,8 +205,8 @@ function run(check) {
     check("and directories still lead the filtered view after a reverse",
           sortFirst.map(function (i) { return Fixture.reversed()[i].d }).join(","), "true,true,false,false")
     // States' no-match tile: the query named back, and the count of rows the filter tested.
-    check("a filter that matches none says how many rows it tested", Filter.noMatch(11), "11 rows here, none of them")
-    check("and a single row keeps the sentence readable", Filter.noMatch(1), "1 row here, and not it")
+    check("a filter that matches none says how many rows it tested", Filter.noMatch(11), "No match among 11 items")
+    check("and a single item keeps the sentence readable", Filter.noMatch(1), "No match among 1 item")
 
     var pointed = Fixture.pane()
     Filter.setCursor(pointed, 4, 0)

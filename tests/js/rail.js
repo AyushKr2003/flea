@@ -231,8 +231,8 @@ function run(check) {
           railActions(idleRows[1]), "Mount,Flash image")
     check("Ctrl+E on an unmounted volume row releases nothing",
           Eject.releaseFromRows(Mounts.railMenu(idleRows[1])), "")
-    var systemSentence = "This folder is on a system volume, which Flea never unmounts."
-    var noVolume = "This folder is not on a volume Flea can unmount."
+    var systemSentence = "This folder is on a system volume, which Flea never unmounts"
+    var noVolume = "This folder is not on a volume Flea can unmount"
     check("Ctrl+E under home names the system volume when the backend says a system mountpoint holds it",
           ejector("/home/user/Documents", railRows, undefined, { system: true }).said, systemSentence)
     var cloudRows = railRows.concat([{ label: "gdrive", group: "network", kind: "cloud",
@@ -284,15 +284,15 @@ function run(check) {
           ending(ejector("/home/user", railRows, 0)), "1 said|0 handed|0 released")
     check("a rail row with nothing to release says so once",
           ending(ejector("/home/user", [photos], 0)) + "|" + ejector("/home/user", [photos], 0).said,
-          "1 said|0 handed|0 released|Photos has nothing to eject or unmount.")
+          "1 said|0 handed|0 released|Photos has nothing to eject or unmount")
     check("Ctrl+E on the system disk names that drive",
-          ejector("/home/user", railRows, 0).said, "nvme0n1 is the system drive, which Flea never unmounts.")
+          ejector("/home/user", railRows, 0).said, "nvme0n1 is the system drive, which Flea never unmounts")
     var cashRow = { label: "CASH$$", group: "device", kind: "disk", device: "/dev/sda", path: "/", mounted: true, glyph: "drive" }
     check("a label holding dollar signs is printed as written",
-          ejector("/", [cashRow], 0).said, "CASH$$ is the system drive, which Flea never unmounts.")
+          ejector("/", [cashRow], 0).said, "CASH$$ is the system drive, which Flea never unmounts")
     check("and both busy sentences fill a label whole",
           [Mounts.WORDS.stillUnmounting, Mounts.WORDS.stillEjecting].map(function (w) { return Format.fill(w, "CASH$$") }).join("|"),
-          "Still unmounting CASH$$; wait for its result.|Still ejecting CASH$$; wait for its result.")
+          "Still unmounting CASH$$; wait for its result|Still ejecting CASH$$; wait for its result")
 
     // CloudMounts: a FUSE mount inside the home folder shows in NETWORK under its
     // folder's name. Sample input, /proc/self/mountinfo lines (id parent maj:min root

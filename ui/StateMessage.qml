@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import "js/Errors.js" as Errors
 import "js/Filter.js" as Filter
+import "js/Format.js" as Format
 
 // The one thing a pane shows instead of rows, and it carries all three parts the States board gives
 // a pane state: the mark, then one sentence, then the detail the system can prove. The sentence used
@@ -59,7 +60,7 @@ Item {
         Text {
             id: sentence
             width: root.width
-            text: root.nothingMatched ? "Nothing matched " + root.filterQuery : root.message
+            text: root.nothingMatched ? Format.fill(Filter.WORDS.nothingMatched, root.filterQuery) : root.message
             color: Theme.color.foreground
             font.family: Theme.font.family
             font.pixelSize: Theme.font.body

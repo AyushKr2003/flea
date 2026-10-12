@@ -144,7 +144,7 @@ function recordError(record) {
     for (var i = 0; i < schemes.length; i++) {
         if (record.path.indexOf(schemes[i]) === 0 && record.path.length > schemes[i].length) return ""
     }
-    return "path must be absolute, ~/ relative, or a supported URI"
+    return "use a full path, a path that starts with ~/, or a network address"
 }
 
 function storedEntries(records, home) {

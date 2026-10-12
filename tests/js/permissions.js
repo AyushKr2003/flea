@@ -1,3 +1,4 @@
+.import "../../ui/js/Format.js" as Format
 .import "../../ui/js/Permissions.js" as Permissions
 .import "../../ui/js/Ops.js" as Ops
 .import "../../ui/js/Menu.js" as Menu
@@ -30,12 +31,12 @@ function blockAfter(src, marker) {
 }
 // Sample input: ".pragma library\nfunction summarize(modes) { ... }"; wrapping its shared binding counts internal calls too.
 function countedPermissions(counter) {
-    var source = Source.source("ui/js/Permissions.js").replace(".pragma library", "")
-    var load = new Function("counter", source
+    var source = Source.source("ui/js/Permissions.js").replace(".pragma library", "").replace(/^\.import .*$/mg, "")
+    var load = new Function("counter", "Format", source
         + "\nvar realSummarize = summarize;"
         + "\nsummarize = function (modes) { counter.calls += 1; return realSummarize(modes); };"
         + "\nreturn { noteMode: noteMode, summarize: summarize };")
-    return load(counter)
+    return load(counter, Format)
 }
 // Sample input: "Rectangle {\n id: card\n x: 1 // {\n Text { text: \"}\" }\n anchors { centerIn: parent }\n}" keeps "id: card x: 1 anchors { centerIn: parent }" and drops the Text child.
 function cardOwnBindings(src, cardId) {
@@ -135,8 +136,8 @@ function run(check) {
         Permissions.summarize(["0644", "0755"]).bits[0].on, true)
     check("a bit set nowhere reads off",
         Permissions.summarize(["0644", "0644"]).bits[2].on, false)
-    check("mixed boxes keep each file's own bit note",
-        Permissions.mixedNote(), "Mixed boxes keep each file's own bit unless you change them.")
+    check("mixed boxes keep each item's setting note",
+        Permissions.mixedNote(), "Mixed boxes keep each item's own setting unless you change them.")
 
     // Special bits are named in the dialog's own words, never dropped on parse -1.
     check("setgid is named in the dialog's own words",

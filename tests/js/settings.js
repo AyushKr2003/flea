@@ -45,9 +45,9 @@ function runRows(check) {
     // An Omarchy size that is not one of the seven still marks a stop, the nearest one.
     var between = Settings.rows("display", displayState(TextSize.follow(), 13))
     check("a size between two stops marks the nearer one", between[2].index, 3)
-    // HANDOFF rule 8: one short line, which at this panel's width is 47 characters, measured.
-    check("the hint is down to the two chords, on one line", display[3].label,
-          "Ctrl+Shift +/- walks them, Ctrl+Shift+0 follows.")
+    // The keys come from the running preset, spelled as a chord; the default preset binds these three.
+    check("the hint names the keys that step through the stops and the one that follows Omarchy", display[3].label,
+          "Ctrl+Shift++ and Ctrl+Shift+- step through them; Ctrl+Shift+0 follows Omarchy again.")
     // And Effective stays, because in Follow it is the size running and the ruler's mark is not.
     check("Effective reports the size actually running", display[4].label + "|" + display[4].value + "|" + display[4].role,
           "Effective|14 px|live")
@@ -60,7 +60,7 @@ function runRows(check) {
     check("and an unanswered query says so rather than claiming 1x",
           Settings.rows("display", displayState(TextSize.follow(), 14, 0))[6].value, "not reported")
     check("its hint is the board's own sentence, so no reader expects a control",
-          display[7].label, "Flea follows the compositor value and does not step or cycle it.")
+          display[7].label, "Flea follows Hyprland's scale and does not change it.")
     check("the board icon override defaults off", display[9].id + "|" + display[9].on, "display.hyprlandIcons|false")
 
     // Switching to Override adds the stop row, and nothing else about the section moves.

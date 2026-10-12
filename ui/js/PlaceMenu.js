@@ -1,10 +1,16 @@
 .pragma library
 
+.import "Format.js" as Format
 .import "Menu.js" as Menu
 .import "Nav.js" as Nav
 .import "RailKeys.js" as RailKeys
 .import "Places.js" as Places
 .import "Tabs.js" as Tabs
+
+// The sentence a remote favourite answers a new-tab open with, filled by Format.fill.
+var WORDS = {
+    opensHere: "%1 opens in this tab only"
+}
 
 // MenuAdditions rule 3: the folder menu, opened from a Places or Favorites row and acting on that
 // row's own path. The key carries the path because the rail rebuilds on a five second poll and an
@@ -85,6 +91,6 @@ function openTabAt(sidebar, index) {
     // Places.openEntry with a new-tab port: same record check, message and file:// decode; a remote entry answers through the network port.
     Places.openEntry(entry, { pane: pane,
         opened: function (path) { Tabs.openNew(pane, path) },
-        networkHost: function () { sidebar.message(entry.label + " opens in this tab only.", false); return null },
+        networkHost: function () { sidebar.message(Format.fill(WORDS.opensHere, entry.label), false); return null },
         message: sidebar.message })
 }

@@ -1,9 +1,18 @@
 .pragma library
 
+.import "Format.js" as Format
+.import "KeyName.js" as KeyName
+
 // Flea's text size, which is the Display section's one control. The SettingsScale board rules the
 // shape: Omarchy owns the size by default, and an override pins one stop from Omarchy's own range
 // rather than a free number or a multiplier of its own. The monitor scale beside it belongs to the
 // compositor, which is why nothing here steps or cycles one.
+
+// Whole sentences with "%1" for a value, filled by fill so each translates as one.
+var WORDS = {
+    followsOmarchy: "Text size follows Omarchy, %1",
+    override: "Text size %1. %2 follows Omarchy again"
+}
 
 // The board's seven documented stops, in px, read off its own layout table. They are not
 // contiguous: 13, 15, 17, 18 and 19 are not stops. The range is the OEM one, 9 to 20, so Flea
@@ -92,6 +101,6 @@ function caption(base) {
 function announce(stored, omarchyBase) {
     var px = effective(stored, omarchyBase) + "px"
     return following(stored)
-        ? "Text size follows Omarchy, " + px + "."
-        : "Text size " + px + ". Ctrl+Shift+0 follows Omarchy again."
+        ? Format.fill(WORDS.followsOmarchy, px)
+        : Format.fill(WORDS.override, px, KeyName.keyFor("textSizeReset"))
 }

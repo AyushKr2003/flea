@@ -1,6 +1,8 @@
 .import "../../ui/js/Keymap.js" as Keymap
 
 function run(check) {
+    // The hints the status strip draws follow the preset, so this suite hands it back as it found it.
+    var startPreset = Keymap.preset
     var none = Qt.NoModifier, ctrl = Qt.ControlModifier, shift = Qt.ShiftModifier
     var alt = Qt.AltModifier, meta = Qt.MetaModifier
     function key(preset, name, text, mods, expected, context, frontend) {
@@ -321,4 +323,5 @@ function run(check) {
           tabsDefault.filter(function (r) { return r.action === "tabNext" })[0].keys + "|"
           + tabsDefault.filter(function (r) { return r.action === "tabPrevious" })[0].keys, "ctrl-pagedown|ctrl-pageup")
     check("the generator names the pairs it evens", (Keymap.SHEET_MIRRORS || []).length > 0, true)
+    Keymap.setPreset(startPreset)
 }

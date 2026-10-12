@@ -6,17 +6,17 @@ function run(check) {
     // and a refusal of the directory already on screen names nothing, because the breadcrumb does.
     check("a refused hop names the directory that refused",
           Errors.sentence("scan", "Permission denied (os error 13)", "inner"),
-          "Permission denied on inner")
+          "inner cannot be opened: you do not have permission.")
     check("and a refusal of the path on screen is the refusal and nothing else",
           Errors.sentence("scan", "Permission denied (os error 13)", ""),
-          "Permission denied")
+          "This folder cannot be opened: you do not have permission.")
     // The backend's own wording is arbitrary, so the match is case folded before it is looked for.
     check("and it is found whatever case the backend used",
           Errors.sentence("scan", "PERMISSION DENIED", "inner"),
-          "Permission denied on inner")
+          "inner cannot be opened: you do not have permission.")
     check("any other refused hop names its directory too",
           Errors.sentence("scan", "No such file or directory", "gone"),
-          "That directory could not be read: gone")
+          "gone could not be read.")
     check("a stale share names itself rather than the directory",
           Errors.sentence("scan", "file is no longer available", "gone"),
           "That share changed, so this folder is no longer available.")
@@ -28,7 +28,7 @@ function run(check) {
           "That share is not responding.")
     check("and the bare sentence is what is left without one",
           Errors.sentence("scan", "No such file or directory"),
-          "That directory could not be read.")
+          "That folder could not be read.")
     // Size and mtime are real orders now, so the one refusal left is a key the wire never defined.
     check("a column that is no sort key at all is refused in the operator's words",
           Errors.sentence("sort", "no such sort key; send name, size or mtime"),
@@ -38,7 +38,7 @@ function run(check) {
           "Sorting by that column is not available.")
     check("a read failure says the backend stopped",
           Errors.sentence("read", "EOF"),
-          "The backend stopped responding; reopen Flea and try again.")
+          "Flea stopped responding. Reopen Flea and try again.")
     // The state file's own refusal: the change is still on screen, so the sentence says what did not last.
     check("a refused ui.json write says the setting did not last",
           Errors.sentence("state", ""),
@@ -53,7 +53,7 @@ function run(check) {
     // A non-string message must not throw, because the wire can carry a number or null.
     check("a message that is not a string is still one sentence",
           Errors.sentence("scan", null),
-          "That directory could not be read.")
+          "That folder could not be read.")
 
     // The write operations, whose failures the operator is about to act on rather than just read.
     check("an empty journal reads back as the backend's own sentence",
@@ -67,7 +67,7 @@ function run(check) {
           "That action could not be completed; try again.")
     check("a rename onto a taken name says which problem it is",
           Errors.sentence("rename", "File exists (os error 17)"),
-          "A file with that name is already here.")
+          "An item with that name is already here.")
     check("and any other rename failure stays generic rather than leaking errno",
           Errors.sentence("rename", "Permission denied (os error 13)"),
           "That file could not be renamed.")
@@ -81,7 +81,7 @@ function run(check) {
     // The sentence promises the copy, warns the other name may be incomplete, and names no direction.
     check("a rename that kept its copy says so, with no path and no errno",
           Errors.sentence("rename-kept", "Permission denied (os error 13)"),
-          "Copied, but the old name was only partly removed. Check it.")
+          "Copied to the new name, but the original was only partly removed. Check the original.")
     check("that sentence never leaks the errno",
           Errors.sentence("rename-kept", "Permission denied (os error 13)").indexOf("os error") < 0,
           true)
@@ -97,10 +97,10 @@ function run(check) {
           "That file could not be duplicated.")
     check("a trash failure names the operation",
           Errors.sentence("trash", "gio missing"),
-          "That could not be moved to Trash.")
+          "That item could not be moved to Trash.")
     // src/backend/rowguard.rs: rows read from a replaced listing were refused before anything resolved.
     check("a stale refusal says nothing was done, not that something failed partway",
-          Errors.sentence("stale", "the listing changed before this request arrived"),
+          Errors.sentence("stale", "the folder changed before this could run, so nothing was done"),
           "The listing changed before that arrived, so nothing was done.")
     // src/backend/iomount.rs: a window past its deadline names its mount, which the pane keeps.
     check("a window timeout reads back as the backend's own sentence",
@@ -110,8 +110,8 @@ function run(check) {
           Errors.sentence("window", ""),
           "That action could not be completed; try again.")
     check("a transfer failure reads back as the backend's own sentence",
-          Errors.sentence("transfer", "the destination is not a directory"),
-          "The destination is not a directory.")
+          Errors.sentence("transfer", "the destination is not a folder"),
+          "The destination is not a folder.")
     check("an archive that died with the backend names the archive, not the backend",
           Errors.sentence("archive", "the backend is not running", "doc.zip"),
           "doc.zip could not be opened because the Flea backend stopped; reopen Flea and try again.")
@@ -125,21 +125,21 @@ function run(check) {
           Errors.sentence("link", "this drive cannot hold links"),
           "This drive cannot hold links.")
     check("a read-only refusal passes through instead of the generic sentence",
-          Errors.sentence("rename", "filesystem is read-only"),
-          "Filesystem is read-only.")
+          Errors.sentence("rename", "the drive is read-only"),
+          "The drive is read-only.")
     check("and mkdir keeps it too",
-          Errors.sentence("mkdir", "filesystem is read-only"),
-          "Filesystem is read-only.")
+          Errors.sentence("mkdir", "the drive is read-only"),
+          "The drive is read-only.")
 
     // src/backend/ops.rs words the collision "a folder or file with that name already exists", while
     // rename's own predicate looks for the errno's "file exists". A branch reusing that spelling
     // never fires and falls through to the catch-all, which reads plausibly and proves nothing.
     check("a folder onto a taken name says which problem it is",
           Errors.sentence("mkdir", "a folder or file with that name already exists"),
-          "A folder or file with that name is already here.")
+          "An item with that name is already here.")
     check("a rename onto a taken name still matches the errno spelling it gets",
           Errors.sentence("rename", "File exists (os error 17)"),
-          "A file with that name is already here.")
+          "An item with that name is already here.")
     check("any other mkdir failure reaches the mkdir branch, not the catch-all",
           Errors.sentence("mkdir", "Permission denied (os error 13)"),
           "That folder could not be created.")
@@ -192,27 +192,27 @@ function run(check) {
 
     // The credentialed mount can identify the timeout and shell statuses without reading GIO text.
     check("the helper's own deadline names the host, not the credential",
-          Errors.connectFailure(124, "smb://host/share"), "Connect failed: host did not respond")
+          Errors.connectFailure(124, "smb://host/share"), "Could not connect: the server did not respond.")
     check("a helper that could not be run at all says so",
-          Errors.connectFailure(127, "smb://host/share"), "Connect failed: authentication helper is unavailable")
+          Errors.connectFailure(127, "smb://host/share"), "Could not connect: Flea could not ask for the password.")
     // The helper returns only gio's status, so 1 cannot tell a bad password from a TLS failure and the URI proves neither.
     for (var uri of ["davs://host/dav", "dav://host/dav", "ftps://host/", "ftp://host/",
                      "smb://host/share", "sftp://host/", "DAVS://host/dav", "", null]) {
         for (var code of [1, 2, 42]) {
             check("an unclassified mount failure stays neutral: " + uri + " status " + code,
-                  Errors.connectFailure(code, uri), "Connect failed: the network location could not be opened")
+                  Errors.connectFailure(code, uri), "Could not connect: the network location could not be opened.")
         }
         check("a non-executable helper is named for every scheme: " + uri,
-              Errors.connectFailure(126, uri), "Connect failed: authentication helper is unavailable")
+              Errors.connectFailure(126, uri), "Could not connect: Flea could not ask for the password.")
         check("a missing helper is named for every scheme: " + uri,
-              Errors.connectFailure(127, uri), "Connect failed: authentication helper is unavailable")
+              Errors.connectFailure(127, uri), "Could not connect: Flea could not ask for the password.")
         check("a timeout is named for every scheme: " + uri,
-              Errors.connectFailure(124, uri), "Connect failed: host did not respond")
+              Errors.connectFailure(124, uri), "Could not connect: the server did not respond.")
         // 77 is the helper's refusal status: the server asked for the password again after it was sent.
         check("a refused sign-in is named for every scheme: " + uri,
-              Errors.connectFailure(77, uri), "Connect failed: authentication was refused")
+              Errors.connectFailure(77, uri), "Could not connect: the server refused the connection.")
     }
     check("the refusal does not echo URI credentials or paths",
           Errors.connectFailure(1, "davs://user:secret@host/private"),
-          "Connect failed: the network location could not be opened")
+          "Could not connect: the network location could not be opened.")
 }

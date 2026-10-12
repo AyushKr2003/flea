@@ -203,7 +203,7 @@ function run(check) {
         texts(Transfer.byteParts(carried, 0)), "1.2 GB of 4.0 GB · 38.2 MB/s · 1:13 left")
     check("the card fills the finished share", Math.round(Transfer.fraction(carried) * 1000) / 1000, 0.3)
     check("the card offers Cancel while writing", Transfer.cancelEnabled(carried), true)
-    check("the eject line is the rail's own", FlashEndings.ejectDoneLine("128GB"), "Ejected 128GB, it is safe to unplug.")
+    check("the eject line is the rail's own", FlashEndings.ejectDoneLine("128GB"), "Ejected 128GB. It is safe to unplug.")
     check("a busy eject names what is still mounted", FlashEndings.ejectBusyLine("128GB"),
           "128GB is still mounted; close what is using it.")
     check("a failed eject names the drive", FlashEndings.ejectFailedLine("128GB"), "Could not eject 128GB.")

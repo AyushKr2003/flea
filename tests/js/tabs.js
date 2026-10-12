@@ -195,12 +195,12 @@ function run(check) {
 
     var missing = Fixture.pane()
     Tabs.act("tab3", missing)
-    check("a digit with no such tab says so in words", missing.said.join(""), "No tab 3.")
+    check("a digit with no such tab says so in words", missing.said.join(""), "No tab 3")
 
     var last = Fixture.pane()
     Tabs.act("tabClose", last)
     check("w on the only tab refuses rather than closing the window",
-          last.said.join(""), "Can't close the last tab.")
+          last.said.join(""), "The last tab cannot be closed")
 
     var pair = Fixture.pane("/home/gm/a")
     Tabs.act("tabNew", pair)
@@ -707,7 +707,7 @@ function run(check) {
     // A tab-count verdict stands only until the count changes; anything else stands.
     var lone = Fixture.pane("/tmp/lone")
     Tabs.act("tabClose", lone)
-    check("the last-tab verdict stood", lone.statusBar.notice, "Can't close the last tab.")
+    check("the last-tab verdict stood", lone.statusBar.notice, "The last tab cannot be closed")
     Tabs.act("tabNew", lone)
     check("a new tab withdraws the standing last-tab verdict", lone.statusBar.notice, "")
     check("and the new tab is still opened", Tabs.count(lone), 2)
@@ -721,13 +721,13 @@ function run(check) {
     var selPane = Fixture.pane("/tmp/sel")
     Tabs.openNew(selPane)
     Tabs.selectAt(selPane, 7)
-    check("a missing tab still says its number", selPane.statusBar.notice, "No tab 8.")
+    check("a missing tab still says its number", selPane.statusBar.notice, "No tab 8")
     Tabs.closeAt(selPane, 1)
     check("closing a tab withdraws the standing select verdict", selPane.statusBar.notice, "")
     var closePane = Fixture.pane("/tmp/close")
     Tabs.openNew(closePane)
     Tabs.closeAt(closePane, 7)
-    check("a missing close still says its number", closePane.statusBar.notice, "No tab 8.")
+    check("a missing close still says its number", closePane.statusBar.notice, "No tab 8")
     Tabs.openNew(closePane)
     check("a new tab withdraws the standing close verdict", closePane.statusBar.notice, "")
     Tabs.setOwnPid("111")
@@ -741,7 +741,7 @@ function run(check) {
     var landedPane = Fixture.pane("/tmp/landed")
     Tabs.act("tabClose", landedPane)
     landedPane.message("Copy failed.", true)
-    check("the count verdict stands before the landing", landedPane.statusBar.notice, "Can't close the last tab.")
+    check("the count verdict stands before the landing", landedPane.statusBar.notice, "The last tab cannot be closed")
     check("and it still names its notice", landedPane.tabCountNotice !== -1, true)
     Tabs.receiveTab(landedPane, foreign, 0)
     check("a received tab withdraws the standing count verdict", landedPane.statusBar.notice, "")

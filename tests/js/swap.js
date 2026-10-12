@@ -33,6 +33,7 @@ function pane(holds) {
     }
     p.clearSelection = function () { p.cleared += 1 }
     p.message = function (text, isError) { p.said.push(text) }
+    p.armPrompted = function (text, isError) { p.said.push(text) }
     p.listArea = { primeSettle: function () {} }
     p.backend = {
         list: function (path, first, hidden) { p.sent.push("list " + path) },
@@ -70,6 +71,7 @@ function keyPane(inFlight, rows) {
     p.selectedIndices = function () { return [] }
     p.renameEditor = function () { return null }
     p.message = function (text, isError) { p.said.push(text) }
+    p.armPrompted = function (text, isError) { p.said.push(text) }
     p.clearSelection = function () {}
     p.listArea = { primeSettle: function () {} }
     p.backend = {

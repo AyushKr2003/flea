@@ -4,6 +4,7 @@ import Quickshell.Io
 import "js/Errors.js" as Errors
 import "js/Cloud.js" as Cloud
 import "js/Crumbs.js" as Crumbs
+import "js/Format.js" as Format
 import "js/Mounts.js" as Mounts
 import "js/Protocols.js" as Protocols
 import "js/Dropbox.js" as Dropbox
@@ -41,12 +42,15 @@ Item {
     signal message(string text, bool isError)
     // The bridge wait's own sticky line, cleared with "" when the folder lands or fails.
     signal sticky(string text, var origin)
+    // The GVFS bridge's Starting line, which the status bar marks busy; a clear still goes through sticky.
+    signal startingBridge(string text, var origin)
     // Client-side only, see "listShares" below: ui/ShareBrowser.qml renders these as pane rows.
     signal sharesListed(string baseUri, string baseLabel, var names, var origin)
     // Fired once ui/NetworkPlaces.qml's write has actually landed, so a caller's reload reads it.
     signal renamed()
     signal retryRequested(string uri, string label, string password, string reason, bool failedConnect, var origin)
-    signal completed(string requestId, string uri, bool success, string reason)
+    // connectFailed says the failure is a refused connection, so the dialog marks the location unacknowledged without reading the sentence.
+    signal completed(string requestId, string uri, bool success, string reason, bool connectFailed)
 
     // Hyprland has no auth portal here, so "gio mount" on a share that wants a credential prompt
     // hangs forever with no stdin to answer it, and "gio info" on a location gvfs cannot reach does
@@ -187,14 +191,14 @@ Item {
             if (root._dropboxAwaitingStart && !running) {
                 root._dropboxAwaitingStart = false
                 root.dropboxChecking = false
-                root.dropboxReason = "Dropbox status helper could not start"
+                root.dropboxReason = "Dropbox could not be checked"
                 root.dropboxCode = ""
                 root.dropboxRefreshed()
             }
         }
         onExited: function(exitCode) {
             root._dropboxAwaitingStart = false
-            var answer = exitCode === 137 || exitCode === 9 ? { reason: "Dropbox status was interrupted or timed out", code: "statusFailed" }
+            var answer = exitCode === 137 || exitCode === 9 ? { reason: "Dropbox did not answer in time", code: "statusFailed" }
                 : Dropbox.status(dropboxOut.text || root._dropboxOutput, exitCode, dropboxErr.text || root._dropboxError)
             root.dropboxReason = answer.reason
             root.dropboxCode = answer.code
@@ -299,7 +303,7 @@ Item {
     }
     // A null bridge is a missing component, not a refused mount, so it names the file it failed to build.
     function bridgeMissingReason() {
-        return "Could not open " + (root._pendingLabel || root._pendingUri) + ": GvfsBridge.qml did not load"
+        return Format.fill(Mounts.WORDS.bridgeMissing, root._pendingLabel || root._pendingUri)
     }
     // The Loader status is the cause, so it is warned with the file named and the wait ends with no retry.
     function failBridgeMissing() {
@@ -337,7 +341,7 @@ Item {
             if (held) root.rememberPathAlias(path, held.label, held.uri)
             root.opened(path, origin)
         }
-        function onStarting(text, origin) { root.sticky(text, origin) }
+        function onStarting(text, origin) { root.startingBridge(text, origin) }
         function onFailed(text, origin) {
             if (root._repairWaiting) {
                 root._repairWaiting = false
@@ -498,8 +502,8 @@ Item {
         // touches no flight state.
         if (mountProcess.running || authProcess.running || infoProcess.running || listSharesProcess.running || root._repairActive || root._repairWaiting) {
             // A guard that returns in silence names nothing at all, and a leg can hold it 15 s.
-            var reason = "Another network location is still opening; give it a moment."
-            if (request.id) root.completed(request.id, Mounts.normalize(uri), false, reason)
+            var reason = Mounts.WORDS.anotherOpening
+            if (request.id) root.completed(request.id, Mounts.normalize(uri), false, reason, false)
             else root.message(reason, false)
             return
         }
@@ -561,7 +565,7 @@ Item {
         // prompt at all, which is how a domain account locks itself out.
         if (refused === true) root.forgetPassword(root._pendingUri)
         else if (attempted.length > 0) root.remember(root._pendingUri, attempted)
-        if (!root.finishRequest(false, reason))
+        if (!root.finishRequest(false, reason, missing !== true))
             root.retryRequested(root._pendingUri, root._pendingLabel, attempted, reason,
                                 missing !== true, root._pendingOrigin)
     }
@@ -576,8 +580,8 @@ Item {
         root._repairBridged = false
         root._repairRoot = ""
         root._repairPath = ""
-        if (refused) root.failMount("Connect failed: network location was refused", root.passwordFor(uri))
-        else root.failMount("Connect failed: location has no browsable folder", root.passwordFor(uri))
+        if (refused) root.failMount(Errors.WORDS.connectRefused, root.passwordFor(uri))
+        else root.failMount(Errors.WORDS.connectNoFolder, root.passwordFor(uri))
     }
 
     // Issue 194's repair, answered through backend.peek: gio's own folder first, then every
@@ -645,20 +649,20 @@ Item {
             return
         }
         if (picked.users.length > 0) {
-            root.failMount("Connect failed: that share is mounted as " + picked.users.join(", "),
+            root.failMount(Format.fill(Errors.WORDS.connectMountedAs, picked.users.join(", ")),
                            root.passwordFor(root._repairUri))
             return
         }
         root.repairFailed()
     }
 
-    function finishRequest(success, reason) {
+    function finishRequest(success, reason, connectFailed) {
         var requestId = root._requestId
         if (!requestId) return false
         root._requestId = ""
         if (success) root.remember(root._pendingUri, root._requestPassword)
         root._requestPassword = ""
-        root.completed(requestId, root._pendingUri, success, reason || "")
+        root.completed(requestId, root._pendingUri, success, reason || "", connectFailed === true)
         return true
     }
 
@@ -747,8 +751,8 @@ Item {
             // tests/ui.sh presses l on the rail the instant this fires. An address that never
             // answered has no credential to correct anyway.
             root.result = "failed"
-            root.message("Connect failed: host did not respond", true)
-            root.finishRequest(false, "Connect failed: host did not respond")
+            root.message(Errors.WORDS.connectNoAnswer, true)
+            root.finishRequest(false, Errors.WORDS.connectNoAnswer, true)
         }
     }
 
@@ -769,7 +773,7 @@ Item {
         onRunningChanged: {
             if (root._authAwaitingStart && !authProcess.running) {
                 root._authAwaitingStart = false
-                root.failMount("Connect failed: authentication helper is unavailable",
+                root.failMount(Errors.WORDS.connectNoPrompt,
                                root.passwordFor(root._pendingUri))
             }
         }
@@ -865,11 +869,11 @@ Item {
                 return
             }
             if (failed) {
-                root.failMount("Connect failed: network location was refused",
+                root.failMount(Errors.WORDS.connectRefused,
                                root.passwordFor(root._pendingUri))
                 return
             }
-            root.failMount("Connect failed: location has no browsable folder", root.passwordFor(root._pendingUri))
+            root.failMount(Errors.WORDS.connectNoFolder, root.passwordFor(root._pendingUri))
         }
     }
 
@@ -885,7 +889,7 @@ Item {
             var body = String(listSharesOut.text || root._listSharesOutput || "")
             var names = body.split("\n").map(function (s) { return s.trim() }).filter(function (s) { return s.length > 0 })
             if (exitCode !== 0 || names.length === 0) {
-                root.failMount("Connect failed: location has no browsable folder", root.passwordFor(root._pendingUri))
+                root.failMount(Errors.WORDS.connectNoFolder, root.passwordFor(root._pendingUri))
                 return
             }
             root.result = "mounted"
@@ -902,7 +906,7 @@ Item {
             root.result = exitCode === 0 ? "unmounted" : "failed"
             // Replace the arm prompt immediately after successful unmount.
             root.message(exitCode === 0
-                ? "Unmounted " + root._pendingUnmountLabel + "."
+                ? Format.fill(Mounts.WORDS.unmountedLine, root._pendingUnmountLabel)
                 : "That share could not be unmounted; it may still be in use.", exitCode !== 0)
         }
     }

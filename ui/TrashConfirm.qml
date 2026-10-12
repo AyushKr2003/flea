@@ -25,6 +25,9 @@ FocusScope {
     readonly property var cancelItem: cancelButton
     readonly property var dangerItem: dangerButton
     readonly property string titleText: title.text
+    // The delete question, one whole sentence per count, each filled by Format.fill.
+    readonly property var deleteWords: ({ one: "Delete 1 item permanently?", many: "Delete %1 items permanently?" })
+    function deleteTitle(n) { return n === 1 ? root.deleteWords.one : Format.fill(root.deleteWords.many, Format.count(n)) }
     readonly property string bodyText: bodyLabel.text
     function open(value) { snapshot = value; destructiveFocus = false; body.contentY = 0; opened = true; forceActiveFocus() }
     function close() { opened = false }
@@ -90,7 +93,7 @@ FocusScope {
                 Text {
                     id: title
                     width: parent.width - alertMark.width - parent.spacing
-                    text: root.snapshot.all ? "Empty Trash?" : "Delete " + Ops.items(root.snapshot.count) + " permanently?"
+                    text: root.snapshot.all ? "Empty Trash?" : root.deleteTitle(root.snapshot.count)
                     textFormat: Text.PlainText
                     wrapMode: Text.Wrap
                     color: Theme.color.foreground

@@ -17,7 +17,7 @@ function rows(state, choice) {
     out[out.length - 1].available = on
     // The board's own sentence, second half included: the bind is the user's line in hyprland's
     // config and nothing here installs it.
-    out.push({ kind: "hint", label: "Super+D opens it from anywhere; the README carries the bind." })
+    out.push({ kind: "hint", label: "Super+D opens it from anywhere once you add the bind from the README." })
     out.push({ kind: "group", label: "Recent captures" })
     out.push({ kind: "check", id: "shelf.screenshots", label: "Screenshots", glyph: "image",
                 available: on, on: data.screenshots !== false })

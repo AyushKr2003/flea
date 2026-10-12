@@ -11,6 +11,55 @@
 .import "Status.js" as Status
 .import "Search.js" as Search
 
+// Whole sentences with "%1" to "%3" for a name, a count or a place, filled by Format.fill so each reads as one.
+var WORDS = {
+    duplicated: "Duplicated to %1",
+    convertedTo: "Converted to %1",
+    alreadyExists: "%1 already exists.",
+    shelfOne: "Added it to the shelf",
+    shelfMany: "Added %1 items to the shelf",
+    deleteOne: "This %1 is deleted from disk. This cannot be undone.",
+    deleteMany: "These %1 are deleted from disk. This cannot be undone.",
+    deleteAllOne: "%1, %2. This deletes it from disk. This cannot be undone.",
+    deleteAllMany: "%1, %2. This deletes them from disk. This cannot be undone.",
+    moved: "Moved %1",
+    movedOf: "Moved %1 of %2",
+    copied: "Copied %1",
+    copiedOf: "Copied %1 of %2",
+    cut: "Cut %1",
+    failedNote: " · %1 failed",
+    cancelledNote: " · cancelled",
+    skippedNote: " · %1 skipped",
+    moveFailed: "Move failed: %1 · %2",
+    copyFailed: "Copy failed: %1 · %2",
+    linked: "Linked %1",
+    selectedForRetry: "%1 selected for retry",
+    trashFailedOne: "That item could not be moved to Trash.",
+    trashFailedOneWhy: "That item could not be moved to Trash: %1.",
+    trashFailedMany: "%1 could not be moved to Trash.",
+    trashFailedManyWhy: "%1 could not be moved to Trash: %2.",
+    trashedAll: "Moved %1 to Trash",
+    trashedSome: "Moved %1 to Trash, %2 failed",
+    trashedSomeWhy: "Moved %1 to Trash, %2 failed: %3",
+    created: "Created %1",
+    taildropReason: "Taildrop · %1",
+    compressing: "Compressing %1 to .%2",
+    converting: "Converting %1 to .%2",
+    undoNothing: "Undid the last action"
+}
+
+// What a journal word undoes and redoes, as whole sentences: a word the backend uses for itself is never shown.
+var UNDONE = {
+    copy: "Undid the copy", move: "Undid the move", rename: "Undid the rename", merge: "Undid the merge",
+    permissions: "Undid the permissions", duplicate: "Undid the duplicate", link: "Undid the link",
+    bulkrename: "Undid the bulk rename", newfile: "Removed the new file", paste: "Undid the paste", cut: "Undid the cut"
+}
+var REDONE = {
+    copy: "Redid the copy", move: "Redid the move", rename: "Redid the rename", merge: "Redid the merge",
+    permissions: "Redid the permissions", duplicate: "Redid the duplicate", link: "Redid the link",
+    bulkrename: "Redid the bulk rename", newfile: "Redid the new file", paste: "Redid the paste", cut: "Redid the cut"
+}
+
 function emptyClipboard() {
     return Clipboard.empty()
 }
@@ -43,14 +92,12 @@ function scopeSingle(scope) {
     return String(scope).replace("items", "item")
 }
 function deleteScopeLine(scope, n) {
-    return n === 1 ? "This " + scopeSingle(scope) + " is deleted from disk. This cannot be undone."
-                   : "These " + scope + " are deleted from disk. This cannot be undone."
+    return n === 1 ? Format.fill(WORDS.deleteOne, scopeSingle(scope)) : Format.fill(WORDS.deleteMany, scope)
 }
 
 // The Empty Trash body, two whole sentences with the row's own count and formatted size; this module never formats a size itself.
 function deleteAllLine(n, sizeText) {
-    return n === 1 ? "1 item, %1. This deletes it from disk. This cannot be undone.".replace("%1", sizeText)
-                   : "%1 items, %2. This deletes them from disk. This cannot be undone.".replace("%1", Format.count(n)).replace("%2", sizeText)
+    return Format.fill(n === 1 ? WORDS.deleteAllOne : WORDS.deleteAllMany, items(n), sizeText)
 }
 
 // "Deleted 1 of 1 item" or "Restored 0 of 2 items": the Trash view and the menu delete status.
@@ -70,51 +117,54 @@ function progressLine(t) {
 }
 
 function transferDone(t, ok, failed, skipped, cancelled, durable, note) {
-    var verb = t.moving ? "Moved " : "Copied "
     var partial = failed > 0 || skipped > 0 || cancelled
-    var line = verb + (partial ? Format.count(ok) + " of " + Format.count(t.n) : items(ok))
-    if (failed > 0) line += " · " + Format.count(failed) + " failed"
-    if (skipped > 0) line += " · " + Format.count(skipped) + " skipped"
-    if (cancelled) line += " · cancelled"
+    var line = partial
+        ? Format.fill(t.moving ? WORDS.movedOf : WORDS.copiedOf, Format.count(ok), Format.count(t.n))
+        : Format.fill(t.moving ? WORDS.moved : WORDS.copied, items(ok))
+    if (failed > 0) line += Format.fill(WORDS.failedNote, Format.count(failed))
+    if (skipped > 0) line += Format.fill(WORDS.skippedNote, Format.count(skipped))
+    if (cancelled) line += WORDS.cancelledNote
     // The durable verdict's own note rides ahead of the undo hint, so the strip draws
     // "Copied N items" with "<note> · z undoes" beside it. Only what landed is said:
     // a verdict note with nothing copied stays unsaid.
-    if (ok > 0 && String(note || "").length > 0) line += " · " + note
-    return line + (ok > 0 ? Status.UNDO_HINT : "")
+    if (ok > 0 && String(note || "").length > 0) line += Format.fill(Status.HINTS.note, note)
+    return ok > 0 ? Status.withUndo(line) : line
 }
 
 function transferFailure(t, name, error) {
-    return (t.moving ? "Move" : "Copy") + " failed: " + name + " · " + error
+    return Format.fill(t.moving ? WORDS.moveFailed : WORDS.copyFailed, name, error)
 }
 
 // MenuAdditions040: Paste as links answers one line per request, and one
 // journal entry, so one undo removes every link it created.
 function linkedLine(ok, failed, skipped, note) {
-    var line = "Linked " + items(ok)
-    if (failed > 0) line += " · " + Format.count(failed) + " failed"
-    if (skipped > 0) line += " · " + Format.count(skipped) + " skipped"
+    var line = Format.fill(WORDS.linked, items(ok))
+    if (failed > 0) line += Format.fill(WORDS.failedNote, Format.count(failed))
+    if (skipped > 0) line += Format.fill(WORDS.skippedNote, Format.count(skipped))
     // A stranded replace rides ahead of the undo hint, so the counts keep their shape.
-    if (String(note || "").length > 0) line += " · " + note
-    return line + (ok > 0 ? Status.UNDO_HINT : "")
+    if (String(note || "").length > 0) line += Format.fill(Status.HINTS.note, note)
+    return ok > 0 ? Status.withUndo(line) : line
 }
 
 // Only the identity-checked locate reply supplies these selected retry matches.
 function retrySelectionLine(matches) {
     if (!matches.length) return ""
-    return (matches.length === 1 ? leaf(matches[0].path) : items(matches.length)) + " selected for retry"
+    return Format.fill(WORDS.selectedForRetry, matches.length === 1 ? leaf(matches[0].path) : items(matches.length))
 }
 
 // The canvas draws this one verbatim: "Moved 4 items to Trash · z undoes".
 // A failure names its reason, so a hung mount or a denial reads as what happened rather than silence.
 function trashed(ok, failed, reason) {
     var why = String(reason || "")
-    if (ok === 0)
-        return failed === 1 ? "That item could not be moved to Trash" + (why.length > 0 ? ": " + why + "." : ".")
-                            : items(failed) + " could not be moved to Trash" + (why.length > 0 ? ": " + why + "." : ".")
-    var line = "Moved " + items(ok) + " to Trash"
-    if (failed > 0)
-        line += ", " + Format.count(failed) + " failed" + (why.length > 0 ? ": " + why : "")
-    return line + Status.UNDO_HINT
+    if (ok === 0) {
+        if (failed === 1)
+            return why.length > 0 ? Format.fill(WORDS.trashFailedOneWhy, why) : WORDS.trashFailedOne
+        return why.length > 0 ? Format.fill(WORDS.trashFailedManyWhy, items(failed), why) : Format.fill(WORDS.trashFailedMany, items(failed))
+    }
+    if (failed === 0)
+        return Format.fill(WORDS.trashedAll, items(ok)) + Status.undoHint()
+    return (why.length > 0 ? Format.fill(WORDS.trashedSomeWhy, items(ok), Format.count(failed), why)
+                          : Format.fill(WORDS.trashedSome, items(ok), Format.count(failed))) + Status.undoHint()
 }
 
 // The op an undone line carries is the backend's own word for the operation it reversed.
@@ -127,16 +177,26 @@ function undone(op) {
     // never typed, so this one says what left the disk instead.
     if (op === "mkdir")
         return "Removed the new folder."
-    return "Undid the " + op + "."
+    return UNDONE[op] !== undefined ? UNDONE[op] : WORDS.undoNothing
+}
+
+// The redo line for a journal word, before the undo hint the caller adds.
+function redone(op) {
+    return REDONE[op] !== undefined ? REDONE[op] : "Redid the last action"
+}
+
+// The line for a new file or folder, which the status line draws beside its reversal hint when it has one.
+function createdLine(path) {
+    return Format.fill(WORDS.created, leaf(path))
 }
 
 // The created folder's own line, carrying the same reversal hint the transfer and trash lines do.
 function made(path) {
-    return "Created " + leaf(path) + Status.UNDO_HINT
+    return Status.withUndo(createdLine(path))
 }
 
 function copied(n, moving) {
-    return (moving ? "Cut " : "Copied ") + items(n) + Status.PASTE_HINT
+    return Status.withPaste(Format.fill(moving ? WORDS.cut : WORDS.copied, items(n)))
 }
 
 // The three reasons a cursor is not a target, asked in the order ui/js/Nav.js asks them of Enter.
@@ -221,8 +281,8 @@ function deletedLine(message) {
 var BULK_DONE_ONE = "Renamed 1 item%1"
 var BULK_DONE_MANY = "Renamed %1 items%2"
 function bulkDoneLine(ok) {
-    if (ok === 1) return BULK_DONE_ONE.replace("%1", Status.UNDO_HINT)
-    return BULK_DONE_MANY.replace("%1", Format.count(ok)).replace("%2", Status.UNDO_HINT)
+    if (ok === 1) return BULK_DONE_ONE.replace("%1", Status.undoHint())
+    return BULK_DONE_MANY.replace("%1", Format.count(ok)).replace("%2", Status.undoHint())
 }
 
 // ---- the actions, each taking the pane the way Search.js's own do ----
@@ -361,7 +421,7 @@ function undo(pane) {
 // defensive, because the menu already empties its peer list for a directory cursor.
 function sendTaildrop(pane, taildrop, peerId, path) {
     if (typeof path !== "string" || path.charAt(0) !== "/") {
-        pane.message("Cursor source was not validated; reopen the menu.", true)
+        pane.message("That menu is out of date. Reopen it.", true)
         return
     }
     var row = pane.rowFor(pane.cursorIndex)
@@ -372,7 +432,7 @@ function sendTaildrop(pane, taildrop, peerId, path) {
         // The reason is one shared token: the menu, both front ends and the probes all read it, and
         // the TUI draws it as "taildrop · signed out". The bar names the subject the same way rather
         // than printing a bare fragment beside errors that are sentences.
-        pane.message(taildrop.reason ? "Taildrop · " + taildrop.reason
+        pane.message(taildrop.reason ? Format.fill(WORDS.taildropReason, taildrop.reason)
                                      : "That Taildrop peer is no longer available.", true)
         return
     }
@@ -406,7 +466,7 @@ function compressResolved(pane, list, format, menuId) {
     }
     var stem = Archive.archiveStem(names, leaf(pane.path))
     pane.backend.compress(list, pane.join(Search.baseOf(pane), stem + "." + format), format, menuId)
-    pane.sticky("Compressing " + items(list.length) + " to ." + format)
+    pane.sticky(Format.fill(WORDS.compressing, items(list.length), format))
 }
 
 // One paths reply, two possible askers. The clipboard is the default because it is what every reply
@@ -461,7 +521,7 @@ function openConvert(pane, menuId) {
 
 function convert(pane, source, format, strip, requestId) {
     pane.convertSource = Object.assign({}, source, {requestId: requestId})
-    pane.sticky("Converting " + source.name + " to ." + format)
+    pane.sticky(Format.fill(WORDS.converting, source.name, format))
     pane.backend.convertImage(source.path, Convert.destination(source, format), strip, source.menuId, requestId, false)
 }
 

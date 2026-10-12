@@ -26,7 +26,7 @@ Item {
     property bool saveCommitted: false
     property bool saveNewPlace: true
     readonly property bool busy: root.connecting || root.saving
-    readonly property string dialogTitle: root.baseTitle() + (root.failedConnect ? ", failed connect" : "")
+    readonly property string dialogTitle: root.failedConnect ? "Could not connect to the network share" : root.baseTitle()
     // The card keeps this much window above and below it when the window is shorter than the card.
     readonly property int clampMargin: 8
     // var, not Item: BorderSurface is a qs.Ui type qmllint cannot resolve, and Item would read as incompatible.
@@ -127,10 +127,10 @@ Item {
         root.mountRequested(root.requestId, root.pendingUri, root.pendingLabel, form.password)
     }
 
-    function mountFinished(requestId, uri, success, reason) {
+    function mountFinished(requestId, uri, success, reason, connectFailed) {
         if (!root.opened || !root.connecting || requestId !== root.requestId || uri !== root.pendingUri) return
         root.connecting = false
-        if (!success) { root.saveFailed(reason); return }
+        if (!success) { root.saveFailed(reason, connectFailed === true); return }
         // The location answered, so nothing about it is left unacknowledged.
         root.unacknowledgedUri = ""
         root.unacknowledgedReason = ""
@@ -143,18 +143,19 @@ Item {
         pendingFocus.forceActiveFocus()
         root.saving = true
         if (!Favourites.add(root.pendingUri, root.pendingLabel, root.requestId))
-            root.saveFailed("A Favorites change is still being saved. Retry to save this location.")
+            root.saveFailed("A Favorites change is still being saved. Retry to save this location.", false)
     }
 
-    function saveFailed(message) {
+    // connect is true when the failure is a refused connection, which the mount service says and this dialog never works out from the sentence.
+    function saveFailed(message, connect) {
         root.saving = false
         root.statusText = message
-        if (message.indexOf("Connect failed:") === 0) {
+        if (connect) {
             root.unacknowledgedUri = Mounts.normalize(root.pendingUri)
             root.unacknowledgedReason = message
         }
         root.retrying = true
-        root.failedConnect = message.indexOf("Connect failed:") === 0
+        root.failedConnect = connect
         form.focusHost()
     }
 
@@ -162,7 +163,7 @@ Item {
         target: Favourites
         function onCompleted(requestId, success, message) {
             if (!root.opened || !root.saving || requestId !== root.requestId) return
-            if (!success) { root.saveFailed(message); return }
+            if (!success) { root.saveFailed(message, false); return }
             root.saving = false
             if (message) {
                 root.saveCommitted = true
@@ -195,7 +196,7 @@ Item {
     function formPasswordState() { return form.passwordState() }
     function formPasswordEyeCentre() { return form.passwordEyeCentre() }
     function formPasswordHint() { return form.passwordHintText }
-    function formNote() { return form.protocol === "NFS" ? "No credentials: NFS trusts the client host" : "" }
+    function formNote() { return form.protocol === "NFS" ? "No password needed: the NFS server trusts this computer" : "" }
     function formAction() {
         if (root.saveCommitted) return "Close"
         if (root.saving) return "Saving…"

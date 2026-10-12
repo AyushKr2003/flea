@@ -9,6 +9,12 @@
 .import "Startup.js" as Startup
 .import "TabMove.js" as TabMove
 
+// The sentence a digit key answers with when no tab sits there, filled by Format.fill.
+var WORDS = {
+    noTab: "No tab %1",
+    lastTab: "The last tab cannot be closed"
+}
+
 // Hidden tabs are snapshots, so the pane and backend still own only one listing.
 // The nine-tab cap matches TUI's direct digit selection; GUI shortcuts cycle through the same state.
 
@@ -324,7 +330,7 @@ function selectAt(pane, i) {
     var here = restingPath(pane)
     var items = currentItems(pane, here)
     if (i < 0 || i >= items.length) {
-        sayCount(pane, "No tab %1.".arg(i + 1))
+        sayCount(pane, Format.fill(WORDS.noTab, i + 1))
         return
     }
     var index = currentIndex(pane)
@@ -340,11 +346,11 @@ function selectAt(pane, i) {
 function closeAt(pane, i) {
     var items = currentItems(pane)
     if (items.length <= 1) {
-        sayCount(pane, "Can't close the last tab.")
+        sayCount(pane, WORDS.lastTab)
         return
     }
     if (i < 0 || i >= items.length) {
-        sayCount(pane, "No tab %1.".arg(i + 1))
+        sayCount(pane, Format.fill(WORDS.noTab, i + 1))
         return
     }
     var index = currentIndex(pane)

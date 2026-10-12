@@ -24,13 +24,12 @@ function run(check) {
         GvfsBridge.needsBridge("/run/user/1000/doc/1234/file.pdf", dir), false)
 
     check("the Starting line is the board's",
-        GvfsBridge.startingLine("Pixel 8"), "Starting the GVFS bridge for Pixel 8")
+        GvfsBridge.startingLine("Pixel 8"), "Opening Pixel 8")
     check("the failure line is the board's",
         GvfsBridge.failedLine("Pixel 8", "gvfsd-fuse exited with status 1"),
-        "Pixel 8 needs the GVFS bridge, and it would not start · gvfsd-fuse exited with status 1")
+        "Pixel 8 could not be opened because a system service did not start · gvfsd-fuse exited with status 1")
     // The deadline's own wording is pinned beside its behaviour below.
-    check("a Starting line reads as one", GvfsBridge.isStartingLine("Starting the GVFS bridge for Pixel 8"), true)
-    check("any other sticky line does not", GvfsBridge.isStartingLine("Compressing 2 items to .zip"), false)
+    check("no code reads the Starting line back to decide anything", typeof GvfsBridge.isStartingLine, "undefined")
     check("the Starting line waits out the board's 250 ms", GvfsBridge.STARTING_MS, 250)
 
     // gvfsd's own spawn, measured on minipc: /usr/lib/gvfsd-fuse /run/user/1000/gvfs -f.
@@ -80,7 +79,7 @@ function run(check) {
     check("another folder meanwhile is refused rather than starting a second bridge",
         stranger.length + "|" + stranger[0].op, "1|refuse")
     check("the refusal names the wait it stands behind",
-        stranger[0].text, "Another network location is still opening; give it a moment.")
+        stranger[0].text, "Another network location is still opening. Try again when it opens")
     check("still exactly one start", slow.starts, 1)
 
     // A file under a served bridge is ready without any start.
@@ -97,7 +96,7 @@ function run(check) {
     check("a fruitless poll answers nothing at all", GvfsBridge.onPolled(slow, false).length, 0)
     var show = GvfsBridge.onElapsed(slow)
     check("the 250 ms timer shows the Starting line", show.length + "|" + show[0].op, "1|show")
-    check("word for word", show[0].text, "Starting the GVFS bridge for Pixel 8")
+    check("word for word", show[0].text, "Opening Pixel 8")
     var classifying = GvfsBridge.onPolled(slow, true)
     check("a served poll classifies before it opens",
         classifying.length + "|" + classifying[0].op, "1|classify")
@@ -117,7 +116,7 @@ function run(check) {
     var hungFailed = GvfsBridge.onTimeout(hungCheck)
     check("a hung check fails at the deadline", hungFailed.length + "|" + hungFailed[0].op, "1|fail")
     check("word for word",
-        hungFailed[0].text, "Pixel 8 needs the GVFS bridge, and it would not start · waiting for the folder timed out")
+        hungFailed[0].text, "Pixel 8 could not be opened because a system service did not start · waiting for the folder timed out")
     check("and the wait is over", hungCheck.phase, "idle")
     var hung = GvfsBridge.create()
     GvfsBridge.ensure(hung, req)

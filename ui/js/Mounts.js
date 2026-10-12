@@ -6,9 +6,30 @@
 
 // Whole sentences with "%1" for a value, filled by fill so each translates as one; replace would read "$$" in a label as a pattern.
 var WORDS = {
-    nothingToRelease: "%1 has nothing to eject or unmount.",
-    stillEjecting: "Still ejecting %1; wait for its result.",
-    stillUnmounting: "Still unmounting %1; wait for its result."
+    nothingToRelease: "%1 has nothing to eject or unmount",
+    stillEjecting: "Still ejecting %1; wait for its result",
+    stillUnmounting: "Still unmounting %1; wait for its result",
+    anotherMounting: "Another drive is still mounting. Try again when it finishes",
+    stillUnmountingTryAgain: "%1 is still unmounting. Try again when it finishes",
+    ejecting: "Ejecting %1. Do not unplug it yet.",
+    noFolder: "%1 was mounted, but Flea could not find its folder.",
+    ejectUnfinished: "%1 did not finish ejecting and is still mounted.",
+    mountFailed: "%1 could not be mounted.",
+    unmountFailed: "%1 could not be unmounted.",
+    ejectFailed: "%1 could not be ejected.",
+    busy: "%1 is busy; close what is using it and try again.",
+    mountRefused: "%1 was not mounted: you do not have permission.",
+    unmountRefused: "%1 was not unmounted: you do not have permission.",
+    ejectRefused: "%1 was not ejected: you do not have permission.",
+    noDisc: "%1 has no disc or card in it.",
+    notMountable: "%1 cannot be mounted on this computer.",
+    anotherOpening: "Another network location is still opening. Try again when it opens",
+    notSaved: "%1 is not saved, and stays in the sidebar until it is unmounted",
+    forgottenStays: "%1 is forgotten, and stays in the sidebar until it is unmounted",
+    forgotten: "%1 is forgotten",
+    unmountedLine: "Unmounted %1",
+    bridgeMissing: "Could not open %1 because part of Flea did not load. Reinstall Flea.",
+    transferUsing: "%1 could not be unmounted. A transfer may still be using it."
 }
 
 // Sample input, captured live on the box with one network share mounted (2026-08-31):

@@ -3,6 +3,7 @@
 .import "DragOut.js" as DragOut
 .import "Search.js" as Search
 .import "Ops.js" as Ops
+.import "Format.js" as Format
 .import "Swap.js" as Swap
 
 // A drop is a gesture that calls the transfer request Ops.moveToDropbox already sends, with the folder
@@ -52,6 +53,17 @@ function canDrop(rows, index, row) {
     return rows.indexOf(index) < 0
 }
 
+// Whole sentences with "%1" for the item count and "%2" for the folder name, filled by Format.fill. The keys held at the drop decide
+// copy or move (dropHeld above, read through ui/RowDrag.qml's verbAt), so a move line names both keys.
+var WORDS = {
+    linkTo: "Link %1 to %2",
+    linkToFolder: "Link %1 to a folder",
+    copyTo: "Copy %1 to %2",
+    copyToFolder: "Copy %1 to a folder",
+    moveTo: "Move %1 to %2 · Ctrl copies, Shift moves",
+    moveToFolder: "Move %1 to a folder · Ctrl copies, Shift moves"
+}
+
 // The board's own words on the hovered folder.
 function label(copy, link) {
     if (link === true) return "link here"
@@ -61,9 +73,11 @@ function label(copy, link) {
 // The status bar's half of the board. The hint names the lift because Drag.active runs a nested
 // event loop the window gets no key events in, so a key pressed after the drag starts cannot arrive.
 function line(n, name, copy, link) {
-    var verb = link === true ? "Link " : copy ? "Copy " : "Move "
-    var where = name.length > 0 ? " to " + name : " to a folder"
-    return verb + Ops.items(n) + where + ((copy || link === true) ? "" : " · ctrl at lift copies")
+    var named = name.length > 0
+    var template = link === true ? (named ? WORDS.linkTo : WORDS.linkToFolder)
+        : copy ? (named ? WORDS.copyTo : WORDS.copyToFolder)
+        : (named ? WORDS.moveTo : WORDS.moveToFolder)
+    return Format.fill(template, Ops.items(n), name)
 }
 
 // The by-index drop is the only path a too-wide selection takes, onto its own listing, with links through the Paste-as-links card.

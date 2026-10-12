@@ -67,7 +67,7 @@ Item {
             if (root._awaitingStart && !running) {
                 root._awaitingStart = false
                 root.checking = false
-                root.reason = "Tailscale status helper could not start"
+                root.reason = "Tailscale could not be checked"
                 root.code = ""
                 root.refreshed()
             }
@@ -75,7 +75,7 @@ Item {
         onExited: function (exitCode) {
             root._awaitingStart = false
             var state = TaildropJs.status(statusOut.text || root._statusOutput, exitCode,
-                exitCode === 137 || exitCode === 9 ? "Tailscale status was interrupted or timed out" : statusErr.text || root._statusError)
+                exitCode === 137 || exitCode === 9 ? "Tailscale did not answer in time" : statusErr.text || root._statusError)
             root.peers = state.peers
             root.reason = state.reason
             root.code = state.code

@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell.Io
 import "js/Phones.js" as Phones
+import "js/Format.js" as Format
 import "js/Mounts.js" as Mounts
 
 // The DEVICES group's phone rows, the third Service beside ui/DeviceMounts.qml (block devices over
@@ -59,7 +60,7 @@ Item {
         id: unmountProcess
         onExited: function (exitCode) {
             if (exitCode !== 0)
-                root.message("Could not unmount " + root._unmountLabel + "; a transfer may still be using it.", true)
+                root.message(Format.fill(Mounts.WORDS.transferUsing, root._unmountLabel), true)
             root.released()
         }
     }

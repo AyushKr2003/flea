@@ -1,5 +1,8 @@
 .pragma library
 
+.import "Format.js" as Format
+.import "Mounts.js" as Mounts
+
 // The DEVICES half of the rail: one lsblk listing turned into the rows ui/DeviceMounts.qml draws.
 // Split out of ui/js/Mounts.js, which keeps the rail's shared vocabulary and the NETWORK half; a
 // block device and a gvfs share have nothing in common but the rail they land in.
@@ -324,16 +327,16 @@ function mountError(op, exitCode, stderr, label) {
     if (/already mounted/.test(text))
         return ""
     if (/busy|in use|in use by/.test(text))
-        return name + " is busy; close what is using it and try again."
+        return Format.fill(Mounts.WORDS.busy, name)
     if (/not authorized|not allowed|refused|dismissed|no authentication|auth/i.test(String(stderr || "")))
-        return name + " was not " + (op === "unmount" ? "unmounted" : op === "eject" ? "ejected" : "mounted") + ": not authorized."
+        return Format.fill(op === "unmount" ? Mounts.WORDS.unmountRefused : op === "eject" ? Mounts.WORDS.ejectRefused : Mounts.WORDS.mountRefused, name)
     if (/no volume|no medium|no media|empty|no device/.test(text))
-        return /medium|media|empty/.test(text) ? name + " has no medium in it." : name + " is not a volume this system can mount."
+        return Format.fill(/medium|media|empty/.test(text) ? Mounts.WORDS.noDisc : Mounts.WORDS.notMountable, name)
     if (op === "unmount")
-        return name + " could not be unmounted."
+        return Format.fill(Mounts.WORDS.unmountFailed, name)
     if (op === "eject")
-        return name + " could not be ejected."
-    return name + " could not be mounted."
+        return Format.fill(Mounts.WORDS.ejectFailed, name)
+    return Format.fill(Mounts.WORDS.mountFailed, name)
 }
 
 // Sample: ["/home", "/var/log", "/"] for one btrfs device with several subvolumes mounted, ["[SWAP]"]

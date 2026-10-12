@@ -33,6 +33,7 @@ function railPane() {
     p.focusView = "rail"
     p.said = ""
     p.message = function (text, isError) { p.said = text }
+    p.armPrompted = function (text, isError) { p.said = text }
     return p
 }
 
@@ -56,6 +57,7 @@ function listPane(hasRow) {
     p.isError = false
     p.openCursorMenu = function () { p.opened += 1; return hasRow }
     p.message = function (text, isError) { p.said = text; p.isError = isError }
+    p.armPrompted = function (text, isError) { p.said = text; p.isError = isError }
     return p
 }
 
@@ -105,6 +107,7 @@ function armHandle(p) {
     p.keySequenceIdentity = ""
     p.trashArmedAt = 0
     p.message = function (text) { p.said = text }
+    p.armPrompted = function (text) { p.said = text }
     p.acted = []
     p.act = function (action) { p.acted.push(action); Focus.act(action, p) }
     return p
@@ -150,7 +153,7 @@ function run(check) {
     Focus.handleKey(key(Qt.Key_unknown, "\u007f", Qt.NoModifier), printablePane, printablePane.sidebar)
     check("DEL produces no type-ahead hint", printablePane.said, "")
     Focus.handleKey(key(Qt.Key_unknown, "é", Qt.NoModifier), printablePane, printablePane.sidebar)
-    check("a normal unbound letter still produces the filter hint", printablePane.said, "Press / to filter this listing by name.")
+    check("a normal unbound letter still produces the filter hint", printablePane.said, "Press / to filter this folder by name")
     var none = Qt.NoModifier
     var shift = Qt.ShiftModifier
 
@@ -241,6 +244,7 @@ function run(check) {
     held.listInFlight = true
     held.said = ""
     held.message = function (text) { held.said = text }
+    held.armPrompted = function (text) { held.said = text }
     held.opened = []
     held.openWithoutHistory = function (next) { held.opened.push(next) }
     held.backend = { sortBy: "name", sortDesc: false }
@@ -259,6 +263,7 @@ function run(check) {
     stuck.join = function (base, name) { return base === "/" ? "/" + name : base + "/" + name }
     stuck.said = ""
     stuck.message = function (text) { stuck.said = text }
+    stuck.armPrompted = function (text) { stuck.said = text }
     stuck.opened = []
     stuck.openWithoutHistory = function (next) { stuck.opened.push(next) }
     Focus.act("reveal", stuck)
@@ -409,19 +414,20 @@ function run(check) {
     var historyPaste = escaper("", 0)
     historyPaste.recentMode = "results"
     historyPaste.message = function (text) { historyPaste.said = text }
+    historyPaste.armPrompted = function (text) { historyPaste.said = text }
     historyPaste.openPasteAs = function () { historyPaste.pasted = true }
     historyPaste.pasteLink = function () { historyPaste.pasted = true }
     historyPaste.pasted = false
     Focus.act("pasteAs", historyPaste)
     check("Paste as is refused in Recent", historyPaste.said + "|" + historyPaste.pasted,
-          "This listing is a history, and cannot take a paste.|false")
+          "Recent cannot take a paste. Open a folder first|false")
     Focus.act("pasteLink", historyPaste)
     check("and its relative leaf is refused there too", historyPaste.said + "|" + historyPaste.pasted,
-          "This listing is a history, and cannot take a paste.|false")
+          "Recent cannot take a paste. Open a folder first|false")
     Focus.act("pasteAbsoluteLink", historyPaste)
     Focus.act("pasteHardLink", historyPaste)
     check("and so are the absolute and hard leaves", historyPaste.said + "|" + historyPaste.pasted,
-          "This listing is a history, and cannot take a paste.|false")
+          "Recent cannot take a paste. Open a folder first|false")
 
     // F5 and Ctrl+R re-list the folder they are on through the reload key.
     var f5 = key(Qt.Key_F5, "", none)
@@ -538,7 +544,7 @@ function run(check) {
     Focus.act("eject", outside)
     check("ctrl e in a listing on the internal disk says so, even with the rail cursor on the stick",
           outside.sidebar.released.length + "|" + outside.said,
-          "0|This folder is not on a volume Flea can unmount.")
+          "0|This folder is not on a volume Flea can unmount")
 
     // Ctrl+E with the rail hidden: the Loader unloads the Sidebar, so root.sidebar is null and
     // there are no entries to resolve against. The key hands to the pane's transient one-shot
@@ -569,7 +575,7 @@ function run(check) {
                    releaseChosen: function (action, key) {} }
     Eject.release(hiddenOutside, noRail, false)
     check("the hidden-rail completion outside any volume says so instead of releasing",
-          hiddenOutside.said, "This folder is not on a volume Flea can unmount.")
+          hiddenOutside.said, "This folder is not on a volume Flea can unmount")
 
     // The listing's m goes through the pane, which says whether a delegate was under the cursor; an
     // empty directory and a filter that hides every row both get the sentence rather than silence.
@@ -580,7 +586,7 @@ function run(check) {
     var bare = listPane(false)
     Focus.act("menu", bare)
     check("m with no row under the cursor says why instead of swallowing the key",
-          bare.opened + "|" + bare.said, "1|No row under the cursor to open a menu on.")
+          bare.opened + "|" + bare.said, "1|No item under the cursor to open a menu on")
 
     // PR 34's chord. The context-menu row and Ctrl+T raise the same terminal, and the rail owns its
     // own keys, so the one route both views share is the interception in handleKey above the views.
@@ -794,15 +800,15 @@ function run(check) {
     }
     var recentPaste = recentPane()
     Focus.act("paste", recentPaste)
-    check("paste over Recent says the history line", recentPaste.said, "This listing is a history, and cannot take a paste.")
+    check("paste over Recent says the history line", recentPaste.said, "Recent cannot take a paste. Open a folder first")
     check("and reaches neither Ops nor collide", recentPaste.collide.asked.length + "|" + recentPaste.made.length, "0|0")
     var recentMove = recentPane()
     Focus.act("movePaste", recentMove)
-    check("move-paste over Recent says the history line", recentMove.said, "This listing is a history, and cannot take a paste.")
+    check("move-paste over Recent says the history line", recentMove.said, "Recent cannot take a paste. Open a folder first")
     check("and asks no transfer", recentMove.collide.asked.length, 0)
     var recentFolder = recentPane()
     Focus.act("newFolder", recentFolder)
-    check("new folder over Recent says the history line", recentFolder.said, "This listing is a history, and cannot take a new folder.")
+    check("new folder over Recent says the history line", recentFolder.said, "Recent cannot hold a new folder. Open a folder first")
     check("and asks the backend for nothing", recentFolder.made.length, 0)
     var recentReveal = recentPane()
     recentReveal.cursorIndex = 0

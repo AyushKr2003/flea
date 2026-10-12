@@ -6,15 +6,15 @@ function account(raw, error) {
     if (error) return { path: "", reason: error, code: "readFailed" }
     if (!raw) return { path: "", reason: "Dropbox is signed out", code: "signedOut" }
     var data
-    try { data = JSON.parse(raw) } catch (e) { return { path: "", reason: "Dropbox account metadata is invalid", code: "invalid" } }
+    try { data = JSON.parse(raw) } catch (e) { return { path: "", reason: "Dropbox account details could not be read", code: "invalid" } }
     if (!data || typeof data !== "object" || Array.isArray(data))
-        return { path: "", reason: "Dropbox account metadata is invalid", code: "invalid" }
+        return { path: "", reason: "Dropbox account details could not be read", code: "invalid" }
     for (var i = 0, keys = ["personal", "business"]; i < keys.length; i++) {
         var value = data[keys[i]]
         if (!value || typeof value !== "object" || Array.isArray(value)) continue
         var path = value.path
         if (typeof path !== "string" || path.charAt(0) !== "/" || path === "/" || path.indexOf("\u0000") >= 0)
-            return { path: "", reason: "Dropbox account folder is invalid", code: "invalid" }
+            return { path: "", reason: "The Dropbox folder could not be found", code: "invalid" }
         return { path: path.replace(/\/+$/, ""), reason: "", code: "" }
     }
     return { path: "", reason: "Dropbox is signed out", code: "signedOut" }
@@ -29,8 +29,8 @@ function contains(root, path) {
 // Sample output: dropbox-cli status prints "Up to date" or "Dropbox isn't running!" even with exit status zero.
 function status(output, exitCode, error) {
     var text = String(output || "").trim(), detail = String(error || "").trim()
-    if (exitCode !== 0) return { reason: detail || text || "Dropbox status failed", code: "statusFailed" }
-    if (!text) return { reason: detail || "Dropbox returned empty status", code: "statusFailed" }
+    if (exitCode !== 0) return { reason: detail || text || "Dropbox could not be checked", code: "statusFailed" }
+    if (!text) return { reason: detail || "Dropbox did not report its status", code: "statusFailed" }
     if (detail) return { reason: detail, code: "statusFailed" }
     var lower = text.toLowerCase()
     if (lower.indexOf("not running") >= 0 || lower.indexOf("isn't running") >= 0 || lower === "stopped"

@@ -13,7 +13,7 @@ var RESULTS = "results"
 // One refusal for both paste routes: the menu reaches past key dispatch, so it shares this.
 function refusePaste(pane) {
     if (pane.recentMode.length > 0) {
-        pane.message("This listing is a history, and cannot take a paste.", false)
+        pane.message("Recent cannot take a paste. Open a folder first", false)
         return true
     }
     return false

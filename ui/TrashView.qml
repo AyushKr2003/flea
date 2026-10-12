@@ -47,6 +47,8 @@ FocusScope {
     property int confirmingSelectionToken: 0
     property var confirmingIdentities: []
     property int confirmingToken: 0
+    // The sentence a recovered journal answers with, one whole sentence per count, each filled by Format.fill.
+    readonly property var recoveredWords: ({ one: "Recovered 1 interrupted file operation", many: "Recovered %1 interrupted file operations" })
     readonly property bool confirmationOpen: confirmation.opened
     readonly property var confirmationItem: confirmation
     readonly property var backItem: backButton
@@ -65,6 +67,8 @@ FocusScope {
     signal actionRequested(string action)
     signal contextRequested(real x, real y, bool hasSelection)
     signal statusReported(string message, bool error)
+    // The dd prompt, said apart from a status line so the bar starts its arm from the signal and never by reading the sentence.
+    signal armReported(string text)
     signal operationResult(string headline, string detail, bool error)
     signal countChanged(int count)
     anchors.fill: parent
@@ -189,14 +193,14 @@ FocusScope {
         var paired = trashArmedAt > 0 && now - trashArmedAt < TrashKeys.ARM_MS
         trashArmedAt = paired ? 0 : now
         if (paired) prepare(false)
-        else statusReported("Press d again to review permanent deletion, or Delete on its own.", false)
+        else armReported(TrashKeys.reviewPrompt())
     }
     function receive(message) {
         if ((!opened && !operationActive) || message.id !== requestId || message.op !== pendingOp) return
         pendingOp = ""
         if (!message.ok) {
             if (message.stale && opened) { operationActive = false; confirming = true; sourceChanged(); return }
-            errorText = message.error || "Trash operation failed."
+            errorText = message.error || "That Trash action could not be completed."
             confirming = false; confirmation.close()
             statusReported(errorText, true)
             operationActive = false
@@ -218,9 +222,9 @@ FocusScope {
             cursor = Math.max(0, Math.min(cursor, total - 1))
             if (message.op === "list") {
                 if ((message.recoveryErrors || []).length > 0)
-                    operationResult("Interrupted file operation needs attention", message.recoveryErrors.join("\n"), true)
+                    operationResult("Flea could not finish an interrupted file action", message.recoveryErrors.join("\n"), true)
                 else if (message.recoveredCount > 0)
-                    operationResult("Recovered " + message.recoveredCount + " interrupted file " + Ops.pluralWord(message.recoveredCount, "operation", "operations"), "", false)
+                    operationResult(message.recoveredCount === 1 ? root.recoveredWords.one : Format.fill(root.recoveredWords.many, message.recoveredCount), "", false)
                 errorText = ""
                 var kept = ({})
                 var keptIdentities = ({})

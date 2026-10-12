@@ -7,7 +7,11 @@
 // and the window are the whole of the policy and neither needs a window to be true.
 
 // What Ops.trash reaches for, plus the stamp Trash.arm reads and writes.
+// What pane.message was handed, kept outside the stub so no field of it has to exist on Pane.
+var messaged = []
+
 function pane() {
+    messaged = []
     var p = {
         trashArmedAt: 0,
         cursorIndex: 3,
@@ -17,7 +21,8 @@ function pane() {
         said: "",
         selectedIndices: function () { return [] }
     }
-    p.message = function (text, isError) { p.said = text }
+    p.armPrompted = function (text) { p.said = text }
+    p.message = function (text, isError) { messaged.push(text) }
     p.backend = { trash: function (idx) { p.trashedIdx = idx } }
     return p
 }
@@ -27,7 +32,8 @@ function run(check) {
     Trash.arm(p)
     check("the first d trashes nothing and says what to press", p.trashedIdx.length, 0)
     check("and the sentence names both routes", p.said,
-          "Press d again to trash, or Delete on its own.")
+          "Press d again to move it to Trash, or Delete on its own.")
+    check("and the prompt goes by the typed arm channel, never pane.message, which the bar would take for a result", messaged.length, 0)
     check("and it leaves the pair armed", p.trashArmedAt > 0, true)
     Trash.arm(p)
     check("the second d inside the window trashes the cursor row", p.trashedIdx.join(","), "3")

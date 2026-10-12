@@ -240,10 +240,14 @@ FocusScope {
 
     signal opened(string path)
     signal message(string text, bool isError)
+    // The dd prompt of an arm, said apart from message so the status bar never reads a sentence to find it.
+    signal armPrompted(string text)
     signal forgetMessage(string text)
     signal operationResult(string headline, string detail, bool isError)
     // The status bar's sticky slot, which unlike message does not time out; empty clears it.
     signal sticky(string text)
+    // The same slot for the GVFS bridge's Starting line, so the status bar lights its busy mark from the call and not from the sentence.
+    signal stickyStarting(string text)
     // The one popup, hosted in shell.qml beside the network dialog rather than inside the pane.
     signal convertRequested(string name)
     // Archives040: the password compress resolves through the cards host, which Focus reaches
@@ -541,7 +545,7 @@ FocusScope {
     // Re-listing also clears the cursor and selection, the same as opening any other directory.
     // Recent lists what the history names, dotfiles among them, so the toggle has nothing to hide there.
     function toggleHidden() {
-        if (root.recentMode.length > 0) { root.message("This listing is a history, and keeps the dotfiles it names.", false); return }
+        if (root.recentMode.length > 0) { root.message("Recent shows every item it lists, hidden ones included", false); return }
         root.showHidden = !root.showHidden
         ViewState.changeKey("hidden", root.showHidden)
         root.open(root.path)
@@ -588,7 +592,7 @@ FocusScope {
         if (action === "permissions") { root.openPermissions(); return }
         if (action === "rename" && root.openBulkRename(paths)) return  // several rows open the bulk card
         // Recent is a history, not a directory: a new file there would land in the root it stands on.
-        if (action === "newFile" && root.recentMode.length > 0) { root.message("This listing is a history, and cannot take a new file.", false); return }
+        if (action === "newFile" && root.recentMode.length > 0) { root.message("Recent cannot hold a new file. Open a folder first", false); return }
         if (["newFile", "rename", "openWith", "moveTo", "copyTo", "properties", "deletePermanently"].indexOf(action) >= 0) {
             menuActions.open(action, menuId || 0, context)
             return
@@ -656,12 +660,12 @@ FocusScope {
     // The context menu is its one caller, and it acts on the single cursor target.
     function makeExecutable() {
         if (!root.isSingleCursorTarget()) {
-            root.message("Make executable needs a script without its execute bit.", false)
+            root.message("Make executable works on a script that cannot run yet", false)
             return
         }
         var row = root.rowFor(root.cursorIndex)
         if (!row || !Menu.canMakeExecutable(row.p, 1, root.rowHasShebang, true)) {
-            root.message("Make executable needs a script without its execute bit.", false)
+            root.message("Make executable works on a script that cannot run yet", false)
             return
         }
         var taken = [root.join(Search.baseOf(root), row.n)]
@@ -696,7 +700,7 @@ FocusScope {
             var target = root.permissionSelection()
             var single = target ? target.p : 0
             if (Menu.permissionsEntry(single, 1).disabled) {
-                root.message("Permissions takes one file or folder, not a link.", true)
+                root.message("Permissions takes one item, not a link.", true)
                 return
             }
             root.permissionsRequested(paths[0])
@@ -728,7 +732,7 @@ FocusScope {
     // c and P open Copy as and Paste as on their first flyout row.
     function openCopyAs() {
         if (!root.openCursorMenu()) {
-            root.message("No row under the cursor to open a menu on.", false)
+            root.message("No item under the cursor to open a menu on", false)
             return
         }
         menu.openSubmenuFor("copyAs")
@@ -751,7 +755,7 @@ FocusScope {
     function showOriginal() {
         var row = root.rowFor(root.cursorIndex)
         if (!row || !Format.isSymlink(row.p)) {
-            root.message("Show original needs the cursor on a symlink.", false)
+            root.message("Show original needs the cursor on a link", false)
             return
         }
         root.requestLinkTarget(root.join(Search.baseOf(root), row.n))
@@ -1102,7 +1106,7 @@ FocusScope {
         localSend: ({ installed: (root.backend.providers.localsend || {}).installed === true, checking: menuActions.localSend.checking,
                       peers: (root.cursorRow && !root.cursorRow.d) ? menuActions.localSend.peers : [], answeredOnce: menuActions.localSend.answeredOnce })
         dropboxPath: root.dropboxService && root.dropboxService.dropboxReady ? root.dropboxService.dropboxPath : ""
-        dropboxReason: root.dropboxService ? root.dropboxService.dropboxReason : "Dropbox service unavailable"
+        dropboxReason: root.dropboxService ? root.dropboxService.dropboxReason : "Dropbox is not available"
         dropboxCode: root.dropboxService ? root.dropboxService.dropboxCode : ""
         rowInDropbox: root.menuValuesLive && root.dropboxService && root.cursorRow
             && Dropbox.contains(root.dropboxService.dropboxPath, root.join(Search.baseOf(root), root.cursorRow.n))
@@ -1183,7 +1187,7 @@ FocusScope {
     function moveToDropbox(menuId) { Ops.moveToDropbox(root, root.dropboxService && root.dropboxService.dropboxReady ? root.dropboxService.dropboxPath : "", menuId) }
     // The three foreign programs live in ui/PaneWire.qml with the backend's replies; these only name the row.
     function copyShareLink(path) {
-        if (!path) { root.message("Cursor source was not validated; reopen the menu.", true); return }
+        if (!path) { root.message("That menu is out of date. Reopen it.", true); return }
         wire.shareLink.copy(path)
     }
     function sendTaildrop(peerId, path) { Ops.sendTaildrop(root, wire.taildrop, peerId, path) }
@@ -1205,7 +1209,7 @@ FocusScope {
         }
         if (action === "copyAs") { Ops.copyAs(root, "path", [path]); return }
         if (action === "permissions") { root.permissionsRequested(path); return }
-        root.message(action + " is not built yet.", false)
+        root.message("That action is not available yet", false)
     }
 
     // The keyboard's own entrance to the row menu; the placement itself is ui/js/Menu.js's.

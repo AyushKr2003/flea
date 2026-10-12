@@ -181,7 +181,7 @@ QtObject {
     readonly property string density: root.state.density || "compact"
     readonly property string addressBar: root.state.addressBar || "breadcrumb"
     readonly property bool hyprlandIcons: root.display.hyprlandIcons === true
-    property string saveStatus: "Saved · applied in this process"
+    property string saveStatus: "Saved"
 
     // Settings > View > Opening. ui/js/Startup.js is what turns these into a path; nothing else reads
     // them, so the panel and the two openers can never disagree about where a window or a tab begins.
@@ -478,7 +478,7 @@ QtObject {
         onLoadFailed: function (error) {
             if (error === FileViewError.FileNotFound && !root.initialReadComplete) return
             if (!root.initialReadComplete) root.unreadable = true
-            root.favouritesReadError = "Favorites not refreshed: ui.json unreadable; kept the old entries."
+            root.favouritesReadError = UiState.FAVOURITES_UNREAD
             root.favouritesReadFailed(root.favouritesReadError)
         }
     }
@@ -490,7 +490,7 @@ QtObject {
     function wrote(exitCode) {
         // Taken out before the patch below is built, so a writer queued behind this one launches with
         // what is still owed and not with the settings this one has just stored.
-        root.saveStatus = exitCode === 0 ? "Saved · applied in this process"
+        root.saveStatus = exitCode === 0 ? "Saved"
             : "Could not save settings · changes apply to this session only"
         if (exitCode === 0)
             root.unsaved = UiState.acknowledged(root.unsaved, root.writeBook.inflight)

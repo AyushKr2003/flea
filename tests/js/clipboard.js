@@ -119,6 +119,8 @@ function run(check) {
     check("failed set reports honest scope", p.said[1], "Copied in this window only: no compositor")
     Clipboard.receive(p, { op: "set", ok: false, error: "no compositor" })
     check("failure reports once per pending set", p.said.length, 2)
+    Clipboard.receive(p, { op: "clear", ok: false, error: "no compositor" })
+    check("a failed clear names the system clipboard", p.said[2], "Could not clear the system clipboard: no compositor")
     watchError(p)
     check("watch failure keeps local copy", p.clipboard === local, true)
     Ops.paste(p)

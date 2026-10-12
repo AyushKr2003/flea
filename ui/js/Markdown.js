@@ -8,6 +8,11 @@
 
 // Markdown's stable API: remote images become a placeholder, only files inside the document folder load.
 
+// Whole sentences with "%1" for a value, filled by fill so each translates as one.
+var WORDS = {
+    deepNotice: "This file nests deeper than %1 levels, so Flea shows its source."
+}
+
 var RENDERED = "rendered"
 var SOURCE = "source"
 
@@ -15,7 +20,7 @@ var SOURCE = "source"
 var NESTING_LIMIT = Blocks.NESTING_LIMIT
 
 function deepNotice() {
-    return "Rendered preview skipped: nesting is deeper than " + NESTING_LIMIT + " levels. Showing the source."
+    return Format.fill(WORDS.deepNotice, NESTING_LIMIT)
 }
 
 // Only these three schemes open in the default application; relative links, anchors and every other scheme open nothing.

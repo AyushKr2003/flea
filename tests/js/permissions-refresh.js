@@ -89,7 +89,7 @@ function apply(p, kind) {
 
 function undo(p, op, redo) {
     var handler = new Function("pane", "Ops", "Status", "op", "ok", body(Source.source("ui/PaneWire.qml"), redo ? "onRedone" : "onUndone"))
-    handler(p, Ops, {UNDO_HINT: ""}, op, true)
+    handler(p, Ops, {undoHint: function () { return "" }}, op, true)
 }
 
 function run(check) {

@@ -1,6 +1,26 @@
 .pragma library
 
+.import "KeyName.js" as KeyName
+.import "Format.js" as Format
 .import "Ops.js" as Ops
+
+// Whole sentences with "%1" for the key that arms and "%2" for the key that acts on its own, filled by Format.fill.
+var WORDS = {
+    trash: "Press %1 again to move it to Trash, or %2 on its own.",
+    review: "Press %1 again to review permanent deletion, or %2 on its own.",
+    trashAlone: "Press %1 again to move it to Trash.",
+    reviewAlone: "Press %1 again to review permanent deletion."
+}
+
+// The keys come from the running preset: the arming key, and the key that acts at once when the preset binds one.
+function trashPrompt() {
+    var alone = KeyName.keyOf("trash", "none")
+    return alone.length > 0 ? Format.fill(WORDS.trash, KeyName.keyFor("trash"), alone) : Format.fill(WORDS.trashAlone, KeyName.keyFor("trash"))
+}
+function reviewPrompt() {
+    var alone = KeyName.keyOf("trash", "none")
+    return alone.length > 0 ? Format.fill(WORDS.review, KeyName.keyFor("trash"), alone) : Format.fill(WORDS.reviewAlone, KeyName.keyFor("trash"))
+}
 
 // The dd pair. A single d used to trash, and it sat in the middle of the letters a name is typed
 // with, so the third keystroke of "Vid" trashed the row (issue 7). Delete and Ctrl+Delete are not
@@ -19,7 +39,7 @@ function arm(pane) {
         return
     }
     pane.trashArmedAt = Date.now()
-    pane.message("Press d again to trash, or Delete on its own.", false)
+    pane.armPrompted(trashPrompt())
 }
 
 // Window-level keys the Trash view borrows: "direct" skips pane.act as Focus.handleKey does, "act" goes through it, "trash" stays here.

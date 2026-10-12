@@ -5,6 +5,15 @@
 .import "Match.js" as Match
 .import "Thumbs.js" as Thumbs
 
+// The strip's two sentences and the no-match tile's heading, each filled by Format.fill.
+var WORDS = {
+    noMatchOne: "No match among 1 item",
+    noMatchMany: "No match among %1 items",
+    shown: "%1 of %2 shown",
+    shownOfFolder: "%1 of %2 shown · of %3 in this folder",
+    nothingMatched: "Nothing matched %1"
+}
+
 // The filter narrows the listing already on screen: no walk, no round trip, and every row it keeps
 // is one the backend has already sent. ui/js/Search.js is its bigger sibling, which walks the
 // subtree and replaces the listing; the design canvas draws the two as different things and this
@@ -57,14 +66,16 @@ function summary(list, loaded, total) {
     if (list === null) {
         return ""
     }
-    var head = Format.count(list.length) + " of " + Format.count(loaded) + " shown"
-    return total > loaded ? head + " · of " + Format.count(total) + " in this folder" : head
+    if (total > loaded) {
+        return Format.fill(WORDS.shownOfFolder, Format.count(list.length), Format.count(loaded), Format.count(total))
+    }
+    return Format.fill(WORDS.shown, Format.count(list.length), Format.count(loaded))
 }
 
 // States' no-match tile: the pane names the query back and says how many rows it tested, because
 // the query is up in a strip the reader may have looked away from.
 function noMatch(total) {
-    return total === 1 ? "1 row here, and not it" : Format.count(total) + " rows here, none of them"
+    return total === 1 ? WORDS.noMatchOne : Format.fill(WORDS.noMatchMany, Format.count(total))
 }
 
 // The rows drawn between two ends, which is not the range between them: a plain index range would

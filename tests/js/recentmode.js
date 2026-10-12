@@ -264,13 +264,13 @@ function run(check) {
         var history = { recentMode: "results", said: "" }
         history.message = function (text) { history.said = text }
         check("it refuses in Recent", RecentMode.refusePaste(history), true)
-        check("and says why", history.said, "This listing is a history, and cannot take a paste.")
+        check("and says why", history.said, "Recent cannot take a paste. Open a folder first")
         var browsing = { recentMode: "", said: "" }
         browsing.message = function (text) { browsing.said = text }
         check("and stays silent off Recent", RecentMode.refusePaste(browsing), false)
     } else {
         check("it refuses in Recent", "missing", true)
-        check("and says why", "missing", "This listing is a history, and cannot take a paste.")
+        check("and says why", "missing", "Recent cannot take a paste. Open a folder first")
         check("and stays silent off Recent", "missing", false)
     }
     // A hop out of Recent without close still hands the standing order back.
