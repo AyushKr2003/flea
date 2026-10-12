@@ -4058,6 +4058,8 @@ Three ceilings that earlier joins moved are recorded with their reasons, each fr
 
 The picker save line's whole-sentence templates and name joints move three ceilings, re-derived with `wc -l`: `ui/js/Picker.js` 328 to 335, for the two save templates and `jointName`, the sentences filling through the shared `Format.fill`; `tests/js/picker.js` 343 to 352 for the `Format` import and the two sentence pins; and `tests/picker-hunt.qml` 448 to 449 for the joint-free `plain` text its collision checks read.
 
+The Tags flyout that stays open moves three ceilings, each re-derived with `wc -l`: `ui/ContextMenu.qml` 751 to 752, `ui/PaneMenuActions.qml` 490 to 491 and `ui/Pane.qml` 1180 to 1181, one comment line each for the Tags branch of `chooseSub`, the repeatable tag activation and the `tg`-blind held-rows identity.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
@@ -9026,6 +9028,8 @@ The dual pane Quick Look fix qualifies the right pane's `previewLoader` binding 
 The Contents walk's mount charge moves one ceiling, re-derived with `wc -l`: `src/backend/dirsize.rs` 400 to 412, for the lines in `list_into` that look up a directory entry's device from the mount table before its metadata call, tell `entering` when it crosses onto another device and hand the walk back to the listed folder once that stat returns, so a hang in the stat that crosses into a mount is charged to that mount and a later sibling's is not. The remote walk's test seams (its pace and the silence that marks a mount) live in `src/backend/menucontents_seams.rs`.
 
 The minor-fix pass adds `a_frame_held_for_the_preview_body_swallows_a_trash_key` to `src/tui/hold_tests.rs`, the case where the hold comes from the first preview body with the parent peek already landed, so `src/tui/hold_tests.rs` goes from 393 to 426 lines (`wc -l`) and its recorded ceiling in `tools/flea-file-budget` is 426.
+
+The Tags flyout that stays open through a choice and redraws from the re-asked answer, and the queue that keeps a second tag choice made before the menu snapshot answers, add bytes to `ui/ContextMenu.qml`, `ui/Pane.qml` and `ui/PaneMenuActions.qml`, which moves `tests/startup-units.txt`'s `bytes` line from 1596965 to 1598119, the sum the probe's tool takes over the same 170 units. The same change takes `ui/PaneMenuActions.qml`'s recorded ceiling from 491 to 507, `wc -l` on the file, for the queue, the one-shot gate that now lets a tag toggle repeat, and the queue's resets wherever a pending action is cleared. The queue then drains one choice per activate reply, because the backend's menu slot holds one job and a second activate sent at once was refused as busy and lost: `tagInFlight`, `sendNextTag` and the resets take the `bytes` line to 1598752 and the ceiling from 507 to 519, each re-derived (the probe's tool sum, `wc -l`).
 
 ## The image flasher
 

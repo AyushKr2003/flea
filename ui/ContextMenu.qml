@@ -390,7 +390,8 @@ Item {
             }
         }
         if (!action || !root.validateChoice(action, id)) return
-        root.close()
+        // A Tags choice changes the boxes this flyout draws, so the menu stays up and the answer redraws them in place.
+        if (action !== "tags") root.close()
         root.chosen(action + ":" + id)
     }
 

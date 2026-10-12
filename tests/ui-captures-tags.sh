@@ -72,14 +72,13 @@ case_cap_tags() {
     done
     [[ "$(ipc statusPrimary)" == *"Tagged 1 item Blue"* ]] \
         || fail "cap_tags: digit 5 applied no Blue, status reads $(ipc statusPrimary)"
-    # the digit applies and closes the menu, so T reopens the flyout for the applied check
-    key T >/dev/null
-    settle
-    cap_menu_expect '.opened and .submenu' "tags: T reopened no flyout after the mixed toggle"
+    # the digit toggles in place: the menu and the flyout stay open and Blue turns checked on its own row, with no T
+    cap_menu_expect '.opened and .submenu' "tags: the digit closed the menu or the flyout"
     cap_menu_expect '([.submenuEntries[] | select(.id == "Blue")][0].tagRow.state) == "applied"' "tags: Blue is not checked over both files after the mixed toggle"
     shot tags-mixed-apply
     key -k Escape >/dev/null
     settle
+    cap_menu_expect '.opened and (.submenu | not)' "tags: one Escape did not leave the menu open with no flyout"
     key -k Escape >/dev/null
     settle
     [[ "$(ipc contextMenuVisible)" == "false" ]] || fail "cap_tags: the Tags menu stayed open"
@@ -97,12 +96,10 @@ case_cap_tags() {
     done
     [[ "$(ipc statusPrimary)" == *"Tagged 1 item Yellow"* ]] \
         || fail "cap_tags: digit 3 toggled no Yellow, status reads $(ipc statusPrimary)"
+    # a digit fires like a click and leaves the flyout up, so the second digit needs no T
+    cap_menu_expect '.opened and .submenu' "tags: the digit toggle closed the flyout"
+    cap_menu_expect '([.submenuEntries[] | select(.id == "Yellow")][0].tagRow.state) == "applied"' "tags: Yellow is not checked after the digit toggle"
     shot tags-digit-toggle
-    # a digit fires like a click and closes the menu, so T reopens the list before the second digit
-    [[ "$(ipc contextMenuVisible)" == "false" ]] || fail "cap_tags: the digit toggle left the menu open"
-    key T >/dev/null
-    settle
-    cap_menu_expect '.opened and .submenu' "tags: T did not reopen the flyout after the digit toggle"
     # ruling A: removing the tag prints the Removed line with its z hint
     key 3 >/dev/null
     for waited in $(seq 1 100); do
@@ -111,6 +108,7 @@ case_cap_tags() {
     done
     [[ "$(ipc statusPrimary)" == *"Removed Yellow from 1 item"* ]] \
         || fail "cap_tags: digit 3 removed no Yellow, status reads $(ipc statusPrimary)"
+    cap_menu_expect '.opened and .submenu and ([.submenuEntries[] | select(.id == "Yellow")][0].tagRow.state) == "absent"' "tags: Yellow is not unchecked after the second digit"
     shot tags-removed
     key -k Escape >/dev/null
     settle
@@ -240,8 +238,8 @@ EOF
     menu_seek_submenu "Remove all tags"
     cap_menu_expect '.submenuEntries[.submenuCursor].label == "Remove all tags"' "tags: Return would not land on Remove all tags"
     key -k Return >/dev/null
-    # the highlighted row fires and closes the menu in one turn, so a closed menu proves Return chose the clear
-    cap_menu_expect '(.opened == false)' "tags: the no-op clear never fired, the menu stayed open"
+    # the highlighted row fires and leaves the flyout up on the same row, so the open flyout proves Return chose the clear
+    cap_menu_expect '.opened and .submenu and .submenuEntries[.submenuCursor].label == "Remove all tags"' "tags: the no-op clear closed the flyout or moved its cursor"
     # the backend answers ok:0, so watch three seconds of wall time: a late Removed line still fails
     waited=$((SECONDS + 3))
     while (( SECONDS < waited )); do
@@ -262,6 +260,33 @@ else:
     raise SystemExit("user.xdg.tags appeared on the untagged row")
 EOF
     shot tags-noop
+    # the same Return on the same row clears a tagged row, which only the activation does: the Removed line and the bare file prove it fired
+    key 5 >/dev/null
+    for waited in $(seq 1 100); do
+        [[ "$(ipc statusPrimary)" == *"Tagged 1 item Blue"* ]] && break
+        sleep 0.05
+    done
+    [[ "$(ipc statusPrimary)" == *"Tagged 1 item Blue"* ]] \
+        || fail "cap_tags: digit 5 tagged no Blue on noop.txt, status reads $(ipc statusPrimary)"
+    cap_menu_expect '.opened and .submenu and .submenuEntries[.submenuCursor].label == "Remove all tags"' "tags: the digit moved the flyout cursor off Remove all tags"
+    key -k Return >/dev/null
+    for waited in $(seq 1 100); do
+        [[ "$(ipc statusPrimary)" == *"Removed all tags from 1 item"* ]] && break
+        sleep 0.05
+    done
+    [[ "$(ipc statusPrimary)" == *"Removed all tags from 1 item"* ]] \
+        || fail "cap_tags: Return on Remove all tags cleared nothing, status reads $(ipc statusPrimary)"
+    [[ "$dir/plain-sub/noop.txt" == "$fixture_root/"* ]] || fail "cap_tags: refusing a path outside the fixture root"
+    python3 - "$dir/plain-sub/noop.txt" <<'EOF2' || fail "cap_tags: Return left the Blue tag on noop.txt"
+import os
+import sys
+try:
+    os.getxattr(sys.argv[1], "user.xdg.tags")
+except OSError as e:
+    assert e.errno == 61, e
+else:
+    raise SystemExit("user.xdg.tags stayed on noop.txt")
+EOF2
     key -k Escape >/dev/null
     settle
     key -k Escape >/dev/null

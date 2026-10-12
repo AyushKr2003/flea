@@ -134,6 +134,10 @@ Loader {
     property bool ready: false
     property string pendingAction: ""
     property bool pendingActivation: false
+    // Tag toggles chosen while the first still awaits its snapshot, kept in press order; any other pending action drops them.
+    property var queuedTags: []
+    // A tag activate sent and not yet answered; the backend's menu slot holds one job, so the next queued tag waits for this reply.
+    property bool tagInFlight: false
     property bool activationUsed: false
     // The request a keymap sheet activation runs under, which lists hidden rows; the next snapshot moves requestId past it.
     property int sheetRequest: 0
@@ -207,6 +211,8 @@ Loader {
         ready = false
         pendingAction = ""
         pendingActivation = false
+        queuedTags = []
+        tagInFlight = false
         activationUsed = false
         identity = pane.menuSelectionIdentity()
         folder = pane.path
@@ -278,7 +284,13 @@ Loader {
             pane.message("Selected items changed; reopen the menu.", true)
             return
         }
-        activationUsed = true
+        // A tag toggle repeats inside one open menu; every other choice closes it, so one activation is all it gets.
+        if (action.indexOf("tags:") === 0 && (tagInFlight || (pendingActivation && pendingAction.indexOf("tags:") === 0))) {
+            queuedTags = queuedTags.concat([action])
+            return
+        }
+        queuedTags = []
+        activationUsed = action.indexOf("tags:") !== 0
         providerValidated = false
         pendingAction = action
         pendingActivation = true
@@ -304,6 +316,16 @@ Loader {
         }
         pane.backend.send({c: "menuaction", op: "activate", id: requestId, action: action,
             dest: pane.dropboxService ? pane.dropboxService.dropboxPath : ""})
+        tagInFlight = action.indexOf("tags:") === 0
+    }
+    // The answer to a tag activate frees the menu slot, so the next queued tag goes out now.
+    function sendNextTag() {
+        tagInFlight = false
+        if (queuedTags.length === 0) return
+        pendingAction = queuedTags[0]
+        queuedTags = queuedTags.slice(1)
+        pendingActivation = true
+        validateActivation()
     }
     function show(action) {
         pendingAction = ""
@@ -410,6 +432,8 @@ Loader {
                             && !root.pendingAction && !root.pendingActivation
                     root.pendingAction = ""
                     root.pendingActivation = false
+                    root.queuedTags = []
+                    root.tagInFlight = false
                     root.providersRefreshing = false
                     root.identity = ""
                     if (!retired)
@@ -428,6 +452,8 @@ Loader {
             }
             if (message.op === "activate") {
                 if (!message.ok || root.identity !== root.pane.menuSelectionIdentity()) {
+                    root.queuedTags = []
+                    root.tagInFlight = false
                     root.pane.message(message.error || "Selected items changed; reopen the menu.", true)
                     return
                 }
@@ -440,6 +466,7 @@ Loader {
                         root.addFavourite(message.paths[0])
                     } else root.pane.performMenu(message.action, message.id, message.paths)
                 }
+                if (action === "tags") root.sendNextTag()
                 return
             }
             if (root.item) root.item.receive(message)
@@ -452,6 +479,8 @@ Loader {
             root.identity = ""
             root.pendingAction = ""
             root.pendingActivation = false
+            root.queuedTags = []
+            root.tagInFlight = false
             root.providersRefreshing = false
             if (root.opened || root.deleting) root.item.receive({id: root.requestId, op: root.deleting ? "delete" : "", ok: false, error: message})
         }
