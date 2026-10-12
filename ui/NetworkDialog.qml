@@ -413,13 +413,13 @@ Item {
                         width: Theme.font.caption
                         height: Theme.font.caption
                         name: "alert"
-                        color: Theme.color.error
+                        color: Theme.color.errorOnSurface
                     }
 
                     Text {
                         width: parent.width - Theme.font.caption - parent.spacing
                         text: root.statusText
-                        color: Theme.color.error
+                        color: Theme.color.errorOnSurface
                         font.family: Theme.font.family
                         font.pixelSize: Theme.font.caption
                         wrapMode: Text.Wrap

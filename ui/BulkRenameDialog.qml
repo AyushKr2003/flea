@@ -330,7 +330,7 @@ FocusScope {
                                                 width: parent.width - reason.width - parent.spacing
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 text: BulkRename.nameAt(root.newNames, nameRow.index)
-                                                color: root.reasonAt(nameRow.index) ? Theme.color.error
+                                                color: root.reasonAt(nameRow.index) ? Theme.color.errorOnSurface
                                                     : root.changedAt(nameRow.index) ? Theme.color.foreground : Theme.color.muted
                                                 selectionColor: Theme.color.accent
                                                 font.family: Theme.font.family
@@ -354,7 +354,7 @@ FocusScope {
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 text: root.reasonAt(nameRow.index)
                                                 textFormat: Text.PlainText
-                                                color: Theme.color.error
+                                                color: Theme.color.errorOnSurface
                                                 font.family: Theme.font.family
                                                 font.pixelSize: Theme.font.caption
                                             }

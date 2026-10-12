@@ -106,8 +106,8 @@ ShellRoot {
             root.check("strip: the played part is half the line and the handle is the handle",
                        parts.length === 3 ? [Math.abs(parts[1].width - parts[0].width * root.halfway) < root.pixelSlack, parts[2].width === strip.seekItem.handle] : [], [true, true])
             root.check("unlock: the refusal note takes errorOnSurface", root.inkOf(root.textWith(unlock.cardItem, "QQuickText", root.unlockMessage)), root.rgba(root.onSurfaceSentinel))
-            root.check("bulk rename: an invalid name line keeps error", root.inkOf(root.textWith(bulk.cardItem, "QQuickTextInput", root.invalidName)), root.rgba(root.errorSentinel))
-            root.check("bulk rename: its reason keeps error", root.inkOf(root.textWith(bulk.cardItem, "QQuickText", root.invalidReason)), root.rgba(root.errorSentinel))
+            root.check("bulk rename: an invalid name line takes errorOnSurface", root.inkOf(root.textWith(bulk.cardItem, "QQuickTextInput", root.invalidName)), root.rgba(root.onSurfaceSentinel))
+            root.check("bulk rename: its reason takes errorOnSurface", root.inkOf(root.textWith(bulk.cardItem, "QQuickText", root.invalidReason)), root.rgba(root.onSurfaceSentinel))
             bulk.terminalError = root.terminalMessage
         } },
         { wait: root.settleTicks, until: function () { return root.landed(root.firstShare) }, run: function () {

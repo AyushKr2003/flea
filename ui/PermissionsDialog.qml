@@ -579,7 +579,7 @@ FocusScope {
                         : root.facts.ok && root.modeValue < 0 ? "Enter three octal digits or a leading-zero four-digit mode." : "")
                     textFormat: Text.PlainText
                     wrapMode: Text.Wrap
-                    color: root.busy ? Theme.color.muted : Theme.color.error
+                    color: root.busy ? Theme.color.muted : Theme.color.errorOnSurface
                     font { family: Theme.font.family; pixelSize: Theme.font.caption }
                 }
                 Item {

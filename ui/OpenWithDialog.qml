@@ -524,7 +524,7 @@ Item {
                 bottomPadding: Theme.spacing.gap
                 height: Math.max(Theme.rowHeight + topPadding + bottomPadding, implicitHeight)
                 text: root.committing ? "Opening…" : root.errorText
-                color: root.committing ? Theme.color.muted : Theme.color.error
+                color: root.committing ? Theme.color.muted : Theme.color.errorOnSurface
                 font.family: Theme.font.family
                 font.pixelSize: Theme.font.caption
                 textFormat: Text.PlainText

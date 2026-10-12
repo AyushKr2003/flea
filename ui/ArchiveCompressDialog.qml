@@ -322,7 +322,7 @@ Item {
                         width: parent.width
                         visible: root.errorText.length > 0
                         text: root.errorText
-                        color: Theme.color.error
+                        color: Theme.color.errorOnSurface
                         font { family: Theme.font.family; pixelSize: Theme.font.caption }
                         textFormat: Text.PlainText
                         wrapMode: Text.Wrap
