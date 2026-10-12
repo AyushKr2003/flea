@@ -2001,6 +2001,9 @@ the batch and its exit status cannot attribute a failure to a single path; a pat
 afterwards is counted in `failed`. `err` rides only on a failure, so a successful line is byte-identical
 to before. `gio` runs under a 10 s deadline, so a hung mount answers "Trash took too long to answer"
 instead of holding the single operation slot.
+The line goes out as soon as `gio` has returned and the disk shows each path gone, before the second `gio trash --list`
+that names the undo journal's URIs; the operation slot stays claimed until that list lands, so an operation sent in between
+answers busy. The line is sent once per batch.
 
 ### slow
 

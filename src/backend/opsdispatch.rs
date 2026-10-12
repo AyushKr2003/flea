@@ -2,7 +2,7 @@
 use crate::backend::iomount::{internal_failure, mount_body, mount_key, slow_sentence, slow_write_with, CALL_DEADLINE, SlowWrite, SLOW_MKDIR, SLOW_RENAME};
 use crate::backend::ops;
 use crate::backend::opsreq::{
-    duplicated_line, made_line, op_err, renamed_line, run_duplicate_checked, run_transfer_checked, run_trash, trashed_line,
+    duplicated_line, made_line, op_err, renamed_line, run_duplicate_checked, run_transfer_checked, run_trash,
     transferdone_line, transferitem_line, transferprogress_line, transferstarted_line, undone_line, usable_dest,
     LinkOutcome, OpMsg,
 };
@@ -817,11 +817,7 @@ pub(crate) fn report_op(out: &mut impl Write, ops: &mut Ops, msg: OpMsg) {
             ops.transfer_retry = (id, retry);
             writeln!(out, "{}", line).ok();
         }
-        OpMsg::Trashed { ok, failed, entry, reason } => {
-            ops.journal.push(entry);
-            ops.live.finished();
-            writeln!(out, "{}", trashed_line(ok, failed, &reason)).ok();
-        }
+        landed @ (OpMsg::TrashAnnounced { .. } | OpMsg::Trashed { .. }) => super::trashland::land(out, ops, landed),
         OpMsg::Linked { ok, failed, skipped, entry, note, first_err, dest } => {
             ops.journal.push(entry);
             ops.live.finished();
@@ -1089,7 +1085,7 @@ mod tests {
         report_op(
             &mut buf,
             &mut o,
-            OpMsg::Trashed { ok: 1, failed: 0, entry: Entry { op: "trash".to_string(), steps: vec![Step::Created { path: "/x".into() }] }, reason: String::new() },
+            OpMsg::Trashed { ok: 1, failed: 0, entry: Entry { op: "trash".to_string(), steps: vec![Step::Created { path: "/x".into() }] }, reason: String::new(), announced: false },
         );
         assert!(o.live.running().is_none(), "the cap would otherwise refuse every operation for the rest of the session");
         assert_eq!(o.journal.len(), 1);

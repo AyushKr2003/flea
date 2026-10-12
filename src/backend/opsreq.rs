@@ -2,7 +2,6 @@
 use crate::backend::collide::{already_there, cancelled, Place, Policy, Skipping, CANCELLED};
 use crate::backend::copyfile::{copy_any, move_any, Progress};
 use crate::backend::ops;
-use crate::backend::trash;
 use crate::backend::undo::{self, Entry, ItemIdentity, Step};
 use crate::error::{from_io, io_message, FleaError};
 use crate::json::escape;
@@ -60,7 +59,10 @@ pub enum OpMsg {
     MergeDone { id: usize, ok: usize, failed: usize, skipped: usize, cancelled: bool, entry: Entry,
                 retry: Vec<(PathBuf, ItemIdentity)>, durable: bool, note: String, merged: usize, kept_both: usize, into: String,
                 refused: Vec<(String, String)> },
-    Trashed { ok: usize, failed: usize, entry: Entry, reason: String },
+    // The outcome line alone, sent the moment the disk shows it; the slot stays claimed until Trashed journals.
+    TrashAnnounced { ok: usize, failed: usize, reason: String },
+    // announced is true once TrashAnnounced already wrote this batch's line, so the wire carries it once.
+    Trashed { ok: usize, failed: usize, entry: Entry, reason: String, announced: bool },
     Linked { ok: usize, failed: usize, skipped: usize, entry: Entry, note: String, first_err: String, dest: String },
     Duplicated { ok: bool, path: String, err: String, entry: Entry },
     RedoDone { journal: super::undo::Journal, result: Result<String, FleaError>, touched: super::undo::Reached },
@@ -570,21 +572,7 @@ fn one_item(
     outcome
 }
 
-pub(crate) fn run_trash(paths: Vec<String>, tx: Sender<OpMsg>, selection: Option<Vec<super::menu_actions::Selected>>) {
-    let owned: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
-    let (entries, failed, reason) = match trash::trash_checked(&owned, selection.as_deref()) {
-        Ok(result) => result,
-        Err(error) => {
-            let line = super::proto::error_line(&op_err("trash", "", &error));
-            let _ = tx.send(OpMsg::Meta { line });
-            (Vec::new(), owned.len(), error)
-        }
-    };
-    let ok = entries.len();
-    let steps = entries.into_iter().map(Step::Trashed).collect();
-    let entry = Entry { op: "trash".to_string(), steps };
-    let _ = tx.send(OpMsg::Trashed { ok, failed, entry, reason });
-}
+pub(crate) use super::trashland::run_trash;
 
 // The same for a duplicate: ui/Pane.qml's own path is run_duplicate_checked.
 #[cfg_attr(not(test), allow(dead_code))]

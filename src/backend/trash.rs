@@ -124,6 +124,11 @@ pub fn trash(paths: &[PathBuf]) -> (Vec<Entry>, usize, String) {
 }
 
 pub(crate) fn trash_checked(paths: &[PathBuf], selection: Option<&[super::menu_actions::Selected]>) -> Result<(Vec<Entry>, usize, String), String> {
+    trash_announcing(paths, selection, &mut |_, _, _| {})
+}
+
+// announce(ok, failed, reason) fires once gio has returned and the disk shows the outcome, before the settle list that only names the journal's URIs.
+pub(crate) fn trash_announcing(paths: &[PathBuf], selection: Option<&[super::menu_actions::Selected]>, announce: &mut dyn FnMut(usize, usize, &str)) -> Result<(Vec<Entry>, usize, String), String> {
     // A leading empty path is a drag that left this window. The receiver may already have moved
     // the file and still accepted a move; a path that is gone is then nothing left to delete.
     let (quiet_gone, paths) = match paths.first() {
@@ -182,14 +187,19 @@ pub(crate) fn trash_checked(paths: &[PathBuf], selection: Option<&[super::menu_a
                 break;
             }
         }
+        // The disk answers whether each path went, so the outcome is known before the settle list is read.
+        let gone: Vec<bool> = rest.iter().map(|&i| present[i].symlink_metadata().is_err()).collect();
+        still_here = gone.iter().filter(|g| !**g).count();
+        failed += still_here;
+        let gio_failed = !matches!(&output, Some(o) if o.status.success());
+        let reason = trash_reason(failed, gio_failed, still_here, &output);
+        announce(entries.iter().flatten().count() + gone.len() - still_here, failed, &reason);
         let after = list();
         for (pos, i) in rest.into_iter().enumerate() {
-            let p = present[i];
-            if p.symlink_metadata().is_ok() {
-                failed += 1;
-                still_here += 1;
+            if !gone[pos] {
                 continue;
             }
+            let p = present[i];
             entries[i] = Some(match before.as_ref().zip(after.as_ref()).and_then(|(b, a)| newest_entry_for(b, a, p)) {
                 Some(e) => e,
                 // A list that failed, or listed nothing new, still leaves the path, what the Trash held before and the time, so undo resolves the entry from a fresh list.
@@ -203,16 +213,20 @@ pub(crate) fn trash_checked(paths: &[PathBuf], selection: Option<&[super::menu_a
     let ok: Vec<Entry> = entries.into_iter().flatten().collect();
     // A batch renamed whole ran no gio, so its silence is not a gio failure.
     let gio_failed = gio_ran && !matches!(&output, Some(o) if o.status.success());
-    let reason = if failed == 0 {
+    Ok((ok, failed, trash_reason(failed, gio_failed, still_here, &output)))
+}
+
+// The one sentence a batch's failures share, so the early announce and the final result never word it differently.
+fn trash_reason(failed: usize, gio_failed: bool, still_here: usize, output: &Option<std::process::Output>) -> String {
+    if failed == 0 {
         String::new()
     } else if gio_failed {
-        failure_reason(&output)
+        failure_reason(output)
     } else if still_here > 0 {
         "those items are still there".to_string()
     } else {
         "those items are already gone".to_string()
-    };
-    Ok((ok, failed, reason))
+    }
 }
 
 // The URIs a list held for one original path, which is what tells a later list's new entry from the old ones.
