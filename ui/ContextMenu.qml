@@ -619,7 +619,7 @@ Item {
         }
     }
 
-    // The flyout: a second frame beside whichever row opened it, only while one has.
+    // The flyout: a second frame beside whichever row opened it, only while one has, at least its parent's width.
     Rectangle {
         id: flyout
         visible: root.submenuOpen || flyout.opacity > 0
@@ -630,7 +630,9 @@ Item {
         // peers.y already carries the inset, so the flyout frame itself stays on the row grid.
         y: Math.max(root.workArea.y + root.workAreaInset,
                     Math.min(frame.y + root.heldOffset, root.workArea.y + root.workArea.height - root.workAreaInset - height))
-        width: Math.max(0, Math.min(root.submenuBuilding ? Theme.menuWidth : Math.max(Theme.menuWidth, root.widestRow(peers)), root.workArea.width))
+        // Its own read, so a change of the parent's width does not read every peer's width again.
+        readonly property real widestPeer: root.submenuBuilding ? 0 : root.widestRow(peers)
+        width: Math.max(0, Math.min(Math.max(frame.width, Theme.menuWidth, flyout.widestPeer), root.workArea.width))
         height: Math.max(0, Math.min(peers.implicitHeight + 2 * Theme.spacing.rowPaddingY,
                                     root.workArea.height - 2 * root.workAreaInset))
         color: Theme.color.surface

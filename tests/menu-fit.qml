@@ -360,8 +360,8 @@ ShellRoot {
                          read: shell.readCard(menu.submenuFrameItem, menu.submenuEntries.length, menu.submenuItemFor) })
         for (var c = 0; c < cards.length; c++) {
             var card = cards[c]
-            var want = Math.min(menu.workArea.width, Math.max(Flea.Theme.menuWidth, card.read.wanted))
-            shell.check(tag + ": " + card.name + " is as wide as its widest row, capped by the work area", card.frame.width, want)
+            var want = Math.min(menu.workArea.width, Math.max(Flea.Theme.menuWidth, card.read.wanted, card.name === "flyout" ? menu.frameItem.width : 0))
+            shell.check(tag + ": " + card.name + " is as wide as its widest row and its parent frame, capped by the work area", card.frame.width, want)
             shell.check(tag + ": " + card.name + " stays inside the work area", shell.inside(card.frame, menu.workArea), true)
             shell.check(tag + ": " + card.name + " rows each state a wanted width", card.read.unmeasured, [])
             if (!s.narrow) {
@@ -373,7 +373,7 @@ ShellRoot {
                 shell.check(tag + ": " + card.name + " of rows that all fit keeps Theme.menuWidth", card.frame.width, Flea.Theme.menuWidth)
             // The widest row of a widened card is flush: its hint sits one gap from its label, no wider than needed.
             var widest = card.read.widest
-            if (!s.narrow && widest && card.frame.width > Flea.Theme.menuWidth && widest.hint.length > 0 && widest.entry.hintSquare !== true) {
+            if (!s.narrow && widest && card.frame.width > Flea.Theme.menuWidth && card.frame.width <= widest.wantedWidth + shell.roundingSlack && widest.hint.length > 0 && widest.entry.hintSquare !== true) {
                 var label = shell.textDrawn(widest, widest.entry.label), hint = shell.textDrawn(widest, widest.hint)
                 var slack = hint.x - (label.x + label.implicitWidth) - Flea.Theme.spacing.gap
                 shell.check(tag + ": " + card.name + " is no wider than its widest row needs", Math.abs(slack) <= shell.roundingSlack, true)
