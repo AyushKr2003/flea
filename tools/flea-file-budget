@@ -149,7 +149,7 @@ ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 797
 ui/Preview.qml 839
 ui/PreviewColumn.qml 586
-ui/PickerChrome.qml 429
+ui/PickerChrome.qml 441
 ui/DeviceMounts.qml 528
 ui/PreviewMarkdown.qml 625
 ui/Row.qml 496
