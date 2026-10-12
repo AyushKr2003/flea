@@ -28,13 +28,23 @@
 Flea combines a Rust backend with a Quickshell interface that follows your Omarchy theme.
 Large directories stay responsive: the window loads rows and requests thumbnails as you need them.
 
-- **Three views.** List, columns and grid, with tabs and natural filename sorting.
-- **Quick Look.** Press Space for images, PDFs, text, media and archive contents.
-- **File operations.** Copy, move, rename, trash, compress and extract, with an undo journal.
+- **Four views.** List, columns, grid and two panes side by side, with tabs and natural filename sorting.
+- **Quick Look.** Press Space for images, PDFs, text, media, 3D model thumbnails and archive contents.
+- **File operations.** Copy, move, rename, trash, compress and extract, with an undo journal. Several selected names rename in one card. A folder pasted onto a folder of the same name merges into it, and undo takes the merge back.
+- **Tags.** Seven tags in your theme's colours, set with `T` and the keys 1 to 7, listed in the sidebar and found with `tag:red`.
+- **Search.** Ranked results replace the listing as you type. Esc returns to the folder and the cursor; Enter keeps the results.
 - **Network and sharing.** SMB, SFTP, FTPS, WebDAV, NFS, Dropbox and Taildrop.
-- **Devices.** USB drives, phones and cameras over MTP, PTP and AFC, mounted from the rail.
+- **Devices.** USB drives, phones and cameras over MTP, PTP and AFC, mounted from the rail. An encrypted drive unlocks from its rail row and locks again when you unmount it.
+- **Disk images.** Write an ISO or IMG, plain or compressed, or a zip holding one, to a USB drive; Flea reads every byte back to check it.
 - **Desktop integration.** Default file manager, “Show in folder” and Open/Save dialogs.
 - **Your settings.** Omarchy text sizes, configurable menus and Default, Vim, Mac or Windows keys.
+
+The newest navigation wins. Back, Forward, Up, a tab, the sidebar and the path bar replace a listing that
+is still loading. Tab walks the listing, the sidebar, the chrome bar and the tab strip, and
+Shift+Tab walks back. Muted text is lifted to a 4.5:1 contrast against its background, a menu row that
+cannot act says why in one word beside its label (offline, signed out, no devices), and a long dialog
+keeps its title and buttons in place while its body scrolls. Opening a script, a program or an AppImage
+asks first: Run, Run in terminal or Open as text. Properties on a folder counts its size and items.
 
 An iPhone lists once it has been unlocked and trusted on this machine: AFC needs the pairing record
 that leaves behind, not an unlocked screen every time. Pairing also puts the phone on its tethering
@@ -114,13 +124,14 @@ If you previously pinned another directory handler, restore that handler explici
 ## Views
 
 **List** for file details. **Grid** for photos and clips. **Columns** for browsing folders with a preview beside them.
+**Two panes** show two folders side by side (`Ctrl+4`). Drag the divider to resize them, double-click it to make them equal, and Flea remembers the split. A setting can remember each folder's own List, Columns or Grid.
 
 <p align="center">
   <img src="docs/images/grid.png" width="49%" alt="Grid view with image and video thumbnails">
   <img src="docs/images/list.png" width="49%" alt="Columns view with the preview column, file details and the iPhone on the Devices rail">
 </p>
 
-**Space** opens Quick Look from any view. Page through a PDF, play media or inspect an archive.
+**Space** opens Quick Look from any view. Page through a PDF, play media or inspect an archive. `+` and `-` zoom an image, `0` returns it to fit, and media has a volume track beside its seek bar. Archive contents list for 7z, ISO images and packages, and a password archive asks for its password.
 
 <p align="center">
   <img src="docs/images/pdf.png" alt="PDF preview with page navigation">
@@ -227,16 +238,19 @@ Press **?** for the full keymap, or **,** to change settings.
 | Quick Look | `Space` |
 | Select / extend selection | `v` / `Shift` + arrows |
 | Copy / cut / paste | `y` `x` `p`, or `Ctrl+C` `Ctrl+X` `Ctrl+V` |
-| Rename / trash / undo | `r` or `F2` / `dd` or `Delete` / `z` |
+| Rename / trash / undo / redo | `r` or `F2` / `dd` or `Delete` / `z` / `Ctrl+Shift+Z` |
+| Tag the selection | `T`, then `1`–`7` |
 | New folder | `Ctrl+Shift+N` |
 | Search / filter the list | `f` / `/` |
 | Enter a path, or jump to a folder by name | `:` or `Ctrl+L`, then a path or a name |
-| List / columns / grid | `Ctrl+1` / `Ctrl+2` / `Ctrl+3` |
+| List / columns / grid / two panes | `Ctrl+1` / `Ctrl+2` / `Ctrl+3` / `Ctrl+4` |
+| Next / previous area | `Tab` / `Shift+Tab` |
 | New tab / close tab / switch tab | `t` / `w` / `1`–`9` |
 | Open terminal / context menu | `Ctrl+T` / `m` |
 | Show hidden files | `.` |
+| Zoom an image in Quick Look / fit | `+` `-` / `0` |
 
-The Windows preset uses `Ctrl+Shift+1/2/3` for views. Menu visibility does not disable shortcuts.
+The Windows preset uses `Ctrl+Shift+1/2/3/4` for views and `Ctrl+Y` for redo. Menu visibility does not disable shortcuts.
 See [the full key table](keys.toml) for preset bindings and pointer actions.
 
 ## Build
