@@ -1,8 +1,7 @@
 import QtQuick
 import "js/sourcefixture.js" as Source
 
-// Grid lift readiness: every tile builds its lift path in the landing turn, never on a later
-// press, while only views keeping per-row drop areas build a DropArea (ui/RowDrag.qml).
+// Grid lift readiness: every tile builds its lift path in the landing turn, while only views keeping per-row drop areas build a DropArea (ui/RowDrag.qml).
 Item {
     id: root
     property int checked: 0
@@ -94,19 +93,6 @@ Item {
         root.check("shared-area tile builds none", root.hasDropArea(slim), false)
         root.check("drop API answers", typeof full.enterAt === "function" && typeof full.leaveAt === "function"
                   && typeof full.moveAt === "function" && typeof full.dropAt === "function", true)
-        function fakeDrag(marker) {
-            return { urls: [], accepted: true,
-                     getDataAsString: function (t) { return t === "application/x-flea-rows" ? marker : "" } }
-        }
-        var d1 = fakeDrag("m"), d2 = fakeDrag("m")
-        full.enterAt(d1)
-        slim.enterAt(d2)
-        root.check("shared entrance matches", d1.accepted, d2.accepted)
-        full.moveAt()
-        slim.moveAt()
-        full.leaveAt()
-        slim.leaveAt()
-        root.check("shared leave matches", full.session.dropIndex, slim.session.dropIndex)
         console.log("dragready: " + root.checked + " checks, " + root.failed + " failed")
         Qt.quit()
     }

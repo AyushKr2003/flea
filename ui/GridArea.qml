@@ -131,13 +131,13 @@ GridView {
     bottomMargin: Theme.spacing.gap
     cellWidth: GridGeometry.cellWidthFor(root.width, root.columns, Theme.spacing.gap, Theme.spacing.rowPaddingX)
     cellHeight: root.cellHeightPx
-    // Qt builds a landing's inserted tiles out to the cache edge in that turn, so an emptied view drops its cache rows.
-    // They come back in cacheStepsMargin steps, each built in its frame's own turn, never as an asynchronous
-    // incubation that an emptied view would cancel; once every row is in, the margin becomes the cache again.
+    // An emptied view drops its cache rows; they come back in cacheStepsMargin frame steps, each built in its own turn, never by incubation an emptied view would cancel.
     readonly property int cacheFull: root.cellHeightPx * GridGeometry.cacheRows
     property int cacheSteps: 0
     readonly property int cacheStepsMargin: 4
     property int cacheQuiet: 0
+    // The frames a key holds growth quiet, so the key's own frame builds nothing else.
+    readonly property int cacheQuietFrames: 2
     cacheBuffer: root.cacheSteps > root.cacheStepsMargin ? root.cacheFull : 0
     displayMarginEnd: root.cacheSteps > root.cacheStepsMargin ? 0 : root.cacheFull * root.cacheSteps / root.cacheStepsMargin
     function regrowCache() {
@@ -148,7 +148,7 @@ GridView {
             cacheGrow.start()
     }
     function holdCache() {
-        if (cacheGrow.running) root.cacheQuiet = 2
+        if (cacheGrow.running) root.cacheQuiet = root.cacheQuietFrames
     }
     FrameAnimation {
         id: cacheGrow
@@ -290,8 +290,7 @@ GridView {
         }
     }
 
-    // One hover index for every tile: a per-tile handler costs a HoverHandler per delegate
-    // in the landing turn, while the highlight and the tip read the hovered tile alone.
+    // One hover index for every tile: a per-tile HoverHandler costs a delegate each in the landing turn.
     property int hoveredIndex: -1
     // The view index under a view point, or -1 past the tiles; content offsets keep it exact.
     function hoverAt(x, y) {
@@ -303,18 +302,17 @@ GridView {
         onHoveredChanged: { if (!hovered) root.hoveredIndex = -1; else root.hoverAt(point.position.x, point.position.y) }
         onPointChanged: if (hovered) root.hoverAt(point.position.x, point.position.y)
     }
-    // One drop area for every tile: a per-tile area costs a DropArea per delegate in the landing
-    // turn, while a tile answers a drop from its row alone, so the grid resolves the tile instead.
+    // One drop area for every folder tile: a per-tile DropArea costs a delegate each in the landing turn.
     property var dropTile: null
     property int dropListingIndex: -1
     // What the tile under the drag answered; one refusal on entry must not end the area's events, so the area itself stays accepted and each move re-says this.
     property bool dropAccepted: false
-    // The tile's drop row under a view point, or null past its icon and caption; the map keeps the content offset exact, and a pooled or stale tile never answers.
+    // A folder tile's drop row under a view point, or null on a file, past its icon and caption, or on bare ground; the index lookup never meets another item of the content, and a pooled or stale tile never answers.
     function tileDropAt(x, y) {
         var p = root.mapToItem(root.contentItem, x, y)
-        var tile = root.contentItem.childAt(p.x, p.y)
-        if (!tile || tile.visible === false || !tile.live || tile.listingIndex === undefined
-                || tile.listingIndex < 0 || !tile.row || !root.hitsTile(tile, tile.mapFromItem(root, x, y)))
+        var tile = root.itemAtIndex(root.indexAt(p.x, p.y))
+        if (!tile || tile.visible === false || !tile.live || tile.listingIndex === undefined || tile.listingIndex < 0
+                || !tile.row || tile.row.d !== true || !root.hitsTile(tile, tile.mapFromItem(root, x, y)))
             return null
         return tile.rowDrag
     }
@@ -348,6 +346,8 @@ GridView {
     DropArea {
         parent: root
         anchors.fill: parent
+        // Bare ground and file tiles are not this area's, so the pane's floor (ui/PaneWire.qml) takes them as it does under List.
+        containmentMask: QtObject { function contains(point: point): bool { return root.tileDropAt(point.x, point.y) !== null } }
         enabled: root.pane !== null && !root.pane.listInFlight
         keys: [DragOps.ROWS_MIME, "text/uri-list", "text/plain"]
         onEntered: function (drag) {

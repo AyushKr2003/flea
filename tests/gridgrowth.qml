@@ -16,6 +16,7 @@ ShellRoot {
     property int frames: 0
     property bool framed: false
     property int polls: 0
+    property int minSteps: 0
 
     function pad(i) { var n = String(i); while (n.length < 4) n = "0" + n; return n }
     function bigRows() {
@@ -105,18 +106,6 @@ ShellRoot {
         }
         return false
     }
-    // Where the model count never lands the driver starts on its own, the test starts the driver's own object instead.
-    function kickDriver(v) {
-        var res = v.resources || []
-        for (var i = 0; i < res.length; i++) {
-            var r = res[i]
-            if (r && r.interval !== undefined && r.repeat && !r.running) { r.start(); return }
-        }
-        for (var j = 0; j < res.length; j++) {
-            var q = res[j]
-            if (q && q.interval === undefined && q.repeat === undefined && q.running === false && q.start !== undefined) { q.start(); return }
-        }
-    }
     function land(path, total, rows) {
         var p = root.stubPane
         p.listInFlight = true
@@ -153,12 +142,30 @@ ShellRoot {
             return
         }
         if (root.stage === 2) {
-            root.kickDriver(v)
-            v.forceLayout()
             if (v.cacheSteps < 1) { root.polls += 1; if (root.polls > 400) { root.failures.push("growth never started"); root.report(); return } step.restart(); return }
             if (v.cacheSteps > v.cacheStepsMargin) { root.failures.push("growth finished before a down"); root.report(); return }
             root.down()
+            return
         }
+        if (root.stage === 4) {
+            // Growth runs to its end on its own frames, then a second landing must empty the cache and grow it back again.
+            if (v.cacheSteps <= v.cacheStepsMargin) { root.polls += 1; if (root.polls > 800) { root.failures.push("growth never finished"); root.report() } else step.restart(); return }
+            root.minSteps = v.cacheSteps
+            root.polls = 0
+            root.stage = 5
+            root.land("/fx/enter/big2", 1000, root.bigRows())
+            step.restart()
+            return
+        }
+        if (root.stage === 5) {
+            if (v.cacheSteps < 1) { root.polls += 1; if (root.polls > 800) { root.failures.push("the second landing never regrew"); root.report() } else step.restart(); return }
+            if (root.minSteps !== 0) root.failures.push("the second landing kept the grown cache, steps never fell below " + root.minSteps)
+            root.report()
+        }
+    }
+    Connections {
+        target: viewLoader.item
+        function onCacheStepsChanged() { if (root.stage === 5) root.minSteps = Math.min(root.minSteps, viewLoader.item.cacheSteps) }
     }
     function down() {
         var v = root.view()
@@ -186,7 +193,9 @@ ShellRoot {
     }
     function finish() {
         if (root.stage !== 3) return
-        root.report()
+        root.stage = 4
+        root.polls = 0
+        step.restart()
     }
     function report() {
         root.stage = 4

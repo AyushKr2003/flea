@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A Down during cache regrowth carries no growth build on its frame; growth steps only on quiet frames.
+# A landing starts cache regrowth on its own, a Down during it carries no growth build on its frame, and the next landing regrows it again.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -28,7 +28,7 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
     timeout 60 qs -p "$test_root/config" 2>&1)
 
-# Sample input, one probe line: "  INFO qml: GRIDGROWTH PASS probes=6 inflight=6"
+# Sample input, one probe line: "  INFO qml: GRIDGROWTH PASS steps=1 frames=6"
 pass_count=$(printf '%s\n' "$output" | grep -c 'GRIDGROWTH PASS')
 fail_count=$(printf '%s\n' "$output" | grep -c 'GRIDGROWTH FAIL')
 if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then

@@ -1,8 +1,7 @@
 import QtQuick
 import "js/sourcefixture.js" as Source
 
-// Shared grid hover: one HoverHandler on the view sets one index, every tile reads it.
-// No tile builds its own handler, and the highlight hides under the band while the tip stays.
+// Shared grid hover wiring: one HoverHandler on the view, one index every tile reads; the behaviour runs in griddroplive on the real view.
 Item {
     id: root
     property int checked: 0
@@ -20,18 +19,6 @@ Item {
         return code.split(marker).length - 1
     }
 
-    // Three tiles sharing one index, the delegate's two bindings in the same shape.
-    property int shared: -1
-    property bool bandClear: true
-    property var live: [true, true, true]
-    function raw(i) { return root.live[i] && root.shared === i }
-    function light(i) { return root.raw(i) && root.bandClear }
-    function litCount() {
-        var n = 0
-        for (var i = 0; i < 3; i++) if (root.light(i)) n++
-        return n
-    }
-
     Component.onCompleted: {
         var tile = Source.source("ui/GridTile.qml")
         var area = Source.source("ui/GridArea.qml")
@@ -47,24 +34,9 @@ Item {
         root.check("probe resolves by position", area.indexOf("root.indexAt(x + root.contentX, y + root.contentY)") >= 0, true)
         root.check("probe clears on leave", area.indexOf("if (!hovered) root.hoveredIndex = -1") >= 0, true)
         root.check("tile reads the shared index", area.indexOf("hovered: cell.live && root.hoveredIndex === cell.index") >= 0, true)
+        root.check("a point change feeds the index", area.indexOf("onPointChanged: if (hovered) root.hoverAt(point.position.x, point.position.y)") >= 0, true)
+        root.check("a scroll under a resting pointer feeds the index", area.indexOf("if (hoverProbe.hovered) root.hoverAt(hoverProbe.point.position.x, hoverProbe.point.position.y)") >= 0, true)
         root.check("tile guards on the band", area.indexOf("hoverShown: root.pane.selectionBand === null") >= 0, true)
-        root.check("rest lights none", root.litCount(), 0)
-        for (var i = 0; i < 3; i++) {
-            root.shared = i
-            root.check("move lights exactly one", root.litCount(), 1)
-            root.check("move lights this one", root.light(i), true)
-        }
-        root.bandClear = false
-        root.shared = 1
-        root.check("band hides the highlight", root.litCount(), 0)
-        root.check("band keeps the tip source", root.raw(1), true)
-        root.bandClear = true
-        root.live[1] = false
-        root.check("pooled tile stays dark", root.light(1), false)
-        root.check("peer still lights", root.litCount(), 0)
-        root.live = [true, true, true]
-        root.shared = 2
-        root.check("reuse lights the peer", root.light(2), true)
         console.log("hoverready: " + root.checked + " checks, " + root.failed + " failed")
         Qt.quit()
     }

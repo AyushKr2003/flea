@@ -1,7 +1,5 @@
 #!/bin/bash
-# The grid's first press-move after a cold landing must start the same drag as today: the lift
-# handler builds with the tile, never on a later press, while the shared drop area (ui/GridArea.qml)
-# lets grid tiles skip their own DropArea. Red on a change that creates the drag object late.
+# The grid's first press-move after a cold landing starts the drag: the lift handler builds with the tile while the shared drop area lets it skip its own DropArea.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 # The grid delegate opts out of the per-row area; the list and columns rows keep it.

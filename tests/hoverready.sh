@@ -1,6 +1,5 @@
 #!/bin/bash
-# The grid's hover must come from one shared probe: no tile builds its own HoverHandler,
-# the highlight and the tip read one index, and a move lights exactly one tile at a time.
+# The grid's hover comes from one shared probe: no tile builds its own HoverHandler and every tile reads one index.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 # One shared probe on the view; the delegate and the tile hold no HoverHandler of their own.
