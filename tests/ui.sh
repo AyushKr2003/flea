@@ -14647,9 +14647,7 @@ columns_hero_span() {
     printf '%s %s\n' "$((sx + active))" "$((sw - active))"
 }
 
-# The same manual test: thumbnails, the empty hero, the peeked column's menu and video playback, per
-# view. Each view enters its own uncached copy of the fixture through the UI, so it acquires its own
-# thumbnails rather than reading ones another view warmed.
+# The manual views test per view (thumbnails, empty hero, peeked column menu, video), each on its own uncached fixture copy so it acquires its own thumbnails.
 case_views() {
     # Four fixtures directly inside the sandbox root, which is what its guard allows; the fourth is the
     # grid again after the columns view, so a column kept alive under the grid is proven to plan nothing.
@@ -14787,8 +14785,12 @@ case_views() {
         (( lit > 0 )) || fail "$mode: the empty directory's hero painted nothing"
         # Its box is the listing slot (a lazy view reports a local origin, once drawing the hero over the sidebar); in columns the whole pane at 2-3 columns, else the free area.
         read -r sx sy sw sh <<< "$(ipc listAreaRect)"
-        local ex=$sx ew=$sw
-        [[ "$mode" == "columns" ]] && read -r ex ew <<< "$(columns_hero_span "$sx" "$sw" "$(ipc columnCount)")"
+        local ex=$sx ew=$sw span
+        if [[ "$mode" == "columns" ]]; then
+            # fail inside the substitution exits only the subshell, so its status carries the failure here.
+            span=$(columns_hero_span "$sx" "$sw" "$(ipc columnCount)") || exit 1
+            read -r ex ew <<< "$span"
+        fi
         rect_is "$(ipc emptyStateRect)" "$ex" "$sy" "$ew" "$sh" 1 \
             || fail "$mode: the hero's box is $(ipc emptyStateRect), not the slot $ex $sy $ew $sh"
         read -r mx my mw mh <<< "$(ipc emptyMarkRect)"
