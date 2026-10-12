@@ -9,6 +9,7 @@ import "js/MarkdownPrepared.js" as Prepared
 import "js/Motion.js" as Motion
 import "js/PreviewSettle.js" as PreviewSettle
 import "js/PreviewSwap.js" as PreviewSwap
+import "js/Swap.js" as Swap
 
 // The overlay lives inside the Flea window, Finder's Quick Look shape: a second window breaks omarchy-drive focus flea and every test that narrows on it.
 Item {
@@ -150,6 +151,8 @@ Item {
     readonly property bool revealed: root.landed || root.revealedEarly
     // Set by the cap, or by a press or the wheel during the hold.
     property bool revealedEarly: false
+    // When the early loading state first drew, 0 while none stands; content replaces it only after Swap.MIN_SHOW_MS.
+    property double loadingSince: 0
     // True once this open's content first drew; later moves are the swap's to count.
     property bool landed: false
     readonly property bool revealedOpen: root.active && root.revealed
@@ -164,20 +167,34 @@ Item {
         return { revealed: root.revealed, revealedEarly: root.revealedEarly, landed: root.landed, lookEmptyFrames: root.lookEmptyFrames, revealCaps: root.revealCaps }
     }
     // A move still settling lands nothing, and followSettle reruns this once it stops, so what reveals is the cursor's own file.
+    // Past the cap, content that is ready waits out the loading state's minimum, so it never blinks for under 100 ms.
     function revealIfReady() {
-        if (root.active && root.lookReady && !followSettle.running)
+        if (!root.active || !root.lookReady || followSettle.running)
+            return
+        var left = root.loadingEarly ? Swap.showLeft(root.loadingSince, Date.now()) : 0
+        if (left > 0) {
+            minShow.interval = left
+            minShow.restart()
+        } else {
             root.landed = true
+        }
+    }
+    function showEarly() {
+        root.loadingSince = Date.now()
+        root.revealedEarly = true
     }
     function revealNow() {
         root.revealIfReady()
         if (root.unrevealed)
-            root.revealedEarly = true
+            root.showEarly()
     }
     // The ready test runs after the open's own turn, because lookReady still reads the closed overlay inside this handler.
     onActiveChanged: {
         root.revealedEarly = false
+        root.loadingSince = 0
         root.landed = false
         revealCap.stop()
+        minShow.stop()
         if (root.active)
             Qt.callLater(root.revealIfReady)
     }
@@ -185,13 +202,20 @@ Item {
     // Armed by load() once show() returns, beside the swap's own cap.
     Timer {
         id: revealCap
+        objectName: "revealCap"
         repeat: false
         onTriggered: {
             if (!root.unrevealed)
                 return
             root.revealCaps += 1
-            root.revealedEarly = true
+            root.showEarly()
         }
+    }
+    // The early loading state has stood its minimum, so ready content lands now.
+    Timer {
+        id: minShow
+        repeat: false
+        onTriggered: root.revealIfReady()
     }
     // afterAnimating runs just before each frame is synchronised, so it sees a frame that draws the card or dim with neither content nor the loading state.
     Connections {

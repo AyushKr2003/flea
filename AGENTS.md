@@ -705,9 +705,11 @@ mutates under the picture and then calls `start(isPdf)`, held j joins the hold w
 staying, and `close()` calls `cancel()` so nothing queued runs. Space's own open takes no picture: its card and
 dim wait for the content's first frame (`lookReady`, which sets `landed`), and `revealed` is `landed || revealedEarly`.
 The hold ends early over the loading state, shown at once (`heldOff`) for every kind, when the `revealCap` single-shot
-fires at `capMs` counted from after `show()` returns, beside the swap's own `start()`, so a cold first PDF compile is not
-inside it, or when a press or the wheel lands anywhere on the overlay: the top `holdShield` takes it, through its own
-release, so no click reaches a card that never drew. A move during the hold takes no picture and keeps the open's cap;
+fires at `Swap.CAP_MS` (66 ms) counted from after `show()` returns, beside the swap's own `start()`, so a cold first PDF
+compile is not inside it, or when a press or the wheel lands anywhere on the overlay: the top `holdShield` takes it, through
+its own release, so no click reaches a card that never drew. That early loading state stands `Swap.MIN_SHOW_MS` from
+`loadingSince`: `revealIfReady` asks `Swap.showLeft`, and content ready sooner lands when the `minShow` timer ends, while
+content ready before the reveal lands at once. A move during the hold takes no picture and keeps the open's cap;
 an idle one loads at once and a burst still trails on `followSettle`, which `revealIfReady` waits out, so whatever
 reveals is the cursor's own file and a held key asks nothing per row. The card and dim read opacity 0 for the whole hold
 and share one `fade`, so a reopen inside the close fade cuts it. `lookEmptyFrames` in `previewSwapState`'s `lookOpen`
@@ -8922,7 +8924,7 @@ The release-line join of the button frame line `075bb903` moves no ceiling past 
 
 The release-line join of the picker answer strip, the Flash file-menu identity and the bench Version column moves no ceiling past the side that set it, and `tests/startup-units.txt` keeps its 170 units while its `bytes` line moves from 1588235 to 1588400, the sum the probe's tool takes over them with the answer buttons' press area in `ui/DialogButton.qml` and the selection identity call in `ui/PaneMenuActions.qml`.
 
-The release-line join of the approved fix, bench, search, picker and Flash strip lines re-derives each ceiling both sides moved with `wc -l` on the merged tree: `src/backend/copyfile_tests.rs` 694, `ui/Pane.qml` 1180, `ui/PickerChrome.qml` 426, `ui/PickerWindow.qml` 797, `tests/button-members.qml` 488 and `tests/js/picker.js` 343, and records `tests/chromering.qml` at 413 for the Flash strip's Back checks beside the seven picker strip stops. `tests/startup-units.txt` keeps its 170 units, `ui/PathEntry.qml` leaving for the first edit and `ui/PrebuildDriver.qml` joining, while its `bytes` line moves from 1588400 to 1596965, the sum the probe's tool takes over them.
+The release-line join of the approved fix, bench, search, picker and Flash strip lines re-derives each ceiling both sides moved with `wc -l` on the merged tree: `src/backend/copyfile_tests.rs` 694, `ui/Pane.qml` 1180, `ui/PickerChrome.qml` 426, `ui/PickerWindow.qml` 797, `tests/button-members.qml` 488 and `tests/js/picker.js` 343, and records `tests/chromering.qml` at 413 for the Flash strip's Back checks beside the seven picker strip stops. `tests/startup-units.txt` keeps its 170 units, `ui/PathEntry.qml` leaving for the first edit and `ui/PrebuildDriver.qml` joining, while its `bytes` line moves from 1588400 to 1596965, the sum the probe's tool takes over them. Quick Look's early loading state keeping its minimum show then moves the line to 1597041, `ui/js/Swap.js` growing by 76 bytes with a comment line.
 
 The Network Tab ring moves three ceilings, each re-derived with `wc -l`: `ui/NetworkDialog.qml` 447 to 457 for the ids, `tabHandle` and `onTabbed` lines that put Cancel, the primary and Install Dropbox in the form's walk after the TLS box, with Escape moved from the form to the card's content so a focused button closes the dialog too, and `ui/NetworkForm.qml` 406 to 413 for the `trailing` prop, the joined ring, the pass-over step and the button labels in `focusName`, and `tests/button-members.qml` 445 to 485 for the trailing-walk checks that Tab from TLS reaches each button and wraps to the first chip, Backtab returns, an unavailable button is passed over and `focusName` names the focused button.
 
