@@ -224,6 +224,7 @@ OPENER
         menu_state=$(ipc menuState) || fail "cardsizes: menu state observation failed"
         work_width=$(jq -er '.workArea.width | numbers' <<< "$menu_state") || fail "cardsizes: menu work area observation failed"
         # The needed width is the sum of what each row laid out for itself (ui/MenuRow.qml's wantedWidth rule, parts() as drawn), never widestRow's answer.
+        # Sample input: {"rows":[{"separator":false,"markLeft":12,"slot":16,"labelLeft":8,"label":61,"labelRight":8,"labelTruncated":false,"hint":40,"hintWrap":false,"hintRight":0,"status":0,"chevron":0,"chevronRight":12},{"separator":true}]}
         need_width=$(jq -er '[.rows[] | if . == null then error("row not built") elif .separator then empty else
             (.markLeft + .slot + .labelLeft + .label + .labelRight + (if .hintWrap then 0 else .hint end) + .hintRight + .status + .chevron + .chevronRight | ceil) end] | max | numbers' <<< "$menu_state") \
             || fail "cardsizes: menu row parts observation failed"

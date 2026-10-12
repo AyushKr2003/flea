@@ -218,6 +218,7 @@ ShellRoot {
     }
 
     // A row's needed width from its own parts, the sum ui/MenuRow.qml's wantedWidth takes; 0 when a row is unbuilt.
+    // Sample input: [{separator: false, markLeft: 12, slot: 16, labelLeft: 8, label: 61, labelRight: 8, hint: 40, hintWrap: false, hintRight: 0, status: 0, chevron: 0, chevronRight: 12}, {separator: true}]
     function neededWidth(rows) {
         var widest = 0
         for (var i = 0; i < rows.length; i++) {
