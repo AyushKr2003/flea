@@ -21,13 +21,25 @@ fn run_user_root() -> String {
     "/run/user/".to_string()
 }
 
-// Sample input: "/run/user/1000//gvfs/./smb-share:x/a" answers "/run/user/1000/gvfs/smb-share:x/a"; the text of a clean path is kept as is.
+// Sample input: "/run/user/1000//gvfs/../gvfs/smb-share:x/a" answers "/run/user/1000/gvfs/smb-share:x/a"; the text of a clean path is kept as is.
 fn folded(path: &Path) -> std::borrow::Cow<'_, str> {
     let text = path.to_string_lossy();
-    if !text.contains("//") && !text.contains("/./") && !text.ends_with("/.") {
+    if !text.contains("//") && !text.contains("/./") && !text.ends_with("/.") && !text.contains("/../") && !text.ends_with("/..") {
         return text;
     }
-    std::borrow::Cow::Owned(path.components().collect::<PathBuf>().to_string_lossy().into_owned())
+    let mut out = PathBuf::new();
+    for part in path.components() {
+        // A ".." pops one named segment and never climbs above the root.
+        match part {
+            std::path::Component::ParentDir => {
+                if matches!(out.components().next_back(), Some(std::path::Component::Normal(_))) {
+                    out.pop();
+                }
+            }
+            other => out.push(other),
+        }
+    }
+    std::borrow::Cow::Owned(out.to_string_lossy().into_owned())
 }
 
 // Splits "<run>/<uid>/gvfs/<share...>" into the root through "gvfs/" and the rest; None for any path off the gvfs mount root.
@@ -63,11 +75,13 @@ pub fn gvfs_root(path: &Path) -> Option<PathBuf> {
 mod tests {
     use super::*;
 
-    // Doubled slashes and dot segments fold away before the gvfs root is matched, so no spelling of a mount path escapes the guard.
+    // Doubled slashes, dot and dot-dot segments fold away before the gvfs root is matched, so no spelling of a mount path escapes the guard.
     #[test]
     fn an_unnormalized_gvfs_path_is_still_a_gvfs_path() {
         for spelled in ["/run/user/1000//gvfs/smb-share:server=n,share=x/a", "/run/user/1000/./gvfs/smb-share:server=n,share=x/a",
-            "/run/user/1000/gvfs//smb-share:server=n,share=x/a", "//run/user/1000/gvfs/smb-share:server=n,share=x/a", "/run/user/1000/gvfs/smb-share:server=n,share=x/."] {
+            "/run/user/1000/gvfs//smb-share:server=n,share=x/a", "//run/user/1000/gvfs/smb-share:server=n,share=x/a", "/run/user/1000/gvfs/smb-share:server=n,share=x/.",
+            "/run/user/1000/gvfs/../gvfs/smb-share:server=n,share=x/a", "/run/user/1000/x/../gvfs/smb-share:server=n,share=x/a",
+            "/../run/user/1000/gvfs/smb-share:server=n,share=x/a", "/run/user/1000/gvfs/smb-share:server=n,share=x/a/b/.."] {
             assert_eq!(gvfs_class(Path::new(spelled)), Some("network"), "{spelled} is a gvfs path");
             assert_eq!(gvfs_root(Path::new(spelled)).as_deref(), Some(Path::new("/run/user/1000/gvfs/smb-share:server=n,share=x")), "{spelled} roots at its share");
         }
