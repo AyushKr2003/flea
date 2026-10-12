@@ -1,7 +1,10 @@
-# Stands in for Hyprland's two sockets: .socket2.sock streams events, and sends configreloaded once the go file exists.
+# Stands in for Hyprland's two sockets: .socket2.sock streams events. It sends workspace>>2 once the ws file exists and
+# then writes ws-sent beside it, and sends configreloaded once the go file exists.
 import os, socket, sys, threading, time
 
 root, go = sys.argv[1], sys.argv[2]
+ws = os.path.join(os.path.dirname(go), "ws")
+ws_sent = ws + "-sent"
 
 
 def listen(name):
@@ -23,7 +26,11 @@ def commands(server):
 
 def events(server):
     conn, _ = server.accept()
-    conn.sendall(b"workspace>>1\n")
+    while not os.path.exists(ws):
+        time.sleep(0.05)
+    conn.sendall(b"workspace>>2\n")
+    with open(ws_sent, "w") as marker:
+        marker.write("sent\n")
     while not os.path.exists(go):
         time.sleep(0.05)
     conn.sendall(b"configreloaded>>\n")

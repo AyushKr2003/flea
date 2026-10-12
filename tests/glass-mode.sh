@@ -4,6 +4,7 @@ set -u
 cd "$(dirname "$0")/.." || exit 1
 . "$PWD/tools/flea-sandbox-guard"
 command -v qs >/dev/null || { echo 'FAIL glass-mode needs qs'; exit 1; }
+command -v python3 >/dev/null || { echo 'FAIL glass-mode needs python3'; exit 1; }
 command -v dbus-run-session >/dev/null || { echo 'FAIL glass-mode needs a private D-Bus session'; exit 1; }
 bin=${FLEA_BIN:-$PWD/target/debug/flea}
 [[ -x "$bin" ]] || { echo 'FAIL glass-mode needs the built backend'; exit 1; }
@@ -12,10 +13,11 @@ probe_root=$(mktemp -d "$SANDBOX_ROOT/flea-glass-mode.XXXXXX") || exit 1
 : > "$probe_root/$SANDBOX_MARKER" || exit 1
 qs_pid=""
 server_pid=""
-# Polled ten times a second up to these bounds; the sweep walks every view and overlay, so it gets the longer one.
+# Polled ten times a second up to these bounds: one case gets 60 s to print its receipt, a shell gets 2 s to stop, the socket stand-in 5 s to bind.
 poll_s=0.1
 polls_per_s=10
 case_budget_s=60
+socket_wait_s=5
 stop_grace_s=2
 stop_polls=$(( stop_grace_s * polls_per_s ))
 stop_qs() {
@@ -101,10 +103,11 @@ STUB
         mkdir -p "$probe/runtime/hypr/glassmode" || { setup_failed "$name" "mkdir of the socket directory failed"; return 1; }
         python3 -I tests/glass-mode-socket.py "$probe/runtime/hypr/glassmode" "$probe/go" >"$probe/socket.log" 2>&1 &
         server_pid=$!
-        for ((tick = 0; tick < 5 * polls_per_s; tick++)); do
+        for ((tick = 0; tick < socket_wait_s * polls_per_s; tick++)); do
             [[ -S "$probe/runtime/hypr/glassmode/.socket2.sock" ]] && break
             sleep "$poll_s"
         done
+        [[ -S "$probe/runtime/hypr/glassmode/.socket2.sock" ]] || { setup_failed "$name" "the event socket never appeared inside ${socket_wait_s}s"; kill "$server_pid" 2>/dev/null; server_pid=""; return 1; }
         sig=(HYPRLAND_INSTANCE_SIGNATURE=glassmode)
     fi
     env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLEA_SELECT "${sig[@]}" \
@@ -161,7 +164,7 @@ run_case transparent-theme precedence - 87 0.34 -
 run_case transparent-bare precedence - 255 - -
 # A value that is not a number is the default 1 where it is set, as before the mode existed.
 run_case user-word precedence glassy 255 0.34 abc
-# The same through a socket speaking Hyprland's event protocol: a workspace event moves nothing, configreloaded moves the radius.
+# The same through a socket speaking Hyprland's event protocol: a workspace event sent after the rounding changed moves nothing, configreloaded moves the radius.
 run_case socket socket - 255 - -
 # A reload moves the mode and the corner radius under a running window.
 run_case reload reload glassy 191 - - 0.75

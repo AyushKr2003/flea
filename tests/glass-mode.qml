@@ -21,6 +21,14 @@ ShellRoot {
     property var steps: []
     property int stepIndex: 0
     property int stepTicks: 0
+    // The stepper ticks every 50 ms, so 200 ticks bound one step to 10 s before it is reported as never completed.
+    readonly property int stepTickLimit: 200
+    // Style's own startup refresh lands up to this long after the first answer, so nothing is changed before it.
+    readonly property int startupSettleMs: 600
+    // How long a raw event or a reload gets to reach Style and Glass before a "did not move" check reads them.
+    readonly property int eventSettleMs: 600
+    // How long the detached rm of the toggle file gets to finish before the mode is read.
+    readonly property int toggleRemoveSettleMs: 400
 
     function check(cond, label) {
         root.checks++
@@ -57,13 +65,12 @@ ShellRoot {
     function reloadSteps() {
         return [
             root.wait(function () { return Commons.Style.cornerRadius === 10 }),
-            // Style's own startup refresh is still pending a beat after the first answer.
-            root.settle(600),
+            root.settle(root.startupSettleMs),
             root.act(function () { rounding.setText("0\n"); Flea.Theme.hyprEvent("workspace") }),
-            root.settle(600),
+            root.settle(root.eventSettleMs),
             root.act(function () { root.check(Commons.Style.cornerRadius === 10, "a workspace event moved the corner radius") }),
             root.act(function () { Quickshell.execDetached(["rm", "-f", root.toggles + "/window-glassy.lua"]) }),
-            root.settle(400),
+            root.settle(root.toggleRemoveSettleMs),
             root.act(function () { root.check(Flea.Glass.mode === "glassy", "the mode moved before any reload"); root.reload() }),
             root.wait(function () { return Commons.Style.cornerRadius === 0 }),
             root.act(function () {
@@ -80,14 +87,16 @@ ShellRoot {
         ]
     }
 
-    // Hyprland's own event stream: the workspace event it opens with moves nothing, and configreloaded moves the radius.
+    // Hyprland's own event stream: a workspace event sent after the rounding changed moves nothing, and configreloaded moves the radius.
     function socketSteps() {
         return [
             root.wait(function () { return Commons.Style.cornerRadius === 10 }),
-            root.settle(600),
-            root.act(function () { rounding.setText("0\n") }),
-            root.settle(600),
-            root.act(function () { root.check(Commons.Style.cornerRadius === 10, "a workspace event moved the corner radius") ; go.setText("go\n") }),
+            root.settle(root.startupSettleMs),
+            // The stand-in sends its workspace event only once ws exists, so it arrives after the rounding file reads 0.
+            root.act(function () { rounding.setText("0\n"); ws.setText("ws\n") }),
+            root.wait(function () { wsSent.reload(); return wsSent.text() === "sent\n" }),
+            root.settle(root.eventSettleMs),
+            root.act(function () { root.check(Commons.Style.cornerRadius === 10, "a workspace event moved the corner radius"); go.setText("go\n") }),
             root.wait(function () { return Commons.Style.cornerRadius === 0 })
         ]
     }
@@ -100,6 +109,8 @@ ShellRoot {
     Component.onCompleted: root.buildSteps()
 
     FileView { id: go; path: root.roundingFile.replace(/rounding$/, "go"); printErrors: false; blockWrites: true }
+    FileView { id: ws; path: root.roundingFile.replace(/rounding$/, "ws"); printErrors: false; blockWrites: true }
+    FileView { id: wsSent; path: root.roundingFile.replace(/rounding$/, "ws-sent"); printErrors: false; blockLoading: true }
     FileView { id: rounding; path: root.roundingFile; printErrors: false; blockWrites: true }
     FileView { id: opaque; path: root.toggles + "/window-opaque.lua"; printErrors: false; blockWrites: true }
     FileView { id: glassy; path: root.toggles + "/window-glassy.lua"; printErrors: false; blockWrites: true }
@@ -116,7 +127,7 @@ ShellRoot {
                 root.stepTicks = 0
                 return
             }
-            if (++root.stepTicks > 200) {
+            if (++root.stepTicks > root.stepTickLimit) {
                 root.check(false, "step " + root.stepIndex + " never completed")
                 root.report()
             }
