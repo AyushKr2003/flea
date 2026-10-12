@@ -132,6 +132,7 @@ function run(check) {
     var measured = counted.reasons(newBig)
     check("the counted run gives the same reasons", sameReasons(measured, wantBig), true)
     check("one pass costs at most four map ops per name", counted.ops() <= 4 * newBig.length, true)
+    check("one pass goes through the counted map", counted.ops() >= newBig.length, true)
     // A name read twice is a second pass over the input, which the map count cannot see.
     var reads = 0
     var counting = newBig.map(function (s) { return { toString: function () { reads += 1; return s } } })

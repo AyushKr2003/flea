@@ -9,11 +9,15 @@ cap_drops_fat_skip() {
 }
 # The EXIT trap a hold chains: release the button, then run the trap that was set before the press.
 cap_drops_exit_chain() {
+    local st=$?
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true
-    [[ -n "${cap_drops_saved_trap:-}" ]] || return 0
+    [[ -n "${cap_drops_saved_trap:-}" ]] || return "$st"
     # trap -p prints: trap -- 'command' EXIT, so the quoted command is the third word.
     eval "set -- $cap_drops_saved_trap"
+    # The saved trap reads $? for the status the script is exiting with, so hand it that status again.
+    (exit "$st")
     eval "${3:-:}"
+    return "$st"
 }
 # A press arms the release ahead of whatever EXIT trap exists, which keeps running after it.
 cap_drops_arm() {
