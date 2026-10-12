@@ -298,11 +298,11 @@ function run(check) {
     // TallPreviews: the frame's shape follows the row's kind alone, and the facts fold into one line whose Kind elides alone.
     var every = [Facts.TEXT, Facts.CODE, Facts.ARCHIVE, Facts.IMAGE, Facts.VIDEO, Facts.AUDIO, Facts.PDF,
                  Facts.SYMLINK, Facts.MULTI, Facts.LOADING, Facts.ERROR, Facts.UNSUPPORTED]
-    check("text, code and an archive list are tall and every other kind keeps the 16 by 10 frame",
+    check("text, code, an archive list and a PDF are tall and every other kind keeps the 16 by 10 frame",
           every.map(function (st) { return Facts.tall(st) }).join("|"),
-          "true|true|true|false|false|false|false|false|false|false|false|false")
-    function line(st, size, meta, kind) {
-        var l = Facts.compactLine(st, row("text-x-generic", size), meta, kind)
+          "true|true|true|false|false|false|true|false|false|false|false|false")
+    function line(st, size, meta, kind, extra) {
+        var l = Facts.compactLine(st, row("text-x-generic", size), meta, kind, extra)
         return l.kind + "|" + l.tail
     }
     check("code states its Kind, size and lines, the Kind apart from the tail that never elides",
@@ -323,6 +323,11 @@ function run(check) {
           + "#" + line(Facts.ARCHIVE, 9000, { entries: 0, archiveFailed: false }, "Zip archive")
           + "#" + line(Facts.ARCHIVE, 9000, { entries: 0, archiveFailed: true }, "Zip archive"),
           "Zip archive| \u00b7 9.0 kB \u00b7 214 entries#Zip archive| \u00b7 9.0 kB \u00b7 1 entry#Zip archive| \u00b7 9.0 kB \u00b7 0 entries#Zip archive| \u00b7 9.0 kB")
+    check("a PDF states its pages with a singular, a grouped count and nothing until the document is read",
+          line(Facts.PDF, 2400000, null, "PDF document", { pages: "12" }) + "#" + line(Facts.PDF, 31000, null, "PDF document", { pages: "1" })
+          + "#" + line(Facts.PDF, 9000000, null, "PDF document", { pages: "1204" }) + "#" + line(Facts.PDF, 31000, null, "PDF document", { pages: "" })
+          + "#" + line(Facts.PDF, 31000, null, "PDF document"),
+          "PDF document| \u00b7 2.4 MB \u00b7 12 pages#PDF document| \u00b7 31.0 kB \u00b7 1 page#PDF document| \u00b7 9.0 MB \u00b7 1,204 pages#PDF document| \u00b7 31.0 kB#PDF document| \u00b7 31.0 kB")
     check("a Kind that looks like a placeholder is kept whole, and a missing Kind or row states what it can",
           line(Facts.CODE, 4100, { lines: 2 }, "100% %2 source") + "#" + line(Facts.CODE, 4100, { lines: 2 }, "")
           + "#" + JSON.stringify(Facts.compactLine(Facts.CODE, null, { lines: 2 }, "Rust source code")),

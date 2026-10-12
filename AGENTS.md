@@ -8928,6 +8928,8 @@ The Network Tab ring moves three ceilings, each re-derived with `wc -l`: `ui/Net
 
 The tall previews line keeps `tests/startup-units.txt` at its 170 units while its `bytes` line moves from 1596965 to 1597596, the sum the probe's tool takes over them with the `previewFacts` key in `ui/ViewState.qml` and `ui/js/UiState.js`, the `factsToggle` route in `ui/js/Focus.js` and its generated rows in `ui/js/Keymap.js`.
 
+The column's continuous PDF stack moves the first-frame `bytes` line in `tests/startup-units.txt` from 1597596 to 1597959 (+363, no unit added): `ui/js/PreviewKeys.js` routes the column's page keys to the stack's scroll instead of the removed strip, while `ui/Ipc.qml` and `ui/IpcPreviewState.qml` lose the strip's state reads.
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one

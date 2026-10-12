@@ -34,7 +34,7 @@ Flea.PreviewColumn {
         if (!root.row || !root.pane) return
         var look = root.pane.quickLook()
         look.open(root.path, root.row.i, root.row.s, root.kindName)
-        look.pdfItem.expandFrom(root.pdfPage(), root.pdfZoom)
+        look.pdfItem.expandFrom(root.pdfPage(), PreviewKeys.PDF_ZOOM_MIN)
     }
 
     Keys.onPressed: function(event) {

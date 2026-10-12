@@ -28,6 +28,18 @@ function run(check) {
     PreviewKeys.pdfAction("trash", viewer)
     check("listing actions do nothing in PDF context", activated.join(","), "1,5")
 
+    // The column's PDF has no strip and no controls: pages scroll, and Space, Return and e open Quick Look at the page in view.
+    for (var colPreset of ["default", "vim", "mac", "windows"]) {
+        var colLog = []
+        var column = { turnPage: function (delta) { colLog.push("turn " + delta) }, scrollPage: function (delta) { colLog.push("scroll " + delta) },
+            toggleExpand: function () { colLog.push("expand") } }
+        var keys = [[Qt.Key_Space, " "], [Qt.Key_Return, "\r"], [Qt.Key_E, "e"], [Qt.Key_Right, ""], [Qt.Key_Left, ""], [Qt.Key_L, "l"], [Qt.Key_H, "h"],
+                    [Qt.Key_Down, ""], [Qt.Key_Up, ""], [Qt.Key_Plus, "+"], [Qt.Key_Tab, ""]]
+        keys.forEach(function (k) { PreviewKeys.pdfAction(Keymap.lookupFor(colPreset, k[0], k[1], Qt.NoModifier, "pdf", "gui"), column) })
+        check(colPreset + ": the column's PDF opens Quick Look, turns and scrolls, and ignores zoom and focus keys",
+            colLog.join(","), "expand,expand,expand,turn 1,turn -1,turn 1,turn -1,scroll 1,scroll -1")
+    }
+
     // Quick Look's PDF viewer opens with no control picked (-1): its keys act on the document, Return activates nothing, Shift+Tab enters at Close.
     for (var preset of ["default", "vim", "mac", "windows"]) {
         var log = []

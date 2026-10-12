@@ -31,102 +31,78 @@ pdf_pointer_on() {
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null 2>&1 || fail "PDF pointer nudge failed"
 }
 
+# Quick Look's strip, driven by keys; the column's PDF has no strip and case_pdffocus drives its pages.
 pdf_controls() {
-    local overlay="$1" before ignored
-    if [[ "$overlay" == true ]]; then
-        # Quick Look opens on the document with no control picked and no keyboard frame; its keys act on the document there.
-        pdf_expect true ".pages == 3 and .focused and .control == -1 and (.controls[0].enabled | not) and $pdf_framed == []" "opens with no control picked"
-        key l >/dev/null
-        pdf_expect true '.page == 1 and .control == -1 and .focused' "l pages forward with no control picked"
-        key '+' >/dev/null
-        pdf_expect true '.zoom == 1.25 and .control == -1 and .focused' "plus zooms in with no control picked"
-        # A second plus marks Return as handled; a Return that activated any control would turn, zoom, expand or close.
-        key -k Return >/dev/null
-        key '+' >/dev/null
-        pdf_expect true ".zoom == 1.5 and .page == 1 and .control == -1 and .focused and $pdf_framed == []" "Return with no control picked activates nothing"
-        [[ "$(ipc previewExpanded)" == false ]] || fail "PDF Return with no control picked expanded Quick Look"
-        key h >/dev/null
-        key -- '-' >/dev/null
-        key -- '-' >/dev/null
-        pdf_expect true '.page == 0 and .zoom == 1 and .control == -1' "h and minus act with no control picked"
-        # Tab enters the strip at Next.
-        key -k Tab >/dev/null
-    fi
-    pdf_expect "$overlay" ".pages == 3 and .focused and .control == 1 and (.controls[0].enabled | not) and $pdf_framed == [1]" "initial focus"
-    key -k Return >/dev/null
-    pdf_expect "$overlay" '.page == 1' "Enter activates Next"
-    if [[ "$overlay" == true ]]; then
-        # Space closes Quick Look for every kind, so Enter activates the focused control there.
-        key -k Return >/dev/null
-        pdf_expect "$overlay" '.page == 2 and (.controls[1].enabled | not)' "Return activates Next"
-        key -k Return >/dev/null
-        pdf_expect "$overlay" '.page == 2' "disabled Next refuses Return"
-    else
-        key -k space >/dev/null
-        pdf_expect "$overlay" '.page == 2 and (.controls[1].enabled | not)' "Space activates Next"
-        key -k space >/dev/null
-        pdf_expect "$overlay" '.page == 2' "disabled Next refuses Space"
-    fi
-    key -M shift -k Tab -m shift >/dev/null
-    pdf_expect "$overlay" '.control == 0' "reverse focus skips disabled Next"
-    if [[ "$overlay" == true ]]; then
-        key -k Return >/dev/null
-        pdf_expect "$overlay" '.page == 1' "Return activates Previous"
-    else
-        key -k space >/dev/null
-        pdf_expect "$overlay" '.page == 1' "Space activates Previous"
-    fi
-    key -k Tab >/dev/null
-    pdf_expect "$overlay" '.control == 1' "Tab reaches Next"
-    key -k Tab >/dev/null
-    pdf_expect "$overlay" '.control == 3' "Tab skips disabled Zoom Out"
-    if [[ "$overlay" == true ]]; then
-        key -k Return >/dev/null
-        pdf_expect "$overlay" '.zoom == 1.25' "Return activates Zoom In"
-    else
-        key -k space >/dev/null
-        pdf_expect "$overlay" '.zoom == 1.25' "Space activates Zoom In"
-    fi
-    key -M shift -k Tab -m shift >/dev/null
-    pdf_expect "$overlay" '.control == 2' "reverse reaches enabled Zoom Out"
-    key -k Return >/dev/null
-    pdf_expect "$overlay" '.zoom == 1' "Enter activates Zoom Out"
-    key -k Tab -k Tab >/dev/null
-    pdf_expect "$overlay" '.control == 4' "Tab reaches Expand"
-    key -k Tab >/dev/null
-    if [[ "$overlay" == true ]]; then
-        pdf_expect true '.control == 5' "Tab reaches Close"
-        key -k Tab >/dev/null
-        pdf_expect true '.control == 0' "forward wraps within Quick Look"
-        key -M shift -k Tab -m shift >/dev/null
-        pdf_expect true '.control == 5' "reverse wraps within Quick Look"
-    else
-        pdf_expect false '.control == 0' "forward wraps within inline PDF"
-        key -M shift -k Tab -m shift >/dev/null
-        pdf_expect false '.control == 4' "reverse wraps within inline PDF"
-    fi
+    local before ignored
+    # Quick Look opens on the document with no control picked and no keyboard frame; its keys act on the document there.
+    pdf_expect true ".pages == 3 and .focused and .control == -1 and (.controls[0].enabled | not) and $pdf_framed == []" "opens with no control picked"
     key l >/dev/null
-    pdf_expect "$overlay" '.page == 2' "l pages forward"
-    key h >/dev/null
-    pdf_expect "$overlay" '.page == 1' "h pages back"
-    key -k Right >/dev/null
-    pdf_expect "$overlay" '.page == 2' "Right pages forward"
-    key -k Left >/dev/null
-    pdf_expect "$overlay" '.page == 1' "Left pages back"
+    pdf_expect true '.page == 1 and .control == -1 and .focused' "l pages forward with no control picked"
     key '+' >/dev/null
-    pdf_expect "$overlay" '.zoom == 1.25' "plus zooms in"
+    pdf_expect true '.zoom == 1.25 and .control == -1 and .focused' "plus zooms in with no control picked"
+    # A second plus marks Return as handled; a Return that activated any control would turn, zoom, expand or close.
+    key -k Return >/dev/null
+    key '+' >/dev/null
+    pdf_expect true ".zoom == 1.5 and .page == 1 and .control == -1 and .focused and $pdf_framed == []" "Return with no control picked activates nothing"
+    [[ "$(ipc previewExpanded)" == false ]] || fail "PDF Return with no control picked expanded Quick Look"
+    key h >/dev/null
+    key -- '-' >/dev/null
+    key -- '-' >/dev/null
+    pdf_expect true '.page == 0 and .zoom == 1 and .control == -1' "h and minus act with no control picked"
+    # Tab enters the strip at Next.
+    key -k Tab >/dev/null
+    pdf_expect true ".pages == 3 and .focused and .control == 1 and (.controls[0].enabled | not) and $pdf_framed == [1]" "initial focus"
+    key -k Return >/dev/null
+    pdf_expect true '.page == 1' "Enter activates Next"
+    # Space closes Quick Look for every kind, so Enter activates the focused control there.
+    key -k Return >/dev/null
+    pdf_expect true '.page == 2 and (.controls[1].enabled | not)' "Return activates Next"
+    key -k Return >/dev/null
+    pdf_expect true '.page == 2' "disabled Next refuses Return"
+    key -M shift -k Tab -m shift >/dev/null
+    pdf_expect true '.control == 0' "reverse focus skips disabled Next"
+    key -k Return >/dev/null
+    pdf_expect true '.page == 1' "Return activates Previous"
+    key -k Tab >/dev/null
+    pdf_expect true '.control == 1' "Tab reaches Next"
+    key -k Tab >/dev/null
+    pdf_expect true '.control == 3' "Tab skips disabled Zoom Out"
+    key -k Return >/dev/null
+    pdf_expect true '.zoom == 1.25' "Return activates Zoom In"
+    key -M shift -k Tab -m shift >/dev/null
+    pdf_expect true '.control == 2' "reverse reaches enabled Zoom Out"
+    key -k Return >/dev/null
+    pdf_expect true '.zoom == 1' "Enter activates Zoom Out"
+    key -k Tab -k Tab >/dev/null
+    pdf_expect true '.control == 4' "Tab reaches Expand"
+    key -k Tab >/dev/null
+    pdf_expect true '.control == 5' "Tab reaches Close"
+    key -k Tab >/dev/null
+    pdf_expect true '.control == 0' "forward wraps within Quick Look"
+    key -M shift -k Tab -m shift >/dev/null
+    pdf_expect true '.control == 5' "reverse wraps within Quick Look"
+    key l >/dev/null
+    pdf_expect true '.page == 2' "l pages forward"
+    key h >/dev/null
+    pdf_expect true '.page == 1' "h pages back"
+    key -k Right >/dev/null
+    pdf_expect true '.page == 2' "Right pages forward"
+    key -k Left >/dev/null
+    pdf_expect true '.page == 1' "Left pages back"
+    key '+' >/dev/null
+    pdf_expect true '.zoom == 1.25' "plus zooms in"
     key -k Down >/dev/null
-    pdf_expect "$overlay" '.scrollY > 0' "Down scrolls page"
+    pdf_expect true '.scrollY > 0' "Down scrolls page"
     key -k Up >/dev/null
-    pdf_expect "$overlay" '.scrollY == 0' "Up scrolls page back"
+    pdf_expect true '.scrollY == 0' "Up scrolls page back"
     before=$(ipc cursor)
     for ignored in j k r d; do
         key -- "$ignored" >/dev/null
-        pdf_expect "$overlay" '.scrollY == 0 and .page == 1 and .focused' "listing key $ignored ignored"
+        pdf_expect true '.scrollY == 0 and .page == 1 and .focused' "listing key $ignored ignored"
     done
     [[ "$(ipc cursor)" == "$before" ]] || fail "PDF listing keys changed listing cursor"
     key -- '-' >/dev/null
-    pdf_expect "$overlay" '.zoom == 1' "minus zooms out"
+    pdf_expect true '.zoom == 1' "minus zooms out"
 }
 
 case_pdffocus() {
@@ -135,9 +111,9 @@ case_pdffocus() {
     sandbox_scratch "$state"
     mkdir -p "$state/flea"
     printf 'listing cursor guard\n' > "$dir/a.txt"
-    magick \( -size 440x354 xc:white -fill black -font Liberation-Sans -pointsize 24 -annotate +30+45 PAGEONE \) \
-           \( -size 440x354 xc:white -fill black -font Liberation-Sans -pointsize 24 -annotate +30+45 PAGETWO \) \
-           \( -size 440x354 xc:white -fill black -font Liberation-Sans -pointsize 24 -annotate +30+45 PAGETHREE \) "$dir/manual.pdf"
+    magick \( -size 440x1100 xc:white -fill black -font Liberation-Sans -pointsize 24 -annotate +30+45 PAGEONE \) \
+           \( -size 440x1100 xc:white -fill black -font Liberation-Sans -pointsize 24 -annotate +30+45 PAGETWO \) \
+           \( -size 440x1100 xc:white -fill black -font Liberation-Sans -pointsize 24 -annotate +30+45 PAGETHREE \) "$dir/manual.pdf"
     [[ -s "$dir/manual.pdf" ]] || fail "PDF fixture generation failed"
     export XDG_STATE_HOME="$state"
     for preset in default vim mac windows; do
@@ -146,7 +122,7 @@ case_pdffocus() {
         wait_listing 2
         [[ "$(ipc keymapPreset)" == "$preset" ]] || fail "PDF preset did not load: $preset"
         open_row manual.pdf
-        pdf_controls true
+        pdf_controls
         # Close by Space, then Enter, then Escape and Ctrl+Tab in separate real activations.
         key -k space >/dev/null
         [[ "$(ipc previewOpen)" == false ]] || fail "PDF Space did not activate Close"
@@ -168,14 +144,22 @@ case_pdffocus() {
         settle
         pdf_expect false '.pages == 3' "inline document loaded"
         key -M ctrl -k Tab -m ctrl >/dev/null
-        pdf_controls false
-        pdf_expect false '.control == 4 and .page == 1' "inline Expand retains focus"
-        key '+' >/dev/null
-        key -k Return >/dev/null
-        pdf_expect true '.focused and .page == 1 and .zoom == 1.25' "inline expansion keeps page and zoom"
-        [[ "$(ipc previewExpanded)" == true ]] || fail "PDF inline Expand did not fill the window"
+        pdf_expect false '.focused and .page == 0' "Ctrl+Tab enters inline PDF on the first page"
+        key l >/dev/null
+        pdf_expect false '.page == 1 and .scrollY > 0' "l scrolls the next page to the frame's top"
+        key h >/dev/null
+        pdf_expect false '.page == 0 and .scrollY == 0' "h scrolls back to the first page"
+        key -k Down >/dev/null
+        pdf_expect false '.scrollY > 0' "Down scrolls the pages"
+        key -k Up >/dev/null
+        pdf_expect false '.scrollY == 0' "Up scrolls the pages back"
+        key -k Right >/dev/null
+        pdf_expect false '.page == 1' "Right scrolls the next page to the frame's top"
         key e >/dev/null
-        pdf_expect true '.page == 1 and .zoom == 1.25' "collapse retains page and zoom"
+        pdf_expect true '.focused and .page == 1 and .zoom == 1' "inline expansion keeps the page"
+        [[ "$(ipc previewExpanded)" == true ]] || fail "PDF inline expand did not fill the window"
+        key e >/dev/null
+        pdf_expect true '.page == 1 and .zoom == 1' "collapse retains the page"
         [[ "$(ipc previewExpanded)" == false ]] || fail "PDF expanded view did not collapse"
         key -k Escape >/dev/null
         pdf_expect false '(.focused | not)' "expanded Escape returns focus"
@@ -255,10 +239,7 @@ case_pdffocus() {
         pdf_expect false '.pages == 3' "$mode inline document"
         key -M ctrl -k Tab -m ctrl >/dev/null
         pdf_expect false '.focused' "$mode inline focus entry"
-        pdf_expect false '(.frame | split(" ") | map(tonumber)) as $frame |
-            (.toolbar | split(" ") | map(tonumber)) as $toolbar |
-            $frame[2] > 0 and $frame[3] > 0 and $toolbar[3] > 0 and $toolbar[1] >= ($frame[1] + $frame[3])' \
-            "$mode inline controls stay below the page frame"
+        pdf_expect false '(.frame | split(" ") | map(tonumber)) as $frame | $frame[2] > 0 and $frame[3] > 0' "$mode inline frame is drawn"
         shot "pdf-inline-$mode-800x480"
         key -k Escape >/dev/null
         pdf_expect false '(.focused | not)' "$mode inline focus return"

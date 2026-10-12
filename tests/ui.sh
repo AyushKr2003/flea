@@ -5031,8 +5031,8 @@ case_columns() {
     # and the error state had never met a real file anywhere in this suite. Each page is built in its
     # own parentheses: without them magick applies one -draw to the whole list and both pages come out
     # identical, measured on the built file before this was written.
-    magick \( -size 400x560 xc:white -fill black -draw "rectangle 40,40 120,80" \) \
-           \( -size 400x560 xc:white -fill black -draw "rectangle 40,40 360,520" \) \
+    magick \( -size 400x1200 xc:white -fill black -draw "rectangle 40,40 120,80" \) \
+           \( -size 400x1200 xc:white -fill black -draw "rectangle 40,40 360,520" \) \
            "$dir/manual.pdf"
     [[ -s "$dir/manual.pdf" ]] || fail "magick produced no manual.pdf"
     # A real header over a truncated body, so the document is unreadable rather than absent; poppler
@@ -5130,17 +5130,15 @@ case_columns() {
     (( page1_white > 2 * blank_white )) \
         || fail "columns: the pdf frame drew $page1_white near-white pixels against $blank_white with no document, so no page rendered"
 
-    centre=$(ipc columnChevronCentre right)
-    [[ -n "$centre" ]] || fail "columns: the pdf pager's right chevron has no on-screen centre"
-    read -r cx cy <<< "$centre"
-    read -r wx wy _ww _wh < <(window_box) || fail "native window coordinates unavailable"
-    omarchy-drive click "$((cx + wx))" "$((cy + wy))" >/dev/null
+    # The column's PDF has no pager: with the keyboard in the preview, l scrolls the second page up to the frame's top.
+    key -M ctrl -k Tab -m ctrl >/dev/null
+    key l >/dev/null
     settle
-    (( $(ipc columnPdfPage) == 1 )) \
-        || fail "columns: the chevron left the frame on page $(ipc columnPdfPage), not the second"
-    # PdfPageImage renders asynchronously, so the page number flips before the pixels do; the poll is
+    (( $(ipc pdfState false | jq '.scrollY | floor') > 0 )) \
+        || fail "columns: l left the pdf at its top, scrolled to $(ipc pdfState false | jq .scrollY)"
+    # PdfPageImage renders asynchronously, so the scroll lands before the pixels do; the poll is
     # the wait and the assertion at once. Page two is 34 per cent dark against page one's 0.7, both
-    # measured on the built file, so an unchanged count means the render never followed the turn.
+    # measured on the built file, so an unchanged count means the render never followed the scroll.
     page2_white=$page1_white
     for i in $(seq 1 20); do
         shot columns-pdf-page2
@@ -5149,7 +5147,8 @@ case_columns() {
         sleep 0.2
     done
     (( page2_white != page1_white )) \
-        || fail "columns: page two renders the same $page1_white near-white pixels as page one, so the turn changed nothing"
+        || fail "columns: the scrolled pdf draws the same $page1_white near-white pixels as page one, so the scroll changed nothing"
+    key -M ctrl -k Tab -m ctrl >/dev/null
     printf 'COLUMNS pdf pixels blank=%s page1=%s page2=%s\n' "$blank_white" "$page1_white" "$page2_white"
 
     seek_row_named "link"

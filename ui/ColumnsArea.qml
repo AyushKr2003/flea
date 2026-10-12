@@ -272,7 +272,6 @@ Item {
     function pdfPage() { return preview.pdfPage() }
     readonly property alias previewColumn: preview
     function pdfPages() { return preview.pdfPages }
-    function pdfChevron(dir) { return preview.pdfChevron(dir) }
     function pdfLoaded() { return preview.pdfLoaded() }
 
     // The kind string the backend already sent for this row, never one the column re-derives.

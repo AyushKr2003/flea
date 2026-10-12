@@ -159,7 +159,7 @@ function archiveMore(meta, shown) {
 
 // TallPreviews: the kinds whose frame fills the column from its top down to the name. The shape follows the row's
 // kind and never its load state, so a tall row is tall while loading, ready, blank or failed.
-var TALL_STATES = [TEXT, CODE, ARCHIVE]
+var TALL_STATES = [TEXT, CODE, ARCHIVE, PDF]
 
 function tall(st) {
     return TALL_STATES.indexOf(st) >= 0
@@ -177,14 +177,20 @@ var LINES_ONE = "1 line"
 var LINES_MANY = "%1 lines"
 var ENTRIES_ONE = "1 entry"
 var ENTRIES_MANY = "%1 entries"
+var PAGES_ONE = "1 page"
+var PAGES_MANY = "%1 pages"
 
 // One pass, so a value that looks like a placeholder is kept whole.
 function fill(template, values) {
     return template.replace(/%(\d)/g, function (whole, place) { return values[place - 1] })
 }
 
-// "132 lines" or "214 entries"; nothing while the count is not known, and a floor keeps its mark.
-function compactCount(st, meta) {
+// "132 lines", "214 entries" or "12 pages"; nothing while the count is not known, and a floor keeps its mark.
+function compactCount(st, meta, extra) {
+    if (st === PDF) {
+        var pages = Number(extra && extra.pages)
+        return pages === 1 ? PAGES_ONE : pages > 1 ? fill(PAGES_MANY, [Format.count(pages)]) : ""
+    }
     if (st === ARCHIVE) {
         if (!meta || meta.archiveFailed === true || meta.entries === undefined) {
             return ""
@@ -199,11 +205,11 @@ function compactCount(st, meta) {
 }
 
 // The tall kinds' one facts line, the Kind then the size then the count; the Kind comes apart from the tail so the Kind alone can elide.
-function compactLine(st, row, meta, kindName) {
+function compactLine(st, row, meta, kindName, extra) {
     if (!row) {
         return { kind: "", tail: "" }
     }
-    var count = compactCount(st, meta)
+    var count = compactCount(st, meta, extra)
     var line = fill(count ? COMPACT_LINE : COMPACT_BARE, [kindName, Format.size(row.s), count])
     var tail = line.substring(kindName.length)
     return { kind: kindName, tail: kindName ? tail : tail.replace(LEADING_SEPARATOR, "") }

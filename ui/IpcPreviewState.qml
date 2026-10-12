@@ -100,10 +100,10 @@ QtObject {
     function pdfState(overlay: bool): string {
         var p = overlay ? root.look.pdfItem : root.pane.previewColumnItem
         if (!p) return "null"
-        return JSON.stringify({ page: overlay ? p.page : p.pdfPage(), pages: overlay ? p.pageCount : p.pdfPages,
-            frame: overlay ? "" : root.fleaWindow.rectOf(p.pdfFrameItem),
-            toolbar: overlay ? "" : root.fleaWindow.rectOf(p.pdfToolbarItem),
-            zoom: overlay ? p.zoom : p.pdfZoom, scrollY: p.pdfScrollY, focused: p.activeFocus, control: p.pdfControlIndex,
+        if (!overlay)
+            return JSON.stringify({ page: p.pdfPage(), pages: p.pdfPages, frame: root.fleaWindow.rectOf(p.pdfFrameItem),
+                scrollY: p.pdfScrollY, focused: p.activeFocus })
+        return JSON.stringify({ page: p.page, pages: p.pageCount, zoom: p.zoom, scrollY: p.pdfScrollY, focused: p.activeFocus, control: p.pdfControlIndex,
             controls: p.pdfControls.map(function (control) { return { name: control.accessName, enabled: control.enabled,
                 visible: control.visible, centre: root.fleaWindow.centreOf(control),
                 hovered: control.hovered, pressed: control.pressed, ring: control.ringItem.visible } }) })
