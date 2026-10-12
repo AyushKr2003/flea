@@ -47,7 +47,7 @@ fn gio_runs_under_the_named_wait() {
     let argv = gio_argv(&["trash", "--list"]);
     assert_eq!(&argv[..4], ["timeout", "--kill-after=1s", "10s", "gio"], "the bound gio runs under: {argv:?}");
     assert_eq!(&argv[4..], ["trash", "--list"]);
-    assert_eq!(failure_reason(&None), "the Trash could not be reached, so nothing was moved");
+    assert_eq!(failure_reason(&None, false), "the Trash could not be reached, so nothing was moved");
 }
 
 #[test]
@@ -114,12 +114,33 @@ fn no_uri_is_journaled_from_a_list_that_could_not_be_read_whole() {
 fn a_failed_trash_carries_gios_own_last_line() {
     let output = Some(std::process::Output { status: std::process::ExitStatus::from_raw(256),
         stdout: Vec::new(), stderr: b"gio: Error 1: Permission denied\n".to_vec() });
-    assert!(failure_reason(&output).contains("Permission denied"));
+    assert!(failure_reason(&output, false).contains("Permission denied"));
     let timed_out = Some(std::process::Output { status: std::process::ExitStatus::from_raw(124 << 8),
         stdout: Vec::new(), stderr: Vec::new() });
-    assert_eq!(failure_reason(&timed_out), "The Trash took too long to answer");
+    assert_eq!(failure_reason(&timed_out, false), "The Trash took too long to answer");
     let silent = Some(std::process::Output { status: std::process::ExitStatus::from_raw(256), stdout: Vec::new(), stderr: Vec::new() });
-    assert_eq!(failure_reason(&silent), "the items could not be moved to the Trash");
+    assert_eq!(failure_reason(&silent, false), "the items could not be moved to the Trash");
+    assert_eq!(failure_reason(&silent, true), "the rest could not be moved to the Trash");
+}
+
+// A later chunk that never reached gio follows a chunk that moved its items, so the reason must not say nothing moved.
+#[test]
+fn a_chunk_that_cannot_reach_the_trash_after_one_that_moved_does_not_say_nothing_moved() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let d = crate::backend::testdir::TestDir::new("trash-second-chunk");
+    let paths: Vec<PathBuf> = (0..TRASH_CHUNK + 1).map(|n| d.file(&format!("f{n}.txt"), "x")).collect();
+    let calls = Rc::new(AtomicUsize::new(0));
+    let seen = Rc::clone(&calls);
+    let _stand = StandIn::hold(Rc::new(move |args: &[&str]| {
+        if args.first() != Some(&"trash") || args.contains(&"--list") { return Some(ok_output()); }
+        if seen.fetch_add(1, Ordering::Relaxed) > 0 { return None; }
+        for path in &args[2..] { std::fs::remove_file(path).unwrap(); }
+        Some(ok_output())
+    }));
+    let (ok, failed, reason) = trash_checked(&paths, None).expect("a partly moved batch is not an error");
+    assert_eq!((ok.len(), failed), (TRASH_CHUNK, 1));
+    assert_eq!(reason, "the Trash could not be reached, so the rest were not moved");
+    assert!(!reason.contains("nothing"), "{reason}");
 }
 
 #[test]

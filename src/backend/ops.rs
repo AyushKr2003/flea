@@ -12,9 +12,8 @@ const NAME_TRIES: usize = 999;
 const NEW_FOLDER: &str = "New Folder";
 
 // A name from the client is a trust boundary: anything with a separator would move the file out of its own directory.
-pub fn valid_name(name: &str) -> bool {
-    !name.is_empty() && name != "." && name != ".." && !name.contains('/') && !name.contains('\0')
-}
+pub use super::opsname::{name_refusal, name_refusal_sentence};
+pub fn valid_name(name: &str) -> bool { name_refusal(name).is_none() }
 
 // Rename that refuses to overwrite. std::fs::rename alone can replace a target on Unix.
 pub fn rename_noreplace(from: &Path, to: &Path) -> Result<(), FleaError> {
@@ -41,8 +40,8 @@ fn named(where_: &str, path: &Path, msg: &str) -> FleaError {
 
 // Answers the new path and the step that puts the old name back; a failure answers no step, a kept copy included, because none of undo.rs's four shapes can say which of the two names is whole.
 pub fn rename(path: &Path, to_name: &str) -> Result<(PathBuf, Vec<Step>), FleaError> {
-    if !valid_name(to_name) {
-        return Err(named("rename", path, "a name cannot be empty, . or .., or contain /"));
+    if let Some(refusal) = name_refusal(to_name) {
+        return Err(named("rename", path, refusal));
     }
     let parent = path.parent().unwrap_or(Path::new("/"));
     // The destination's own rules refuse before the syscall, so vfat answers the character, not EINVAL.
@@ -175,13 +174,13 @@ pub fn mkdir(parent: &Path, name: &str) -> Result<(PathBuf, Vec<Step>), FleaErro
             Some(d) => d,
             None => return Err(named("mkdir", parent, "every default folder name here is already taken")),
         }
-    } else if valid_name(name) {
+    } else if let Some(refusal) = name_refusal(name) {
+        return Err(named("mkdir", parent, refusal));
+    } else {
         if let Some(refusal) = crate::backend::fsname::refuse_in(parent, name) {
             return Err(named("mkdir", parent, &refusal));
         }
         parent.join(name)
-    } else {
-        return Err(named("mkdir", parent, "a name cannot be . or .., or contain /"));
     };
     match std::fs::create_dir(&dir) {
         Ok(()) => Ok((dir.clone(), vec![Step::MadeDir { path: dir.clone(), identity: ItemIdentity::inspect(&dir)? }])),
@@ -394,7 +393,8 @@ mod tests {
         let d = TestDir::new("mkdirbadname");
         for bad in [".", "..", "a/b", "../up", "nul\0byte"] {
             let err = mkdir(d.path(), bad).expect_err(bad);
-            assert_eq!(err.msg, "a name cannot be . or .., or contain /", "{:?}", bad);
+            let clause = match bad { "." | ".." => "a name cannot be a single dot or a double dot", "nul\0byte" => "a name cannot contain a null character", _ => "a name cannot contain /" };
+            assert_eq!(err.msg, clause, "{:?}", bad);
         }
         assert_eq!(mkdir(Path::new("relative"), "x").unwrap_err().msg, "a parent must be an absolute path");
         // A name of only spaces is a legal name, as it is for rename; trimming is the field's job.

@@ -169,7 +169,7 @@ impl State {
                 self.save = None;
                 let path = PathBuf::from(field_str(line, "folder").unwrap_or_default());
                 let name = field_str(line, "name").unwrap_or_default();
-                if !super::ops::valid_name(&name) { return Err("A name cannot contain /.".into()); }
+                if let Some(refusal) = super::ops::name_refusal_sentence(&name) { return Err(refusal); }
                 let folder = Held::open(&path, true)?;
                 if !folder.current()?.is_dir() { return Err("The selected save location is not a folder.".into()); }
                 let path = path.join(name);

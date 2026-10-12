@@ -194,7 +194,7 @@ take one to name which program and here the program is Flea. The files it writes
    **This step is the skipped-not-failed one, and no other step is.** It needs
    `flea.portal`, which only the package installs. Run a binary you built with `cargo build` on a
    box whose installed package predates the chooser, which is every box updating from 0.1.3, and
-   the command prints `flea: no portal backend is installed, so the file chooser step was skipped`
+   the command prints `flea: no file chooser service is installed, so Flea could not become the file chooser`
    and carries on. On such a box the honest-about-state line above is a claim about the steps that
    ran alone: the chooser was never claimed, so a second run cannot say it is already Flea's. That
    box has no packaged `com.thisisgm.flea.FileManager1.service` either, and step 2 says so and fails

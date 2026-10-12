@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const NAME_BYTES: usize = 255;
-// One sentence for every fault in the temporary folder the names file lives in.
+// The one sentence for every fault in making the temporary folder the names file lives in; a fault after that names the folder.
 const PREPARE_FAILED: &str = "Bulk rename could not prepare its temporary folder";
 
 pub struct Batch {
@@ -129,7 +129,7 @@ impl NamesFile {
     }
     fn check(&self) -> io::Result<()> {
         if !self.root.is_absolute() || self.root.as_os_str().is_empty() || identity(&self.root.symlink_metadata()?) != self.identity {
-            return Err(failure(PREPARE_FAILED));
+            return Err(failure(&format!("Bulk rename stopped because its temporary folder {} changed", self.root.display())));
         }
         Ok(())
     }
@@ -137,7 +137,7 @@ impl NamesFile {
         self.cleaned = true;
         self.check()?;
         if !self.path.is_absolute() || self.path == self.root || !self.path.starts_with(&self.root) {
-            return Err(failure(PREPARE_FAILED));
+            return Err(failure(&format!("Bulk rename would not remove {}, which is not inside its temporary folder {}", self.path.display(), self.root.display())));
         }
         match fs::remove_file(&self.path) {
             Ok(()) => {}
@@ -189,17 +189,21 @@ mod tests {
         assert_eq!(joined.to_string(), "first; cleanup could not finish: second");
         assert_eq!(settle(Ok(()), Err(failure("second"))).unwrap_err().to_string(), "second");
     }
-    // A temporary folder that changed, a cleanup aimed outside it and one that cannot empty it: each refuses without deleting a thing.
+    // A temporary folder that changed, a cleanup aimed outside it and one that cannot empty it: each refuses without deleting a thing, in its own sentence.
     #[test]
     fn temporary_folder_faults_name_the_folder_and_delete_nothing() {
         let directory = TestDir::new("tui-bulk-folder");
         let root = directory.dir("work");
         let keep = directory.file("work/keep", "kept");
         let real = identity(&root.symlink_metadata().unwrap());
+        let shown = root.display();
         let mut names = NamesFile { path: root.join("names"), root: root.clone(), identity: (0, 0, 0), cleaned: true };
-        assert_eq!(names.check().unwrap_err().to_string(), "Bulk rename could not prepare its temporary folder");
+        assert_eq!(names.check().unwrap_err().to_string(), format!("Bulk rename stopped because its temporary folder {shown} changed"));
+        // The identity guard fires first on a changed folder, so cleanup of it says the folder changed, and deletes nothing.
+        names.cleaned = false;
+        assert_eq!(names.cleanup().unwrap_err().to_string(), format!("Bulk rename stopped because its temporary folder {shown} changed"));
         names = NamesFile { path: root.clone(), root: root.clone(), identity: real, cleaned: false };
-        assert_eq!(names.cleanup().unwrap_err().to_string(), "Bulk rename could not prepare its temporary folder");
+        assert_eq!(names.cleanup().unwrap_err().to_string(), format!("Bulk rename would not remove {shown}, which is not inside its temporary folder {shown}"));
         names = NamesFile { path: root.join("names"), root: root.clone(), identity: real, cleaned: false };
         let left = names.cleanup().unwrap_err().to_string();
         assert!(left.starts_with(&format!("Bulk rename left temporary files at {}: ", root.display())), "{left}");

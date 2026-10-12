@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-// The one answer for a menu route whose selection is gone or no longer the item the request names.
+// The answer for a menu route whose captured selection is gone or differs from the request; a path outside a held selection gets selected_path's own sentence.
 pub(crate) const SELECTION_CHANGED: &str = "Selected items changed; reopen the menu.";
 
 // A slow remote write still running past its slow line, keyed by the mount it holds.

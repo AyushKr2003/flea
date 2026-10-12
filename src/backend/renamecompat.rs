@@ -474,7 +474,7 @@ mod tests {
         d.assert_contains(&source);
         d.assert_contains(&target);
         FAIL_TAKE_BACK.with(|fail| fail.set(true));
-        let error = copy_then_remove(&source, &target).expect_err("an unreadable child cannot be copied");
+        let error = { let copied = copy_then_remove(&source, &target); FAIL_TAKE_BACK.with(|fail| fail.set(false)); copied }.expect_err("an unreadable child cannot be copied");
         assert!(error.msg.ends_with("; the partial copy could not be removed: test refused the take-back"), "{}", error.msg);
         assert_eq!(error.path, target.to_string_lossy(), "the leftover is named by its own path");
     }

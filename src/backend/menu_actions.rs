@@ -12,7 +12,7 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-// The one sentence every backend refusal of a menu selection that no longer matches uses, the one the UI shows for a stale route.
+// The sentence every backend refusal of a menu selection that no longer matches uses, the one the UI shows for a stale route; selected_path alone names one missing item.
 pub(crate) const SELECTION_CHANGED: &str = "Selected items changed; reopen the menu.";
 const MENU_STOPPED: &str = "The menu stopped answering; reopen this window.";
 const DELETE_EXPIRED: &str = "The delete confirmation expired; confirm again.";

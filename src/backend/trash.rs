@@ -61,14 +61,15 @@ fn gio_argv(args: &[&str]) -> Vec<String> {
 // One chunk's worth of paths per gio call, so the 10 s bound measures a stall and not the batch size.
 const TRASH_CHUNK: usize = 64;
 
-// The batch's own reason, so a hung mount or a denial reads as what happened rather than silence.
-pub(crate) fn failure_reason(output: &Option<std::process::Output>) -> String {
+// The batch's own reason, so a hung mount or a denial reads as what happened rather than silence; `moved` is whether any item already went, in an earlier chunk or by rename.
+pub(crate) fn failure_reason(output: &Option<std::process::Output>, moved: bool) -> String {
     match output {
+        None if moved => "the Trash could not be reached, so the rest were not moved".to_string(),
         None => "the Trash could not be reached, so nothing was moved".to_string(),
         Some(o) if matches!(o.status.code(), Some(124 | 137)) => "The Trash took too long to answer".to_string(),
         Some(o) => {
             let line = String::from_utf8_lossy(&o.stderr).lines().last().unwrap_or("").trim().to_string();
-            if line.is_empty() { "the items could not be moved to the Trash".to_string() } else { line }
+            if !line.is_empty() { line } else if moved { "the rest could not be moved to the Trash".to_string() } else { "the items could not be moved to the Trash".to_string() }
         }
     }
 }
@@ -206,7 +207,7 @@ pub(crate) fn trash_checked(paths: &[PathBuf], selection: Option<&[super::menu_a
     let reason = if failed == 0 {
         String::new()
     } else if gio_failed {
-        failure_reason(&output)
+        failure_reason(&output, !ok.is_empty())
     } else if still_here > 0 {
         "those items are still there".to_string()
     } else {

@@ -4,6 +4,9 @@ use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
+const UNREAD: &str = "Taildrop status could not be read";
+const TOO_LARGE: &str = "Taildrop status was too large to read";
+
 #[derive(Clone)]
 pub struct Peer {
     pub id: String,
@@ -53,7 +56,7 @@ impl Taildrop {
         {
             Ok(mut child) => {
                 let Some(output) = child.stdout.take() else {
-                    self.error = "Taildrop status could not be read".into();
+                    self.error = UNREAD.into();
                     return;
                 };
                 let (tx, rx) = mpsc::channel();
@@ -65,7 +68,7 @@ impl Taildrop {
                         .read_to_end(&mut bytes)
                         .and_then(|_| {
                             if bytes.len() as u64 > MAX_STATUS_BYTES {
-                                Err(io::Error::other("Taildrop status could not be read"))
+                                Err(io::Error::new(io::ErrorKind::InvalidData, TOO_LARGE))
                             } else {
                                 Ok(bytes)
                             }
@@ -133,7 +136,7 @@ impl Taildrop {
             Ok(Some(status)) => status,
             Ok(None) => return,
             Err(_) => {
-                self.error = "Taildrop status could not be read".into();
+                self.error = UNREAD.into();
                 return;
             }
         };
@@ -143,16 +146,19 @@ impl Taildrop {
         self.child = None;
         self.output = None;
         match (status, result) {
-            (status, Ok(bytes)) if status.success() => {
+            // A reply past its limit or unreadable had its child killed, so its exit status says nothing more.
+            (_, Err(error)) if error.kind() == io::ErrorKind::InvalidData => self.error = TOO_LARGE.into(),
+            (_, Err(_)) => self.error = UNREAD.into(),
+            (status, Ok(_)) if !status.success() => self.error = "Tailscale reported an error".into(),
+            (_, Ok(bytes)) => {
                 match jsondoc::parse(&String::from_utf8_lossy(&bytes)) {
                     Ok(value) => match available_peers(&value) {
                         Ok(peers) => self.peers = peers,
                         Err(reason) => self.error = reason,
                     },
-                    Err(_) => self.error = "Taildrop status could not be read".into(),
+                    Err(_) => self.error = UNREAD.into(),
                 }
             }
-            _ => self.error = "Taildrop status could not be read".into(),
         }
     }
     pub fn send(&mut self, peer: &Peer, paths: &[String]) -> io::Result<()> {
@@ -312,13 +318,20 @@ mod tests {
         taildrop.sending = Some("Alpha".into());
         taildrop.poll();
         assert_eq!(taildrop.sent, Some(Err("Could not send to Alpha (exit status: 7)".into())));
-        let mut taildrop = Taildrop::new();
-        let (tx, rx) = mpsc::channel();
-        tx.send(Ok(Vec::new())).unwrap();
-        taildrop.child = Some(finished(7));
-        taildrop.output = Some(rx);
-        taildrop.poll();
-        assert_eq!(taildrop.error, "Taildrop status could not be read");
+        // Each way the status call ends has its own sentence, so a test of one cannot pass through another.
+        let status_after = |code: i32, answer: io::Result<Vec<u8>>| {
+            let mut taildrop = Taildrop::new();
+            let (tx, rx) = mpsc::channel();
+            tx.send(answer).unwrap();
+            taildrop.child = Some(finished(code));
+            taildrop.output = Some(rx);
+            taildrop.poll();
+            taildrop.error.clone()
+        };
+        assert_eq!(status_after(7, Ok(Vec::new())), "Tailscale reported an error");
+        assert_eq!(status_after(0, Ok(Vec::new())), "Taildrop status could not be read", "an empty answer is not a status");
+        assert_eq!(status_after(0, Err(io::Error::new(io::ErrorKind::InvalidData, TOO_LARGE))), "Taildrop status was too large to read");
+        assert_eq!(status_after(7, Err(io::Error::from(io::ErrorKind::UnexpectedEof))), "Taildrop status could not be read");
     }
     #[test]
     fn provider_state_overrides_stale_peer_eligibility() {

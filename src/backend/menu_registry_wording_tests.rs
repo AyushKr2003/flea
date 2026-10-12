@@ -10,12 +10,33 @@ fn registry_errors_are_sentences_that_end_once() {
     let launch = registry.launch_command(&mut Command::new("/usr/bin/false"), &cancel).unwrap_err();
     assert_eq!(launch, "The application could not be started (exit status 1).");
     let missing = registry.launch_command(&mut Command::new("/definitely-missing-gio-test-helper"), &cancel).unwrap_err();
-    assert!(missing.starts_with("Could not start the application list: ") && !missing.contains("os error"), "{}", missing);
+    assert!(missing.starts_with("The application could not be started: ") && !missing.contains("os error"), "{}", missing);
     let stopped = Cancellation::default();
     stopped.next();
     let cancelled = registry.launch_command(&mut Command::new("/usr/bin/true"), &stopped).unwrap_err();
     for error in [query, launch, missing, cancelled] {
         assert!(error.ends_with('.') && !error.ends_with(".."), "{}", error);
+    }
+}
+
+// A launch is not a list read: the shared start and cancel code names the work the child serves, in both directions.
+#[test]
+fn a_launch_fault_never_blames_the_application_list_and_a_list_fault_never_blames_a_launch() {
+    let registry = Registry::default();
+    let live = Cancellation::default();
+    let stopped = Cancellation::default();
+    stopped.next();
+    let missing = "/definitely-missing-gio-test-helper";
+    assert_eq!(registry.launch_command(&mut Command::new("/usr/bin/true"), &stopped).unwrap_err(), "Opening the application was cancelled.");
+    assert_eq!(registry.capture(&mut Command::new("/usr/bin/true"), &stopped).unwrap_err(), "Reading the application list was cancelled.");
+    let launch = registry.launch_command(&mut Command::new(missing), &live).unwrap_err();
+    assert!(launch.starts_with("The application could not be started: ") && !launch.contains("application list"), "{}", launch);
+    let list = registry.capture(&mut Command::new(missing), &live).unwrap_err();
+    assert!(list.starts_with("Could not start the application list: ") && !list.contains("could not be started"), "{}", list);
+    for work in [Work::Launch, Work::List] {
+        let observed = work.unobserved(&std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+        assert_eq!(observed.contains("application list"), matches!(work, Work::List), "{}", observed);
+        assert!(observed.ends_with("permission denied."), "{}", observed);
     }
 }
 
@@ -50,7 +71,7 @@ fn retired_registry_wording_is_gone_from_the_live_source() {
                     "query service", "icon index service", "not a desktop entry", "byte metadata limit", "is not valid UTF-8"] {
         assert!(!live.contains(retired), "retired wording came back: {}", retired);
     }
-    for plain in ["The selected item's file type is unknown.", "Application {} could not be read.", "Could not open {} with {}: {}."] {
+    for plain in ["The selected item's file type is unknown.", "Application {} could not be read: it is too large.", "Application {} could not be read: it is not valid text.", "Could not open {} with {}: {}."] {
         assert!(live.contains(plain), "plain wording is missing: {}", plain);
     }
 }

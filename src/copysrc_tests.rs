@@ -56,7 +56,7 @@ const WRITTEN: [(&str, &str, usize); 35] = [
     ("chooser.rs", "{} could not be created: {}", 1),
     ("chooser.rs", "{} could not be read: {}", 3),
     ("chooser.rs", "{} could not be removed: {}", 1),
-    ("chooser.rs", "The desktop is unknown, so Flea cannot tell whether this desktop reads {}. Run flea --default inside the desktop session.", 1),
+    ("chooser.rs", "The desktop is unknown, so Flea cannot tell whether this desktop reads {}. Run {} inside the desktop session.", 1),
     ("defaults.rs", "is not installed in any applications folder, so nothing was made the default. Install the package first.", 1),
     ("defaults.rs", "{}: skipped, {} is not installed in any data folder", 1),
     ("defaults.rs", "{}: Flea, written to {}, which is read before every system folder", 1),
@@ -141,12 +141,37 @@ fn no_retired_sentence_comes_back() {
     }
 }
 
+// The lines that print an ErrorKind in Debug form: a `{:?}` and a `.kind()` in one statement, wherever the format and its arguments break across lines.
+fn debug_kinds(held: &str) -> Vec<String> {
+    let lines: Vec<&str> = held.lines().collect();
+    let mut found = Vec::new();
+    for (at, line) in lines.iter().enumerate() {
+        if !line.contains("{:?}") { continue; }
+        // A statement ends at its semicolon, so read on to it, at most five lines.
+        let mut statement = String::new();
+        for next in lines.iter().skip(at).take(5) {
+            statement.push_str(next);
+            if next.trim_end().ends_with(';') || next.trim_end().ends_with('{') { break; }
+        }
+        if statement.contains("kind()") { found.push(line.trim().to_string()); }
+    }
+    found
+}
+
 // An ErrorKind printed in Debug form reads "PermissionDenied"; error::io_message says it in words.
 #[test]
 fn no_message_prints_an_error_kind_in_debug_form() {
     for (file, _) in SOURCES.iter().filter(|(file, _)| *file != "favourites.rs") {
-        let held = code(file);
-        let lines: Vec<&str> = held.lines().filter(|line| line.contains("{:?}") && line.contains("kind()")).collect();
+        let lines = debug_kinds(&code(file));
         assert!(lines.is_empty(), "{} prints an error kind in Debug form: {:?}", file, lines);
     }
+}
+
+// The pre-pass shelfzip.rs shape put the format on one line and the kind on the next; the check reads across it.
+#[test]
+fn a_debug_kind_split_over_two_lines_is_still_caught() {
+    let split = "return Err(format!(\"{} is the only folder ({:?})\",\n    dir.display(),\n    e.kind()));";
+    assert_eq!(debug_kinds(split).len(), 1, "the format line is reported");
+    assert!(debug_kinds("return Err(format!(\"{} is the only folder ({})\", dir.display(), io_message(&e)));").is_empty());
+    assert!(debug_kinds("println!(\"{:?}\", name);\nlet k = e.kind();").is_empty(), "a kind in the next statement is not this one");
 }

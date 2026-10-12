@@ -30,7 +30,8 @@ pub fn backend_installed() -> bool {
     installed_portal().is_some()
 }
 
-pub fn claim() -> i32 {
+// `command` is the one the user ran, so a refusal that asks for a rerun names the right one.
+pub fn claim(command: &str) -> i32 {
     if installed_portal().is_none() {
         eprintln!(
             "flea: {} is not installed in any portal folder, so the file chooser was not changed. Install the package first.",
@@ -39,7 +40,7 @@ pub fn claim() -> i32 {
         return 1;
     }
     // A portal file that cannot be named is refused before either half, so a refused claim writes nothing.
-    let target = match effective_conf() {
+    let target = match effective_conf(command) {
         Ok(target) => target,
         Err(why) => {
             eprintln!("flea: {}", why);
@@ -162,20 +163,24 @@ fn conf_path() -> Result<PathBuf, String> {
 }
 
 // The one user file xdg-desktop-portal reads, and whether it is the desktop-specific one.
-fn effective_conf() -> Result<(PathBuf, bool), String> {
+fn effective_conf(command: &str) -> Result<(PathBuf, bool), String> {
     if let Some(desktop) = shadowing_file()? {
         return Ok((desktop, true));
     }
     // With no desktop named, a desktop file here may be the one the portal reads, so portals.conf would be a guess.
     let found = desktop_files()?;
     if std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default().is_empty() && !found.is_empty() {
-        let names: Vec<String> = found.iter().map(|p| p.display().to_string()).collect();
-        return Err(format!(
-            "The desktop is unknown, so Flea cannot tell whether this desktop reads {}. Run flea --default inside the desktop session.",
-            names.join(" or ")
-        ));
+        return Err(unknown_desktop(&found, command));
     }
     Ok((conf_path()?, false))
+}
+
+fn unknown_desktop(found: &[PathBuf], command: &str) -> String {
+    let names: Vec<String> = found.iter().map(|p| p.display().to_string()).collect();
+    format!(
+        "The desktop is unknown, so Flea cannot tell whether this desktop reads {}. Run {} inside the desktop session.",
+        names.join(" or "), command
+    )
 }
 
 // Inside one directory xdg-desktop-portal reads <desktop>-portals.conf and stops, so a file for this

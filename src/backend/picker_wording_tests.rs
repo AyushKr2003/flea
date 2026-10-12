@@ -11,6 +11,9 @@ fn a_refused_save_says_what_to_change() {
     let cancel = Cancellation::default();
     let save = |folder: &Path, name: &str| format!(r#"{{"op":"save","id":1,"folder":"{}","name":"{}"}}"#, escape(&folder.to_string_lossy()), name);
     assert_eq!(state.handle(&save(&folder, "a/b"), &cancel).unwrap_err(), "A name cannot contain /.");
+    assert_eq!(state.handle(&save(&folder, ".."), &cancel).unwrap_err(), "A name cannot be a single dot or a double dot.");
+    assert_eq!(state.handle(&save(&folder, ""), &cancel).unwrap_err(), "A name cannot be empty.");
+    assert_eq!(state.handle(&save(&folder, "a\\u0000b"), &cancel).unwrap_err(), "A name cannot contain a null character.");
     assert_eq!(state.handle(&save(&file, "out"), &cancel).unwrap_err(), "The selected save location is not a folder.");
     state.handle(&save(&folder, "output"), &cancel).unwrap();
     dir.file("folder/output", "arrived");

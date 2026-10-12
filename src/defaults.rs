@@ -17,7 +17,7 @@ const PACKAGED_SERVICE: &str = "dbus-1/services/com.thisisgm.flea.FileManager1.s
 // The provenance line, and the test for whether a file already there is Flea's to rewrite or remove.
 const MARK: &str = "# Written by `flea --default`; `flea --default off` removes it.";
 
-// Exit statuses ui/js/MakeDefault.js finished() reads in place of a sentence: 2 is usage, 1 is any other refusal.
+// Exit statuses: 2 is usage and 1 any other refusal; ui/js/MakeDefault.js finished() reads only 3, and 4 keeps an xdg-mime refusal apart from the rest.
 pub const REFUSED: i32 = 1;
 pub const EXIT_UNINSTALLED: i32 = 3;
 pub const EXIT_XDG_MIME: i32 = 4;

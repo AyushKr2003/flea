@@ -4328,8 +4328,9 @@ waits for its consumer.
   or the copy. A directory this user cannot write is marked not deletable on the listed line's
   `w` field, and a drag from it copies unless Shift is held. Qt's platform drag runs a nested
   loop in which the window receives no keys, so Ctrl
-  or Shift pressed after the drag starts cannot change the verb. The status line says
-  `Ctrl copies, Shift moves`, naming both keys,
+  or Shift pressed after the drag starts cannot change what a foreign receiver is offered. A drop
+  onto one of Flea's own folders reads the keys held at the drop (#259, `keys` in `ui/js/DragOut.js`),
+  which is why the status line says `Ctrl copies, Shift moves`, naming both keys,
   and a Ctrl with Shift lift links, its Link line naming the verb outright. `drag.sh` proves a same-device move and a Ctrl copy but needs the display and a
   real pointer, so `dragwire.sh` carries the offer into the headless battery: a leaving drag
   must offer copy alone and `text/uri-list`, a link lift must offer `Qt.LinkAction`,
@@ -6717,7 +6718,7 @@ the same kind, so the sentence names no direction, warns that the name the copy 
 incomplete, and leaves the refreshed listing to show which names are on disk. The journal spends its
 entry either way, because a failed reversal that stayed would block every older undo behind a step
 that keeps failing.
-A twin stranded by a failed move-back answers `rename-stranded` rather than `rename-kept`: the temp sibling holds the file under a hidden dot name, so `path` is the source, which closes the rename request, and `msg` names the temp leaf with the move-back cause ("the file was left as .flea-case-N-M in this folder: input/output failed"). `ui/js/Errors.js` capitalises it as it does a transfer, `ui/PaneWire.qml` treats it as `rename-kept` for the refresh, and a move through move_any (copyfile.rs:607) carries the same `msg`, on a `redo` error for a redo and on the transfer item error for a non-regular item.
+A twin stranded by a failed move-back answers `rename-stranded` rather than `rename-kept`: the temp sibling holds the file under a hidden dot name, so `path` is the source, which closes the rename request, and `msg` names the temp leaf with the move-back cause ("the file was left as .flea-case-N-M in this folder: the drive could not read or write the data"). `ui/js/Errors.js` capitalises it as it does a transfer, `ui/PaneWire.qml` treats it as `rename-kept` for the refresh, and a move through move_any (copyfile.rs:607) carries the same `msg`, on a `redo` error for a redo and on the transfer item error for a non-regular item.
 corner: the copy is not snapshot-isolated, so a source replaced after the copy completes is destroyed
 by the removal that follows, and a concurrent write into the operation-created partial target is lost
 with it; both are accepted rather than defended against.

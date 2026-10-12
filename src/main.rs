@@ -66,7 +66,7 @@ fn claim_both() -> i32 {
     }
     // A source build has no flea.portal to prefer, which is the picker's precondition, not a failure here.
     let status = if chooser::backend_installed() {
-        chooser::claim()
+        chooser::claim("flea --default")
     } else {
         eprintln!("flea: no file chooser service is installed, so Flea could not become the file chooser");
         0
@@ -79,7 +79,7 @@ fn claim_both() -> i32 {
 // flea --picker on its own, so it owns the undo line --default must not print for it.
 fn claim_picker() -> i32 {
     let installed = chooser::backend_installed();
-    let status = chooser::claim();
+    let status = chooser::claim("flea --picker");
     if installed {
         println!("undo both with: flea --picker off");
     }

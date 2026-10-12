@@ -81,7 +81,7 @@ fn linux_io_message(code: Option<i32>) -> &'static str {
         Some(ELOOP) => "the path has too many links",
         Some(ESTALE) => "file is no longer available",
         Some(EDQUOT) => "storage quota exceeded",
-        _ => "the drive could not read or write the data",
+        _ => "the operation could not finish",
     }
 }
 
@@ -108,11 +108,11 @@ mod tests {
             (ErrorKind::InvalidInput, "invalid input"),
             (ErrorKind::TimedOut, "operation timed out"),
             (ErrorKind::WouldBlock, "the item is busy; try again"),
-            (ErrorKind::Other, "the drive could not read or write the data"),
+            (ErrorKind::Other, "the operation could not finish"),
         ] {
             assert_eq!(io_message(&Error::from(kind)), expected);
         }
-        assert_eq!(io_message(&Error::from_raw_os_error(i32::MAX)), "the drive could not read or write the data");
+        assert_eq!(io_message(&Error::from_raw_os_error(i32::MAX)), "the operation could not finish");
     }
 
     #[test]

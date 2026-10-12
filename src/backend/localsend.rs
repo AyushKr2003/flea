@@ -54,27 +54,26 @@ extern "C" {
     fn prctl(option: i32, ...) -> i32;
 }
 
-// Every refusal while the terminal is made says one thing: the detail is the platform's, not the user's.
-const NOT_STARTED: &str = "LocalSend could not start.";
+// The person reads the cause; the log names the step that met it, since four calls can refuse in the same way.
+fn setup_fault(step: &str, cause: &std::io::Error) -> String { eprintln!("flea: LocalSend terminal setup, {}: {}", step, cause); format!("LocalSend could not start: {}.", crate::error::io_message(cause)) }
 
 fn open_pty() -> Result<(OwnedFd, std::fs::File), String> {
     // O_RDWR | O_NOCTTY | O_CLOEXEC: the terminal belongs to the child, and the master must not ride into it.
     const O_RDWR_NOCTTY_CLOEXEC: i32 = 0o2 | 0o400 | 0o2000000;
     let raw = unsafe { posix_openpt(O_RDWR_NOCTTY_CLOEXEC) };
-    if raw < 0 { return Err(NOT_STARTED.into()) }
+    if raw < 0 { return Err(setup_fault("posix_openpt", &std::io::Error::last_os_error())) }
     let master = unsafe { OwnedFd::from_raw_fd(raw) };
-    if unsafe { grantpt(raw) } < 0 || unsafe { unlockpt(raw) } < 0 {
-        return Err(NOT_STARTED.into())
-    }
+    if unsafe { grantpt(raw) } < 0 { return Err(setup_fault("grantpt", &std::io::Error::last_os_error())) }
+    if unsafe { unlockpt(raw) } < 0 { return Err(setup_fault("unlockpt", &std::io::Error::last_os_error())) }
     let mut name = [0u8; 256];
-    if unsafe { ptsname_r(raw, name.as_mut_ptr(), name.len()) } != 0 {
-        return Err(NOT_STARTED.into())
-    }
+    // ptsname_r answers its errno as the return value and leaves errno alone.
+    let named = unsafe { ptsname_r(raw, name.as_mut_ptr(), name.len()) };
+    if named != 0 { return Err(setup_fault("ptsname_r", &std::io::Error::from_raw_os_error(named))) }
     let end = name.iter().position(|b| *b == 0).unwrap_or(0);
     let path = String::from_utf8_lossy(&name[..end]).into_owned();
     let size = WinSize { rows: ROWS, cols: COLS, x_pixels: 0, y_pixels: 0 };
     if unsafe { ioctl(raw, TIOCSWINSZ, &size as *const WinSize) } < 0 {
-        return Err(NOT_STARTED.into())
+        return Err(setup_fault("TIOCSWINSZ", &std::io::Error::last_os_error()))
     }
     let slave = std::fs::OpenOptions::new().read(true).write(true).open(&path)
         .map_err(|e| format!("LocalSend could not start: {}.", crate::error::io_message(&e)))?;

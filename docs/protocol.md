@@ -1998,7 +1998,7 @@ Counts, plus the batch's own reason when anything failed: `{"t":"trashed","ok":0
 Unlike `transferitem` there is no per-path error text, because trash is one `gio` call for
 the batch and its exit status cannot attribute a failure to a single path; a path that is still on disk
 afterwards is counted in `failed`. `err` rides only on a failure, so a successful line is byte-identical
-to before. `gio` runs under a 10 s deadline, so a hung mount answers "Trash took too long to answer"
+to before. `gio` runs under a 10 s deadline, so a hung mount answers "The Trash took too long to answer"
 instead of holding the single operation slot.
 
 ### slow

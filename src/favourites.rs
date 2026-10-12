@@ -95,11 +95,11 @@ pub fn changed(state: &Json, operation: &Json) -> Result<Json, String> {
             let label = record
                 .get("label")
                 .and_then(Json::as_str)
-                .ok_or("favorite label must be text")?;
+                .ok_or("A favorite name must be text.")?;
             let path = record
                 .get("path")
                 .and_then(Json::as_str)
-                .ok_or("favorite path must be text")?;
+                .ok_or("A favorite path must be text.")?;
             if !label
                 .chars()
                 .any(|character| !character.is_whitespace() && !character.is_control())
@@ -108,7 +108,7 @@ pub fn changed(state: &Json, operation: &Json) -> Result<Json, String> {
             }
             if !valid_path(path) {
                 return Err(
-                    "use a full path, a path that starts with ~/, or a network address".into(),
+                    "A favorite needs a full path, a path that starts with ~/, or a network address.".into(),
                 );
             }
             // Issue 138, AksharP5: one place is one row, so a place the list holds is kept once.
@@ -137,7 +137,7 @@ pub fn changed(state: &Json, operation: &Json) -> Result<Json, String> {
                     let label = operation
                         .get("label")
                         .and_then(Json::as_str)
-                        .ok_or("favorite label must be text")?;
+                        .ok_or("A favorite name must be text.")?;
                     if label.trim().is_empty() {
                         return Err("A favorite name needs visible text.".into());
                     }
@@ -374,7 +374,7 @@ mod tests {
         }
     }
 
-    // Favourites.qml shows the first line raw, so each refusal is a whole sentence with its capital and its period.
+    // Favourites.qml shows the first line raw, so each refusal an add, move or rename can meet is a whole sentence with its capital and its period.
     #[test]
     fn a_refused_edit_is_a_whole_sentence_the_rail_can_show_raw() {
         let state = uistate::from_file(r#"{"places":{"favourites":[{"label":"A","path":"/a"},"damaged"]}}"#);
@@ -384,5 +384,9 @@ mod tests {
         assert_eq!(refused(r#"{"op":"add","record":{"label":" ","path":"/a"}}"#.to_string()), "A favorite name needs visible text.");
         assert_eq!(refused(format!(r#"{{"op":"rename","index":0,"label":" ",{}}}"#, held)), "A favorite name needs visible text.");
         assert_eq!(refused(format!(r#"{{"op":"rename","index":1,"label":"B",{}}}"#, held)), "This favorite is damaged and cannot be renamed. Remove it instead.");
+        assert_eq!(refused(r#"{"op":"add","record":{"label":"B","path":"rel/x"}}"#.to_string()), "A favorite needs a full path, a path that starts with ~/, or a network address.");
+        assert_eq!(refused(r#"{"op":"add","record":{"label":7,"path":"/a"}}"#.to_string()), "A favorite name must be text.");
+        assert_eq!(refused(r#"{"op":"add","record":{"label":"B","path":7}}"#.to_string()), "A favorite path must be text.");
+        assert_eq!(refused(format!(r#"{{"op":"rename","index":0,"label":7,{}}}"#, held)), "A favorite name must be text.");
     }
 }
