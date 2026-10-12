@@ -263,13 +263,30 @@ function columnasks(check) {
     back.pickerOnly = true
     back.askDropDevs("5", ["/x"])
     check("the chooser's backend asks nothing", sent.length, 2)
-    var row = Source.source("ui/RowDrag.qml")
-    check("a row reads its own device first, else the backend's answer for its path, at every drop seam",
-          row.indexOf("DropDev.devFor(root.targetPane.backend.pathDevs") >= 0 && row.split("row.v").length - 1 === 2
-          && row.split("root.destDev").length - 1 >= 6, true)
-    check("a drag entering a row asks through the columns area, which asks the drawn neighbour columns' visible rows",
-          row.indexOf("columnsArea.askDropDevs(lift)") >= 0 && Source.source("ui/ColumnsArea.qml").indexOf("column.dropAsks()") >= 0
-          && Source.source("ui/ColumnPane.qml").indexOf("DropDev.folderAsks(root.rows") >= 0, true)
+    // The columns area's real ask: the drawn neighbour columns' answers in one request, nothing when the area is hidden, nothing for a column that is not drawn.
+    var asked = []
+    var drawn = function (name, paths) { return name ? { dropAsks: function () { return paths } } : null }
+    var area = { visible: true, pane: { backend: { askDropDevs: function (token, paths) { asked.push(token + ":" + paths.join(",")) } } } }
+    var ask = function (grandparent, parent, child) {
+        return new Function("root", "greatGrandparentLoader", "grandparentLoader", "parentColumn", "childColumn",
+            "return function (token) {" + Source.block(Source.source("ui/ColumnsArea.qml"), "function askDropDevs(", "ui/ColumnsArea.qml") + "}")(
+            area, { item: null }, { item: grandparent }, parent, child)
+    }
+    ask(drawn("g", ["/g/a"]), drawn("p", ["/p/b", "/p/c"]), drawn("c", ["/c/d"]))("7")
+    area.visible = false
+    ask(drawn("g", ["/g/a"]), drawn("p", ["/p/b"]), drawn("c", ["/c/d"]))("8")
+    area.visible = true
+    ask(null, drawn("p", []), drawn("c", ["/c/d"]))("9")
+    check("the columns area asks every drawn neighbour column's rows in one request, and nothing while hidden",
+          asked.join("|"), "7:/g/a,/p/b,/p/c,/c/d|9:/c/d")
+    // The reply lands through the real handler, as a merge, so the listing's ancestor answers and the drag's folder answers live in one map.
+    var landed = { pathDevs: { "/home": 6 } }
+    Messages.route(landed, { t: "devs", devs: { "/home/u/deep": 7 } })
+    var first = landed.pathDevs
+    Messages.route(landed, { t: "devs", devs: { "/home/u/more": 8 } })
+    check("a devs reply merges into the map as a new object, and the earlier answers stand",
+          JSON.stringify(landed.pathDevs) + (first !== landed.pathDevs) + JSON.stringify(first),
+          '{"/home":6,"/home/u/deep":7,"/home/u/more":8}true{"/home":6,"/home/u/deep":7}')
 }
 
 function run(check) {
