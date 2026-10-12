@@ -28,11 +28,12 @@ ShellRoot {
     property double calmFrom: 0
     property bool ticking: false
     property bool finished: false
-    // Asks counted at each move's start, the largest line any reply reached, and the listings seen during a reload.
+    // Asks counted at each move's start, the largest line any reply reached, and the loads tried while a reload's listing was out, and the asks and queued loads made then.
     property int askBase: 0
     property int farthest: 0
     property bool watchLoad: false
     property int loadsSeen: 0
+    property int askedLoading: 0
     // The lines the shown file grows by in the reload, and the ask token before it.
     readonly property int grownLines: 5
     property int reloadBase: 0
@@ -42,7 +43,6 @@ ShellRoot {
     property int liveFrames: 0
     property int midBase: 0
     property var bad: []
-    property int badCount: 0
     // Frames the swap counts as half-built, and those of them that drew a line of code.
     property int midFrames: 0
     property int midDrawn: 0
@@ -143,7 +143,6 @@ ShellRoot {
             else if (root.plainOf(texts[i].text).indexOf("fn " + letter + (i + 1) + "(") !== 0) why = "line " + (i + 1) + " is not the file's own"
         }
         if (why === "") return
-        root.badCount += 1
         if (root.bad.length < 5) root.bad.push(why + " at " + root.nameShown(col))
     }
     function walkVerdict(label, moves) {
@@ -204,6 +203,7 @@ ShellRoot {
             root.check("a CodeLines is live and active for the reload", [root.codeCount(), shownCode.active], [1, true])
             root.check("the reload starts from the shown file's one line", shownCode.lines.length, 1)
             root.loadsSeen = 0
+            root.askedLoading = 0
             root.reloadBase = root.backend().codeToken
             // The shown file grows on disk (size and mtime move), so the landing must ask for the new lines.
             var grown = [root.imgLine]
@@ -216,8 +216,10 @@ ShellRoot {
                 if (!root.calm(!root.pane.listInFlight && root.loadsSeen > 0 && grownCode !== null && grownCode.lines.length === 1 + root.grownLines && root.drawn("06-img.html", "styled"))) return false
                 root.watchLoad = false
                 root.check("the listing loaded under a live CodeLines", root.loadsSeen > 0, true)
+                root.check("no code ask or queued load while the listing loads", root.askedLoading, 0)
                 root.check("the reload asks the grown file again", root.backend().codeToken > root.reloadBase, true)
                 root.check("the grown file's reply replaces the shown lines", grownCode.lines, grown)
+                grownFile.setText(root.imgLine + "\n") // both runs share the fixture
                 return true
             }
         } else if (op.wide !== undefined) {
@@ -272,6 +274,15 @@ ShellRoot {
             root.finish()
         }
     }
+    // Ctrl+Space, the settle's own route, tried while the listing is out (after the flip, when the preview's gate has seen it): it must queue nothing.
+    function tryLoad() {
+        if (!root.pane.listInFlight) return
+        var chosen = root.descendants(root.pane).filter(function (n) { return typeof n.followSelection === "function" })[0]
+        chosen.loadQueuedKey = ""
+        root.pane.loadSelectionPreview()
+        root.askedLoading += chosen.loadQueuedKey === "" ? 0 : 1
+        root.loadsSeen += 1
+    }
     function beginWalk() {
         root.askBase = root.backend().codeToken
         root.midBase = root.column().swap.midFrames
@@ -279,7 +290,6 @@ ShellRoot {
         root.midFrames = 0
         root.midDrawn = 0
         root.bad = []
-        root.badCount = 0
         root.sampling = true
     }
 
@@ -346,7 +356,10 @@ ShellRoot {
     Connections {
         target: root.pane
         function onListInFlightChanged() {
-            if (root.watchLoad && root.pane.listInFlight) root.loadsSeen += 1
+            if (!root.watchLoad) return
+            // The asks between the flip in and the flip out.
+            root.askedLoading += (root.pane.listInFlight ? -1 : 1) * realBackend.codeToken
+            if (root.pane.listInFlight) Qt.callLater(root.tryLoad)
         }
     }
     Component {
