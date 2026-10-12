@@ -55,19 +55,16 @@ Item {
     }
     Component.onCompleted: root.mountTag()
     onEntryChanged: root.mountTag()
-    readonly property color markColor: root.errored ? root.errorInk
-                                     : !root.available ? Theme.color.mutedFrame : root.danger ? root.errorInk
-                                     : root.picked ? Theme.color.accent : root.lit ? Theme.color.markLit : Theme.color.mutedFrame
-    // A lit row is washed, so its error ink and its hint are the lifted pair; a picked row keeps its accent fill and its ink.
-    readonly property bool lit: root.current && !root.picked
-    readonly property color errorInk: root.lit ? Theme.color.errorLit : Theme.color.error
-    readonly property color labelColor: root.errored ? root.errorInk
-                                      : !root.available ? Theme.color.muted : root.danger ? root.errorInk
-                                      : root.entry.labelColor !== undefined ? (root.lit ? Theme.color.labelLit : root.entry.labelColor)
-                                      : root.picked ? Theme.color.accent : root.lit ? Theme.color.labelLit : Theme.color.foreground
+    readonly property color markColor: root.errored ? Theme.color.error
+                                     : !root.available ? Theme.color.mutedFrame : root.danger ? Theme.color.error
+                                     : root.picked ? Theme.color.accent : Theme.color.mutedFrame
+    readonly property color labelColor: root.errored ? Theme.color.error
+                                      : !root.available ? Theme.color.muted : root.danger ? Theme.color.error
+                                      : root.entry.labelColor !== undefined ? root.entry.labelColor
+                                      : root.picked ? Theme.color.accent : Theme.color.foreground
 
-    // The cursor fill, shared by the pointer and the keyboard: Theme derives it per palette to stand 3:1 off the menu surface.
-    readonly property real hoverOpacity: Theme.washCursor
+    // The hover lift Row.qml uses, so a menu row and a list row read alike.
+    readonly property real hoverOpacity: Theme.washHover
     // The rail's mount-status square and the gap the Update Flea board puts between it and the version.
     readonly property int statusSquareSize: 6
     readonly property int statusSquareGap: 7
@@ -262,7 +259,7 @@ Item {
         horizontalAlignment: Text.AlignRight
         // MenuAdditions040: every key hint is muted on a live, lit or dead row; a dead row dims it with the label, a wrapped reason stays readable.
         color: root.entry.hintSquare === true ? root.labelColor
-             : root.available || root.entry.hintWrap !== true ? (root.lit ? Theme.color.mutedLit : Theme.color.muted) : Theme.color.foreground
+             : root.available || root.entry.hintWrap !== true ? Theme.color.muted : Theme.color.foreground
         opacity: root.available || root.entry.hintWrap === true ? 1 : label.opacity
         font.family: Theme.font.family
         font.pixelSize: Theme.font.caption
@@ -284,7 +281,7 @@ Item {
             anchors.fill: parent
             visible: root.isSubmenu
             name: "chevron-right"
-            color: root.lit ? Theme.color.markLit : Theme.color.mutedFrame
+            color: Theme.color.mutedFrame
         }
     }
 
