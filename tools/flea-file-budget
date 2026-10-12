@@ -92,7 +92,7 @@ tests/gridmark.qml 419
 tests/columnsfilter.qml 400
 tests/columnsfolder.qml 399
 tests/quicklook-firstframe.qml 438
-tests/markdown-render.qml 914
+tests/markdown-render.qml 915
 tests/markdown-linearity.qml 679
 tests/markdown-preview-state.qml 474
 tests/markdown-tables.qml 401

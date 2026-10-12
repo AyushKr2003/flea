@@ -185,12 +185,13 @@ ShellRoot {
             view: "rendered"
         }
 
-        // The bar without its segment, as a code or text pane draws it, over a name too long for it.
+        // The bar without its segment, as a code or text pane draws it, over a name too long for it; shown beside the grab, because an item reports its effective visibility.
         Flea.QuickLookBar {
             id: plainBar
+            x: window.implicitWidth
+            y: colMd.height
             width: 900
-            visible: false
-            markName: "file"
+            markName: "markdown"
             name: shell.longFixture.substring(shell.longFixture.lastIndexOf("/") + 1)
             countLabel: "12 lines"
         }

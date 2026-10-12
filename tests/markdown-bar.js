@@ -146,8 +146,8 @@ function plainBarError(g, tokens) {
         return "the plain bar still exposes a segment";
     if (g.rendered.visible || g.source.visible)
         return "the plain bar still draws a word of the segment";
-    if (g.markName !== "file")
-        return "the plain bar mark is " + g.markName + ", want file";
+    if (g.markName !== "markdown")
+        return "the plain bar mark is " + g.markName + ", want markdown";
     if (!(g.name.width < g.name.implicitWidth))
         return "the plain bar's name did not elide (" + g.name.width + "/" + g.name.implicitWidth + ")";
     if (!g.countShown)
