@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Eleven gates share one scanner (worker-report judges paths, the rest read source); controls run first.
+# Twelve gates share one scanner (worker-report judges paths, the rest read source); controls run first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 -B tests/staticgates_tests.py
