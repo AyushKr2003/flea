@@ -213,7 +213,7 @@ Flea.PreviewColumn {
         root.loadedDirectory = root.pane.path
         root.loadedIdentity = root.identity(candidate)
         root.row = Object.assign({}, candidate)
-        root.path = root.pane.join(root.pane.path, candidate.n)
+        root.path = root.pane.join(Search.baseOf(root.pane), candidate.n)
         root.kindName = root.pane.kindNames[candidate.k] || ""
         root.selectionCount = root.pane.selectionCount()
         root.loadedSelection = PreviewSettle.selectionKey(root.pane.selectionCount(), root.pane.selectionVersion)

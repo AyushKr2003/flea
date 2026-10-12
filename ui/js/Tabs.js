@@ -315,7 +315,7 @@ function openCursorTab(pane) {
         sayPlain(pane, "Only a folder opens in a new tab.")
         return
     }
-    var base = pane.path
+    var base = Search.baseOf(pane)
     openNew(pane, base === "/" ? "/" + row.n : base + "/" + row.n)
 }
 
