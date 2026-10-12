@@ -11,14 +11,17 @@ pub const ZWLR_MANAGER: &str = "zwlr_data_control_manager_v1";
 
 // Where the compositor listens: $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY, or WAYLAND_DISPLAY as is.
 pub fn socket_path() -> Result<PathBuf, String> {
-    let display = std::env::var_os("WAYLAND_DISPLAY")
-        .ok_or_else(|| "WAYLAND_DISPLAY is not set, so there is no clipboard to use".to_string())?;
+    socket_path_in(std::env::var_os("WAYLAND_DISPLAY"), std::env::var_os("XDG_RUNTIME_DIR"))
+}
+
+// Split so a test names both values without writing this process's environment.
+pub(crate) fn socket_path_in(display: Option<std::ffi::OsString>, runtime: Option<std::ffi::OsString>) -> Result<PathBuf, String> {
+    let display = display.ok_or_else(|| "WAYLAND_DISPLAY is not set, so there is no clipboard to use".to_string())?;
     let display = PathBuf::from(display);
     if display.is_absolute() {
         return Ok(display);
     }
-    let dir = std::env::var_os("XDG_RUNTIME_DIR")
-        .ok_or_else(|| "XDG_RUNTIME_DIR is not set, so the display socket cannot be found".to_string())?;
+    let dir = runtime.ok_or_else(|| "XDG_RUNTIME_DIR is not set, so the display socket cannot be found".to_string())?;
     Ok(PathBuf::from(dir).join(display))
 }
 

@@ -41,9 +41,14 @@ pub struct Prefetch {
 
 // Sample input: FLEA_GVFS_PATH "/run/user/1000/gvfs/smb-share:server=x,share=y/dir".
 pub fn env_prefetch() -> Option<Prefetch> {
-    let dest = std::env::var_os(PREFETCH_ENV).filter(|v| !v.is_empty()).map(PathBuf::from)?;
-    let path = std::env::var(PATH_ENV).ok().filter(|v| !v.is_empty())?;
-    let start_ms = std::env::var(START_ENV).ok()?.parse::<u64>().ok()?;
+    env_prefetch_from(|name| std::env::var_os(name))
+}
+
+// Split so a test names the three values without writing this process's environment.
+pub(crate) fn env_prefetch_from(get: impl Fn(&str) -> Option<std::ffi::OsString>) -> Option<Prefetch> {
+    let dest = get(PREFETCH_ENV).filter(|v| !v.is_empty()).map(PathBuf::from)?;
+    let path = get(PATH_ENV).and_then(|v| v.into_string().ok()).filter(|v| !v.is_empty())?;
+    let start_ms = get(START_ENV)?.into_string().ok()?.parse::<u64>().ok()?;
     Some(Prefetch { dest, path, start_ms })
 }
 
@@ -108,7 +113,12 @@ pub fn prepare(path: &str) -> Option<(PathBuf, u64)> {
     if !gvfslist::is_gvfs(Path::new(path)) {
         return None;
     }
-    let dir = runtime_dir()?;
+    prepare_in(runtime_dir())
+}
+
+// Split so a test names the runtime dir without writing this process's environment.
+pub(crate) fn prepare_in(dir: Option<PathBuf>) -> Option<(PathBuf, u64)> {
+    let dir = dir?;
     // A refused runtime dir says why on stderr, then the launch lists the share itself.
     if let Err(e) = ensure_dir(&dir) {
         eprintln!("flea: {}, so the share lists without a head start", e);
@@ -203,6 +213,11 @@ fn shrink_claim(claimed: &Path) {
 
 // The backend's first gvfs scan of the prefetched path adopts the file; else None.
 pub(crate) fn adopt_matching(path: &str, hidden: bool, prefetch: &Prefetch) -> Option<(Listing, f64)> {
+    adopt_matching_in(path, hidden, prefetch, runtime_dir().as_deref())
+}
+
+// Split so a test names the runtime dir without writing this process's environment.
+pub(crate) fn adopt_matching_in(path: &str, hidden: bool, prefetch: &Prefetch, runtime: Option<&Path>) -> Option<(Listing, f64)> {
     if prefetch.path != path {
         return None;
     }
@@ -211,7 +226,7 @@ pub(crate) fn adopt_matching(path: &str, hidden: bool, prefetch: &Prefetch) -> O
     }
     // corner: a listing still streaming 15 s after launch is re-listed by the scan; 10k NAS rows take about 1.1 s.
     let deadline = UNIX_EPOCH + Duration::from_millis(prefetch.start_ms) + gvfslist::GIO_TIMEOUT;
-    adopt_in(path, hidden, &prefetch.dest, deadline, prefetch.start_ms, runtime_dir().as_deref())
+    adopt_in(path, hidden, &prefetch.dest, deadline, prefetch.start_ms, runtime)
 }
 
 // Split so a test can name the launch start and runtime dir without touching the environment.

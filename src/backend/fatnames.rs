@@ -43,7 +43,7 @@ pub fn sanitize(name: &str) -> String {
     for ch in name.chars() {
         out.push(match ch {
             ':' | '?' | '*' | '"' | '<' | '>' | '|' | '\\' => '_',
-            other if (other as u32) < 0x20 => '_',
+            other if (other as u32) < 0x20 || other == '\u{7f}' => '_',
             other => other,
         });
     }
@@ -203,6 +203,11 @@ mod tests {
         assert_eq!(sanitize("a*b\"c<d>e|f"), "a_b_c_d_e_f");
         assert_eq!(sanitize("a\\b.txt"), "a_b.txt");
         assert_eq!(sanitize("a\tb"), "a_b");
+        assert_eq!(sanitize("a\u{1}b\u{1f}c"), "a_b_c");
+        assert_eq!(sanitize("a\u{7f}b"), "a_b");
+        assert_eq!(sanitize("x\u{7f}\n:y.mp4"), "x___y.mp4");
+        assert!(needs_rename("a\u{7f}b") && needs_rename("a\u{1}b"));
+        assert_eq!(sanitize("a\u{80}b"), "a\u{80}b", "a C1 character is a legal FAT name character");
         assert!(needs_rename("clip: final.mp4"));
     }
 

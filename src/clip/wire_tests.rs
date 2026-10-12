@@ -86,14 +86,13 @@ fn five_and_twenty_eight_descriptors_arrive_whole_in_one_sendmsg() {
 
 #[test]
 fn the_socket_path_prefers_an_absolute_display() {
-    use crate::clip::testutil::DisplayEnv;
-    // Process-global names: serialised with every other borrower, and restored on drop.
-    let _env = DisplayEnv::set(Some(std::path::Path::new("/tmp/abs-wayland-0")));
-    std::env::remove_var("XDG_RUNTIME_DIR");
-    assert_eq!(socket_path().unwrap(), std::path::PathBuf::from("/tmp/abs-wayland-0"));
-    std::env::set_var("WAYLAND_DISPLAY", "wayland-0");
-    std::env::set_var("XDG_RUNTIME_DIR", "/run/user/7");
-    assert_eq!(socket_path().unwrap(), std::path::PathBuf::from("/run/user/7/wayland-0"));
+    use std::ffi::OsString;
+    let name = |v: &str| Some(OsString::from(v));
+    assert_eq!(socket_path_in(name("/tmp/abs-wayland-0"), None).unwrap(), std::path::PathBuf::from("/tmp/abs-wayland-0"));
+    assert_eq!(socket_path_in(name("/tmp/abs-wayland-0"), name("/run/user/7")).unwrap(), std::path::PathBuf::from("/tmp/abs-wayland-0"));
+    assert_eq!(socket_path_in(name("wayland-0"), name("/run/user/7")).unwrap(), std::path::PathBuf::from("/run/user/7/wayland-0"));
+    assert_eq!(socket_path_in(name("wayland-0"), None).unwrap_err(), "XDG_RUNTIME_DIR is not set, so the display socket cannot be found");
+    assert_eq!(socket_path_in(None, name("/run/user/7")).unwrap_err(), "WAYLAND_DISPLAY is not set, so there is no clipboard to use");
 }
 
 // Every writer of XDG_RUNTIME_DIR takes one lock: the gvfs prefetch tests, the TUI warm tests and a display env.
