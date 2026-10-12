@@ -1173,7 +1173,7 @@ wait_marker() {
     fail "$why"
 }
 
-# Tab toggles between the list and the rail, so a case that does not know which one it is on asks.
+# Tab walks the ring list, rail, bar, strip, so a case that does not know whether it is on the list or the rail asks.
 rail_focus() {
     [[ "$(ipc focusView)" == "rail" ]] && return 0
     key -k Tab >/dev/null
@@ -10529,6 +10529,9 @@ EOS
 
     # The one instance is shared with the listing, so the keyboard must come back to it afterwards:
     # a second ContextMenu in this tree once killed every key in the window, see AGENTS.md.
+    key -k Tab >/dev/null
+    settle
+    [[ "$(ipc focusView)" == "chrome" ]] || fail "unmount: Tab out of the rail left the keyboard on $(ipc focusView) instead of the bar"
     key -k Tab >/dev/null
     settle
     [[ "$(ipc focusView)" == "list" ]] || fail "unmount: Tab did not reach the list after the rail menu closed"

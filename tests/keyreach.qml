@@ -148,6 +148,15 @@ ShellRoot {
             root.key(Qt.Key_Backtab, Qt.ShiftModifier); root.same(body.focusSide + ":" + root.view(), "0:chrome:sliders", "Shift+Tab from the left list reaches the bar")
             root.key(Qt.Key_Backtab, Qt.ShiftModifier); root.same(body.focusSide + ":" + root.view(), "0:rail", "Shift+Tab goes on to the rail")
             root.key(Qt.Key_Backtab, Qt.ShiftModifier); root.same(body.focusSide + ":" + root.view(), "1:list", "Shift+Tab goes on to the right list")
+            body.focusPane(1)
+            var right = body.currentPane
+            right.focusView = "chrome"
+            body.focusPane(0)
+            root.same(right.focusView, "list", "a click on the left pane gives the right pane's bar stop its list back")
+            body.focusPane(1)
+            right.focusView = "strip"
+            body.focusPane(0)
+            root.same(right.focusView, "list", "and its strip stop")
             root.key(Qt.Key_1, Qt.ControlModifier)
         })
         wait("single again", function () { return !body.dualMode })
