@@ -30,6 +30,11 @@ ShellRoot {
     property int windows: 0
     property int windowsBefore: 0
     property var refusals: []
+    // The tags each settags request named, in the order the pane sent them.
+    property var sentTags: []
+    property int pendingSeen: 0
+    // Every error sentence the pane raised, so a refused tag activate shows.
+    property var errors: []
     // What TagState held a turn after the last settagged answer, once its own handler had run.
     property var afterWrite: null
     property bool readyAtOpen: true
@@ -74,6 +79,8 @@ ShellRoot {
         for (var n = 0; n < maxKeys && menu.submenuCursor !== target; n++)
             driver.keyClick(menu.submenuCursor < target ? Qt.Key_Down : Qt.Key_Up, Qt.NoModifier, -1)
     }
+    // A write over rows past the held window is settled once its forced re-read has also answered.
+    function reReadLanded() { return toggleLanded() && pane.tags().asking === null }
     // One toggle lands when its settagged answer has come back and the held window has answered after it.
     function toggleLanded() { return landed > landedBefore && windows > windowsBefore }
     function toggled() { landedBefore = landed; windowsBefore = windows; afterWrite = null }
@@ -195,16 +202,46 @@ ShellRoot {
                   pane.tags().openMenu()
                   readyAtOpen = pane.menuActions.ready
                   toggled()
+                  sentTags = []
+                  errors = []
                   menu.chooseSub("Yellow")
                   menu.chooseSub("Green")
               },
-              ready: function () { return landed >= landedBefore + 2 && windows > windowsBefore },
+              // A refused choice never lands, so an error ends the wait for the busy check to name.
+              ready: function () { return errors.length > 0 || (landed >= landedBefore + 2 && windows > windowsBefore) },
               verify: function () {
                   check("3 and 4: both choices landed before the snapshot answered", !readyAtOpen)
                   check("3 and 4: the flyout stays open", flyoutStands())
+                  check("3 and 4: Yellow was sent before Green", sentTags.join() === "Yellow,Green")
                   check("3 and 4: Yellow reads applied", state("Yellow") === Tags.APPLIED)
                   check("3 and 4: Green reads applied", state("Green") === Tags.APPLIED)
                   check("3 and 4: nothing was refused", refusals.length === 0)
+                  check("3 and 4: no activate met a busy menu worker", errors.length === 0)
+                  menu.close()
+              } },
+            { name: "three choices made before the menu snapshot answers all apply, in order",
+              act: function () {
+                  pane.selectOnly(0)
+                  pane.toggleSelectAt(1)
+                  pane.listArea.forceActiveFocus()
+                  pane.tags().openMenu()
+                  readyAtOpen = pane.menuActions.ready
+                  toggled()
+                  sentTags = []
+                  errors = []
+                  menu.chooseSub("Blue")
+                  menu.chooseSub("Purple")
+                  menu.chooseSub("Gray")
+              },
+              // A refused choice never lands, so an error ends the wait for the busy check to name.
+              ready: function () { return errors.length > 0 || (landed >= landedBefore + 3 && windows > windowsBefore) },
+              verify: function () {
+                  check("3 choices: all landed before the snapshot answered", !readyAtOpen)
+                  check("3 choices: they were sent in the order chosen", sentTags.join() === "Blue,Purple,Gray")
+                  check("3 choices: Blue reads applied", state("Blue") === Tags.APPLIED)
+                  check("3 choices: Purple reads applied", state("Purple") === Tags.APPLIED)
+                  check("3 choices: Gray reads applied", state("Gray") === Tags.APPLIED)
+                  check("3 choices: no activate met a busy menu worker", errors.length === 0)
                   menu.close()
               } },
             { name: "pick the first row and the last, which the held window does not hold together",
@@ -226,7 +263,7 @@ ShellRoot {
               } },
             { name: "digit 1 over the picked rows keeps the read up and asks again",
               act: function () { toggled(); driver.keyClickChar("1", Qt.NoModifier, -1) },
-              ready: toggleLanded,
+              ready: reReadLanded,
               verify: function () {
                   check("past the window: the read was kept through the write", afterWrite !== null && afterWrite.asked)
                   check("past the window: a fresh read was asked at once", afterWrite !== null && afterWrite.asking)
@@ -308,8 +345,17 @@ ShellRoot {
         function onSettagged(message) { root.landed += 1; Qt.callLater(root.noteWrite) }
     }
     Connections {
+        target: root.pane ? root.pane.tagState : null
+        function onPendingChanged() {
+            var held = root.pane.tagState.pending
+            if (held.length > root.pendingSeen) root.sentTags = root.sentTags.concat([held[held.length - 1].tag])
+            root.pendingSeen = held.length
+        }
+    }
+    Connections {
         target: root.pane
         function onRowsChanged() { root.windows += 1 }
+        function onMessage(text, isError) { if (isError) root.errors = root.errors.concat([text]) }
     }
     Connections {
         target: root.menu
