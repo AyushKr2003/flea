@@ -343,14 +343,35 @@ mod tests {
         assert!(inherited.is_empty(), "the CLI holds the terminal master at {:?}", inherited);
     }
     const LIFECYCLE_MARKER: &str = "FLEA_LOCALSEND_LIFECYCLE_PROBE";
-    const LIFECYCLE_TOKEN: &str = "FLEA_LOCALSEND_LIFECYCLE_TOKEN";
     const LIFECYCLE_TEST: &str = "backend::localsend::tests::a_child_cli_does_not_outlive_its_parent";
 
-    // A zombie is a killed process waiting to be reaped, which is not a CLI that survived.
-    fn running(pid: i32) -> bool {
-        std::fs::read_to_string(format!("/proc/{pid}/stat")).map(|stat| {
-            stat.rsplit(')').next().and_then(|tail| tail.split_whitespace().next()) != Some("Z")
-        }).unwrap_or(false)
+    // Field 3 (state) and field 22 (start time) of /proc/pid/stat, split after the last ')' so a comm cannot shift them.
+    // Sample input: "4242 (localsend) S 4100 4242 4100 0 -1 4194560 812 0 0 0 3 1 0 0 20 0 4 0 9876543 ..." -> ("S", 9876543).
+    fn proc_stat(pid: i32) -> Option<(String, u64)> {
+        let stat = match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound || e.raw_os_error() == Some(ESRCH) => return None,
+            other => other.unwrap_or_else(|e| panic!("pid {pid} exists but its stat is unreadable: {e}")),
+        };
+        let mut fields = stat.rsplit(')').next().expect("a stat tail").split_whitespace();
+        let state = fields.next().expect("a stat state").to_string();
+        Some((state, fields.nth(18).expect("a stat start time").parse().expect("a numeric start time")))
+    }
+
+    // A reused pid has another start time and a zombie waits to be reaped, so neither is a CLI that survived.
+    fn child_running(pid: i32, start: u64) -> bool {
+        proc_stat(pid).is_some_and(|(state, began)| state != "Z" && began == start)
+    }
+
+    #[test]
+    fn a_live_pid_with_another_start_time_is_not_the_child() {
+        let mut sleeper = std::process::Command::new("sleep").arg("5").spawn().expect("a sleep");
+        let pid = sleeper.id() as i32;
+        let start = proc_stat(pid).expect("the sleep's stat").1;
+        let (other, own) = (child_running(pid, start + 1), child_running(pid, start));
+        let _ = sleeper.kill();
+        let _ = sleeper.wait();
+        assert!(!other, "a live pid with another start time was read as the child");
+        assert!(own, "a live pid with its own start time was not read as the child");
     }
 
     // The probe ends with a stand-in behind, like a killed backend; only PDEATHSIG can end the HUP-ignoring child.
@@ -368,36 +389,35 @@ mod tests {
                 assert!(Instant::now() < deadline, "the stand-in never armed its HUP ignore");
                 std::thread::sleep(Duration::from_millis(10));
             }
-            std::fs::write(&marker, child.id().to_string()).expect("the probe writes its child's pid");
+            let start = proc_stat(child.id() as i32).expect("the stand-in's stat").1;
+            std::fs::write(&marker, format!("{} {}", child.id(), start)).expect("the probe writes its child's identity");
             // The stand-in must outlive this probe, so its handle is relinquished rather than reaped.
             std::mem::forget(child);
             return;
         }
         let dir = crate::backend::testdir::TestDir::new("localsend-life");
-        let marker = dir.path().join("child.pid");
-        let token = format!("{}={}", LIFECYCLE_TOKEN, marker.display());
+        let marker = dir.path().join("child.id");
         let out = std::process::Command::new(std::env::current_exe().expect("a test binary knows its own path"))
             .args(["--exact", "--test-threads=1", "--nocapture", LIFECYCLE_TEST])
             .env(LIFECYCLE_MARKER, &marker)
-            .env(LIFECYCLE_TOKEN, &marker)
             .output()
             .expect("the test binary re-executes");
         let report = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
         assert!(out.status.success(), "the probe child failed: {}", report);
         // Renaming the test would filter the child to nothing and exit 0, so it has to say it ran one.
         assert!(report.contains("1 passed"), "the probe child ran no test: {}", report);
-        let pid: i32 = std::fs::read_to_string(&marker).expect("the probe wrote its child's pid")
-            .trim().parse().expect("a pid");
+        let identity = std::fs::read_to_string(&marker).expect("the probe wrote its child's identity");
+        let (pid, start) = identity.split_once(' ').expect("a pid and a start time");
+        let (pid, start): (i32, u64) = (pid.parse().expect("a pid"), start.trim().parse().expect("a start time"));
         let deadline = Instant::now() + Duration::from_secs(5);
-        while running(pid) && Instant::now() < deadline {
+        while child_running(pid, start) && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(25));
         }
-        if running(pid) {
-            let environ = std::fs::read(format!("/proc/{pid}/environ")).unwrap_or_default();
-            assert!(environ.split(|b| *b == 0).any(|v| v == token.as_bytes()), "refusing to kill a pid without this fixture's marker");
+        // Only the pid that started at `start` is killed, so a reused pid is never touched.
+        if child_running(pid, start) {
             let _ = std::process::Command::new("kill").arg("-9").arg(pid.to_string()).status();
             let killed = Instant::now() + Duration::from_secs(5);
-            while running(pid) && Instant::now() < killed {
+            while child_running(pid, start) && Instant::now() < killed {
                 std::thread::sleep(Duration::from_millis(25));
             }
             panic!("a CLI survived the backend's death: pid {pid}");
