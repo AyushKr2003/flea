@@ -256,7 +256,11 @@ case_cap_drops() {
     click_chrome columns
     settle
     [[ "$(ipc viewMode)" == "columns" ]] || fail "cap_drops: the chrome never reached columns"
-    [[ "$(ipc columnNames child)" == *"p1.txt"* ]] || fail "cap_drops: the child column never listed p1.txt"
+    # The child column lists Photos after its own read, so the check waits for it, up to 5 s.
+    local child_end=$((SECONDS + 5)) child=""
+    while child=$(ipc columnNames child); [[ "$child" != *"p1.txt"* ]] && (( SECONDS < child_end )); do sleep 0.1; done
+    [[ "$child" == *"p1.txt"* ]] \
+        || fail "cap_drops: the child column never listed p1.txt (child '$child', parent '$(ipc columnNames parent)', path $(ipc path))"
     names=$(ipc columnNames parent)
     index=$(printf '%s' "$names" | tr '|' '\n' | grep -nx "deep" | head -n 1 | cut -d: -f1 || true)
     [[ -n "$index" ]] || fail "cap_drops: the parent column never listed deep: $names"

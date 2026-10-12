@@ -204,6 +204,9 @@ case_cap_dropmods() {
     sleep 0.3
     hypr_window_float "$probe_addr" on >/dev/null || fail "cap_dropmods: the probe window would not float"
     sleep 0.3
+    # A floated window keeps its tiled width, which parks its centre past the screen edge; give it its own size first.
+    hypr_window_resize_absolute "$probe_addr" 420 300 >/dev/null || fail "cap_dropmods: the probe window would not take its size"
+    sleep 0.3
     read -r wx wy ww wh <<< "$(window_box)"
     hypr_window_move_absolute "$probe_addr" "$((wx + ww - 480))" "$((wy + 60))" >/dev/null \
         || fail "cap_dropmods: the probe window would not park"
@@ -211,6 +214,8 @@ case_cap_dropmods() {
     probe_box=$(hyprctl clients -j 2>/dev/null | jq -er '[.[] | select(.title == "DropProbe")] | select(length == 1) | .[0] | [.at[0] + .size[0] / 2, .at[1] + .size[1] / 2] | select(all(.[]; . == floor)) | @tsv' 2>/dev/null || printf "")
     [[ -n "$probe_box" ]] || fail "cap_dropmods: the probe window has no geometry to aim at"
     read -r tx ty <<< "$probe_box"
+    (( tx > wx && tx < wx + ww && ty > wy && ty < wy + wh )) \
+        || fail "cap_dropmods: the probe centre $tx,$ty lies outside the Flea window $wx,$wy,$ww,$wh, so the pointer cannot reach it"
     cap_dropmods_focus_pid "$(flea_pid)" "$dir"
     seek_row_named "probe1.txt" || fail "cap_dropmods: probe1.txt never came under the cursor"
     src_pt=$(ipc rowCentre "$(row_index_of probe1.txt)"); read -r cx cy <<< "$src_pt"
