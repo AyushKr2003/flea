@@ -791,7 +791,7 @@ def test_sorting():
     expected = {**first_write, "sort": {"key": "date", "reverse": False}, "folderSorts": {str(ordered): {"key": "date", "reverse": False}}}
     check("SP11 ui.json holds the last sort and the folder's remembered order, nothing else", json.loads(state_file.read_text()) == expected, state_file.read_text())
     guard(root / "data/recently-used.xbel").unlink()
-    # The two requests below start from name, the order a box with nothing saved opens in.
+    # SP12 below starts from name, the order a box with nothing saved opens in.
     guard(state_file).unlink()
     sorting.row("alpha.txt")
     sorting.key("-k", "Return")
@@ -817,9 +817,11 @@ def test_sorting():
 
     write(ordered / "report.txt", "taken")
     saving = Request("SP13-sorting-save", method="SaveFile", folder=ordered, current_name=GLib.Variant("s", "report.txt")).opened()
-    saving.until("the collision is reviewed", lambda state: state["saveReady"] and state["collision"])
+    # a3c7508f6: SP12's last sort is the default now, so the save opens on size descending and s steps to modified.
+    saving.until("the collision is reviewed", lambda state: state["saveReady"] and state["collision"] and state["state"] == "ready"
+                 and state["sortBy"] == "size" and state["sortDesc"])
     saving.key("s")
-    saving.until("a sort keeps the filename and its collision answer", lambda state: state["sortBy"] == "size"
+    saving.until("a sort keeps the filename and its collision answer", lambda state: state["sortBy"] == "mtime" and not state["sortDesc"]
                  and state["state"] == "ready" and state["saveName"] == "report.txt" and state["saveReady"] and state["collision"])
     saving.focus_control("Filename")
     saving.key("-k", "End")
@@ -827,9 +829,11 @@ def test_sorting():
     saving.key("s")
     saving.key("S")
     typed = saving.until("s and S typed into Filename are text", lambda state: state["saveName"] == "report.txtsS")
-    check("SP13 typing in Filename sorts nothing", typed["sortBy"] == "size" and not typed["sortDesc"], typed)
+    check("SP13 typing in Filename sorts nothing", typed["sortBy"] == "mtime" and not typed["sortDesc"], typed)
     saving.cancel()
     guard(ordered / "report.txt").unlink()
+    # The groups after this one start from nothing saved, as they did before a picker sort was remembered.
+    guard(state_file).unlink(missing_ok=True)
 
 
 # Sample input: var MISSING_SENTENCE = "%1 does not exist or cannot be reached."
