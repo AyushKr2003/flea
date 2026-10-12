@@ -501,6 +501,8 @@ def run_preview(arm, fixture, ctx, keys, view, mode, kinds, opts, table=None):
         return [{"arm": arm["id"], "entrant": arm["entrant"], "view": view,
                  "column": "preview", "first_ms": "no feature",
                  "note": NAV[arm["entrant"]]["src"]["preview"]}]
+    if mode == "quicklook" and not NAV[arm["entrant"]]["preview_quicklook"]:
+        raise RuntimeError("no quicklook key for %s, so the quicklook preview cannot open" % arm["entrant"])
     files = sorted(os.listdir(fixture))
     proc, rec = None, None
     try:
@@ -1349,6 +1351,12 @@ def selftest():
         "pane_moved": (PanelRec([(1500 * ms, 5, 40)], [70, None, 50]), "dolphin"),
         "pane_nokey": (PanelRec([], []), "thunar"),
     }
+    # A forced quicklook on an entrant with no quicklook key is a named refusal, not an IndexError from an empty chord.
+    try:
+        run_preview({"id": "d", "entrant": "dolphin"}, "/none", None, None, "default", "quicklook", ["table"], {})
+        fail.append("quicklook_nokey: no refusal")
+    except Exception as e:
+        check("quicklook_nokey_names", str(e), "no quicklook key for dolphin, so the quicklook preview cannot open")
     for name, (rec, who) in refused.items():
         try:
             ensure_pane_panel(ChordKeys(), rec, who)
