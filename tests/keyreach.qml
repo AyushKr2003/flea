@@ -91,8 +91,9 @@ ShellRoot {
         act("each control draws one foreground frame inside the bar", function () {
             var live = ChromeKeys.controls(chrome)
             for (var i = 0; i < live.length; i++) {
-                root.reach(live[i])
+                root.check(root.reach(live[i]), live[i] + " was not reached by the keyboard")
                 var ring = chrome.buttonFor(live[i]).ringItem
+                root.check(ring.visible, live[i] + " ring is not visible")
                 root.check(root.ringsOnBar() === 1, live[i] + " is not the only framed control")
                 root.inside(live[i], ring, chrome, chrome.width, chrome.height - root.hairline)
                 root.check(Qt.colorEqual(ring.border.color, Flea.Theme.color.foreground), live[i] + " frame is not foreground")
@@ -125,7 +126,7 @@ ShellRoot {
             root.check(root.glyphs().indexOf("filter,sort") > 0 && root.glyphs().indexOf("search") < 0, "grid controls " + root.glyphs())
             root.reach("sort"); root.key(Qt.Key_Return)
         })
-        act("sort asked, filter next", function () { root.same(root.view(), "chrome:sort", "Sort keeps the keyboard"); root.reach("filter"); root.key(Qt.Key_Return) })
+        act("sort asked, filter next", function () { root.check(root.counts.sort === 1, "Return on Sort did not reach the sort action"); root.same(root.view(), "chrome:sort", "Sort keeps the keyboard"); root.reach("filter"); root.key(Qt.Key_Return) })
         wait("filter is typing", function () { return pane.filterTyping })
         act("filter closes", function () { root.same(pane.focusView, "list", "Filter hands the keyboard to the pane"); root.key(Qt.Key_Escape) })
         wait("filter is closed", function () { return !pane.filterTyping })
@@ -221,6 +222,11 @@ ShellRoot {
         stepper.running = false
         console.log("KEYREACH DONE checks=" + root.checks + " failed=" + root.failures.length)
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
+    }
+
+    Connections {
+        target: root.chrome
+        function onSortRequested() { root.counts.sort += 1 }
     }
 
     Component.onCompleted: root.plan = root.build()

@@ -131,6 +131,14 @@ function run(check) {
         Focus.handleKey(key(Qt.Key_Return), opens, rail([]))
         check("a press on " + name + " hands the keyboard to what it opens", opens.focusView + "|" + opens.chromeBar.pressed.join(","), "list|" + name)
     }
+    var stale = pane("chrome", ["search", "list"])
+    stale.chromeBar.focusedGlyph = "arrow-left"
+    Focus.handleKey(key(Qt.Key_Return), stale, rail([]))
+    check("a stale stop re-homes to the nearest live control and presses nothing", stale.chromeBar.focusedGlyph + "|" + stale.chromeBar.pressed.join(","), "search|")
+    var staleArrow = pane("chrome", ["search", "list"])
+    staleArrow.chromeBar.focusedGlyph = "arrow-left"
+    Focus.handleKey(key(Qt.Key_Right), staleArrow, rail([]))
+    check("a stale stop's arrow still lands on the first live control", staleArrow.chromeBar.focusedGlyph, "search")
     var inert = pane("chrome")
     inert.chromeBar.focusedGlyph = "list"
     Focus.handleKey(key(Qt.Key_J, none, "j"), inert, rail([]))
@@ -190,4 +198,9 @@ function run(check) {
         Focus.handleKey(key(move), rooted, mounted)
         check("a cursor key (" + move + ") leaves the mark", mounted.markFocused, false)
     }
+    var unbound = pane("rail")
+    var unboundSide = rail([])
+    unbound.sidebar = unboundSide
+    Focus.handleKey(key(Qt.Key_Q, none, "q"), unbound, unboundSide)
+    check("an unbound key on the rail does not throw", unbound.focusView, "rail")
 }

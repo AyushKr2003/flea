@@ -46,6 +46,10 @@ case_keyreach() {
     launch "$dir"
     wait_listing 3
     settle
+    local shown
+    shown=$(keyreach_ipc path)
+    [[ "$shown" == "$dir" ]] || fail "keyreach: the window lists '$shown', not the fixture root '$dir', so no key is sent"
+    [[ -e "$dir/note.txt" && -d "$dir/sub" ]] || fail "keyreach: the fixture root '$dir' lost its files"
     echo "-- one tab: list, rail, chrome bar, list --"
     keyreach_tab; keyreach_expect rail "Tab from the list"
     keyreach_tab; keyreach_expect "chrome:arrow-up" "Tab from the rail"
@@ -69,20 +73,15 @@ case_keyreach() {
     key -k Escape >/dev/null
     settle
     keyreach_expect list "Escape from the strip"
-    echo "-- Right Arrow from a rail row to its eject mark --"
-    keyreach_tab
-    key -k Right >/dev/null
-    settle
-    shot keyreach-rail-eject
-    key -k Escape >/dev/null
-    settle
     echo "-- Ctrl+4 is Dual --"
     key -k Escape >/dev/null
     key -M ctrl -k 4 -m ctrl >/dev/null
     settle
     [[ "$(keyreach_ipc dualState | jq -r .active)" == "true" ]] || fail "keyreach: Ctrl+4 did not open the dual view"
     keyreach_tab
+    keyreach_expect list "Tab from the left list reaches the right one"
     keyreach_tab
+    keyreach_expect "chrome:arrow-up" "Tab from the right list reaches the bar"
     shot keyreach-chrome-dual
     key -M ctrl -k 1 -m ctrl >/dev/null
     settle

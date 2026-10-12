@@ -57,12 +57,29 @@ function target(event, at, count) {
     return -1
 }
 
+// The live control nearest in ORDER to a glyph that went disabled or hidden; unknown names land on the first stop.
+function nearestLive(glyph, glyphs) {
+    var home = glyphs[0]
+    var want = ORDER.indexOf(glyph)
+    if (want < 0) return home
+    var best = Infinity
+    for (var i = 0; i < glyphs.length; i++) {
+        var dist = Math.abs(ORDER.indexOf(glyphs[i]) - want)
+        if (dist < best) { best = dist; home = glyphs[i] }
+    }
+    return home
+}
+
 function chromeKey(event, root) {
     var bar = root.chromeBar
     var glyphs = controls(bar)
     var at = glyphs.indexOf(bar.focusedGlyph)
     if (press(event)) {
-        if (at < 0) return
+        // A stop that went disabled or hidden re-homes to the nearest live control and presses nothing, so Enter never acts on a control the user did not see focused.
+        if (at < 0) {
+            if (glyphs.length > 0) bar.focusedGlyph = nearestLive(bar.focusedGlyph, glyphs)
+            return
+        }
         bar.buttonFor(glyphs[at]).activated()
         if (HANDS_OFF.indexOf(glyphs[at]) >= 0) root.focusView = "list"
         return
