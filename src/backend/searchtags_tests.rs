@@ -39,8 +39,10 @@ pub(super) fn opened(d: &TestDir) -> (Session, Receiver<Event>) {
 
 // Asks a tagged query: the answer stands partial while the names are read, and the worker's landing re-runs it whole.
 pub(super) fn tagged(s: &mut Session, rx: &Receiver<Event>, gen: usize, query: &str) -> Answer {
+    s.tags.hold_read();
     let partial = s.query(gen, query, 50).expect("a newer generation answers");
     assert!(partial.walking, "{query}: an answer on unread names says it is still walking");
+    s.tags.release_read();
     assert!(matches!(rx.recv_timeout(DEADLINE), Ok(Event::SearchWalked)), "the tag worker lands through the walk's event");
     assert!(s.poll_walked(), "the loop sees the tag landing");
     let whole = s.re_answer_standing().expect("the standing tagged query is re-run once");
@@ -195,6 +197,19 @@ impl Tags {
         while !self.pass.as_ref().is_some_and(|pass| pass.done.load(Ordering::Relaxed)) {
             assert!(started.elapsed() < std::time::Duration::from_secs(10), "the tag read lands");
             std::thread::yield_now();
+        }
+    }
+
+    // Holds the next pass before its first chunk, so its first answer is partial whatever the fixture size.
+    pub(crate) fn hold_read(&mut self) {
+        self.hold = true;
+    }
+
+    // Opens the gate: the held pass, if started, reads on, and later passes start open.
+    pub(crate) fn release_read(&mut self) {
+        self.hold = false;
+        if let Some(pass) = &self.pass {
+            pass.held.store(false, Ordering::Release);
         }
     }
 
@@ -387,7 +402,7 @@ fn a_stuck_mount_gets_one_retry_per_query_and_never_a_cycle() {
             assert!(landings < 20, "a stuck mount keeps announcing: the retry cycles");
             if s.poll_walked() {
                 let answer = s.re_answer_standing();
-                assert!(!answer.is_some_and(|answer| !answer.walking), "unread rows keep every answer partial");
+                assert!(!answer.is_some_and(|answer| !answer.walking && s.tags.whole), "unread rows never make an answer whole");
             }
         }
         landings
@@ -397,6 +412,32 @@ fn a_stuck_mount_gets_one_retry_per_query_and_never_a_cycle() {
     assert_eq!(s.tags.reads(), 2 * s.indexed(), "every row was read once and retried once");
     assert!(s.query(2, "tag:Red", 50).expect("answers").walking, "a still-unread answer stays partial");
     assert_eq!(settle(&mut s), 1, "a new query arms exactly one more retry");
+}
+
+#[test]
+fn a_spent_unread_retry_settles_the_answer_partial_and_a_new_query_retries() {
+    let d = holiday("tagspentretry");
+    let (mut s, rx) = opened(&d);
+    s.body = remote_body(&d);
+    crate::backend::iomount::mark_stuck(d.path());
+    // The last re-run any landing owes, until the channel stays quiet.
+    let last_answer = |s: &mut Session| {
+        let mut last = None;
+        while rx.recv_timeout(std::time::Duration::from_millis(300)).is_ok() {
+            if s.poll_walked() {
+                last = s.re_answer_standing().or(last);
+            }
+        }
+        last.expect("a landing re-ran the standing query")
+    };
+    assert!(s.query(1, "tag:Red", 50).expect("answers").walking);
+    let settled = last_answer(&mut s);
+    assert!(!settled.walking && !s.tags.whole, "a spent retry with rows unread settles partial: no read is in flight");
+    assert!(s.re_answer_standing().is_none() && !s.poll_walked(), "the settled answer waits for no landing");
+    let reads = s.tags.reads();
+    assert!(s.query(2, "tag:Red", 50).expect("answers").walking, "a new query re-arms its one retry, which is in flight");
+    assert!(!last_answer(&mut s).walking, "the retried read fails again and settles");
+    assert_eq!(s.tags.reads(), reads + s.indexed(), "the new query retried every row once");
 }
 
 // A local sandbox whose `nas` folder is a nested nfs mount; both files carry Red and the body names the mount.
