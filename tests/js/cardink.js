@@ -1,7 +1,6 @@
 .import "sourcefixture.js" as Source
 
-// Decided FIELDS-01: error text and its mark on a card or the surface footer draw errorOnSurface; a bare error ink stays only in a border.color frame.
-// An ink belongs to the last property that starts a statement before it, on its line or the lines above, so an inline object, a property declaration and a wrapped ternary each count.
+// Decided FIELDS-01: card and footer error text and marks draw errorOnSurface; a bare error ink stays only in a border.color frame, its owner being the last property that starts a statement before it.
 // Sample input: inkOwners(["Text { color: Theme.color.error }"]) answers ["color"].
 function inkOwners(lines) {
     var owners = [], start = /(?:^|[{;])\s*(?:readonly\s+)?(?:property\s+[\w.<>]+\s+)?([\w.]+)\s*:(?!:)/g
@@ -32,6 +31,7 @@ function run(check) {
     check("a declared property's error ink belongs to that property", inkOwners(["    property color ink: Theme.color.error"]).join("|"), "ink")
     check("a returned error ink has no owner", String(inkOwners(["    border.color: x", "    function f() {", "        return Theme.color.error"])[0]), "null")
     check("a wrapped ternary's error ink belongs to the frame above it", inkOwners(["    border.color: bad", "        ? Theme.color.error : Theme.color.border"]).join("|"), "border.color")
+    check("properties joined by a semicolon each own their own ink", inkOwners(["    border.color: x; color: Theme.color.error"]).join("|"), "color")
     check("a ternary's second branch keeps its statement's owner", inkOwners(["    color: a ? Theme.color.foreground : Theme.color.error"]).join("|"), "color")
     var errorCards = ["ui/BulkRenameDialog.qml", "ui/UnlockDialog.qml", "ui/PermissionsDialog.qml", "ui/OpenWithDialog.qml", "ui/MenuActionDialog.qml", "ui/NetworkDialog.qml",
                       "ui/ArchiveCompressDialog.qml", "ui/ArchivePasswordDialog.qml", "ui/ConvertDialog.qml", "ui/PickerSave.qml", "ui/PickerWindow.qml"]
