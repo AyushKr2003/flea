@@ -76,7 +76,10 @@ case_railpointer() {
         settle
         [[ "$(ipc railCursor)" != "0" ]] || fail "railpointer: j never left rail row 0 (railCount=$rail_total)"
     fi
-    # Return focus to the list; the hide unloads the rail Loader and resets its cursor.
+    # Return focus to the list: Tab leaves the rail for the bar and one more reaches the list (a one-tab window has no strip); the hide unloads the rail Loader and resets its cursor.
+    key -k Tab >/dev/null
+    settle
+    [[ "$(ipc focusView)" == "chrome" ]] || fail "railpointer: Tab out of the rail left the keyboard on $(ipc focusView) instead of the bar"
     key -k Tab >/dev/null
     settle
     [[ "$(ipc focusView)" == "list" ]] || fail "railpointer: Tab back to the list left the keyboard on $(ipc focusView) instead of the list"

@@ -725,7 +725,7 @@ function run(check) {
     check("a single pane's Shift+Tab from the list is bound", Focus.lookup(shiftTabKey, armHandle(chromePane("list"))), "focusPrevious")
     var singleKeys = armHandle(chromePane("list"))
     Focus.handleKey(shiftTabKey, singleKeys, singleKeys.sidebar)
-    check("and it mirrors Tab's two-stop toggle by reaching the rail", singleKeys.focusView, "rail")
+    check("and it mirrors Tab by reaching the rail", singleKeys.focusView, "rail")
     var windowSrc = Source.source("ui/WindowBody.qml")
     var railWire = "onSwitchToRail: view.switchToLeftRail()"
     check("wire pin: both Dual panes hand the keyboard to the left pane's rail", windowSrc.split(railWire).length - 1, 2)
@@ -735,11 +735,11 @@ function run(check) {
     function windowFn(name) {
         var from = windowSrc.indexOf("function " + name + "(")
         var line = windowSrc.slice(from, windowSrc.indexOf("\n", from))
-        var body = (/\}$/.test(line) ? line : windowSrc.slice(from, windowSrc.indexOf("\n    }\n", from) + 6)).replace("function " + name, "function").replace(/\b(dualMode|focusSide|primaryPane|currentPane|focusPane)\b/g, "self.$1")
+        var body = (/\}$/.test(line) ? line : windowSrc.slice(from, windowSrc.indexOf("\n    }\n", from) + 6)).replace("function " + name, "function").replace(/\b(dualMode|focusSide|primaryPane|secondPane|currentPane|focusPane)\b/g, "self.$1")
         return new Function("self", "Focus", "view", "Qt", "return " + body)
     }
     var leftPane = chromePane("list"), rightPane = chromePane("list")
-    var win = { dualMode: true, focusSide: 0, primaryPane: leftPane }
+    var win = { dualMode: true, focusSide: 0, primaryPane: leftPane, secondPane: { item: { pane: rightPane } } }
     var seat = { forceActiveFocus: function () {} }
     Object.defineProperty(win, "currentPane", { get: function () { return seat } })
     var rememberCalls = 0, rigView = { rememberDual: function () { rememberCalls += 1 } }
@@ -755,6 +755,9 @@ function run(check) {
     check("Dual rig: a click into the right pane gives the left pane its list back", leftPane.focusView + "|" + win.focusSide, "list|1")
     Focus.windowAction("focusPrevious", rightPane, rightPane.sidebar)
     check("Dual rig: and Shift+Tab from the right lands on the left list, not the rail", leftPane.focusView + "|" + win.focusSide, "list|0")
+    rightPane.focusView = "chrome"
+    win.focusPane(0)
+    check("Dual rig: a click into the left pane gives the right pane's bar stop its list back", rightPane.focusView, "list")
 
     // Both panes share the hidden state, so only the active pane answers a hide with its own listing.
     for (var mode of ["list", "grid", "columns"]) {

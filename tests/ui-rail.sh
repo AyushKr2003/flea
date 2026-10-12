@@ -380,7 +380,10 @@ case_sidebar() (
     [[ "$(ipc focusView)" == "rail" ]] || fail "sidebar: Tab did not reach the withdrawn rail, it is on $(ipc focusView)"
     sidebar_wait false
     key -k Tab >/dev/null; settle
+    [[ "$(ipc focusView)" == "chrome" ]] || fail "sidebar: Tab out of the rail left the keyboard on $(ipc focusView) instead of the bar"
     sidebar_wait true
+    key -k Tab >/dev/null; settle
+    [[ "$(ipc focusView)" == "list" ]] || fail "sidebar: a further Tab left the keyboard on $(ipc focusView) instead of the list"
 
     echo "-- and the switch goes off again from its own row --"
     settings_open_key; settle

@@ -4091,6 +4091,8 @@ The keyboard reach of the chrome bar, the tab strip and a rail row's eject mark 
 
 The join of that Tab ring with the Dual Tab walk keeps one ring in `ui/js/Focus.js`: the rail is the left pane's, so a step onto it from either Dual pane hands the keyboard to that pane through `switchToRail`, and the two lists, the rail, the bar and the strip are consecutive stops in Dual too. It re-derives three ceilings with `wc -l`: `ui/js/Focus.js` 476, `ui/js/Keymap.js` 365 and `ui/Sidebar.qml` 705, and moves the `bytes` line of `tests/startup-units.txt` to 1638469, the sum the probe's tool takes over its 174 units.
 
+`WindowBody.focusPane` hands the pane the keyboard left its list back whichever side is taken, so a click on either pane never leaves the other holding a rail, bar or strip stop the ring would resume from; it moves two ceilings with `wc -l`, `ui/WindowBody.qml` 809 to 810 for the second pane's reset and `tests/js/focus.js` 834 to 837 for the Dual rig.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
