@@ -55,9 +55,13 @@ check "a text row answered with no file" "1" "$(echo "$out" | grep -c '"row":1,"
 check "an image generated a thumbnail" "1" "$(echo "$out" | grep -c '"row":2,"file":"/')"
 check "every requested row was answered" "3" "$(echo "$out" | grep -c '"t":"thumbed"')"
 
-# A cache hit is one read and one parse, tens of microseconds, against the 75 ms and up that a real decode costs here.
+# A generation publishes by rename, so a cached entry that keeps its inode and mtime across the request was not generated again.
+cached_stamp() { stat -c '%i %y' "$CACHE/large/$(printf 'file://%s' "$D/files/$1" | md5sum | cut -d' ' -f1).png" 2>/dev/null || echo "missing-$1"; }
+stamps_before="$(cached_stamp clip.mp4) $(cached_stamp photo.jpg)"
+check "both cached entries are on disk before the request" "0" "$(printf '%s' "$stamps_before" | grep -c missing)"
 out=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"thumb","rows":[0,2]}\n{"c":"quit"}\n' "$D/files" | timeout 120 $BIN --backend)
-check "a cached row is answered without generating it" "2" "$(echo "$out" | grep -cE '"file":"/[^"]*","ms":[0-4]\.[0-9]+}')"
+check "a cached row is answered with its file" "2" "$(echo "$out" | grep -c '"file":"/')"
+check "and neither cached entry was generated again" "$stamps_before" "$(cached_stamp clip.mp4) $(cached_stamp photo.jpg)"
 
 # The only case that decodes a real 6000 by 3375 image, 20.25 megapixels and 81 MB of RGBA, through the product path, so it is what says the address-space cap is large enough for one: it reddens at --as=536870912 and it cannot go red on issue #17 itself, because this box passes the same pixels at the old 1 GiB cap; see AGENTS.md "Thumbnail sandbox".
 if command -v magick >/dev/null; then
@@ -97,9 +101,9 @@ check "an undecodable file answers empty" "1" "$(echo "$out" | grep -c '"row":0,
 check "and the decoder verdict is recorded" "0" "$([ -e "$CACHE/fail/flea/$broken_key.png" ] && echo 0 || echo 1)"
 # record_failure publishes by rename, so a second job would leave a different inode here; an unchanged one proves no child ran.
 marker_inode=$(stat -c %i "$CACHE/fail/flea/$broken_key.png" 2>/dev/null || echo missing-before)
-# The span covers the mime and cache lookups, so a marker answer takes the 4 ms bound of the cached-row check, not a sub-millisecond one; a lost marker decodes again and the inode check below catches it.
+# The inode below, not a time, proves the marker answered: a lost marker decodes again and publishes a new one.
 out=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"thumb","rows":[0]}\n{"c":"quit"}\n' "$D/corrupt" | timeout 120 $BIN --backend)
-check "the second request is answered from the marker" "1" "$(echo "$out" | grep -cE '"row":0,"file":"","ms":[0-4]\.[0-9]+}')"
+check "the second request is answered from the marker" "1" "$(echo "$out" | grep -c '"row":0,"file":""')"
 check "and no second child ran" "$marker_inode" "$(stat -c %i "$CACHE/fail/flea/$broken_key.png" 2>/dev/null || echo missing-after)"
 
 # A fifo named like a video is not a regular file: the 10 s bound is well under the 20 s job timeout it used to burn.
