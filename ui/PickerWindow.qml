@@ -93,7 +93,7 @@ ShellRoot {
         // The save mode's own name, which starts as the caller's suggestion only when that
         // suggestion is a filename: tools/flea-portal passes current_name through verbatim, so a
         // separator in it would put a path outside this folder in the field before anyone typed.
-        property string saveName: Picker.validName(win.req.name) ? win.req.name : ""
+        property string saveName: ""
         onSaveNameChanged: win.invalidateSave()
         property int nextCheck: 0
         property int markRequest: 0
@@ -717,6 +717,8 @@ ShellRoot {
             // other text, as the directory this window opens on.
             var start = win.req.folder.charAt(0) === "/" ? win.req.folder : win.home
             win.viewMode = Picker.rememberedView(ViewState.pickerView)
+            // Seeded here and not by a binding: a binding reads first inside saveReady, and its change handler writes saveReview there.
+            win.saveName = Picker.validName(win.req.name) ? win.req.name : ""
             win.openWithoutHistory(start)
             // Measured on the box: without this the window has the keyboard but the list does not,
             // so Escape reached the surface below and every other key was dropped.
