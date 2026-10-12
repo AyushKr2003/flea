@@ -20,6 +20,15 @@ Item {
     property var pathDevs: ({})
     // The listing the ancestors were last asked for, so a re-read or a live search answer of the same folder asks nothing.
     property string _devsFor: ""
+    // The drag and the folder rows the last drop-target devs ask named, so one drag asks one set once.
+    property string _dropAsked: ""
+    // A drag entering a pane asks the devices of the column folders that name none, since a peek row carries none; a known answer stands until the new one lands, so a later drag never re-says Copy first.
+    function askDropDevs(token, paths) {
+        var key = token + "\n" + paths.join("\n")
+        if (root.pickerOnly || paths.length === 0 || key === root._dropAsked) return
+        root._dropAsked = key
+        root.send({ c: "devs", paths: paths })
+    }
     onListed: function(total, readMs, sortMs, path, changed, gen) {
         var ancestors = DropDev.askPaths(path)
         var asked = path + "\n" + root.dirDev

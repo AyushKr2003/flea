@@ -528,6 +528,15 @@ Item {
         }
     }
 
+    // A drag entering the pane asks the devices of the drawn neighbour columns' visible folder rows in one request, once per drag.
+    function askDropDevs(token) {
+        if (!root.visible) return
+        var paths = []
+        for (var column of [greatGrandparentLoader.item, grandparentLoader.item, parentColumn, childColumn])
+            if (column) paths = paths.concat(column.dropAsks())
+        root.pane.backend.askDropDevs(token, paths)
+    }
+
     // For ui/Ipc.qml: the names a drawn neighbour column holds, "|" joined, and "" when that column is not drawn.
     function drawnNames(slot) {
         var drawn = slot === "child" ? root.shownIsDir : (slot === "parent" && root.showParent && root.parentShown)

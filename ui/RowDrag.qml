@@ -1,6 +1,7 @@
 import QtQuick
 import "js/Drag.js" as DragOps
 import "js/DragOut.js" as DragOut
+import "js/DropDev.js" as DropDev
 import "js/Tabs.js" as Tabs
 import "js/Search.js" as Search
 
@@ -16,6 +17,16 @@ Item {
     readonly property var dropScope: root.pane === null && root.session.peekSource ? root.session.peekSource : null
     readonly property var targetPane: root.dropScope ? root.dropScope.pane : root.pane
     readonly property string targetDir: root.dropScope ? root.dropScope.dir : (root.pane ? Search.baseOf(root.pane) : "")
+
+    // A listing row names its own device; a peek or carried column row names none, so the backend's answer for its path stands in, and an unanswered path is 0, which copies.
+    readonly property int destDev: !root.row ? 0 : root.row.v ? root.row.v
+        : (root.row.d === true && root.targetPane && root.targetPane.backend
+            ? DropDev.devFor(root.targetPane.backend.pathDevs, root.targetPane.join(root.targetDir, root.row.n)) : 0)
+    // The answer landing while this folder is hovered re-says its line once, in the right verb.
+    onDestDevChanged: if (root.lit()) {
+        root.session.dropDestDev = root.destDev
+        root.session.showTarget(root.row.n, root.destDev)
+    }
 
     // The drop destination this delegate last recorded on the session, kept so leaving clears only its own record.
     property string recorded: ""
@@ -58,7 +69,7 @@ Item {
         }
         onPositionChanged: function (drag) {
             if (root.lit()) {
-                root.session.showTarget(root.row.n, root.row.v)
+                root.session.showTarget(root.row.n, root.destDev)
                 root.hoverAt(drag)
             }
         }
@@ -124,10 +135,11 @@ Item {
         root.session.dropIndex = root.listingIndex
         // The drop's own address: the swap may rebuild this delegate on another row before the release.
         root.session.dropDest = dest
-        root.session.dropDestDev = root.row.v || 0
+        root.session.dropDestDev = root.destDev
         root.recorded = dest
+        if (root.targetPane.columnsArea) root.targetPane.columnsArea.askDropDevs(lift)
         DragOut.keys.enter(marker, lift)
-        root.session.enterTarget(marker, urls, root.row.n, root.row.v, shelf, proposed)
+        root.session.enterTarget(marker, urls, root.row.n, root.destDev, shelf, proposed)
         return true
     }
 
@@ -141,7 +153,7 @@ Item {
     function landing() {
         if (root.session.dropDest.length > 0) return { dest: root.session.dropDest, dev: root.session.dropDestDev }
         var folder = root.row && root.row.d === true
-        return { dest: folder ? root.targetPane.join(root.targetDir, root.row.n) : "", dev: folder ? root.row.v : 0 }
+        return { dest: folder ? root.targetPane.join(root.targetDir, root.row.n) : "", dev: folder ? root.destDev : 0 }
     }
 
     // Testable refusal: says the sentence and darkens exactly like dropped(), so a refused
