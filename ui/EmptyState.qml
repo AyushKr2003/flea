@@ -125,12 +125,12 @@ Item {
         onTriggered: { root.beats += 1; fade.restart(); heroMark.replay() }
     }
 
-    // The OEM's phraseSwap SequentialAnimation (tailscale's and airpods' Panel.qml): fade out, swap the index, fade in.
+    // The OEM's phraseSwap order (tailscale's and airpods' Panel.qml): fade out, swap the index, fade in, on Flea's OutCubic and Motion durations.
     SequentialAnimation {
         id: fade
-        PropertyAnimation { target: caption; property: "opacity"; to: 0.0; duration: 180; easing.type: Easing.OutQuad }
+        PropertyAnimation { target: caption; property: "opacity"; to: 0.0; duration: Motion.durMs.close; easing.type: Easing.OutCubic }
         ScriptAction { script: root.messageIndex = (root.messageIndex + 1) % root.messages.length }
-        PropertyAnimation { target: caption; property: "opacity"; to: 1.0; duration: 260; easing.type: Easing.InQuad }
+        PropertyAnimation { target: caption; property: "opacity"; to: 1.0; duration: Motion.durMs.open; easing.type: Easing.OutCubic }
     }
     Connections {
         target: Theme

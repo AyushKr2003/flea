@@ -171,11 +171,12 @@ Item {
             Rectangle {
                 width: parent.width * Transfer.fraction(root.shown)
                 height: parent.height
-                color: Theme.color.accent
+                color: Theme.color.accentFrame
 
                 // The card publishes four times a second; easing across the gap is what makes the
                 // fill read as movement rather than as four steps a second.
                 Behavior on width {
+                    enabled: !Theme.reducedMotion
                     NumberAnimation { duration: root.publishMs; easing.type: Easing.Linear }
                 }
             }

@@ -7804,7 +7804,8 @@ the row's own muted role; the font is `Style.font.caption`, `font.bold: true`,
 `font.letterSpacing: 1.2`. The rotation itself is `Timer { interval: 2800 }` driving a
 `SequentialAnimation` of two `PropertyAnimation`s on opacity, 180 ms out (`Easing.OutQuad`) then
 260 ms in (`Easing.InQuad`), with the phrase index advanced by a `ScriptAction` in between, not a
-plain text swap. `ui/EmptyState.qml` now matches all four exactly; the file's own eight-phrase
+plain text swap. `ui/EmptyState.qml` keeps the order, the interval and the index swap, and its fades
+take Flea's OutCubic at `Motion.durMs` (140 ms out, 180 ms in), the curve every Flea transition uses; the file's own eight-phrase
 list stayed sentence case in its source, matching `activePhrases`' own authoring convention, with
 `.toUpperCase()` applied only at render time.
 
@@ -8959,6 +8960,8 @@ The release-line join of the picker answer strip, the Flash file-menu identity a
 The release-line join of the approved fix, bench, search, picker and Flash strip lines re-derives each ceiling both sides moved with `wc -l` on the merged tree: `src/backend/copyfile_tests.rs` 694, `ui/Pane.qml` 1180, `ui/PickerChrome.qml` 426, `ui/PickerWindow.qml` 797, `tests/button-members.qml` 488 and `tests/js/picker.js` 343, and records `tests/chromering.qml` at 413 for the Flash strip's Back checks beside the seven picker strip stops. `tests/startup-units.txt` keeps its 170 units, `ui/PathEntry.qml` leaving for the first edit and `ui/PrebuildDriver.qml` joining, while its `bytes` line moves from 1588400 to 1596965, the sum the probe's tool takes over them.
 
 The Network Tab ring moves three ceilings, each re-derived with `wc -l`: `ui/NetworkDialog.qml` 447 to 457 for the ids, `tabHandle` and `onTabbed` lines that put Cancel, the primary and Install Dropbox in the form's walk after the TLS box, with Escape moved from the form to the card's content so a focused button closes the dialog too, and `ui/NetworkForm.qml` 406 to 413 for the `trailing` prop, the joined ring, the pass-over step and the button labels in `focusName`, and `tests/button-members.qml` 445 to 485 for the trailing-walk checks that Tab from TLS reaches each button and wraps to the first chip, Backtab returns, an unavailable button is passed over and `focusName` names the focused button.
+
+The OutCubic and surface-safe frame line keeps `tests/startup-units.txt` at its 170 units while its `bytes` line moves from 1596965 to 1597129, the sum the probe's tool takes over them with the press easing in `ui/ChromeButton.qml` and `ui/DialogButton.qml`, the `Motion.durMs` fades in `ui/EmptyState.qml` and `ui/FleaMark.qml`, and the accent frame role and reduced-motion switch in `ui/TransferCard.qml`.
 
 ## The image flasher
 

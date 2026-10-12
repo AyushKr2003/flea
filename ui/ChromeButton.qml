@@ -55,7 +55,7 @@ Item {
 
     Behavior on scale {
         enabled: !Theme.reducedMotion
-        NumberAnimation { duration: Buttons.PRESS_MS; easing.type: Easing.OutQuad }
+        NumberAnimation { duration: Buttons.PRESS_MS; easing.type: Easing.OutCubic }
     }
 
     // ButtonSystem040 A: the keyboard frames the mark in the foreground, centred in the rows above a strip's rule and trimmed to the control inset clear and the glyph's parity.

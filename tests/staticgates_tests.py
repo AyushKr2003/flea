@@ -169,6 +169,20 @@ class StaticGateTests(unittest.TestCase):
                          (11, ['ui/Bare.qml:2' + bare, 'shelf/Optional.qml:2' + bare, 'ui/js/Subscript.js:2' + bare,
                                'shelf/Unbound.qml:3' + unbound, 'ui/js/Context.js:1' + unbound, 'ui/js/Unbound.js:2' + unbound]))
 
+    def test_easing_rejects_every_curve_but_outcubic_and_linear(self):
+        self.write('ui/Quad.qml', 'Item {\n    NumberAnimation { duration: 140; easing.type: Easing.OutQuad }\n}\n')
+        self.write('ui/Spaced.qml', 'Item {\n    Behavior on x { NumberAnimation { easing.type: Easing .InQuad } }\n}\n')
+        self.write('ui/js/Curve.js', 'function curve() {\n    return Easing.InOutSine\n}\n')
+        self.write('ui/Cubic.qml', 'Item {\n    NumberAnimation { easing.type: Easing.OutCubic }\n    NumberAnimation { easing.type: Easing.Linear }\n}\n')
+        self.write('ui/Prose.qml', 'Item { // was Easing.OutQuad\n    property string s: "Easing.InQuad"\n    property int myEasing.OutQuad: 0\n}\n')
+        self.write('shelf/Other.qml', 'Item { NumberAnimation { easing.type: Easing.OutQuad } }\n')
+        self.write('ui/Other.py', 'Easing.OutQuad\n')
+        files = ['ui/Quad.qml', 'ui/Spaced.qml', 'ui/js/Curve.js', 'ui/Cubic.qml', 'ui/Prose.qml', 'shelf/Other.qml', 'ui/Other.py']
+        rule = ', every transition uses Easing.OutCubic'
+        self.assertEqual(gates.easing(self.root, files),
+                         (5, ['ui/Quad.qml:2: Easing.OutQuad' + rule, 'ui/Spaced.qml:2: Easing.InQuad' + rule,
+                              'ui/js/Curve.js:2: Easing.InOutSine' + rule]))
+
     def test_worker_announce_allows_only_the_counted_worker(self):
         self.write('ui/Bare.qml', 'Item { WorkerScript { source: "W.js" } }\n')
         self.write('ui/Said.qml', 'WorkerScript {\n    // WORKER_STARTED\n    Component.onCompleted: console.info(log, "WORKER_STARTED " + source)\n}\n')
