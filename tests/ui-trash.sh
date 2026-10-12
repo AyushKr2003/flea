@@ -51,7 +51,7 @@ trash_guard() {
     [[ -f "$trash_box/.flea-test-sandbox" ]] || fail "trash: missing owned fixture marker"
     canonical=$(realpath -m -- "$path") || fail "trash: could not resolve mutation path"
     [[ "$canonical" == "$trash_box/"* && "$canonical" != "$trash_box" ]] \
-        || fail "trash: mutation path is outside this case's sandbox"
+        || fail "trash: mutation path $path (resolved $canonical) is outside this case's sandbox $trash_box"
 }
 
 trash_bus_id() {

@@ -429,7 +429,7 @@ providers_dropbox_move_checks() {
     providers_selection "$menu_dir"
     providers_choose dropbox
     menus_error 'Move failed: a-marked.txt · permission denied' 'Move to Dropbox reports the real refusal'
-    menus_expect statusActivityState '(.activities | length) == 0 and .errors == 1' 'failed Dropbox move finishes without hiding its error'
+    menus_expect statusActivityState '(.activities | length) == 0 and .errors == 1' 'refused Dropbox move finishes without hiding its error'
     menus_expect statusFooterState '.secondary.text == " · esc dismisses"' 'unacknowledged Dropbox error keeps the informational error specimen'
     menus_equal 'the refusal keeps the marked source bytes' 'list/a-marked.txt original' "$(cat "$menu_dir/a-marked.txt")"
     [[ ! -e "$menu_box/Dropbox/a-marked.txt" ]] || fail 'providers: a refused move left an item in Dropbox'

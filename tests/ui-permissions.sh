@@ -44,7 +44,7 @@ permissions_point() {
     read -r cx cy <<< "$centre"
     [[ "$cx" =~ ^[0-9]+$ && "$cy" =~ ^[0-9]+$ ]] || fail "permissions: native control has no centre"
     read -r wx wy ww wh < <(window_box) || fail "native window coordinates unavailable"
-    (( cx < ww && cy < wh )) || fail "permissions: control is outside the actual viewport"
+    (( cx < ww && cy < wh )) || fail "permissions: control centre $cx,$cy is outside the actual viewport ${ww}x${wh} (window at $wx,$wy)"
     assert_focus
     omarchy-drive click "$((wx + cx))" "$((wy + cy))" "$button" >/dev/null \
         || fail "permissions: native pointer activation failed"

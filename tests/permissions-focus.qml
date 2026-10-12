@@ -273,7 +273,8 @@ ShellRoot {
             }
             next("dismissed")
         } else if (stage === "dismissed") {
-            if (dialog().opened || pane.listInFlight) return
+            // The 140 ms fade-out keeps the dialog drawn after opened flips, so wait it out before asserting it is hidden.
+            if (dialog().opened || dialog().visible || pane.listInFlight) return
             check("dialog is hidden", dialog().visible, false)
             console.log("PERMFOCUS focus " + label() + " " + ipcObject().seam.keyDeliveryState())
             check("listing owns keyboard", pane.listArea.activeFocus, true)
