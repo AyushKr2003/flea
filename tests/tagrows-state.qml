@@ -17,6 +17,9 @@ Item {
         property int windowAsks: 0
         function send(object) { stubBackend.sent.push(object) }
         function window(start, count) { stubBackend.windowAsks += 1 }
+        property var searchSent: []
+        function searchOpen(scope, folder, hidden) { stubBackend.searchSent.push("open " + scope + "|" + folder) }
+        function searchQuery(query, gen, count, wish) { stubBackend.searchSent.push("query " + gen + ":" + query) }
     }
     QtObject {
         id: stubPane
@@ -28,6 +31,28 @@ Item {
         property int windowSize: 2
         property int selectionVersion: 0
         property int cursorIndex: 0
+        property string path: "/home/u/docs"
+        property string home: "/home/u"
+        property string searchMode: ""
+        property string searchQuery: ""
+        property string searchFrom: ""
+        property string searchBase: ""
+        property string recentMode: ""
+        property string pendingSelect: ""
+        property bool searchHere: true
+        property bool searchRunning: false
+        property bool searchCancelled: false
+        property bool searchLeaving: false
+        property bool showHidden: false
+        property int searchGen: 0
+        property int searchOpenedGen: 0
+        property int searchScanned: 0
+        property real searchKeyAt: 0
+        property real searchFirstRowsAt: 0
+        property real searchSettledAt: 0
+        property int sizeWish: 0
+        property var swap: null
+        function join(base, name) { return base + "/" + name }
         property int menuRefreshes: 0
         property var menu: QtObject { function refreshProviderRows() { stubPane.menuRefreshes += 1 } }
         function rowFor(index) { return index >= 0 && index < stubPane.rows.length ? stubPane.rows[index] : null }
@@ -98,6 +123,19 @@ Item {
         probe.check(probe.stateOf(state.flyout(), "Red") === "absent" && stubPane.menuRefreshes === 1, "read: a read made before a change landed drew the flyout")
         state.ask()
         probe.check(stubBackend.sent.length === 5, "read: after a change the selection was not asked again")
+    }
+
+    // A tag place walks Home for its tag through the same live session f opens: one open, one query, and the results mode.
+    function measureWalk() {
+        var state = Qt.createComponent("flea/TagState.qml").createObject(probe, { pane: stubPane })
+        probe.check(state !== null, "walk: TagState did not build")
+        if (state === null) return
+        state.openTag("Red")
+        probe.check(stubPane.searchQuery === "tag:Red" && stubPane.searchMode === "results", "walk: the Red place left " + stubPane.searchMode + " on " + stubPane.searchQuery)
+        probe.check(stubPane.searchHere === false && stubBackend.searchSent.join(",") === "open /home/u|/home/u/docs,query 1:tag:Red", "walk: the backend heard " + stubBackend.searchSent.join(","))
+        stubBackend.searchSent = []
+        state.openTag("Blue")
+        probe.check(stubPane.searchQuery === "tag:Blue" && stubPane.searchMode === "results" && stubBackend.searchSent.join(",") === "open /home/u|/home/u/docs,query 2:tag:Blue", "walk: a second place sent " + stubBackend.searchSent.join(",") + " in " + stubPane.searchMode)
     }
 
     property var answersState: null

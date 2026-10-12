@@ -337,6 +337,7 @@ ShellRoot {
             root.attempt(root.measureRailNoPane)
             root.attempt(tagProbe.measureAnswers)
             root.attempt(tagProbe.measureRead)
+            root.attempt(tagProbe.measureWalk)
             root.attempt(root.measureFlyoutFit)
             Flea.Theme.tag = { colors: root.palette, menuColors: root.palette, fallback: false }
             step.start()

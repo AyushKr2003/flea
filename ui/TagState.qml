@@ -92,9 +92,14 @@ Item {
     // A tag walks Home for that tag, an explicit walk like any search; esc returns to the listing.
     function openTag(name) {
         if (!name) return
-        root.pane.searchHere = false
-        root.pane.searchQuery = "tag:" + name
-        Search.run(root.pane)
+        var pane = root.pane
+        if (pane.searchLeaving === true) return
+        pane.searchHere = false
+        if ((pane.searchMode || "").length === 0) Search.start(pane)
+        else pane.backend.searchOpen(Search.scopeRoot(pane.path, pane.home || "", false), pane.path, pane.showHidden)
+        pane.searchQuery = ""
+        Search.extend(pane, "tag:" + name)
+        pane.searchMode = Search.RESULTS
     }
 
     // A tagstates answer for the read still out lands only in the numbering it was asked in.
