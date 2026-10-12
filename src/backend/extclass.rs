@@ -31,6 +31,12 @@ pub fn gvfs_class(path: &Path) -> Option<&'static str> {
     }
 }
 
+// The classes ui/js/DirSizes.js isRemoteClass refuses a folder size on; unknown never reaches the backend, classify always answers.
+// Sample input: "network" and "phone" true, "usb" and "" false.
+pub fn refuses_folder_sizes(class: &str) -> bool {
+    matches!(class, "network" | "phone")
+}
+
 // Sample input: a symlink "~/NAS" into "/run/user/1000/gvfs/..." answers the share.
 pub fn resolved(path: &Path) -> PathBuf {
     if gvfs_class(path).is_some() {
@@ -175,6 +181,12 @@ mod tests {
         for magic in [0xEF53, 0x9123683E, 0x2011BAB0, 0x01021994, 0x65735546] {
             assert!(!magic_is_network(magic), "0x{:x} is local or decided elsewhere", magic);
         }
+    }
+
+    #[test]
+    fn only_network_and_phone_refuse_a_folder_size() {
+        assert!(refuses_folder_sizes("network") && refuses_folder_sizes("phone"));
+        assert!(!refuses_folder_sizes("usb") && !refuses_folder_sizes(""), "a local or removable disk still sizes");
     }
 
     #[test]

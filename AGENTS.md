@@ -242,7 +242,9 @@ the result and gathers the spans behind it. Those stats live for the one request
 dropped with it, so a listing in name order carries nothing extra and `Span` stays 12
 bytes. `kind` orders by MIME group after phase 1, `date` is an alias for `mtime`, and any
 other key, `mode` included, reaches neither phase: `ordering.rs` refuses it with the one
-sentence that names the four it accepts.
+sentence that names the four it accepts. A size sort on a listing
+`extclass::refuses_folder_sizes` names (network or phone, the classes `DirSizes.js` refuses) walks no folder: `dirsize::sort_walk`
+gives each folder its own entry size marked partial, the order a walk past its deadline gives.
 
 A gvfs FUSE path is the exception to both halves. `scan.rs` lists it through one `gio list`
 child (`backend/gvfslist.rs`) instead of readdir: the daemon answers names with size, type
