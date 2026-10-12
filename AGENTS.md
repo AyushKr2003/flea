@@ -2650,6 +2650,12 @@ geometry snapshot and shared own-return path. `ui/js/Tabs.js` 672 to 686 adds th
 catcher outcome decision using the existing insertion math. Geometry query plumbing
 lives in `ui/TabDragGeometry.qml`, below the soft budget; no global limit changes.
 
+The Quick Look volume track moves four ceilings, each re-derived with `wc -l`: `src/uischema.rs` 502 to 503 for the
+`preview.volume` default and its `Count(0, 100)` rule, `src/uistate.rs` 674 to 704 for the two tests that pin a stored level
+and a refused patch for anything but a whole level, `ui/ViewState.qml` 536 to 539 for `mediaVolume` and `setMediaVolume`,
+and `ui/Preview.qml` 739 to 744 for the volume track handle and the strip's hide timer waiting out a held seek or volume
+press. The new `tests/mediastrip-volume.qml` is 390, for the track width, accessibility step and held-press legs.
+
 `tools/flea-file-budget` scans `src`, `ui`, `shelf` and `tests` for `.rs`, `.qml`, `.js` and `.mjs`
 files (`.mjs` takes the JS budgets). Rust and QML get a 250-line soft budget and a 400-line hard cap; JS gets 200
 soft and 300 hard. Going over the hard cap fails the tool; going over the soft budget
@@ -8983,6 +8989,8 @@ The Quick Look image zoom keeps `tests/startup-units.txt` at its 170 units while
 drp4 2026-10-11 raises the first-frame `bytes` line in `tests/startup-units.txt` from 1,596,985 to 1,598,921 (+1,936, no unit added): +1,260 are the recorded hover-open destination in `ui/FileDrag.qml` (`dropDest`, `dropDestDev`) and `ui/RowDrag.qml` (`lit()` and `landing()`, the recorded address `refuseDrop()` and `dropped()` read), both loaded by the first window; the other 676 were already over the old pin on the DRP3 head `4d1132c3`.
 
 The transfer close fix adds the closing-sample branch to the first-frame `ui/js/Transfer.js`, so `tests/startup-units.txt` keeps its units while its `bytes` line moves from 1596965 to 1597218, the sum the probe's tool takes over them; recompute again at merge, since IP208B edits the same line.
+
+The Quick Look volume track keeps `tests/startup-units.txt` at its 170 units while its `bytes` line moves from 1596965 to 1598076, the sum the probe's tool takes over them with the stored level in `ui/ViewState.qml` and the held level and its gain in `ui/MediaSound.qml`.
 
 ## The image flasher
 
