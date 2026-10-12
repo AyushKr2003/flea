@@ -85,7 +85,9 @@ fn many_small_sub_blocks_cost_about_one_read_per_buffer() {
     let reads = std::rc::Rc::new(std::cell::Cell::new(0));
     let mut r = BufReader::new(Counting { inner: std::io::Cursor::new(g), reads: reads.clone() });
     assert_eq!(gif_frame_count(&mut r, size), Some(1));
-    let buffers = size / 8192 + 1;
+    // std's BufReader default capacity (sample: 8192 bytes).
+    const CAPACITY: u64 = 8192;
+    let buffers = size / CAPACITY + 1;
     assert!(reads.get() as u64 <= buffers + 4, "{} source reads for {} bytes, about {} buffers", reads.get(), size, buffers);
 }
 

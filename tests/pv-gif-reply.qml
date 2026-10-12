@@ -107,8 +107,10 @@ ShellRoot {
                 selection.followSelection()
                 root.advance(2)
             } else if (root.step === 2) {
-                if (!root.waitFor(function () { return backend.asks.length >= 2 && selection.pendingToken !== 0 })) return
+                // The still is drawn first, so a layer built before the reply would already stand here.
+                if (!root.waitFor(function () { var si = quick.surfaceItem(); return backend.asks.length >= 2 && selection.pendingToken !== 0 && si !== null && si.pictureItem.status === Image.Ready })) return
                 root.check(quick.imageFrames === 0 && selection.meta === null, "frames were known before any reply")
+                root.check(root.mover(quick) === null, "Quick Look built the moving layer before any reply")
                 root.reply(24, selection.pendingToken)
                 root.check(quick.imageFrames === 24, "Preview.imageFrames read " + quick.imageFrames + " after a reply of 24")
                 root.check(selection.meta !== null && selection.meta.frames === 24, "SelectionPreview's column meta lost the reply's frames")
