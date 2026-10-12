@@ -111,4 +111,13 @@ function run(check) {
         && headingSrc.indexOf("* root.headingLead") >= 0 && headingSrc.indexOf("letterSpacing: root.headingTracking") >= 0, true)
     check("and it closes a standing filter first, so the red files without the filter's letter still list",
         openPane.filterQuery + "|" + openPane.filterTyping + "|" + Filter.shown([{ n: "apple.txt" }, { n: "box.txt" }], 0, openPane.filterQuery), "|false|null")
+
+    // Nav.js drops canTag at the request and only the fs line brings it back; under a loading mark that line meets the old path.
+    var fsBody = Source.block(Source.source("ui/PaneWire.qml"), "function onFsInfo(fs, free, path, storageClass, tagable, systemVolume)", "ui/PaneWire.qml")
+    var out = { path: "", listingPath: "/fx/v/work", listInFlight: true, recentMode: "", fsName: "", fsFree: 0,
+                storageClass: "", storageKnown: false, systemVolume: false, canTag: false, extVerdict: "", listArea: null }
+    new Function("pane", "root", "ExtThumbs", "ViewState", "return function (fs, free, path, storageClass, tagable, systemVolume) {" + fsBody + "}")(
+        out, { pane: out }, { verdict: function () { return "" } }, { preview: "" })("tmpfs", 64100000, "/fx/v/work", "", true, false)
+    check("the fs line of the listing still out brings the tag verdict, so the Tags row is offered at the first menu",
+          out.canTag + "|" + out.storageKnown, "true|true")
 }
