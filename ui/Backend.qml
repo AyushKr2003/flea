@@ -206,9 +206,9 @@ Item {
         // Every request that names rows names the numbering they were read in, its caller's if it read them earlier; src/backend/rowguard.rs refuses a stale one.
         var line = JSON.stringify(Swap.named(object, root.heldListing)) + "\n"
         if (root.queueing) {
-            // A password is never parked while the child starts; it fails as its own operation, not a dead backend.
+            // A password is never parked while the child starts; it fails as its own operation, naming its archive, not a dead backend.
             if (object.password === undefined) root.pending.push(line)
-            else root.failed("archive", "", "the backend is not running", 0)
+            else root.failed("archive", object.path !== undefined ? object.path : object.dest, "the backend is not running", 0)
             return
         }
         if (!child.running) {

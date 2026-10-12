@@ -9048,6 +9048,8 @@ The auto-hidden rail slides on x: `ui/PaneRail.qml` keeps the Sidebar built afte
 
 tbn1 2026-10-12 moves one ceiling, re-derived with `wc -l`: `tests/js/tabs.js` 797 to 800 for the three checks that each tab-count verdict stood before the next action withdraws it.
 
+S2FIXA 2026-10-11 raises the first-frame `bytes` line in `tests/startup-units.txt` from 1,629,680 to 1,630,201 (no unit added), the sum the probe takes over the same units: 71 in `ui/Backend.qml` (the archive refusal names its archive) and 450 in `ui/js/Errors.js` (the archive refusal sentence names what stopped).
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one

@@ -112,7 +112,7 @@ function run(check) {
     check("F21: a password request before the child starts fails as an archive operation, never as a dead backend",
           failed.join(","), "archive:the backend is not running")
     check("F21: and PaneWire.onFailed shows that sentence as the pane's error message",
-          shown.said.join(","), "The backend is not running.|true")
+          shown.said.join(","), "backup.7z could not be opened because the Flea backend stopped; reopen Flea and try again.|true")
     check("F21: without blanking the pane the way a dead backend does", [shown.total, shown.listingState, shown.stuck.length].join("|"), "5|ready|0")
     check("F21: and only the plain request waits, without the secret",
           backend.pending.length + "|" + (backend.pending.join("").indexOf(CANARY) >= 0), "1|false")

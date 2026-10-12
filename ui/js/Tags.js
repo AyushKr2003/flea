@@ -72,18 +72,19 @@ function changedLine(op, ok, name) {
     return op === "remove" ? removedLine(ok, name) : statusLine(ok, name)
 }
 
-// The line when rows were skipped: names the one left out, or counts the many.
+// The line when rows were skipped: the backend leaves out every row that is neither a file nor a folder, so the fragment counts items, not links.
 function skippedLine(names) {
-    if (names.length === 1) return Format.fill("%1 is not a file or folder, so it was left untagged", names[0])
-    return Format.fill("%1 items are not files or folders, so they were left untagged", names.length)
+    if (names.length === 1) return Format.fill("%1 item skipped", Format.count(names.length))
+    return Format.fill("%1 items skipped", Format.count(names.length))
 }
 
-// The whole answer line: the changed sentence when a file changed, the skipped sentence when a row was left out, both joined when both hold, and empty when neither does.
+// The whole answer line: the changed sentence, the skip fragment ahead of its undo hint, only the skip when nothing changed, and empty when neither holds.
 function doneLine(op, ok, name, skipped) {
-    var parts = []
-    if (ok > 0) parts.push(changedLine(op, ok, name))
-    if (skipped && skipped.length > 0) parts.push(skippedLine(skipped))
-    return parts.join(" \u00b7 ")
+    var skip = skipped && skipped.length > 0 ? skippedLine(skipped) : ""
+    if (ok <= 0) return skip
+    var changed = changedLine(op, ok, name)
+    if (skip === "") return changed
+    return changed.replace(/ \u00b7 z undoes$/, function () { return Format.fill(" \u00b7 %1 \u00b7 z undoes", skip) })
 }
 
 // The flyout's rows: seven swatches with digit hints, then Remove all tags under a separator.
