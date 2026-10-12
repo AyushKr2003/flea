@@ -25,7 +25,8 @@ pub(crate) const STRIP_LEN: u16 = 0x0117;
 pub(crate) const COMPRESSION: u16 = 0x0103;
 pub(crate) const RW2_JPGFROMRAW: u16 = 0x002E;
 pub(crate) const OLY_SETTINGS: u16 = 0x2020;
-// TIFF type UNDEFINED, and the most value bytes an IFD entry holds inline before it holds an offset instead.
+// TIFF types BYTE and UNDEFINED, and the most value bytes an IFD entry holds inline before it holds an offset instead.
+pub(crate) const BYTE: u16 = 1;
 pub(crate) const UNDEFINED: u16 = 7;
 pub(crate) const INLINE_BYTES: u32 = 4;
 // Olympus.pm names the preview start and length by these pairs: 0x0088 and 0x1036 in the note's IFD, 0x0101 in the CameraSettings IFD.

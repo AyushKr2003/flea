@@ -209,7 +209,7 @@ pub(crate) fn walk_ifd<S: Src>(src: &mut S, w: &mut Walk, loc: &IfdLoc, ifd: u64
             }
             t if t == ex::STRIP_LEN => strip.1 = ex::one_u32(src, base, le, typ, cnt, val),
             t if t == ex::COMPRESSION => strip.2 = ex::one_u32(src, base, le, typ, cnt, val),
-            t if t == ex::RW2_JPGFROMRAW && (typ == 1 || typ == ex::UNDEFINED) => {
+            t if t == ex::RW2_JPGFROMRAW && (typ == ex::BYTE || typ == ex::UNDEFINED) => {
                 // The tag's value bytes are the JPEG, which can be far past MAX_VALUE.
                 if let Some((off, n)) = ex::blob_at(base, le, cnt, val) {
                     if n >= 20 {
