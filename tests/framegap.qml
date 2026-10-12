@@ -30,6 +30,7 @@ ShellRoot {
     property int controls: 0
     property int controlMiss: 0
     property int focusMiss: 0
+    property int clipped: 0
     property var seen: ({})
 
     function log(line) { console.log("FRAMEGAP " + line) }
@@ -56,7 +57,7 @@ ShellRoot {
 
     // Fixture hosts the reader must flag, apart from the real hosts.
     function controlHosts() {
-        return [["GapDialog", controlDialogHost], ["GapCheck", controlCheckHost], ["GapChrome", controlChromeHost]]
+        return [["GapDialog", controlDialogHost], ["GapCheck", controlCheckHost], ["GapChrome", controlChromeHost], ["GapCrossing", controlCrossingHost]]
     }
 
     // A control row must be flagged; an unflagged one means the reader went blind, not that the fixtures are clear.
@@ -72,6 +73,7 @@ ShellRoot {
                 root.log("CONTROLROW " + line)
                 continue
             }
+            if (r.clipped) { root.clipped += 1; root.log("CLIPPED " + line); continue }
             root.checks += 1
             root.log("ROW " + line)
             if (!r.under) continue
@@ -256,10 +258,10 @@ ShellRoot {
         Item { id: parking; width: 10; height: 10; focus: true }
     }
 
-    // Negative controls the reader must flag: a dialog button a hairline from a rule, a check box on its host edge, a ruleless chrome button over a rule.
+    // Negative controls the reader must flag: a dialog button a hairline from a rule, a check box on its host edge, a ruleless chrome button over a rule, a dialog button crossing the bottom edge of a host that does not scroll.
     FloatingWindow {
         implicitWidth: 340
-        implicitHeight: 460
+        implicitHeight: 640
         color: Flea.Theme.color.background
 
         Item {
@@ -294,6 +296,11 @@ ShellRoot {
                 Rectangle { height: Flea.Theme.spacing.hairline; width: controlChromeHost.ringW + 8; x: controlChromeHost.ringX - 4; y: controlChromeHost.ringY + controlChromeHost.ringH + 1; color: Flea.Theme.color.muted }
                 Rectangle { width: Flea.Theme.spacing.hairline; height: controlChromeHost.ringH + 8; x: controlChromeHost.ringX - 1 - Flea.Theme.spacing.hairline; y: controlChromeHost.ringY - 4; color: Flea.Theme.color.muted }
                 Rectangle { width: Flea.Theme.spacing.hairline; height: controlChromeHost.ringH + 8; x: controlChromeHost.ringX + controlChromeHost.ringW + 1; y: controlChromeHost.ringY - 4; color: Flea.Theme.color.muted }
+            }
+            Item {
+                id: controlCrossingHost
+                x: 20; y: 460; width: 300; height: 120
+                Flea.DialogButton { x: 0; y: 0; width: 300; height: 140; label: "Gap crossing" }
             }
         }
     }

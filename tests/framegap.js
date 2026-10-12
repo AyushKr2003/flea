@@ -122,6 +122,13 @@ function gaps(f, lines, host) {
 
 function round(v) { return Math.round(v * 100) / 100 }
 
+// A frame inside a Flickable whose content outruns its viewport, below the host: the fold may cut it by design.
+function scrolls(item, host) {
+    for (var p = item.parent; p && p !== host; p = p.parent)
+        if (p.contentY !== undefined && p.contentHeight > p.height) return true
+    return false
+}
+
 // One row per frame and side: the nearest line and the host's edge, each against the inset.
 function rows(hostName, host, hairline, inset, state, stop) {
     var parts = split(collect(host, hairline), host)
@@ -130,6 +137,12 @@ function rows(hostName, host, hairline, inset, state, stop) {
         var f = parts.controls[i]
         var who = f.owner
         var g = gaps(f, parts.lines, host)
+        // Scrolled content cut by the host's top or bottom edge is judged by what the fold shows: one CLIPPED row, no side checks.
+        if ((g.top.edge < 0 || g.bottom.edge < 0) && scrolls(f.item, host)) {
+            out.push({ host: hostName, owner: typeOf(who), name: nameOf(who), frame: typeOf(f.item) + ":" + nameOf(f.item), box: [f.box.x, f.box.y, f.box.width, f.box.height].map(round).join(","),
+                       state: state, stop: stop, side: "fold", rule: "none", edge: round(Math.min(g.top.edge, g.bottom.edge)), inset: inset, under: false, clipped: true })
+            continue
+        }
         for (var side in g) {
             var rule = g[side].rule
             var edge = g[side].edge
