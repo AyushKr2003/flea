@@ -221,6 +221,7 @@ dual_divider_x() {
     local geo area x w
     geo=$(ipc dragPaneGeometry 0 0) || fail "dualdivider: geometry read failed for pane 0"
     area=$(jq -er '.area' <<< "$geo") || fail "dualdivider: pane 0 has no list area (geometry=$geo)"
+    # area is "x y w h" in window pixels, e.g. "12 40 520 600"
     read -r x _ w _ <<< "$area"
     [[ "$x" =~ ^-?[0-9]+$ && "$w" =~ ^[0-9]+$ ]] || fail "dualdivider: pane 0 list area '$area' has no whole x and width"
     printf '%s\n' "$((x + w))"
@@ -229,6 +230,7 @@ dualdivider_launch() {
     launch "$1"
     local ready=false json
     for _attempt in $(seq 1 100); do
+        # dualState is {"active":true,"focused":0,"panes":[{"path":"/x","loading":false,...},{...}]}
         json=$(ipc dualState)
         [[ "$(jq -r '(.panes | length == 2) and all(.panes[]; . != null and .loading == false)' 2>/dev/null <<< "$json")" == "true" ]] && { ready=true; break; }
         sleep 0.05
@@ -245,8 +247,7 @@ dualdivider_equal() {
     (( d <= 1 )) || fail "dualdivider: $1: the listings are not equal ($a vs $b)"
     printf '%s %s\n' "$a" "$b"
 }
-# Dual divider: the 9 px zone drags, the split is remembered across a relaunch, and a double click restores the equal split.
-# The pointer's shape has no native reader, so the zone is proved by the drag it takes; the shape is the column handle's own Qt.SplitHCursor.
+# Dual divider: the 9 px zone drags, the split is remembered, a double click restores equal; the zone is proved by its drag (no native cursor reader).
 case_dualdivider() {
     local dir="$fixture_root/dualdivider" suite_home="$XDG_STATE_HOME" rail
     sandbox_scratch "$dir"

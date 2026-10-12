@@ -10,6 +10,7 @@ ShellRoot {
     readonly property real tolerance: 0.1
     readonly property real handleDrag: 100
     readonly property real farDrag: 5000
+    readonly property real narrowBy: 20
     // The 0.3.9 left pane: the room right of the rail, split equally.
     readonly property var rails: [{name: "shown", rail: "shown", autoHide: false}, {name: "hidden", rail: "hidden", autoHide: false}, {name: "autohide", rail: "shown", autoHide: true}]
     property int checks: 0
@@ -186,6 +187,42 @@ ShellRoot {
         }
     }
 
+    // The pane's own focus save carries {focus, paths} and must leave the stored split alone.
+    function focusStep(r) {
+        return function () {
+            Flea.ViewState.changeLeaf("dual", {split: 6500})
+            body.focusPane(1)
+        }
+    }
+
+    function focusCheck(r) {
+        return function () {
+            root.check((Flea.ViewState.state.dual || {}).focus === 1, r.name + " the focus save landed")
+            root.check(root.split() === 6500, r.name + " switching the focused side keeps the stored split, got " + root.split())
+            root.check(root.near(root.leftWidth(), root.room() * 0.65), r.name + " the listings keep the 65 percent split after the switch")
+            body.focusPane(0)
+            Flea.ViewState.changeLeaf("dual", {split: 5000})
+        }
+    }
+
+    // A window too narrow for two narrowest listings: nothing can move, so a drag leaves the stored split alone.
+    function narrowStep() {
+        Flea.ViewState.changeLeaf("dual", {split: 6500})
+        frame.width = 2 * Flea.Theme.dualMinWidth + root.panes().left.railInset + Flea.Theme.spacing.hairline - root.narrowBy
+    }
+
+    function narrowCheck() {
+        var h = root.handles()[0]
+        root.check(Flea.Theme.dualMinWidth / root.room() > 0.5, "the window is too narrow for two minimum listings, room " + root.room())
+        root.check(root.near(root.leftWidth(), root.rightWidth()), "a narrow window lays the listings equal")
+        var before = root.owed()
+        root.drag(h, root.handleDrag)
+        h.released()
+        root.check(root.split() === 6500, "a drag in a narrow window keeps the stored split, got " + root.split())
+        root.check(root.owed() === before, "a drag in a narrow window owes nothing")
+        frame.width = window.width
+    }
+
     function single() {
         root.panes().left.chooseView("list")
     }
@@ -199,9 +236,9 @@ ShellRoot {
         for (var i = 0; i < root.rails.length; i++) {
             var r = root.rails[i]
             list.push(root.railStep(r), root.autoStep(r), root.defaults(r), root.clickStep(r), root.dragStep(r),
-                root.clampStep(r, 1), root.clampStep(r, -1), root.doubleClickStep(r), root.storedStep(r), root.storedCheck(r), root.sharedCheck(r))
+                root.clampStep(r, 1), root.clampStep(r, -1), root.doubleClickStep(r), root.storedStep(r), root.storedCheck(r), root.sharedCheck(r), root.focusStep(r), root.focusCheck(r))
         }
-        list.push(root.single, root.singleCheck)
+        list.push(root.narrowStep, root.narrowCheck, root.single, root.singleCheck)
         return list
     }
 
@@ -233,6 +270,11 @@ ShellRoot {
         id: window
         implicitWidth: 1100
         implicitHeight: 700
-        Flea.WindowBody { id: body; host: window }
+        Item {
+            id: frame
+            height: parent.height
+            width: parent.width
+            Flea.WindowBody { id: body; host: window }
+        }
     }
 }

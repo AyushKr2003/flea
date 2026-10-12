@@ -147,7 +147,7 @@ ui/Theme.qml 446
 ui/TrashView.qml 468
 ui/UnlockDialog.qml 439
 ui/ViewState.qml 536
-ui/WindowBody.qml 795
+ui/WindowBody.qml 798
 ui/js/Anchor.js 406
 ui/js/ColumnsCarry.js 102
 ui/js/Devices.js 383

@@ -27,14 +27,17 @@ Rectangle {
     readonly property bool dualMode: ViewState.state.view === "dual"
     property int focusSide: (ViewState.state.dual || {}).focus === 1 ? 1 : 0
     // dual.split: the left listing's share of the room right of the rail in ten-thousandths, 5000 the equal split.
+    readonly property int dualSplitScale: 10000
     readonly property int dualEqualSplit: 5000
     readonly property real dualRoom: view.width - primaryPane.railInset - Theme.spacing.hairline
     readonly property real dualSplit: typeof (ViewState.state.dual || {}).split === "number" ? ViewState.state.dual.split : view.dualEqualSplit
     readonly property real dualShare: view.dualShareOf(view.dualSplit)
+    // False when the room fits no two narrowest listings: nothing moves there, so a drag writes nothing.
+    readonly property bool dualFits: Theme.dualMinWidth / view.dualRoom <= 0.5
     // Held between the narrowest listing and its mirror, equal when the room fits no two; the stored split is never rewritten by it.
     function dualShareOf(split) {
         var low = Theme.dualMinWidth / view.dualRoom
-        return low > 0.5 ? 0.5 : Math.min(1 - low, Math.max(low, split / 10000))
+        return low > 0.5 ? 0.5 : Math.min(1 - low, Math.max(low, split / view.dualSplitScale))
     }
     // The run card, null until the first ask builds it for the window and keeps it.
     property var runCard: null
@@ -416,7 +419,7 @@ Rectangle {
             readonly property real leftWidth: primaryPane.width - primaryPane.railInset
             width: handle.width
             height: primaryPane.height
-            function shareAt(travel) { return view.dualShareOf(10000 * (divider.leftWidth + travel) / view.dualRoom) }
+            function shareAt(travel) { return view.dualShareOf(view.dualSplitScale * (divider.leftWidth + travel) / view.dualRoom) }
             function begin(mouse) {
                 divider.startX = handle.mapToItem(view, mouse.x, mouse.y).x
                 divider.dx = 0
@@ -434,7 +437,7 @@ Rectangle {
             // One leaf on release, so both listings re-lay from it in the same frame.
             function end() {
                 if (!divider.dragging) return
-                if (divider.moved) ViewState.changeLeaf("dual", {split: Math.round(10000 * divider.shareAt(divider.dx))})
+                if (divider.moved && view.dualFits) ViewState.changeLeaf("dual", {split: Math.round(view.dualSplitScale * divider.shareAt(divider.dx))})
                 divider.dragging = false
                 divider.moved = false
                 divider.dx = 0
