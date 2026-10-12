@@ -1,5 +1,6 @@
 // The two orders the metadata pass makes possible, size and date; see AGENTS.md "Two-phase listing".
-use crate::backend::dirsize::{walk_all, walked_bytes, DirSize, SORT_BUDGET_MS};
+use crate::backend::dirsize::{sort_walk, walked_bytes, DirSize, SORT_BUDGET_MS};
+use crate::backend::extclass::classify;
 use crate::backend::listing::{Listing, Span};
 use crate::backend::meta::{stat_all, Stat};
 use crate::backend::sort::{name_order, SortBy};
@@ -9,11 +10,17 @@ use std::time::{Duration, Instant};
 
 // A size sort walks folders under one shared deadline and returns those sizes in final row order.
 pub fn sort_by_stat(l: &mut Listing, base: &Path, by: SortBy, desc: bool, hidden_last: bool) -> (f64, f64, Vec<Option<DirSize>>) {
+    let class = if matches!(by, SortBy::Size) { classify(base) } else { "" };
+    sort_by_stat_as(l, base, class, by, desc, hidden_last)
+}
+
+// The class is a parameter so a test can sort a local tree as a share; only a size sort reads it.
+fn sort_by_stat_as(l: &mut Listing, base: &Path, class: &str, by: SortBy, desc: bool, hidden_last: bool) -> (f64, f64, Vec<Option<DirSize>>) {
     let (stats, mut pass_ms) = stat_all(base, l);
     let walked = match by {
         SortBy::Size => {
             let t = Instant::now();
-            let walked = walk_all(base, l, t + Duration::from_millis(SORT_BUDGET_MS));
+            let walked = sort_walk(base, class, l, &stats, t + Duration::from_millis(SORT_BUDGET_MS));
             pass_ms += t.elapsed().as_secs_f64() * 1000.0;
             walked
         }
@@ -68,6 +75,7 @@ fn key_order(l: &Listing, stats: &[Stat], walked: &[Option<DirSize>], by: SortBy
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::dirsize::walk_all;
     use crate::backend::testdir::TestDir;
     use std::time::{Duration, SystemTime};
 
@@ -341,5 +349,42 @@ mod tests {
         assert!(walked[0].unwrap().bytes < full.bytes, "the floor counts less than the subtree total");
         let full = crate::backend::dirsize::walk(&d.join("two"));
         assert!(walked[1].unwrap().bytes < full.bytes, "the second floor too");
+    }
+
+    // The listing sorted by a walk whose deadline had already passed, the order a share must keep.
+    fn expired_order(d: &TestDir, l: &mut Listing) -> String {
+        let walked = walk_all(d.path(), l, Instant::now() - Duration::from_secs(1));
+        let mut rows: Vec<usize> = (0..l.len()).filter(|&i| l.is_dir(i)).collect();
+        rows.sort_by_key(|&i| (walked_bytes(&walked, i), l.name(i).to_string()));
+        rows.iter().map(|&i| l.name(i)).collect::<Vec<_>>().join(" ")
+    }
+
+    #[test]
+    fn a_size_sort_on_a_share_walks_no_folder_and_keeps_the_expired_order() {
+        let (d, mut l) = tree("sizenet");
+        let expired = expired_order(&d, &mut l);
+        let (_, _, seed) = sort_by_stat_as(&mut l, d.path(), "network", SortBy::Size, false, false);
+        let folders: Vec<DirSize> = seed.iter().flatten().copied().collect();
+        assert_eq!(folders.len(), 2, "both folders carry an answer");
+        assert!(folders.iter().all(|f| f.partial), "a refused walk answers a floor, never a total");
+        let own = std::fs::symlink_metadata(d.join("1")).unwrap().len();
+        // "1" holds a 512-byte file, so a walk would count it; the floor is the folder entry alone.
+        assert!(folders.iter().any(|f| f.bytes == own), "the floor is the entry size, not the subtree");
+        assert_eq!(names(&l).split(' ').filter(|n| *n == "1" || *n == "11").collect::<Vec<_>>().join(" "), expired);
+    }
+
+    #[test]
+    fn a_phone_is_refused_like_a_share_and_a_local_class_still_walks() {
+        for class in ["network", "phone"] {
+            let (d, mut l) = tree("sizephone");
+            let (_, _, seed) = sort_by_stat_as(&mut l, d.path(), class, SortBy::Size, false, false);
+            assert!(seed.iter().flatten().all(|f| f.partial), "{} walks nothing", class);
+        }
+        for class in ["", "usb"] {
+            let (d, mut l) = tree("sizelocal");
+            let (_, _, seed) = sort_by_stat_as(&mut l, d.path(), class, SortBy::Size, false, false);
+            assert!(seed.iter().flatten().all(|f| !f.partial), "class {:?} still walks", class);
+            assert_eq!(names(&l), "11 1 3 2", "and orders by the walked size");
+        }
     }
 }
