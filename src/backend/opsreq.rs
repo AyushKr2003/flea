@@ -409,7 +409,7 @@ pub(crate) fn run_transfer_checked(
         // A replace trashes through the batch's deferred session, so its copy still follows its own trash.
         if replace {
             let slot = deferred.get_or_insert_with(super::mergeapply::Deferred::begin);
-            Landed::Now(super::mergeapply::replacing_deferred(&dst, &mut steps, slot, land))
+            Landed::Now(super::mergeapply::replacing_deferred(&dst, &mut steps, slot, &cancel, land))
         } else if moving {
             // A full batch closes before the next item joins it.
             if batch.full() { let closed = close_open(&mut batch, id, &tx, &mut steps, &mut durability, [&mut ok, &mut failed, &mut skipped], &mut retry); close_merged(&closed, merging, &mut merged_total, &mut kept_total); }

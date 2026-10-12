@@ -191,7 +191,7 @@ fn a_replace_whose_copy_fails_puts_the_old_item_straight_back() {
     let cancelled = |_: &mut Vec<Step>| Err(FleaError { where_: "copy".into(), path: String::new(), msg: CANCELLED.into() });
     let mut deferred = Deferred::begin();
     let mut steps = Vec::new();
-    assert_eq!(replacing_deferred(&there, &mut steps, &mut deferred, cancelled).unwrap_err().msg, CANCELLED);
+    assert_eq!(replacing_deferred(&there, &mut steps, &mut deferred, &std::sync::atomic::AtomicBool::new(false), cancelled).unwrap_err().msg, CANCELLED);
     assert_eq!(text(&there), "there");
     assert!(steps.is_empty());
 }
@@ -216,7 +216,7 @@ fn a_put_back_that_fails_keeps_the_step_for_undo_and_says_the_old_item_is_in_tra
     let failing = |_: &mut Vec<Step>| Err(FleaError { where_: "copy".into(), path: String::new(), msg: "permission denied".into() });
     let mut deferred = Deferred::begin();
     let mut steps = Vec::new();
-    let error = replacing_deferred(&there, &mut steps, &mut deferred, failing).unwrap_err();
+    let error = replacing_deferred(&there, &mut steps, &mut deferred, &std::sync::atomic::AtomicBool::new(false), failing).unwrap_err();
     assert!(error.msg.starts_with("permission denied; the item it replaced is still in Trash"), "{}", error.msg);
     assert!(matches!(&steps[..], [Step::Trashed(old)] if old.original == there), "undo can still restore it: {:?}", steps);
 }

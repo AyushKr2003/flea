@@ -197,3 +197,17 @@ fn an_unchanged_name_is_counted_and_records_nothing() {
     assert!(items.is_empty());
     assert_eq!(unchanged, 1);
 }
+
+#[test]
+fn an_in_time_bulk_rename_answers_the_paths_it_landed_for_the_session_patch() {
+    let directory = TestDir::new("bulk-touched");
+    let a = directory.file("a.txt", "aaa");
+    let b = directory.file("b.txt", "bbb");
+    let (tx, _rx) = std::sync::mpsc::channel();
+    let mut ops = crate::backend::opsdispatch::Ops::new(tx);
+    let mut out = Vec::new();
+    let touched = do_bulkrename(&mut out, &mut ops, strings(&[&a, &b]), names(&["x.txt", "y.txt"]));
+    for path in [&a, &b, &directory.join("x.txt"), &directory.join("y.txt")] {
+        assert!(touched.contains(path), "{} is a landed path: {:?}", path.display(), touched);
+    }
+}
