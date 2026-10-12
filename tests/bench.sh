@@ -148,7 +148,7 @@ declare -A CELL
 emit_row() {
   local out="" name
   # The report counts only write_clean 1 rows, so a fixture row is a counted run unless it says otherwise.
-  CELL[write_clean]=${CELL[write_clean]:-1}
+  CELL[write_clean]=${CELL[write_clean]-1}
   while IFS= read -r name; do
     out="${out:+$out,}${CELL[$name]:--}"
   done < <(printf '%s\n' "$bench_header" | tr ',' '\n')
@@ -328,6 +328,15 @@ cp "$man" "${comma_csv%.csv}.manifest.md"
 "$repo/tools/flea-bench-report" "$comma_csv" >/dev/null 2>"$scratch/comma.err"
 check "a comma inside a verdict is refused" 1 $?
 holds "and the refusal names the field that holds it" "so a field holds a comma" "$scratch/comma.err"
+# A comma in a dirty row the guard alone would drop: the raw check still dies naming it.
+dirtycomma_csv="$scratch/dirtycomma.csv"
+cp "$csv" "$dirtycomma_csv"
+CELL=([id]=flea [run]=2 [thumbs_n]=36 [thumbs_by_format]="jpg=2;png=0;txt=0;none=0;unknown=0" [ranked]="unranked: writes in flight, dirty" [preview_ms]=- [write_clean]=0)
+emit_row >> "$dirtycomma_csv"
+cp "$man" "${dirtycomma_csv%.csv}.manifest.md"
+"$repo/tools/flea-bench-report" "$dirtycomma_csv" >/dev/null 2>"$scratch/dirtycomma.err"
+check "a comma in a dirty row the guard would drop is refused" 1 $?
+holds "and the dirty refusal names the field that holds it" "so a field holds a comma" "$scratch/dirtycomma.err"
 
 # The two CSVs this repo ships. Their values are not asserted here, only that the report can read
 # them: rows have been spliced into these by hand and a lost column is the failure that produces.
