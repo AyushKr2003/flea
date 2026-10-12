@@ -1,16 +1,15 @@
-//@ pragma ShellId flea-gridswitch-test
+//@ pragma ShellId flea-gridviewport-test
 import QtQuick
 import QtTest
 import Quickshell
 import "flea" as Flea
 
 // A switch to Grid builds only the viewport's tiles before its first frame, the cache rows after it, and draws no half-built frame: a real pane, counted, never timed.
-// Sample output: "GRIDSWITCH SWITCH first from=list frames=2 whole=2 tiles=48 thumbs=1 units=0".
+// Sample output: "GRIDVIEWPORT SWITCH first to=grid frames=2 partial=0 held=0 built=66 firstFrame=52 reused=0 cols=7 vrows=7 plan=66 live=66".
 ShellRoot {
     id: root
-    readonly property string fixture: Quickshell.env("FLEA_GS_DIR") || ""
-    readonly property int entries: Number(Quickshell.env("FLEA_GS_ENTRIES") || "0")
-    // The most tiles one landing may build: the viewport's and its cache rows, counted from the Grid's own plan.
+    readonly property string fixture: Quickshell.env("FLEA_GV_DIR") || ""
+    readonly property int entries: Number(Quickshell.env("FLEA_GV_ENTRIES") || "0")
     property int checks: 0
     property int failures: 0
     property int frames: 0
@@ -23,32 +22,29 @@ ShellRoot {
     property int quietMark: -1
     property double quietSince: 0
     property double railBy: 0
-    // Frames since the key, and how many of them drew the Grid whole.
+    // Frames since the key, and how many of them drew a Grid with tiles that were not whole.
     property int keyFrames: 0
-    property int wholeFrames: 0
     property int partialFrames: 0
     property int builtAtKey: 0
-    property int thumbsAtKey: 0
-    property var gridAtKey: null
-    property int switches: 0
+    property int heldAtKey: -1
     property double keyAt: 0
-    property var frameLog: []
-    property int firstFrameTiles: -1
     property double keyDoneAt: 0
-    property int framesAtKeyDone: 0
+    // Tiles the Grid held, and how many of them this switch built, on the first frame that draws the Grid; -1 until one does.
+    property int firstFrameTiles: -1
+    property int firstFrameBuilt: -1
 
     function fail(text) {
         failures += 1
-        console.log("GRIDSWITCH FAIL " + text)
+        console.log("GRIDVIEWPORT FAIL " + text)
     }
     function check(name, ok, detail) {
         checks += 1
         if (!ok) fail(name + " " + detail)
-        else console.log("GRIDSWITCH ok " + name)
+        else console.log("GRIDVIEWPORT ok " + name)
     }
     function finish() {
         ticker.stop()
-        console.log("GRIDSWITCH DONE " + checks + " checks, " + failures + " failed")
+        console.log("GRIDVIEWPORT DONE " + checks + " checks, " + failures + " failed")
         Qt.quit()
     }
     function isGrid(area) { return area !== null && area.columns !== undefined }
@@ -69,32 +65,38 @@ ShellRoot {
         }
         return null
     }
-    // Tiles whose cell meets the viewport, parked ones excluded.
-    function seen(grid) {
+    // Tiles the Grid lays out now: parked and pooled ones are not in its content.
+    function laidOut(grid) {
         var n = 0, kids = grid.contentItem.children
         for (var i = 0; i < kids.length; i++)
-            if (kids[i].index !== undefined && kids[i].prebuilt !== true && kids[i].parent === grid.contentItem && kids[i].y + kids[i].height > grid.contentY && kids[i].y < grid.contentY + grid.height) n++
+            if (kids[i].index !== undefined && kids[i].prebuilt !== true && kids[i].pooled !== true && kids[i].parent === grid.contentItem) n++
         return n
     }
     function built() { var grid = findGrid(pane); return grid ? grid.prebuild.createdCount : 0 }
+    // Every delegate the Grid holds, parked and pooled ones too; a hidden Grid holds none.
+    function held() { var grid = findGrid(pane); return grid ? grid.prebuild.createdCount - grid.prebuild.destroyedCount : 0 }
     function landed() {
         return !pane.listInFlight && !pane.swap.holding && pane.total === entries
     }
     function quiet() { root.quietNeeded = true; root.quietMark = -1; root.railBy = Date.now() + 4000 }
     function railSettled() { return pane !== null && pane.sidebar !== null && pane.sidebar.railDeadlineElapsed }
+    // A frame draws the Grid when the pane is on it, it is visible and it holds a tile.
+    function drawsGrid() {
+        var grid = findGrid(pane)
+        return pane !== null && pane.viewMode === "grid" && grid !== null && grid.visible && laidOut(grid) > 0
+    }
     // One switch: the chord, then frames counted until the Grid is whole and the hold has ended.
-    function switchTo(name, view, key, expectBuilt) {
+    function switchTo(name, key) {
         return [
             quiet,
             function () {
                 root.keyFrames = root.frames
-                root.wholeFrames = 0
                 root.partialFrames = 0
                 root.builtAtKey = root.built()
-                root.thumbsAtKey = probeBackend.thumbRequests
+                root.heldAtKey = root.held()
                 pane.listArea.forceActiveFocus()
-                root.frameLog = []
                 root.firstFrameTiles = -1
+                root.firstFrameBuilt = -1
                 root.keyAt = Date.now()
                 root.keyDoneAt = 0
                 // keyClick spins the event loop, so the wait is armed first and holds the report until the click has returned.
@@ -102,33 +104,39 @@ ShellRoot {
                 root.waitFor = function () { return root.keyDoneAt > 0 && root.whole() }
                 keys.keyClick(key, Qt.ControlModifier, -1)
                 root.keyDoneAt = Date.now()
-                root.framesAtKeyDone = root.frames
             },
             function () {
-                var drawn = root.frames - root.keyFrames
-                var tiles = root.built() - root.builtAtKey
-                var thumbs = probeBackend.thumbRequests - root.thumbsAtKey
                 var area = pane.listArea
-                console.log("GRIDSWITCH SWITCH " + name + " to=" + view + " frames=" + drawn + " partial=" + root.partialFrames + " tiles=" + tiles + " thumbs=" + thumbs
-                    + " cols=" + area.columns + " vrows=" + area.visibleTileRows + " plan=" + area.landingTiles + " count=" + area.count + " keyms=" + (root.keyDoneAt - root.keyAt) + " landms=" + (Date.now() - root.keyAt) + " framesAtKeyDone=" + (root.framesAtKeyDone - root.keyFrames) + " log=" + root.frameLog.join(" | "))
+                var viewport = area.columns * area.visibleTileRows
+                console.log("GRIDVIEWPORT SWITCH " + name + " to=grid frames=" + (root.frames - root.keyFrames) + " partial=" + root.partialFrames + " held=" + root.heldAtKey
+                    + " built=" + (root.built() - root.builtAtKey) + " firstFrame=" + root.firstFrameTiles + " reused=" + (root.firstFrameTiles - root.firstFrameBuilt)
+                    + " cols=" + area.columns + " vrows=" + area.visibleTileRows + " plan=" + area.landingTiles + " live=" + root.laidOut(area))
                 check(name + ": the Grid is whole after the key", root.whole(), "viewMode=" + pane.viewMode)
                 check(name + ": no frame drew a half-built Grid", root.partialFrames === 0, "partial=" + root.partialFrames)
-                // The first frame after the key holds the viewport's tiles, one spare row at most; the cache rows come after it.
-                var first = root.firstFrameTiles
-                check(name + ": the first frame built only the viewport's tiles", first >= 0 && first <= area.columns * (area.visibleTileRows + 1), "first=" + first + " viewport=" + area.columns * area.visibleTileRows)
+                // A hidden Grid holds no delegate (AGENTS.md rule 6), so every switch builds its tiles and takes none from a pool.
+                check(name + ": the hidden Grid held no delegate at the key", root.heldAtKey === 0, "held=" + root.heldAtKey)
+                // The first frame that draws the Grid holds the viewport's tiles and one spare row at most; the cache rows come after it.
+                check(name + ": the first Grid frame holds the viewport's tiles and no cache row", root.firstFrameTiles >= viewport && root.firstFrameTiles <= area.columns * (area.visibleTileRows + 1), "first=" + root.firstFrameTiles + " viewport=" + viewport)
+                check(name + ": the first Grid frame reused no tile", root.firstFrameTiles >= 0 && root.firstFrameTiles === root.firstFrameBuilt, "first=" + root.firstFrameTiles + " built=" + root.firstFrameBuilt)
             },
-            function () { root.waitUntil = Date.now() + 3000; root.waitFor = function () { var g = root.findGrid(pane); return g.prebuild.createdCount - g.prebuild.destroyedCount >= g.landingTiles } },
+            function () { root.waitUntil = Date.now() + 3000; root.waitFor = function () { var g = root.findGrid(pane); return root.laidOut(g) >= g.landingTiles } },
             function () {
                 var g = root.findGrid(pane)
-                check(name + ": the cache rows are built after the frame, none missing", g.prebuild.createdCount - g.prebuild.destroyedCount >= g.landingTiles, "live=" + (g.prebuild.createdCount - g.prebuild.destroyedCount) + " plan=" + g.landingTiles)
+                check(name + ": the cache rows are laid out after the frame, none missing", root.laidOut(g) >= g.landingTiles, "laidOut=" + root.laidOut(g) + " plan=" + g.landingTiles)
             }
         ]
     }
-    function back(name, key) {
+    // A chord back to another view, and the pane really on it with the Grid hidden.
+    function back(name, key, mode) {
         return [
             quiet,
-            function () { pane.listArea.forceActiveFocus(); keys.keyClick(key, Qt.ControlModifier, -1); root.waitUntil = Date.now() + 500 },
-            function () { check(name + ": the view is up", true, "") }
+            function () {
+                pane.listArea.forceActiveFocus()
+                keys.keyClick(key, Qt.ControlModifier, -1)
+                root.waitUntil = Date.now() + 3000
+                root.waitFor = function () { var g = root.findGrid(pane); return pane.viewMode === mode && g !== null && !g.visible }
+            },
+            function () { check(name + ": the " + mode + " view is up and the Grid hidden", pane.viewMode === mode && !root.findGrid(pane).visible, "viewMode=" + pane.viewMode) }
         ]
     }
 
@@ -152,12 +160,12 @@ ShellRoot {
                 target: frameProbe.Window.window
                 function onFrameSwapped() {
                     root.frames += 1
-                    if (root.keyDoneAt >= 0 && root.keyAt > 0 && root.frames > root.keyFrames) if (root.frameLog.length === 0) root.firstFrameTiles = root.built() - root.builtAtKey
-                    root.frameLog.push("f" + (root.frames - root.keyFrames) + "@" + (Date.now() - root.keyAt) + "ms tiles=" + (root.built() - root.builtAtKey) + " seen=" + (root.findGrid(root.pane) ? root.seen(root.findGrid(root.pane)) : -1) + " parked=" + (root.findGrid(root.pane) ? root.findGrid(root.pane).prebuild.parkedCount : -1) + " whole=" + root.whole())
-                    if (root.keyFrames >= 0 && root.frames > root.keyFrames && root.pane && root.pane.viewMode === "grid") {
-                        if (root.whole()) root.wholeFrames += 1
-                        else root.partialFrames += 1
+                    if (root.keyAt <= 0 || root.frames <= root.keyFrames || !root.pane || root.pane.viewMode !== "grid") return
+                    if (root.drawsGrid() && root.firstFrameTiles < 0) {
+                        root.firstFrameTiles = root.laidOut(root.findGrid(root.pane))
+                        root.firstFrameBuilt = root.built() - root.builtAtKey
                     }
+                    if (!root.whole()) root.partialFrames += 1
                 }
             }
         }
@@ -170,7 +178,7 @@ ShellRoot {
                 check("the fixture is listed whole", pane.total === entries, "total=" + pane.total)
                 check("the view is list", pane.viewMode === "list", "viewMode=" + pane.viewMode)
             }
-        ].concat(switchTo("first", "grid", Qt.Key_3, true), back("grid to list", Qt.Key_1), switchTo("second", "grid", Qt.Key_3, false), back("grid to columns", Qt.Key_2), switchTo("third", "grid", Qt.Key_3, false), [finish])
+        ].concat(switchTo("first", Qt.Key_3), back("grid to list", Qt.Key_1, "list"), switchTo("second", Qt.Key_3), back("grid to columns", Qt.Key_2, "columns"), switchTo("third", Qt.Key_3), [finish])
         deadline = Date.now() + 40000
     }
 
