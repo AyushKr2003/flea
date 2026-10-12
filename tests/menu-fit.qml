@@ -53,6 +53,20 @@ ShellRoot {
         Flea.ContextMenu { id: menu; anchors.fill: parent }
     }
 
+    // The IPC probe reads the same live menu, so its wanted width is assertable headless.
+    QtObject { id: stubBackend; signal shebang(string path, bool hasShebang, int id) }
+    QtObject {
+        id: stubPane
+        property var backend: stubBackend
+        property var menuActions: ({ready: true, requestId: 0})
+        property string shebangAsked: ""
+        property bool rowHasShebang: false
+        property int shebangId: 0
+        function contextMenu() { return menu }
+    }
+    QtObject { id: windowStub; function rectOf(item) { return "" } }
+    Flea.IpcMenuState { id: probe; pane: stubPane; fleaWindow: windowStub }
+
     // One scene: {tag, stop, density, hints, all, kind: "file" | "background", flyout: action or "", edge, narrow}.
     function sceneList() {
         var out = []
@@ -201,6 +215,19 @@ ShellRoot {
             if (row.wantedWidth > out.wanted) { out.wanted = row.wantedWidth; out.widest = row }
         }
         return out
+    }
+
+    // A row's needed width from its own parts, the sum ui/MenuRow.qml's wantedWidth takes; 0 when a row is unbuilt.
+    // Sample input: [{separator: false, markLeft: 12, slot: 16, labelLeft: 8, label: 61, labelRight: 8, hint: 40, hintWrap: false, hintRight: 0, status: 0, chevron: 0, chevronRight: 12}, {separator: true}]
+    function neededWidth(rows) {
+        var widest = 0
+        for (var i = 0; i < rows.length; i++) {
+            var r = rows[i]
+            if (!r) return 0
+            if (r.separator) continue
+            widest = Math.max(widest, Math.ceil(r.markLeft + r.slot + r.labelLeft + r.label + r.labelRight + (r.hintWrap ? 0 : r.hint) + r.hintRight + r.status + r.chevron + r.chevronRight))
+        }
+        return widest
     }
 
     function inside(item, area) {
@@ -354,6 +381,14 @@ ShellRoot {
         var tag = s.tag
         if (s.errored) shell.runErrored(s)
         var main = shell.readCard(menu.frameItem, menu.entries.length, menu.itemFor)
+        // The probe carries each row's own parts; the frame is min(area, max(token, their sum)), not widestRow's answer.
+        var st = JSON.parse(probe.state()), need = shell.neededWidth(st.rows)
+        shell.check(tag + ": the probe states every row's parts", need > 0, true)
+        shell.check(tag + ": the frame is the parts' sum between the token and the work area", Math.abs(menu.frameItem.width - Math.min(menu.workArea.width, Math.max(Flea.Theme.menuWidth, need))) <= shell.roundingSlack, true)
+        if (menu.frameItem.width < menu.workArea.width)
+            shell.check(tag + ": the probe reports no elided frame label", st.rows.filter(function (r) { return r && !r.separator && r.labelTruncated }).length, 0)
+        if (!s.all && !s.errored)
+            shell.check(tag + ": the parts of rows that all fit stay under Theme.menuWidth", need <= Flea.Theme.menuWidth, true)
         var cards = [{ name: "frame", frame: menu.frameItem, read: main }]
         if (s.flyout)
             cards.push({ name: "flyout", frame: menu.submenuFrameItem,

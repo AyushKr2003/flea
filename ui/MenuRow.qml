@@ -99,6 +99,16 @@ Item {
                     + (statusSquare.visible ? statusSquare.width + statusSquare.anchors.rightMargin : 0)
                     + chevronSlot.width + hintText.anchors.rightMargin)
 
+    // What this row laid out, read off its items and not off wantedWidth: ui/IpcMenuState.qml's width oracle sums these.
+    function parts() {
+        if (root.isSeparator) return {separator: true}
+        return {separator: false, markLeft: markSlot.anchors.leftMargin, slot: markSlot.width,
+                labelLeft: label.anchors.leftMargin, label: label.implicitWidth, labelRight: label.anchors.rightMargin,
+                labelTruncated: label.truncated, hint: hintText.implicitWidth, hintWrap: root.entry.hintWrap === true,
+                hintRight: hintText.anchors.rightMargin, status: statusSquare.visible ? statusSquare.width + statusSquare.anchors.rightMargin : 0,
+                chevron: chevronSlot.width, chevronRight: chevronSlot.anchors.rightMargin}
+    }
+
     Rectangle {
         objectName: "menuWash"
         anchors.fill: parent
