@@ -26,11 +26,9 @@ function messaged(sidebar, isError) {
     if (isError && sidebar) sidebar.focusOnOpen = false
 }
 
-// The Trash row's accent reads as open, so the cursor shows only while Trash is open, focused, or menu-held.
-function trashCursor(trashActive, isCursor, focused, menuOnRow) {
-    if (trashActive) return true
-    if (!isCursor) return false
-    return Boolean(focused || menuOnRow)
+// The keyboard cursor draws its own frame only while the rail has focus or its menu is open; the lit place is Places.heldBy's, Trash included.
+function cursorDrawn(focused, menuOpen) {
+    return Boolean(focused || menuOpen)
 }
 
 // The rail answers ten of the key table's action names and ignores the rest while it has focus.

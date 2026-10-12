@@ -64,7 +64,8 @@ Column {
         id: tagRepeater
         model: root.entries
         delegate: SidebarRow {
-            cursor: index + root.base === root.sidebar.cursorIndex
+            lit: index + root.base === root.sidebar.litIndex
+            cursor: root.sidebar.cursorDrawn && index + root.base === root.sidebar.cursorIndex
             focused: root.sidebar.focused
             tagMark: markComponent
             onActivated: function (idx) { root.sidebar.activate(idx + root.base) }

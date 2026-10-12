@@ -197,6 +197,15 @@ function run(check) {
         atLeast(check, name, "cursor edge against the selected fill",
                 Contrast.ratio(r.accent, washed(r.accent, SELECTED_FILL, r.background)), EDGE_MIN)
 
+        // A pane without focus keeps its marked rows in the selected rung: above the ground and the hover rung, below the focused selection.
+        var inactive = washed(r.foreground, SELECTED_FILL, r.background)
+        atLeast(check, name, "unfocused selection clears the background", Contrast.ratio(inactive, r.background), WASH_MIN)
+        atLeast(check, name, "unfocused selection clears the hover rung",
+                Contrast.ratio(inactive, washed(r.foreground, HOVER_FILL, r.background)), WASH_MIN)
+        atLeast(check, name, "unfocused selection clears the focused selection",
+                Contrast.ratio(inactive, washed(r.foreground, SELECTION_FILL, r.background)), WASH_MIN)
+        atLeast(check, name, "unfocused cursor edge against the unfocused selection", Contrast.ratio(r.muted, inactive), EDGE_MIN)
+
         // The primary button carries its identity in a frame, on the card's own surface.
         atLeast(check, name, "primary frame on surface", Contrast.ratio(r.accentFrame, r.surface), MARK_MIN)
     }
@@ -210,6 +219,9 @@ function run(check) {
             Contrast.ratio(Contrast.ensureRatio("#ff0000", "#1e1e2e", TEXT_MIN), "#1e1e2e"), TEXT_MIN)
     tagThemeSamples(check)
 }
+
+var HOVER_FILL = 0.08       // Style.hoverFillAlpha, the OEM default.
+var SELECTION_FILL = 0.35   // Style.selectionFillAlpha, the OEM default.
 
 // Tag swatches lift to 3:1 on both grounds with the digit fallback decided once per theme load.
 function tagThemeSamples(check) {
