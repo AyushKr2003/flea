@@ -22,10 +22,11 @@ trap cleanup EXIT
 # Sample input: gvfsbridge_launch() { ... } up to the first line that is a closing brace in column 0.
 cut_out() { sed -n "/^$1() {/,/^}/p" "$2"; }
 launch_def=$(cut_out launch tests/ui.sh)
+window_def=$(cut_out launch_window tests/ui.sh)
 kill_def=$(cut_out kill_flea tests/ui.sh)
 helper_def=$(cut_out gvfsbridge_launch tests/ui-gvfsbridge.sh)
 fits_def=$(cut_out gvfsbridge_runtime_fits tests/ui-gvfsbridge.sh)
-[ -n "$launch_def" ] && [ -n "$kill_def" ] || { bad "launch and kill_flea could not be cut out of tests/ui.sh"; exit 1; }
+[ -n "$launch_def" ] && [ -n "$window_def" ] && [ -n "$kill_def" ] || { bad "launch, launch_window and kill_flea could not be cut out of tests/ui.sh"; exit 1; }
 
 mkdir -p "$box/bin" "$box/operator-home" "$box/operator-rt" "$box/fixture-home" "$box/fixture-rt" "$box/dir/bin"
 # One recorder for every double: the tool's name, then the four variables the case moves, then the first PATH entry.
@@ -66,6 +67,7 @@ run_launch() {
     mkdir -p "$rec"
     (
         eval "$launch_def"
+        eval "$window_def"
         eval "$kill_def"
         eval "$helper_def"
         fail() { printf 'FAIL: %s\n' "$*"; exit 1; }
