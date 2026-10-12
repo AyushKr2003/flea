@@ -107,7 +107,7 @@ tests/rename-grid-bottom.qml 438
 tests/rename-grid-bottom.js 344
 tests/ring-bounds.qml 693
 tests/search-live.qml 419
-tests/sidebar-flows.qml 501
+tests/sidebar-flows.qml 584
 tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
 ui/Backend.qml 567
@@ -169,8 +169,8 @@ ui/js/Menu.js 475
 ui/js/Drag.js 343
 ui/js/Format.js 305
 ui/js/Ops.js 480
-ui/js/Search.js 359
-ui/js/Mounts.js 301
+ui/js/Search.js 383
+ui/js/Mounts.js 298
 ui/js/Picker.js 328
 ui/js/Settings.js 459
 ui/js/Scroll.js 304

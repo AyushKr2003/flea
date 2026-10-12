@@ -53,7 +53,7 @@ function markForRow(pane, name, clipboard) {
     return markFor(rowPath(pane, name), clipboard)
 }
 
-// The pane's own join, so a search result resolves against the scope Search.run made its path.
+// The pane's own join, so a search result resolves against the scope its search walked.
 // Sample input: pane { path: "/home/gm/Pictures/phone" }, name "IMG_4121.jpg".
 function rowPath(pane, name) {
     if (!name) {
