@@ -172,8 +172,10 @@ Item {
     // Frames drawn with the card showing during the hold; tests/ui.sh lookopen and tests/quicklook-hold.sh read them.
     property int lookEmptyFrames: 0
     property int revealCaps: 0
+    // The cap's start stamp and how many Loader items stood then, read by tests/quicklook-firstkind.qml against the key.
+    property var revealCapStart: null
     function openState() {
-        return { revealed: root.revealed, revealedEarly: root.revealedEarly, landed: root.landed, lookEmptyFrames: root.lookEmptyFrames, revealCaps: root.revealCaps }
+        return { revealed: root.revealed, revealedEarly: root.revealedEarly, landed: root.landed, lookEmptyFrames: root.lookEmptyFrames, revealCaps: root.revealCaps, revealCapStart: root.revealCapStart }
     }
     // A move still settling lands nothing, and followSettle reruns this once it stops, so what reveals is the cursor's own file.
     // Past the cap, content that is ready waits out the loading state's minimum, so it never blinks for under 100 ms.
@@ -202,13 +204,14 @@ Item {
         root.revealedEarly = false
         root.loadingSince = 0
         root.landed = false
-        revealCap.stop()
         minShow.stop()
-        if (root.active)
+        if (!root.active)
+            revealCap.stop()
+        else
             Qt.callLater(root.revealIfReady)
     }
     onLookReadyChanged: root.revealIfReady()
-    // Armed by load() once show() returns, beside the swap's own cap.
+    // Armed by load() before show() builds the Loader items, beside the swap's own cap.
     Timer {
         id: revealCap
         objectName: "revealCap"
@@ -365,13 +368,14 @@ Item {
         var isPdf = Kinds.quickLookKind(newIcon, newPath) === Kinds.PDF
         var swapItem = root.ensureSwap()
         var show = function () {
-            root.show(newPath, newIcon, newSize, newKind, newThumb, newRow)
-            if (swapItem) swapItem.start(isPdf)
-            // Counted from here, so a cold first PDF's compile is not inside it; a move during the hold keeps the open's deadline.
-            if (root.unrevealed && !revealCap.running) {
+            // Counted from the key, before show() builds the Loader items, so the loading mark is on screen CAP_MS after it; a move during the hold keeps the open's deadline.
+            if ((!root.active || !root.revealed) && !revealCap.running) {
                 revealCap.interval = PreviewSwap.capMs(isPdf)
                 revealCap.start()
+                root.revealCapStart = { at: Date.now(), items: [markdownLoader, mediaLoader, imageLoader, pdfLoader].filter(function (l) { return l.item !== null }).length }
             }
+            root.show(newPath, newIcon, newSize, newKind, newThumb, newRow)
+            if (swapItem) swapItem.start(isPdf)
         }
         if (swapItem && (swapItem.holding || swapItem.capturing))
             swapItem.hold(show, newPath, true)

@@ -723,8 +723,8 @@ mutates under the picture and then calls `start(isPdf)`, held j joins the hold w
 staying, and `close()` calls `cancel()` so nothing queued runs. Space's own open takes no picture: its card and
 dim wait for the content's first frame (`lookReady`, which sets `landed`), and `revealed` is `landed || revealedEarly`.
 The hold ends early over the loading state, shown at once (`heldOff`) for every kind, when the `revealCap` single-shot
-fires at `Swap.CAP_MS` (66 ms) counted from after `show()` returns, beside the swap's own `start()`, so a cold first PDF
-compile is not inside it, or when a press or the wheel lands anywhere on the overlay: the top `holdShield` takes it, through
+fires at `Swap.CAP_MS` (66 ms) counted from the key, armed in `load()` before `show()` builds the Loader items (the cap
+once started after `show()` returned, so the key turn added to the 66 ms and the mark drew a frame late), or when a press or the wheel lands anywhere on the overlay: the top `holdShield` takes it, through
 its own release, so no click reaches a card that never drew. That early loading state stands `Swap.MIN_SHOW_MS` from
 `loadingSince`: `revealIfReady` asks `Swap.showLeft`, and content ready sooner lands when the `minShow` timer ends, while
 content ready before the reveal lands at once. A move during the hold takes no picture and keeps the open's cap;
@@ -9215,3 +9215,5 @@ The LocalSend lifecycle test moves one ceiling, re-derived with `wc -l`: `src/ba
 Open With's native menus case and the Permissions viewport follow their board: `tests/ui-menus.sh` expects the card to open on `Field` and Tab through `Applications`, `Always`, `Cancel` and `Open` back to `Field` (OpenWith.html rule 8, set by `82bc0976b`), and `permissions_viewport` in `tests/ui-permissions.sh` now waits for the new read-only `ipc windowSize` (the content the dialogs centre in) to equal hyprctl's size, while `permissions_point` names the control, its centre, hyprctl's size and the QML scene when a centre lies outside the viewport. `ui/Ipc.qml` takes two lines for `windowSize` and stays under its 984 ceiling in `tools/flea-file-budget`, and `tests/startup-units.txt` moves its `bytes` line from 1652296 to 1652557, the sum the probe's tool takes over them.
 
 The crumb device check lands a sample `devs` reply through `Messages.route` and reads its device with `ui/CrumbDrop.qml`'s own `destDev` binding, which moves `tests/js/drag.js` 481 to 493, re-derived with `wc -l`, while the link-walk bound test lives in the new `src/backend/extclass_tests.rs` so `src/backend/extclass.rs` stays under its cap.
+
+The Quick Look reveal cap starting at the key moves one ceiling, re-derived with `wc -l`: `ui/Preview.qml` 839 to 843, for arming `revealCap` before `show()` (`onActiveChanged` stops it only on close) and the `revealCapStart` stamp `tests/quicklook-firstkind.qml` reads against the key.

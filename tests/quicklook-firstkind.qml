@@ -35,6 +35,7 @@ ShellRoot {
     property var seen: []
     property var unitsAtKey: null
     property double keyAt: 0
+    property double keyReturnedAt: 0
 
     function log(line) { console.log("QLFK " + line) }
     function fail(why) { root.failures++; root.log("FAIL " + root.leg + ": " + why) }
@@ -158,8 +159,20 @@ ShellRoot {
         root.stageAt = Date.now()
         root.keyAt = Date.now()
         root.press(Qt.Key_Space, 1)
+        root.keyReturnedAt = Date.now()
         root.log("KEYRETURNED " + root.leg + " active=" + (root.pv() !== null && root.pv().active) + " keyMs=" + (Date.now() - root.keyAt))
         if (root.pv() === null || !root.pv().active) root.fail("Space returned without Quick Look open")
+    }
+
+    // The reveal cap counts from the key: its Timer started inside the key's turn, before the first Loader item stood, so the loading mark is CAP_MS from the key. A fast local source reveals with no loading frame and no cap.
+    // Sample output: "CAP pdf startedAt=+0 items=0 caps=0 early=false" is a cap armed in the key with no Loader item built.
+    function judgeCap(state) {
+        var cap = state.revealCapStart
+        root.log("CAP " + root.leg + " startedAt=" + (cap ? "+" + (cap.at - root.keyAt) : "none") + " items=" + (cap ? cap.items : "none") + " caps=" + state.revealCaps + " early=" + state.revealedEarly)
+        if (!cap) { root.fail("the open never started the reveal cap"); return }
+        if (cap.at < root.keyAt || cap.at > root.keyReturnedAt) root.fail("the reveal cap started at +" + (cap.at - root.keyAt) + " ms, outside the key's turn of " + (root.keyReturnedAt - root.keyAt) + " ms")
+        if (cap.items !== 0) root.fail("the reveal cap started after " + cap.items + " Loader item(s) were built, not before the first")
+        if (state.revealedEarly || state.revealCaps !== 0) root.fail("a fast source drew the loading frame: caps=" + state.revealCaps + " early=" + state.revealedEarly)
     }
 
     FloatingWindow {
@@ -246,6 +259,7 @@ ShellRoot {
             if (look === null || !look.revealed) return
             var state = look.openState()
             root.log("OPENED " + root.leg + " revealed=" + look.revealed + " landed=" + state.landed + " early=" + state.revealedEarly + " lookEmptyFrames=" + state.lookEmptyFrames + " ms=" + (Date.now() - root.keyAt) + " libs=" + root.libs() + " pss=" + root.pssKb())
+            root.judgeCap(state)
             root.stage = 5
             root.stageAt = Date.now()
             root.press(Qt.Key_Space, 1)
