@@ -20,7 +20,7 @@ function settled(path) {
     }
     p.clearSelection = function () {}
     p.message = function (text, isError) { p.said.push(text) }
-    p.armPrompted = function (text, isError) { p.said.push(text) }
+    p.armPrompted = function () {}
     p.listArea = { primeSettle: function () {} }
     p.swap = { hold: function () { return false } }
     p.join = function (base, name) { return base + "/" + name }

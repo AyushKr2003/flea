@@ -11,7 +11,8 @@
 // Whole sentences with "%1" for a value, filled by fill so each translates as one.
 var WORDS = {
     followsOmarchy: "Text size follows Omarchy, %1",
-    override: "Text size %1. %2 follows Omarchy again"
+    override: "Text size %1. %2 follows Omarchy again",
+    overrideAlone: "Text size %1"
 }
 
 // The board's seven documented stops, in px, read off its own layout table. They are not
@@ -100,7 +101,7 @@ function caption(base) {
 // otherwise a state with no readout and no named way back.
 function announce(stored, omarchyBase) {
     var px = effective(stored, omarchyBase) + "px"
-    return following(stored)
-        ? Format.fill(WORDS.followsOmarchy, px)
-        : Format.fill(WORDS.override, px, KeyName.keyFor("textSizeReset"))
+    if (following(stored)) return Format.fill(WORDS.followsOmarchy, px)
+    var reset = KeyName.keyFor("textSizeReset")
+    return reset.length > 0 ? Format.fill(WORDS.override, px, reset) : Format.fill(WORDS.overrideAlone, px)
 }

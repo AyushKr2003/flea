@@ -183,6 +183,20 @@ function runPresets(check) {
         }
     }
     check("preset check denominator covers all effective bindings", total > 100, true)
+    // A key the preset leaves unbound is named by no hint: the hint is left out and never drawn empty or with a hole in its sentence.
+    var running = Keymap.preset, hollow = []
+    try {
+        for (var h = 0; h < Settings.PRESETS.length; h++) {
+            Keymap.setPreset(Settings.PRESETS[h])
+            var drawn = Settings.rows("display", displayState(TextSize.follow(), 14)).concat(Settings.rows("keys", { preset: Settings.PRESETS[h] }),
+                Settings.rows("preview", { data: { preview: { loadOn: "manual" } } }))
+            var bare = drawn.filter(function (r) { return r.kind === "hint" && (String(r.label).trim().length === 0 || /^ | {2}/.test(r.label)) })
+            if (bare.length > 0 || /^ | {2}/.test(TextSize.announce({ mode: 16 }, 14))) hollow.push(Settings.PRESETS[h])
+        }
+    } finally {
+        Keymap.setPreset(running)
+    }
+    check("no preset draws an empty hint row or a sentence with a key missing from it", hollow.join(","), "")
     var menuRows = Settings.menuRows([], true)
     check("SettingsMenus contains exactly 34 action switches", menuRows.filter(function (r) { return r.kind === "check" && r.id !== "keyHints" }).length, 34)
     // The board's Tags row is one of those switches.

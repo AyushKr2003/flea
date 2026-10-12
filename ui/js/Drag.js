@@ -24,7 +24,7 @@ function carried(pane, index) {
     return [index]
 }
 
-// Ctrl copies, Shift moves, Ctrl with Shift links, all read at the lift because the window gets no keys once Drag.active runs.
+// Ctrl copies, Shift moves, Ctrl with Shift links, read at the lift and again at the drop from the key events DragOut.keys tracks during the drag.
 function copying(modifiers) {
     return (modifiers & Qt.ControlModifier) !== 0
 }
@@ -69,8 +69,8 @@ function label(copy, link) {
     return copy ? "copy here" : "move here"
 }
 
-// The status bar's half of the board. The hint names the lift because Drag.active runs a nested
-// event loop the window gets no key events in, so a key pressed after the drag starts cannot arrive.
+// The status bar's half of the board. The hint names the keys held at the drop: a key pressed after the lift
+// counts when DragOut.keys saw it, and dropHeld reads that before it falls back to the lift.
 function line(n, name, copy, link) {
     var named = name.length > 0
     var template = link === true ? (named ? WORDS.linkTo : WORDS.linkToFolder)

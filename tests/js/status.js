@@ -33,7 +33,7 @@ function trashViewStampsFirst() {
     var body = String(request.responseText || "")
     var from = body.indexOf("function armDelete()")
     var stamp = body.indexOf("trashArmedAt = paired ? 0 : now", from)
-    var say = body.indexOf("armReported(", from)
+    var say = body.indexOf("armReported(TrashKeys.reviewPrompt())", from)
     return from >= 0 && stamp > from && say > stamp
 }
 
@@ -114,7 +114,7 @@ function run(check) {
     check("and the Trash view's own is its review sentence", Trash.reviewPrompt(), "Press d again to review permanent deletion, or Delete on its own.")
     // ui/StatusBar.qml watches the stamp its owner holds when the prompt is said, so each owner stamps first.
     check("Trash.arm stamps before it says its prompt", p.stampAtSay > 0 && p.stampAtSay === p.trashArmedAt, true)
-    check("and ui/TrashView.qml's armDelete does too", trashViewStampsFirst(), true)
+    check("and ui/TrashView.qml's armDelete does too, saying the review sentence of ui/js/Trash.js", trashViewStampsFirst(), true)
     var older = [{ text: "Copy failed: photo.heic · disk full", detail: "No space left on device", place: "" }]
     check("no code reads a sentence to find the arm prompt, the typed armPrompted channel carries it", typeof Status.isPrompt, "undefined")
     check("a prompt's text with no live arm does not stand over an error", Status.transientOf(older, prompt).isError, true)

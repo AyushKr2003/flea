@@ -193,7 +193,7 @@ function runDefault(check) {
     check("and as a run's own re-read it ends the run unticked, not working",
           look(MakeDefault.handlerOf(unread), MakeDefault.restarted(MakeDefault.settled(exited, REREAD), true)), "false|false|||")
     var dead = MakeDefault.unstarted(claiming, ["/usr/bin/flea", "--default"])
-    check("a flea that never ran fails at once, naming the command, with no re-read or restart owed",
+    check("a flea that never ran fails at once, naming the program, with no re-read or restart owed",
           look(NAUTILUS, dead) + "|" + dead.reading + "|" + dead.restarting,
           "false|false|flea could not start|error|right|false|false")
     check("and the next press tries again", JSON.stringify(MakeDefault.press(NAUTILUS, dead)), JSON.stringify(CLAIM))
@@ -234,6 +234,11 @@ function runDefault(check) {
     check("unpackaged from the refusal, before the re-read lands", look(NAUTILUS, refused), unpackaged)
     check("and after it", look(NAUTILUS, MakeDefault.settled(refused, REREAD)), unpackaged)
     check("an unpackaged press runs nothing", MakeDefault.press(NAUTILUS, MakeDefault.settled(refused, REREAD)), null)
+    // The status alone says unpackaged: the refusal's words with any other status are a plain failure, and the status with other words is unpackaged.
+    var wordsOnly = MakeDefault.finished(claiming, 1, refusal, REREAD)
+    check("the refusal's sentence under another status is a failed run, not an unpackaged build", wordsOnly.packaged + "|" + wordsOnly.outcome, "true|failed")
+    var statusOnly = MakeDefault.finished(claiming, MakeDefault.UNINSTALLED_STATUS, "flea: some other words\n", REREAD)
+    check("and the uninstalled status under other words is an unpackaged build", statusOnly.packaged + "|" + statusOnly.outcome, "false|")
     var probedOut = MakeDefault.probed(MakeDefault.idle(), false)
     check("unpackaged from the probe, before any press", look(NAUTILUS, probedOut), unpackaged)
     check("and an entry found later makes the row live again", look(NAUTILUS, MakeDefault.probed(probedOut, true)), "false|false|||")

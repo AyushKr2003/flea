@@ -3492,7 +3492,7 @@ case_background() {
     printf 'BACKGROUND_OCR_END\n'
     [[ "$(ipc contextMenuVisible)" == "true" ]] \
         || fail "background: a right click on empty space opened no menu"
-    # Menus.html's background column: New Folder and New File lead it, and Add to Favorites stays.
+    # Menus.html's background column: New folder and New file lead it, and Add to Favorites stays.
     [[ "$(ipc contextMenuEntries)" == "New folder|New file|-|Paste|Select all|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|-|Settings" ]] \
         || fail "background: the menu is not the board's column, it is $(ipc contextMenuEntries)"
     [[ "$(ipc contextMenuGlyphs)" == "folder-plus|file-plus|-|clipboard|check|-|terminal|star|-|sort|eye|-|sliders" ]] \
@@ -9389,7 +9389,7 @@ EOS
     rm -f "$state/fail"
     : > "$state/refuse"
     key -k Return >/dev/null
-    wait_network_status "Could not connect: the server refused the connection."
+    wait_network_status "Could not connect: the server did not accept the password."
     [[ "$(wc -l < "$helper_log")" -eq $((helper_calls + 1)) ]] \
         || fail "networkauth: refused Retry did not launch helper once"
     [[ "$(ipc networkResult)" == "failed" && "$(ipc dialogOpen)" == "true" \

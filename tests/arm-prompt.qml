@@ -121,7 +121,7 @@ ShellRoot {
                     (view.trashArmedAt > 0) + "|" + (bar.prompt === Trash.reviewPrompt()), "true|true")
         keys.keyClickChar("d", Qt.NoModifier, -1)
         shell.check("the second d spends the arm", view.trashArmedAt, 0)
-        shell.check("so the bar shows no prompt over the review", bar.transient_, "")
+        shell.check("so the bar keeps no prompt, drawn or held, over the review", bar.prompt + "|" + bar.transient_ + "|" + (bar.arm === null), "||true")
         shell.check("and the review opens", view.confirming, true)
     }
 

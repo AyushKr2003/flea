@@ -49,7 +49,7 @@ Item {
     // Fired once ui/NetworkPlaces.qml's write has actually landed, so a caller's reload reads it.
     signal renamed()
     signal retryRequested(string uri, string label, string password, string reason, bool failedConnect, var origin)
-    // connectFailed says the failure is a refused connection, so the dialog marks the location unacknowledged without reading the sentence.
+    // connectFailed says the connection itself failed (refused, unanswered, no folder), so the dialog marks the location unacknowledged without reading the sentence.
     signal completed(string requestId, string uri, bool success, string reason, bool connectFailed)
 
     // Hyprland has no auth portal here, so "gio mount" on a share that wants a credential prompt

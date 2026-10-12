@@ -146,7 +146,7 @@ Item {
             root.saveFailed("A Favorites change is still being saved. Retry to save this location.", false)
     }
 
-    // connect is true when the failure is a refused connection, which the mount service says and this dialog never works out from the sentence.
+    // connect is true when the connection itself failed, which the mount service says and this dialog never works out from the sentence.
     function saveFailed(message, connect) {
         root.saving = false
         root.statusText = message

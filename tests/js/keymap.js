@@ -324,20 +324,33 @@ function run(check) {
           tabsDefault.filter(function (r) { return r.action === "tabNext" })[0].keys + "|"
           + tabsDefault.filter(function (r) { return r.action === "tabPrevious" })[0].keys, "ctrl-pagedown|ctrl-pageup")
     check("the generator names the pairs it evens", (Keymap.SHEET_MIRRORS || []).length > 0, true)
-    // KeyName asks for one action's own rows, never the whole table, yet names the row the whole table lists first.
+    // KeyName asks for one action's own rows with no modifier kind, as the UI does, yet names the row the whole table lists first.
     function firstRow(rows, action) { return rows.filter(function (r) { return r.action === action })[0] }
     var drawn = ["newFolder", "textSizeUp", "textSizeDown", "textSizeReset", "trash", "loadPreview", "keymapSheet", "filter"]
     var drifted = []
-    for (var kp = 0; kp < Keymap.PRESETS.length; kp++) {
-        Keymap.setPreset(Keymap.PRESETS[kp])
-        var whole = Keymap.bindingRows(Keymap.PRESETS[kp], "gui")
-        for (var ka = 0; ka < drawn.length; ka++) {
-            var first = firstRow(whole, drawn[ka])
-            if (KeyName.keyOf(drawn[ka], first ? first.mods : undefined) !== (first ? KeyName.spelled(first.keys) : ""))
-                drifted.push(Keymap.PRESETS[kp] + ":" + drawn[ka])
+    try {
+        for (var kp = 0; kp < Keymap.PRESETS.length; kp++) {
+            Keymap.setPreset(Keymap.PRESETS[kp])
+            var whole = Keymap.bindingRows(Keymap.PRESETS[kp], "gui")
+            for (var ka = 0; ka < drawn.length; ka++) {
+                var first = firstRow(whole, drawn[ka])
+                var plain = Keymap.hintFor(drawn[ka])
+                var want = plain.length > 0 ? plain : first ? KeyName.spelled(first.keys) : ""
+                var row = KeyName.rowFor(drawn[ka])
+                if (KeyName.keyFor(drawn[ka]) !== want || (row ? row.keys : "") !== (first ? first.keys : ""))
+                    drifted.push(Keymap.PRESETS[kp] + ":" + drawn[ka])
+            }
         }
+    } finally {
+        Keymap.setPreset(startPreset)
     }
     check("KeyName names the whole table's first row for each action it draws in every preset", drifted.join(" "), "")
     check("and a chord-only action is named", KeyName.keyFor("newFolder").length > 0, true)
+    // A key keys.toml names as a mark is spelled as that mark, and underscore is not minus.
+    check("underscore, minus and plus are three marks", ["ctrl-shift-underscore", "ctrl-shift-minus", "ctrl-shift-plus"].map(KeyName.spelled).join("|"),
+          "Ctrl+Shift+_|Ctrl+Shift+-|Ctrl+Shift++")
+    Keymap.setPreset("default")
+    check("a sentence with several keys names them all", KeyName.hintedAll("%1 and %2 step", ["textSizeUp", "textSizeDown"]), "Ctrl+Shift++ and Ctrl+Shift+- step")
+    check("and is empty when the preset binds none of one of them", KeyName.hintedAll("%1 and %2 step", ["textSizeUp", "noSuchAction"]), "")
     Keymap.setPreset(startPreset)
 }

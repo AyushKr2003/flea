@@ -14,6 +14,7 @@ var WORDS = {
     connectNoFolder: "Could not connect: that location has no folder to show.",
     connectMountedAs: "Could not connect: that share is already mounted as %1.",
     connectNoAnswer: "Could not connect: the server did not respond.",
+    connectNoPassword: "Could not connect: the server did not accept the password.",
     connectNoPrompt: "Could not connect: Flea could not ask for the password.",
     connectUnopened: "Could not connect: the network location could not be opened."
 }
@@ -182,6 +183,6 @@ function connectFailure(exitCode) {
     if (exitCode === 124) return WORDS.connectNoAnswer
     if (exitCode === 126 || exitCode === 127)
         return WORDS.connectNoPrompt
-    if (exitCode === 77) return WORDS.connectRefused
+    if (exitCode === 77) return WORDS.connectNoPassword
     return WORDS.connectUnopened
 }

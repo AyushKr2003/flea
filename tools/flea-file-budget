@@ -72,7 +72,7 @@ tests/js/collide.js 321
 tests/js/devices.js 363
 tests/js/previewswap.js 469
 tests/js/mdstructure.js 655
-tests/js/keymap.js 343
+tests/js/keymap.js 356
 tests/js/focus.js 843
 tests/js/mounts.js 327
 tests/js/menu.js 596
@@ -86,7 +86,7 @@ tests/permissions-adv.qml 402
 tests/js/network.js 307
 tests/js/ops.js 574
 tests/js/slowclick.js 309
-tests/js/settings.js 354
+tests/js/settings.js 368
 tests/js/tap.js 401
 tests/js/uistate.js 370
 tests/js/watch.js 541
@@ -184,7 +184,7 @@ ui/js/Ops.js 539
 ui/js/Search.js 396
 ui/js/Mounts.js 319
 ui/js/Picker.js 349
-ui/js/Settings.js 471
+ui/js/Settings.js 475
 ui/js/Scroll.js 304
 ui/js/Tabs.js 738
 ui/js/UiState.js 438

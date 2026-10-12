@@ -38,7 +38,7 @@ function pane() {
     }
     p.clearSelection = function () { p.cleared += 1 }
     p.message = function (text, isError) { p.said.push(text) }
-    p.armPrompted = function (text, isError) { p.said.push(text) }
+    p.armPrompted = function () {}
     p.listArea = { primeSettle: function () {} }
     // ui/PaneSwap.qml with nothing held, so the reset and the query it hands back both run at the request.
     p.swap = { hold: function () { return false } }

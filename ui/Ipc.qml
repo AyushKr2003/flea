@@ -300,6 +300,8 @@ QtObject {
 
         // The sticky slot an operation holds while it runs, so a test can name the verb in flight.
         function stickyMessage(): string { return root.bar.sticky }
+        // Whether the busy mark walks, which the GVFS bridge's Starting line lights from the call and not from its sentence.
+        function statusBusy(): string { return String(root.bar.busy) }
         function firstRowsAt(): string { return String(root.backend.firstRowsAt) }
         // Per-keystroke stopwatch for the newest search gen, read-only after a run.
         function searchStamps(): string { return JSON.stringify(Search.stamps(root.pane)) }

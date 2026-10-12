@@ -637,7 +637,7 @@ class Native:
         held_status = guard(self.case, self.case / "providers/status-held")
         for scenario, backend, peer, status_exit, capability, reason in [
             ("status-missing", "Running", "Alpha", 0, True, "Taildrop unavailable: tailscale could not start"),
-            ("status-failed", "Running", "Alpha", 7, True, "Taildrop status could not be read"),
+            ("status-failed", "Running", "Alpha", 7, True, "Tailscale reported an error"),
             ("signed-out-stale-peer", "NeedsLogin", "Alpha", 0, True, "signed out"),
             ("account-disabled-stale-peer", "Running", "Alpha", 0, False, "disabled for this account"),
             ("empty", "Running", None, 0, True, "no peers"),

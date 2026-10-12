@@ -33,7 +33,7 @@ function railPane() {
     p.focusView = "rail"
     p.said = ""
     p.message = function (text, isError) { p.said = text }
-    p.armPrompted = function (text, isError) { p.said = text }
+    p.armPrompted = function () {}
     return p
 }
 
@@ -57,7 +57,7 @@ function listPane(hasRow) {
     p.isError = false
     p.openCursorMenu = function () { p.opened += 1; return hasRow }
     p.message = function (text, isError) { p.said = text; p.isError = isError }
-    p.armPrompted = function (text, isError) { p.said = text; p.isError = isError }
+    p.armPrompted = function () {}
     return p
 }
 
@@ -107,7 +107,7 @@ function armHandle(p) {
     p.keySequenceIdentity = ""
     p.trashArmedAt = 0
     p.message = function (text) { p.said = text }
-    p.armPrompted = function (text) { p.said = text }
+    p.armPrompted = function () {}
     p.acted = []
     p.act = function (action) { p.acted.push(action); Focus.act(action, p) }
     return p
@@ -244,7 +244,7 @@ function run(check) {
     held.listInFlight = true
     held.said = ""
     held.message = function (text) { held.said = text }
-    held.armPrompted = function (text) { held.said = text }
+    held.armPrompted = function () {}
     held.opened = []
     held.openWithoutHistory = function (next) { held.opened.push(next) }
     held.backend = { sortBy: "name", sortDesc: false }
@@ -263,7 +263,7 @@ function run(check) {
     stuck.join = function (base, name) { return base === "/" ? "/" + name : base + "/" + name }
     stuck.said = ""
     stuck.message = function (text) { stuck.said = text }
-    stuck.armPrompted = function (text) { stuck.said = text }
+    stuck.armPrompted = function () {}
     stuck.opened = []
     stuck.openWithoutHistory = function (next) { stuck.opened.push(next) }
     Focus.act("reveal", stuck)
@@ -414,7 +414,7 @@ function run(check) {
     var historyPaste = escaper("", 0)
     historyPaste.recentMode = "results"
     historyPaste.message = function (text) { historyPaste.said = text }
-    historyPaste.armPrompted = function (text) { historyPaste.said = text }
+    historyPaste.armPrompted = function () {}
     historyPaste.openPasteAs = function () { historyPaste.pasted = true }
     historyPaste.pasteLink = function () { historyPaste.pasted = true }
     historyPaste.pasted = false

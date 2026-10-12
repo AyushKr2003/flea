@@ -210,7 +210,7 @@ function run(check) {
               Errors.connectFailure(124, uri), "Could not connect: the server did not respond.")
         // 77 is the helper's refusal status: the server asked for the password again after it was sent.
         check("a refused sign-in is named for every scheme: " + uri,
-              Errors.connectFailure(77, uri), "Could not connect: the server refused the connection.")
+              Errors.connectFailure(77, uri), "Could not connect: the server did not accept the password.")
     }
     check("the refusal does not echo URI credentials or paths",
           Errors.connectFailure(1, "davs://user:secret@host/private"),

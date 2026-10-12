@@ -205,7 +205,8 @@ function displayRows(state) {
           index: TextSize.STOPS.indexOf(TextSize.nearest(state.baseSize)) }
     ]
     // SettingsRest rule 2 keeps only the chords; the hint wraps onto two lines at this width.
-    out.push({ kind: "hint", label: Format.fill(WORDS.textKeys, KeyName.keyFor("textSizeUp"), KeyName.keyFor("textSizeDown"), KeyName.keyFor("textSizeReset")) })
+    var textKeys = KeyName.hintedAll(WORDS.textKeys, ["textSizeUp", "textSizeDown", "textSizeReset"])
+    if (textKeys.length > 0) out.push({ kind: "hint", label: textKeys })
     // And Effective stays: it is state.baseSize, the size actually running, where the ruler marks TextSize.nearest() and a tie takes the smaller stop, so a base of 13 marks 12.
     out.push({ kind: "fact", id: "textEffective", label: "Effective", role: "live",
                value: state.baseSize + " px", caption: effectiveNote(follows, state.baseSize) })
@@ -398,13 +399,15 @@ function previewRows(state) {
     // One value per row, rule 4: the board drops the figure outright, because "64 px  Medium" is one fact twice.
     var size = choice("preview.thumbSize", "Thumbnail size", "maximize", ["small", "medium", "large", "xlarge", "huge", "largest"],
                       ["Small", "Medium", "Large", "Extra large", "Huge", "Largest"], data.thumbSize || "medium")
-    return [
+    var head = [
         { kind: "group", label: "Preview column" },
         // Preview board rule 4: the heading names the group, so the row under it names the switch.
         { kind: "check", id: "preview.column", label: "Show the preview column", glyph: "columns", on: data.column !== false },
-        load,
-        // Rule 3: a hint sits under the control it explains, not two hairlines below it in a footer.
-        { kind: "hint", label: data.loadOn === "manual" ? KeyName.hinted(WORDS.loadTip, "loadPreview") : "Automatic follows the cursor." },
+        load
+    ]
+    // Rule 3: a hint sits under the control it explains, not two hairlines below it in a footer; none when the preset binds no key to name.
+    var loadTip = data.loadOn === "manual" ? KeyName.hinted(WORDS.loadTip, "loadPreview") : "Automatic follows the cursor."
+    var tail = [
         { kind: "group", label: "Thumbnails" },
         choice("preview.thumbnails", "Thumbnails", "image", ["off", "images", "media"],
                ["Off", "Images", "Everything"], data.thumbnails || "media"),
@@ -424,6 +427,7 @@ function previewRows(state) {
         // Rule 7: GridArea gates ctrl-scroll on ViewState.ctrlZoom alone and sizes the tiles from it with thumbnails off, so it is grid zoom, it is named that, and it never greys with them.
         { kind: "check", id: "preview.ctrlZoom", label: "Zoom the grid with ctrl and scroll", glyph: "move-horizontal", on: data.ctrlZoom !== false }
     ]
+    return head.concat(loadTip.length > 0 ? [{ kind: "hint", label: loadTip }] : [], tail)
 }
 
 function columnRows(state) {

@@ -6,10 +6,10 @@
 // the third keystroke of "Vid" trashed the row. These drive Trash.arm directly, because the stamp
 // and the window are the whole of the policy and neither needs a window to be true.
 
-// What Ops.trash reaches for, plus the stamp Trash.arm reads and writes.
 // What pane.message was handed, kept outside the stub so no field of it has to exist on Pane.
 var messaged = []
 
+// What Ops.trash reaches for, plus the stamp Trash.arm reads and writes.
 function pane() {
     messaged = []
     var p = {

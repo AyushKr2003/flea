@@ -6,7 +6,7 @@
 // A key the way the running preset binds it, spelled for a sentence; the sentences stay in their own modules with a "%1" for the key.
 
 // The names keys.toml gives a key that a person would write as a mark.
-var MARKS = { plus: "+", minus: "-", equal: "=", underscore: "-", greater: ">", less: "<", slash: "/", period: ".", comma: "," }
+var MARKS = { plus: "+", minus: "-", equal: "=", underscore: "_", greater: ">", less: "<", slash: "/", period: ".", comma: "," }
 var MODIFIERS = { ctrl: "Ctrl", shift: "Shift", alt: "Alt", super: "Super" }
 
 // Sample input: "ctrl-shift-n" answers "Ctrl+Shift+N"; "delete" answers "Delete"; "ctrl-shift-plus" answers "Ctrl+Shift++".
@@ -50,4 +50,15 @@ function keyOf(action, mods) {
 function hinted(template, action) {
     var key = keyFor(action)
     return key.length > 0 ? Format.fill(template, key) : ""
+}
+
+// The same with "%1", "%2" and on for the keys bound to several actions, "" when the preset leaves any one of them unbound.
+function hintedAll(template, actions) {
+    var keys = [template]
+    for (var i = 0; i < actions.length; i++) {
+        var key = keyFor(actions[i])
+        if (key.length === 0) return ""
+        keys.push(key)
+    }
+    return Format.fill.apply(null, keys)
 }

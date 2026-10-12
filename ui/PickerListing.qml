@@ -133,10 +133,10 @@ Item {
                             if (request !== undefined) root.pathsResolved(message.paths, request)
                         } else root.message(message)
                     }
-                    catch (error) { root.failed("This folder could not be listed.") }
+                    catch (error) { console.warn("PickerListing could not handle a worker reply: " + error); root.failed("This folder could not be listed.") }
                 }
             }
-            onExited: function(code, status) { root.ended(process, "Flea stopped responding, so this folder could not be listed.") }
+            onExited: function(code, status) { console.warn("PickerListing worker exited with code " + code); root.ended(process, "Flea stopped responding, so this folder could not be listed.") }
             // A failed QProcess spawn emits runningChanged, but never exited.
             onRunningChanged: if (!running && !started) root.ended(process, "This folder could not be listed. Restart Flea.")
         }
