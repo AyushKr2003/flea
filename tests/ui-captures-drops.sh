@@ -7,17 +7,22 @@ cap_drops_fat_skip() {
     printf 'CAP SKIP fat-card: needs a FAT mount, driven by the controller\n'
     return 0
 }
-# The EXIT trap a hold chains: release the button, then run the trap that was set before the press.
-cap_drops_exit_chain() {
-    local st=$?
-    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true
-    [[ -n "${cap_drops_saved_trap:-}" ]] || return "$st"
+# Run the EXIT trap a chain saved (the text trap -p printed) with the status the script is exiting with.
+cap_drops_run_trap() {
+    local saved="$1" st="$2"
+    [[ -n "$saved" ]] || return "$st"
     # trap -p prints: trap -- 'command' EXIT, so the quoted command is the third word.
-    eval "set -- $cap_drops_saved_trap"
+    eval "set -- $saved"
     # The saved trap reads $? for the status the script is exiting with, so hand it that status again.
     (exit "$st")
     eval "${3:-:}"
     return "$st"
+}
+# The EXIT trap a hold chains: release the button, then run the trap that was set before the press.
+cap_drops_exit_chain() {
+    local st=$?
+    YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true
+    cap_drops_run_trap "${cap_drops_saved_trap:-}" "$st"
 }
 # A press arms the release ahead of whatever EXIT trap exists, which keeps running after it.
 cap_drops_arm() {
@@ -40,6 +45,7 @@ cap_drops_press() {
     local wx wy ww wh
     read -r wx wy ww wh < <(window_box) || fail "cap_drops: native window coordinates unavailable"
     assert_focus
+    cap_dropmods_mark
     cap_drops_wx=$wx
     cap_drops_wy=$wy
     # Through ydotool, never Hyprland's move, which sends Qt no pointer frame.
@@ -65,15 +71,18 @@ cap_drops_release() {
     settle
     if [[ "$(ipc collideState | jq -r .opened)" == "true" ]]; then key -k Escape >/dev/null; settle; fi
 }
-# A drag is in flight only once the listing says so; a shot before that is a shot of no drag.
-cap_drops_wait_active() {
-    local seen="" end=$((SECONDS + 15))
+# A row, a crumb and a column row take a drag above the listing floor, so the floor stays dark; the status line names the target the drag is over.
+# Sample input: "Move 1 item to Photos · ctrl at lift copies" or "Copy 1 item to outer/" names Photos or outer/; any " · " tail is cut first.
+cap_drops_wait_target() {
+    [[ "$#" -eq 1 ]] || fail "cap_drops: wait_target needs a name, got $#"
+    local want="$1" seen="" end=$((SECONDS + 15))
     while (( SECONDS < end )); do
-        seen=$(ipc listingDropActive 2>/dev/null || printf unavailable)
-        [[ "$seen" == "true" ]] && return 0
+        seen=$(ipc statusActivityState 2>/dev/null | jq -r --arg n " to $want" --argjson before "$cap_dropmods_before" \
+            '.activities[] | select(.running == false and (.id as $i | $before | index([$i]) | not)) | .text | split(" · ")[0] | select(endswith($n))' 2>/dev/null | head -n 1 || true)
+        [[ -n "$seen" ]] && return 0
         sleep 0.1
     done
-    fail "cap_drops: no drag in flight over the listing, saw $seen"
+    fail "cap_drops: no drag line naming $want (status lines: $(ipc statusActivityState 2>/dev/null | jq -r '[.activities[].text] | join(" | ")' 2>/dev/null))"
 }
 # One pasted copy is undone and the copy is awaited away, so the next leg starts clean.
 cap_drops_undo_copy() {
@@ -147,6 +156,7 @@ cap_drops_trash_remove() {
     [[ -n "$name" && "$name" != */* && "$dir" == /*/* && -f "${dir%/*}/$SANDBOX_MARKER" ]] || return 1
     sandbox_require "$dir"
     trash=$(cap_drops_trash_holding "$dir" "$name") || return 0
+    # Sample: Path=/run/media/u/USB/cap%20drops/Pasted image.png (absolute), or cap-drops/x.png relative to the mount top.
     # Names here hold letters, digits, spaces, hyphens and dots, so a space is the one escape trashinfo carries.
     path=$(sed -n 's/^Path=//p' "$trash/info/$name.trashinfo" 2>/dev/null | head -n 1)
     path=${path//%20/ }
@@ -157,13 +167,22 @@ cap_drops_trash_remove() {
     [[ "$path" == "$dir/$name" ]] || return 1
     rm -f -- "$trash/files/$name" "$trash/info/$name.trashinfo"
 }
-# The case's EXIT trap: a pasted image left in a shared mount-top trash is taken out even when the case fails.
+# The case's EXIT trap: a pasted image left in a shared mount-top trash is taken out even when the case fails, then the runner's own trap runs.
 cap_drops_trash_exit() {
     local st=$?
     if [[ -n "${cap_drops_pasted:-}" ]] && ! cap_drops_trash_remove "$cap_drops_dir" "$cap_drops_pasted"; then
         printf 'CAP DROPS trashed %s was not removed\n' "$cap_drops_pasted" >&2
     fi
-    return "$st"
+    cap_drops_run_trap "${cap_drops_trash_saved:-}" "$st"
+}
+# Chain the trash removal ahead of whatever EXIT trap the runner holds, and put exactly that trap back at the case end.
+cap_drops_trash_arm() {
+    cap_drops_trash_saved=$(trap -p EXIT)
+    trap cap_drops_trash_exit EXIT
+}
+cap_drops_trash_disarm() {
+    if [[ -n "${cap_drops_trash_saved:-}" ]]; then eval "$cap_drops_trash_saved"; else trap - EXIT; fi
+    cap_drops_trash_saved=""
 }
 case_cap_drops() {
     local dir="$fixture_root/cap-drops" menus_checks=0 cap_drops_wx=0 cap_drops_wy=0
@@ -171,7 +190,7 @@ case_cap_drops() {
     sandbox_scratch "$dir"
     cap_drops_dir=$dir
     cap_drops_pasted=""
-    trap cap_drops_trash_exit EXIT
+    cap_drops_trash_arm
     mkdir -p "$dir/Photos" "$dir/deep/outer/inner"
     printf 'drag me\n' > "$dir/a.txt"
     printf 'p one\n' > "$dir/Photos/p1.txt"
@@ -226,7 +245,7 @@ case_cap_drops() {
     read -r tx ty <<< "$dst_pt"
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_drops_wait_active
+    cap_drops_wait_target Photos
     shot drops-drop-target
     cap_drops_release
     cap_drops_undo_copy "$dir/Photos/a.txt"
@@ -238,7 +257,7 @@ case_cap_drops() {
     read -r tx ty <<< "$dst_pt"
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_drops_wait_active
+    cap_drops_wait_target Photos
     wait_path "$dir/Photos"
     shot drops-hover-open
     cap_drops_release
@@ -282,7 +301,7 @@ case_cap_drops() {
     read -r cx cy <<< "$src_pt"
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_drops_wait_active
+    cap_drops_wait_target outer/
     shot drops-crumb
     read -r ax ay aw ah <<< "$(ipc listAreaRect)"
     cap_drops_steer "$((ax + aw / 2))" "$((ay + ah - 20))"
@@ -312,7 +331,7 @@ case_cap_drops() {
     read -r cx cy <<< "$src_pt"
     cap_drops_press "$cx" "$cy"
     cap_drops_steer "$tx" "$ty"
-    cap_drops_wait_active
+    cap_drops_wait_target deep
     shot drops-columns-parent
     names=$(ipc columnNames child)
     index=$(printf '%s' "$names" | tr '|' '\n' | grep -nx "p2.txt" | head -n 1 | cut -d: -f1 || true)
@@ -325,7 +344,7 @@ case_cap_drops() {
     [[ -f "$dir/Photos/p1.txt" ]] || fail "cap_drops: the columns leg lost p1.txt"
     cap_drops_fat_skip
     wl-copy --clear >/dev/null 2>&1 || true
-    trap - EXIT
+    cap_drops_trash_disarm
     printf 'CAP_DROPS settings=off,on pasted=image target=held hover=open scroll=band crumb=held columns=held fat=skip\n'
     kill_flea
 }
