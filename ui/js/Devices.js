@@ -329,11 +329,19 @@ function mountError(op, exitCode, stderr, label) {
         return name + " was not " + (op === "unmount" ? "unmounted" : op === "eject" ? "ejected" : "mounted") + ": not authorized."
     if (/no volume|no medium|no media|empty|no device/.test(text))
         return /medium|media|empty/.test(text) ? name + " has no medium in it." : name + " is not a volume this system can mount."
+    if (op === "mount" && /wrong fs type|bad superblock|unknown filesystem type|can.t read superblock|structure needs cleaning/.test(text))
+        return name + " could not be mounted: its file system is damaged or not supported."
     if (op === "unmount")
         return name + " could not be unmounted."
     if (op === "eject")
         return name + " could not be ejected."
     return name + " could not be mounted."
+}
+
+// gio's own reason as the status bar's detail line; sample "Error mounting /dev/sdb1 at /run/media/u/DATA #2: wrong fs type" and "Error unmounting /dev/sdb1: target is busy" give "wrong fs type" and "target is busy", "gio: file:///x: Error ejecting /dev/sdb: busy" gives "busy" (gio's file-URI lead), "" gives "".
+function mountDetail(stderr) {
+    var lines = String(stderr || "").split("\n").map(function (line) { return line.trim() }).filter(function (line) { return line.length > 0 })
+    return lines.join(" ").replace(/^gio:\s*/, "").replace(/^[a-z][a-z0-9+.-]*:\/\/\S*:\s+/i, "").replace(/^Error (?:mounting|unmounting|ejecting) \S+(?: at .*?)?:\s+/, "").trim()
 }
 
 // Sample: ["/home", "/var/log", "/"] for one btrfs device with several subvolumes mounted, ["[SWAP]"]
