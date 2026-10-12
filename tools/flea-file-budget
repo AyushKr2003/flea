@@ -110,7 +110,8 @@ tests/preview-settle-live.qml 532
 tests/preview-decode.qml 759
 tests/js/status.js 354
 tests/rename-grid-bottom.qml 439
-tests/rename-grid-bottom.js 345
+tests/rename-grid-bottom.js 351
+tests/js/runfile.js 305
 tests/ring-bounds.qml 693
 tests/search-live.qml 419
 tests/sidebar-flows.qml 669
