@@ -1223,10 +1223,11 @@ def selftest():
     t_panel = ensure_pane_panel(stub, PanelRec([(stub.now + 100 * ms, 5, 40)], [70, None, 70]), "dolphin")
     check("pane_reopen_chords", stub.chords, [["f11"], ["f11"]])
     check("pane_reopen_timed_second", t_panel, stub.now)
-    # Each refusal names the pane walk: no change frame, a stale frame, no edge, an edge both times, a close that stays closed, a reopen elsewhere.
+    # Each refusal names the pane walk: no change frame, a stale frame, a frame with no ink, no edge, an edge both times, a close that stays closed, a reopen elsewhere.
     refused = {
         "pane_shut": (PanelRec([(100 * ms, 0, -1)], [None, None]), "dolphin"),
         "pane_stale": (PanelRec([(100 * ms, 5, 40)], [None, 70]), "dolphin"),
+        "pane_noink": (PanelRec([(1500 * ms, 5, 0)], [None, 70]), "dolphin"),
         "pane_flat": (PanelRec([(1500 * ms, 5, 40)], [None, None]), "dolphin"),
         "pane_still": (PanelRec([(1500 * ms, 5, 40)], [70, 70]), "dolphin"),
         "pane_stays_closed": (PanelRec([(1500 * ms, 5, 40)], [70, None, None]), "dolphin"),
