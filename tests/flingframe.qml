@@ -25,20 +25,37 @@ ShellRoot {
     property var wheelBefore: null
     property int frameAt: 0
     readonly property int frames: 20
+    // Waits and limits, in ms unless named otherwise.
+    readonly property int tickMs: 16
+    readonly property int timeoutMs: 110000
+    readonly property int mountWaitMs: 300
+    readonly property int fillDeadlineMs: 8000
+    // After the driver's own hold, so the first landing's hold has ended.
+    readonly property int fillGraceMs: 300
+    readonly property int rewindWaitMs: 400
+    readonly property int wheelRewindWaitMs: 200
+    readonly property int wheelTrials: 20
+    // One wheel update moves this many px and a stroke is two of them after its Begin.
+    readonly property int wheelUpdatePx: 20
+    readonly property int wheelUpdates: 2
+    // Rows (tile rows in Grid) below the top a mid start sits at.
+    readonly property int midRowsList: 400
+    readonly property int midRowsGrid: 40
+    // The share of the planned travel a fling must cover for its counts to mean anything.
+    readonly property real travelShare: 0.9
+    // The kinds whose viewport declares cursorClamped (List only; Grid and ColumnPane's ListView declare none).
+    readonly property var clampKinds: ["list"]
+    property double travel: 0
+    property double planned: 0
     property var before: null
     property var samples: []
     property var tallyBefore: null
     property var summary: ({})
     property string kind: "list"
 
-    function pad(i) { var n = String(i); while (n.length < 5) n = "0" + n; return n }
-    function rowsFor(count) {
-        var out = []
-        for (var i = 0; i < count; i++)
-            out.push({ n: "f_" + root.pad(i) + ".txt", d: false, i: "text-plain", p: 420, s: i * 7, m: 1758835200 + i * 60, t: false, k: 0, v: 0 })
-        return out
-    }
-    property var bigRows: root.rowsFor(3000)
+    FlingMeasure { id: measure }
+    function fail(reason) { if (root.failures.indexOf(reason) < 0) root.failures.push(reason) }
+    property var bigRows: measure.rowsFor(3000)
 
     Component {
         id: backendStub
@@ -50,7 +67,7 @@ ShellRoot {
             property bool sortDesc: false
             function peek(path, size, hidden) {
                 var p = String(path)
-                Qt.callLater(function () { var rows = root.rowsFor(6); stub.peeked(p, false, rows.length, rows, false, 0, false, 35, 0, true, "", false) })
+                Qt.callLater(function () { var rows = measure.rowsFor(6); stub.peeked(p, false, rows.length, rows, false, 0, false, 35, 0, true, "", false) })
             }
             function thumb(rows, cacheOnly) { root.tally.thumb += 1 }
             function thumbcancel(rows) { root.tally.thumbcancel += 1 }
@@ -174,33 +191,12 @@ ShellRoot {
             if (kids[i].listingIndex !== undefined) out.push(kids[i])
         return out
     }
-    // Every string a delegate draws, in tree order, so a text that moved is a layout the frame paid.
-    function textsOf(item, out) {
-        if (typeof item.text === "string") out.push(item.text)
-        var kids = item.children
-        for (var i = 0; kids !== undefined && i < kids.length; i++) root.textsOf(kids[i], out)
-        return out
-    }
     function snap() {
         var d = root.driver(), all = root.delegates(), at = new Map()
         for (var i = 0; i < all.length; i++)
-            at.set(all[i], { index: all[i].listingIndex, live: all[i].live === true, texts: root.textsOf(all[i], []).join("|") })
+            at.set(all[i], { index: all[i].listingIndex, live: all[i].live === true, texts: measure.textsOf(all[i], []).join("|") })
         return { created: d.createdCount, destroyed: d.destroyedCount, delegates: all.length, at: at, tally: Object.assign({}, root.tally) }
     }
-    function diff(a, b) {
-        var rebound = 0, texts = 0, entered = 0
-        b.at.forEach(function (now, cell) {
-            var was = a.at.get(cell)
-            if (!was) return
-            if (now.live && (now.index !== was.index || !was.live)) rebound += 1
-            if (now.live && now.texts !== was.texts) texts += 1
-            if (now.live && !was.live) entered += 1
-        })
-        var t = {}
-        for (var k in b.tally) t[k] = b.tally[k] - a.tally[k]
-        return { created: b.created - a.created, destroyed: b.destroyed - a.destroyed, rebound: rebound, texts: texts, tally: t }
-    }
-
     function land(path, total, rows) {
         var p = root.stubPane
         p.listInFlight = true
@@ -218,37 +214,23 @@ ShellRoot {
 
     function go(next) { root.phase = next; root.phaseAt = Date.now() }
     function elapsed() { return Date.now() - root.phaseAt }
-    function stepPx() {
-        var v = root.view()
-        var h = root.kind === "grid" ? v.cellHeight : Flea.Theme.fileRowHeight
-        return root.speeds[root.speedAt] * h
-    }
+    function rowH() { return root.kind === "grid" ? root.view().cellHeight : Flea.Theme.fileRowHeight }
+    function columnsOf() { return root.kind === "grid" ? root.view().columns : 1 }
+    function stepPx() { return root.speeds[root.speedAt] * root.rowH() }
+    function midY(v) { return v.originY - v.topMargin + (root.kind === "grid" ? root.midRowsGrid : root.midRowsList) * root.rowH() }
 
-    function mean(list, pick) { var sum = 0; for (var i = 0; i < list.length; i++) sum += pick(list[i]); return sum / list.length }
-    // A fling frame does the work of the rows entering and nothing else: no backend ask, no build once the pool is full, no read or rebind of a row that stayed.
+    // The view must have moved by the stroke before any count of the stroke means anything.
     function report() {
         var s = root.samples, n = s.length, rows = root.speeds[root.speedAt], start = root.starts[root.startAt]
-        var per = rows * (root.kind === "grid" ? root.view().columns : 1)
-        var m = { created: root.mean(s, function (x) { return x.created }), destroyed: root.mean(s, function (x) { return x.destroyed }),
-                  rebound: root.mean(s, function (x) { return x.rebound }), texts: root.mean(s, function (x) { return x.texts }) }
-        var keys = ["rowFor", "isSelected", "thumb", "thumbcancel", "dirsize", "dirsizecancel", "window", "askMeta", "cursor", "clamped"]
-        for (var k = 0; k < keys.length; k++) m[keys[k]] = root.mean(s, function (x) { return x.tally[keys[k]] })
+        var m = measure.means(s)
         var cs = root.costs.slice().sort(function (a, b) { return a - b; }), csum = 0
         for (var c = 0; c < cs.length; c++) csum += cs[c]
-        var line = "FLINGFRAME " + root.kind + " " + start + " rows=" + rows + " frames=" + n
+        var line = "FLINGFRAME " + root.kind + " " + start + " rows=" + rows + " frames=" + n + " travel=" + root.travel.toFixed(0) + "/" + root.planned.toFixed(0) + "px"
         for (var name in m) line += " " + name + "=" + m[name].toFixed(2)
         console.log(line + " writeMs=" + (csum / cs.length).toFixed(2) + "/" + cs[cs.length - 1])
         var tag = root.kind + " " + start + " rows=" + rows + ": "
-        var asks = m.thumb + m.thumbcancel + m.dirsize + m.dirsizecancel + m.window + m.askMeta
-        if (asks > 0) root.failures.push(tag + asks.toFixed(2) + " backend asks a frame, want 0")
-        if (start === "mid" && m.created > 0) root.failures.push(tag + m.created.toFixed(2) + " delegates built a frame, want 0")
-        if (m.rebound > per + 0.5) root.failures.push(tag + m.rebound.toFixed(2) + " rows rebound a frame, want at most " + per)
-        // A row built or rebound is a row entering; a read past that is a row that stayed.
-        var entering = m.rebound + m.created
-        if (m.texts > entering + 0.5) root.failures.push(tag + m.texts.toFixed(2) + " rows changed text a frame, entering " + entering.toFixed(2))
-        if (m.rowFor > 2 * entering + 0.5) root.failures.push(tag + m.rowFor.toFixed(2) + " row reads a frame, entering " + entering.toFixed(2))
-        if (m.isSelected > entering + 0.5) root.failures.push(tag + m.isSelected.toFixed(2) + " selection reads a frame, entering " + entering.toFixed(2))
-        if (m.cursor > 1.01 || m.clamped > 1.01) root.failures.push(tag + "cursor moved " + m.cursor.toFixed(2) + " and clamped " + m.clamped.toFixed(2) + " a frame, want at most 1")
+        if (root.travel < root.travelShare * root.planned) { root.fail(tag + "the view moved " + root.travel.toFixed(0) + " of " + root.planned.toFixed(0) + " px, so the stroke did not scroll"); return }
+        measure.judge(tag, m, rows * root.columnsOf(), start === "mid", 1).forEach(root.fail)
     }
 
     function finish() {
@@ -268,12 +250,53 @@ ShellRoot {
         root.speedAt = 0
         root.startAt = 0
         viewLoader.sourceComponent = root.kind === "list" ? listView : root.kind === "grid" ? gridView : columnsView
-        root.deadline = Date.now() + 8000
         root.go("mount")
     }
 
+    // A check the probe cannot make is a failure, never a skipped check: the counts and the clamp hook must exist on the view the kind builds.
+    function hookable(v, d) {
+        if (typeof d.createdCount !== "number" || typeof d.destroyedCount !== "number") {
+            root.fail(root.kind + ": the prebuild driver has no createdCount or destroyedCount, so builds cannot be counted")
+            return false
+        }
+        var has = v.cursorClamped !== undefined, want = root.clampKinds.indexOf(root.kind) >= 0
+        if (has !== want) {
+            root.fail(root.kind + ": cursorClamped is " + (has ? "declared" : "missing") + " on the viewport, the probe expects it " + (want ? "declared" : "missing") + ", so the clamp count cannot be trusted")
+            return false
+        }
+        if (has) v.cursorClamped.connect(function (first, last) {
+            root.tally.clamped += 1
+            var p = root.stubPane
+            var to = Math.max(first, Math.min(last, p.cursorIndex))
+            if (to !== p.cursorIndex) p.cursorIndex = to
+        })
+        return true
+    }
+
+    function wheelStroke(v) {
+        var hand = null, kids = v.children
+        for (var w = 0; w < kids.length; w++) if (kids[w].objectName === "fleaScroll") hand = kids[w]
+        if (!hand) { root.fail("wheel: no handler in " + root.kind); return false }
+        var update = { phase: Qt.ScrollUpdate, pixelDelta: Qt.point(0, -root.wheelUpdatePx), angleDelta: Qt.point(0, 0), modifiers: 0, accepted: false }
+        var y0 = v.contentY, t1 = Date.now()
+        hand.handleWheel({ phase: Qt.ScrollBegin, pixelDelta: Qt.point(0, 0), angleDelta: Qt.point(0, 0), modifiers: 0, accepted: false })
+        var took = hand.handleWheel(update)
+        hand.handleWheel(update)
+        v.forceLayout()
+        root.costs.push(Date.now() - t1)
+        var moved = measure.diff(root.wheelBefore, root.snap())
+        var tag = "wheel " + root.kind + ": "
+        if (root.trial === 0) console.log("FLINGFRAME " + root.kind + " wheel first stroke accepted=" + took + " moved=" + (v.contentY - y0) + "px rebound=" + moved.rebound + " created=" + moved.created + " cursor=" + moved.tally.cursor + " asks=" + (moved.tally.thumb + moved.tally.thumbcancel + moved.tally.window))
+        if (took !== true) root.fail(tag + "the handler did not accept the stroke")
+        if (v.contentY === y0) { root.fail(tag + "the handler moved the view by 0 px"); return true }
+        // The stroke is the frame: a mid start has a full pool, and the rows it may reveal are those the pixels it moved cross.
+        var per = (Math.ceil(Math.abs(v.contentY - y0) / root.rowH()) + 1) * root.columnsOf()
+        measure.judge(tag, measure.flat(moved), per, true, root.wheelUpdates).forEach(root.fail)
+        return true
+    }
+
     Timer {
-        interval: 16
+        interval: root.tickMs
         running: true
         repeat: true
         onTriggered: {
@@ -283,36 +306,36 @@ ShellRoot {
                 root.nextKind()
             } else if (root.phase === "mount") {
                 if (!v || !d) return
-                if (root.elapsed() < 300) return
+                if (root.elapsed() < root.mountWaitMs) return
                 root.land("/probe", 3000, root.bigRows)
-                if (typeof v.cursorClamped === "function" || v.cursorClamped !== undefined)
-                    v.cursorClamped.connect(function (first, last) {
-                        root.tally.clamped += 1
-                        var p = root.stubPane
-                        var to = Math.max(first, Math.min(last, p.cursorIndex))
-                        if (to !== p.cursorIndex) p.cursorIndex = to
-                    })
-                root.deadline = Date.now() + 8000
+                if (!root.hookable(v, d)) { root.go("done"); return }
+                root.deadline = Date.now() + root.fillDeadlineMs
                 root.go("fill")
             } else if (root.phase === "fill") {
                 // The pool is full once the driver wants nothing, and the first landing's hold has ended.
-                if (root.elapsed() < d.holdMs + 300) return
+                if (root.elapsed() < d.holdMs + root.fillGraceMs) return
                 if (d.want > 0 && Date.now() < root.deadline) return
-                console.log("FLINGFRAME " + root.kind + " pool delegates=" + root.delegates().length + " parked=" + d.parkedCount + " want=" + d.want + " created=" + d.createdCount + " cols=" + (v.columns !== undefined ? v.columns : 1))
+                console.log("FLINGFRAME " + root.kind + " pool delegates=" + root.delegates().length + " parked=" + d.parkedCount + " want=" + d.want + " created=" + d.createdCount + " cols=" + root.columnsOf())
+                if (d.want > 0) {
+                    root.fail(root.kind + ": the pool never filled, the driver still wants " + d.want + " after " + root.fillDeadlineMs + " ms")
+                    root.go("done")
+                    return
+                }
                 root.go("rewind")
             } else if (root.phase === "rewind") {
-                var h = root.kind === "grid" ? v.cellHeight : Flea.Theme.fileRowHeight
-                v.contentY = v.originY - v.topMargin + (root.starts[root.startAt] === "mid" ? (root.kind === "grid" ? 40 : 400) * h : 0)
+                v.contentY = root.starts[root.startAt] === "mid" ? root.midY(v) : v.originY - v.topMargin
                 root.samples = []
                 root.costs = []
                 root.frameAt = 0
-                if (root.elapsed() < 400) return
+                root.travel = 0
+                root.planned = 0
+                if (root.elapsed() < root.rewindWaitMs) return
                 root.before = root.snap()
                 root.go("fling")
             } else if (root.phase === "fling") {
                 // One frame: read what the last write cost, then write the next step.
                 var now = root.snap()
-                if (root.frameAt > 0) root.samples.push(root.diff(root.before, now))
+                if (root.frameAt > 0) root.samples.push(measure.diff(root.before, now))
                 root.before = now
                 if (root.frameAt >= root.frames) {
                     root.report()
@@ -326,30 +349,20 @@ ShellRoot {
                     return
                 }
                 root.frameAt += 1
-                var t0 = Date.now()
-                v.contentY = v.contentY + root.stepPx()
+                var t0 = Date.now(), y0 = v.contentY, step = root.stepPx()
+                v.contentY = y0 + step
                 v.forceLayout()
                 root.costs.push(Date.now() - t0)
+                root.travel += v.contentY - y0
+                root.planned += step
             } else if (root.phase === "wheelrewind") {
                 // A fresh stroke from rest in the middle: its Begin and first two updates through the real wheel handler, then the layout.
-                var hh = root.kind === "grid" ? v.cellHeight : Flea.Theme.fileRowHeight
-                v.contentY = v.originY - v.topMargin + (root.kind === "grid" ? 40 : 400) * hh
-                if (root.elapsed() < 200) return
+                v.contentY = root.midY(v)
+                if (root.elapsed() < root.wheelRewindWaitMs) return
                 root.wheelBefore = root.snap()
-                var hand = null, kids = v.children
-                for (var w = 0; w < kids.length; w++) if (kids[w].objectName === "fleaScroll") hand = kids[w]
-                if (!hand) { root.failures.push("wheel: no handler in " + root.kind); root.go("done"); return }
-                var y0 = v.contentY, t1 = Date.now()
-                hand.handleWheel({ phase: Qt.ScrollBegin, pixelDelta: Qt.point(0, 0), angleDelta: Qt.point(0, 0), modifiers: 0, accepted: false })
-                var took = hand.handleWheel({ phase: Qt.ScrollUpdate, pixelDelta: Qt.point(0, -20), angleDelta: Qt.point(0, 0), modifiers: 0, accepted: false })
-                hand.handleWheel({ phase: Qt.ScrollUpdate, pixelDelta: Qt.point(0, -20), angleDelta: Qt.point(0, 0), modifiers: 0, accepted: false })
-                v.forceLayout()
-                root.costs.push(Date.now() - t1)
-                var moved = root.diff(root.wheelBefore, root.snap())
-                if (root.trial === 0) console.log("FLINGFRAME " + root.kind + " wheel first stroke accepted=" + took + " moved=" + (v.contentY - y0) + "px rebound=" + moved.rebound + " created=" + moved.created + " cursor=" + moved.tally.cursor + " asks=" + (moved.tally.thumb + moved.tally.thumbcancel + moved.tally.window))
-                if (v.contentY === y0) root.failures.push("wheel: the handler moved " + root.kind + " by 0 px")
+                if (!root.wheelStroke(v)) { root.go("done"); return }
                 root.trial += 1
-                if (root.trial >= 20) {
+                if (root.trial >= root.wheelTrials) {
                     var wc = root.costs.slice(), ws = 0, wm = 0
                     for (var x = 0; x < wc.length; x++) { ws += wc[x]; wm = Math.max(wm, wc[x]) }
                     console.log("FLINGFRAME " + root.kind + " wheel trials=" + wc.length + " beginPlusTwoUpdatesMs=" + (ws / wc.length).toFixed(2) + "/" + wm)
@@ -365,9 +378,9 @@ ShellRoot {
     }
 
     Timer {
-        interval: 110000
+        interval: root.timeoutMs
         running: true
-        onTriggered: { root.failures.push("timeout in " + root.kind + " phase " + root.phase); root.finish() }
+        onTriggered: { root.fail("timeout in " + root.kind + " phase " + root.phase); root.finish() }
     }
     Component.onCompleted: Flea.ViewState.setTextSize({ mode: 14 })
 }
