@@ -37,6 +37,8 @@ ShellRoot {
     readonly property int quietPolls: 8
     // A step that never reaches content is a harness fault, not a duration the product is held to; a 1 MiB parse is the slowest.
     readonly property int watchdogMs: 20000
+    // A parse past this has stalled however alive its worker looks; the slowest seen under load took 20 s.
+    readonly property int stage4CeilingMs: 90000
     readonly property int pollMs: 20
     // A held key repeats every 30 ms; the sweep widens the rest to 300 ms so a late tick on a loaded host cannot pass for a rested cursor.
     readonly property int sweepPaceMs: 30
@@ -314,7 +316,7 @@ ShellRoot {
             Fresh.trace(root)
             // A 1 MiB parse takes 5 to 20 s as the host loads, so stage 4 is held to the worker's silence, which the pane's own fallback times at 10 s, never to speed;
             // a parse that lands past the watchdog is left by stage 4 on this same poll.
-            var workerLive = root.stage === 4 && root.doc() !== null && root.doc().fallbackFires === 0
+            var workerLive = root.stage === 4 && Date.now() - root.stageAt < root.stage4CeilingMs && root.doc() !== null && root.doc().fallbackFires === 0
             if (!workerLive && Date.now() - root.stageAt > root.watchdogMs) {
                 var at = pane ? pane.rowFor(pane.cursorIndex) : null
                 root.fail("stage " + root.stage + " stalled in step " + (root.step + 1) + " reads=" + (root.prepare ? root.prepare.reads : -1)
