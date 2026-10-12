@@ -123,17 +123,43 @@ transferlive_seconds() {
     esac
 }
 
-# Every exit path: stop any payload writer, drain the window, drop the private bus, and delete every payload byte.
+# Each y starts a detached flea --clip-own (src/clip/own.rs spawn_owner) that holds the selection until a newer copy cancels it, so kill_flea never drains it.
+transferlive_stop_owners() {
+    local pid pids result=0 deadline=$((SECONDS + drain_wait_s))
+    local -a owned=() alive=()
+    pids=$(pgrep -x flea) || result=$?
+    (( result <= 1 )) || return 1
+    for pid in $pids; do
+        # Sample cmdline: "/usr/bin/flea\0--clip-own\0", which tr reads as "/usr/bin/flea --clip-own ".
+        [[ "$(tr '\0' ' ' 2>/dev/null < "/proc/$pid/cmdline")" == *" --clip-own " ]] || continue
+        flea_process_owned "$pid" || continue
+        owned+=("$pid")
+        kill "$pid" 2>/dev/null || true
+    done
+    while (( ${#owned[@]} > 0 )); do
+        alive=()
+        for pid in "${owned[@]}"; do
+            if flea_process_owned "$pid"; then alive+=("$pid"); fi
+        done
+        owned=("${alive[@]}")
+        (( ${#owned[@]} > 0 )) || break
+        (( SECONDS < deadline )) || fail "transferlive: clipboard owner ${owned[*]} survived for $drain_wait_s s after SIGTERM"
+        sleep 0.05
+    done
+}
+
+# Every exit path: stop any payload writer, drain the window and its clipboard owners, drop the private bus, and delete every payload byte.
 transferlive_teardown() {
     local pid drained=1
     for pid in "${transferlive_writer_pids[@]}"; do kill "$pid" 2>/dev/null || true; done
     for pid in "${transferlive_writer_pids[@]}"; do wait "$pid" 2>/dev/null || true; done
     transferlive_writer_pids=()
     ( kill_flea ) || drained=0
+    ( transferlive_stop_owners ) || drained=0
     if [[ -n "$transferlive_bus_pid" ]]; then kill "$transferlive_bus_pid" 2>/dev/null || true; fi
     transferlive_bus_pid=""
     if [[ -n "$transferlive_root" ]]; then sandbox_remove "$transferlive_root"; fi
-    (( drained )) || fail "transferlive: the window did not drain at teardown; the payload was deleted anyway"
+    (( drained )) || fail "transferlive: the window or a clipboard owner did not drain at teardown; the payload was deleted anyway"
 }
 
 # Diagnostic for the N1 stall: FLEA_TRANSFERLIVE_SYNC=1 waits for the fixture's own writeback before each launch; S0 rules after the native A/B whether it stays.
