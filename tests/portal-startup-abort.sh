@@ -55,6 +55,7 @@ while [ ! -s "$root/frontend.pid" ] && [ "$waited" -lt 100 ]; do
     waited=$((waited + 1))
 done
 check "term: the run reached its frontend" "1" "$([ -s "$root/frontend.pid" ] && echo 1 || echo 0)"
+check "term: the run's sandbox is present before the TERM" "present" "$([ -e "$root/flea-portal-startup-$runner" ] && echo present || echo gone)"
 kill -TERM "$runner"
 waited=0
 while kill -0 "$runner" 2>/dev/null && [ "$waited" -lt 100 ]; do
