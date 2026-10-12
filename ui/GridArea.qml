@@ -166,6 +166,7 @@ GridView {
         columns: root.columns
         cellWidth: root.cellWidth
         cellHeight: root.cellHeight
+        rowAt: root.tileAt
     }
 
     Flea.FileDrag {
@@ -183,6 +184,8 @@ GridView {
         property int markRow: -1
         // Built ahead of a landing past the shown rows: parked and unparented until the landing adopts it.
         property bool prebuilt: false
+        // Where a press, tap or drag reaches this tile; hover keeps the whole cell.
+        readonly property QtObject pressMask: QtObject { function contains(point: point): bool { return root.hitsTile(cell, point) } }
         Component.onCompleted: if (!root.prebuild.built(cell)) cursorMark.place(cell)
         Component.onDestruction: root.prebuild.gone(cell)
         onParentChanged: if (cell.prebuilt && cell.parent === root.contentItem) root.prebuild.adoptCell(cell)
@@ -212,31 +215,36 @@ GridView {
             enabled: cell.live && root.pane.selectionBand === null
         }
 
-        TapHandler {
-            id: tap
-            enabled: !cell.renaming
-            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-            // A press held past the interval must not fire while the button is
-            // still down on a row about to be dragged; the release still arms.
-            onPressedChanged: if (pressed) root.pane.pressSlowClick()
-            onTapped: function (eventPoint, button) {
-                if (cell.listingIndex < 0) return
-                if (button === Qt.MiddleButton)
-                    Tap.tappedTab(root.pane.rowFor(cell.listingIndex), root.pane.path, root.pane)
-                else if (button === Qt.RightButton)
-                    Tap.tappedMenu(cell.listingIndex, eventPoint, root.pane, root.menu)
-                else {
-                    var wasSole = root.pane.slowClickWasSole(cell.listingIndex)
-                    Tap.tapped(cell.listingIndex, tap.tapCount, tap.point.modifiers, root.pane)
-                    // The slow click renames on the pane's timer; a double click opens through tapped() above instead.
-                    if (tap.tapCount === 2) root.pane.cancelSlowClick()
-                    else if (tap.tapCount === 1 && Tap.onName(cell.captionItem, cell, eventPoint.position, true)) root.pane.armSlowClick(cell.listingIndex, tap.point.modifiers, dragSession.Drag.active, wasSole)
-                    else root.pane.cancelSlowClick()
+        Item {
+            anchors.fill: parent
+            containmentMask: cell.pressMask
+            TapHandler {
+                id: tap
+                enabled: !cell.renaming
+                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                // A press held past the interval must not fire while the button is
+                // still down on a row about to be dragged; the release still arms.
+                onPressedChanged: if (pressed) root.pane.pressSlowClick()
+                onTapped: function (eventPoint, button) {
+                    if (cell.listingIndex < 0) return
+                    if (button === Qt.MiddleButton)
+                        Tap.tappedTab(root.pane.rowFor(cell.listingIndex), root.pane.path, root.pane)
+                    else if (button === Qt.RightButton)
+                        Tap.tappedMenu(cell.listingIndex, eventPoint, root.pane, root.menu)
+                    else {
+                        var wasSole = root.pane.slowClickWasSole(cell.listingIndex)
+                        Tap.tapped(cell.listingIndex, tap.tapCount, tap.point.modifiers, root.pane)
+                        // The slow click renames on the pane's timer; a double click opens through tapped() above instead.
+                        if (tap.tapCount === 2) root.pane.cancelSlowClick()
+                        else if (tap.tapCount === 1 && Tap.onName(cell.captionItem, cell, eventPoint.position, true)) root.pane.armSlowClick(cell.listingIndex, tap.point.modifiers, dragSession.Drag.active, wasSole)
+                        else root.pane.cancelSlowClick()
+                    }
                 }
             }
         }
 
         Flea.RowDrag {
+            containmentMask: cell.pressMask
             session: dragSession
             listingIndex: cell.listingIndex
             row: cell.row
@@ -251,13 +259,25 @@ GridView {
     }
 
     // The space past the last tile is the directory's own, the same rule ui/List.qml carries: a
-    // tile's right click belongs to its delegate, and Tap.onBackground is what tells the two apart.
+    // tile's right click belongs to its delegate, and tileAt is what tells the two apart.
     TapHandler {
         acceptedButtons: Qt.RightButton
         onTapped: function (eventPoint) {
-            if (Tap.onBackground(root, eventPoint))
+            if (root.tileAt(eventPoint.position.x, eventPoint.position.y) < 0)
                 root.menu.openBackground(eventPoint.scenePosition)
         }
+    }
+
+    // A tile is its icon box and its painted caption, or the whole editor while it renames; the rest of a cell is bare ground.
+    function hitsTile(tile, point) {
+        var icon = tile.thumbItem.mapFromItem(tile, point.x, point.y)
+        return tile.editing || (icon.x >= 0 && icon.x < tile.thumbItem.width && icon.y >= 0 && icon.y < tile.thumbItem.height)
+            || Tap.onName(tile.captionItem, tile, point, true)
+    }
+    // The tile index under a content point, -1 on a cell's bare margin or past the last tile.
+    function tileAt(x, y) {
+        var index = root.indexAt(x, y), tile = root.itemAtIndex(index)
+        return tile && root.hitsTile(tile, Qt.point(x - tile.x, y - tile.y)) ? index : -1
     }
 
     onContentYChanged: {
