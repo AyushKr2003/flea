@@ -139,6 +139,15 @@ function run(check) {
     staleArrow.chromeBar.focusedGlyph = "arrow-left"
     Focus.handleKey(key(Qt.Key_Right), staleArrow, rail([]))
     check("a stale stop's arrow still lands on the first live control", staleArrow.chromeBar.focusedGlyph, "search")
+    // The first live stop is not the nearest one here, so a re-home that took glyphs[0] lands on arrow-left.
+    var farEnd = pane("chrome", ["arrow-left", "search", "list", "sliders"])
+    farEnd.chromeBar.focusedGlyph = "dual"
+    Focus.handleKey(key(Qt.Key_Return), farEnd, rail([]))
+    check("a stale stop re-homes to the nearest live control by ORDER, not the first", farEnd.chromeBar.focusedGlyph + "|" + farEnd.chromeBar.pressed.join(","), "sliders|")
+    var farMiddle = pane("chrome", ["arrow-left", "list", "sliders"])
+    farMiddle.chromeBar.focusedGlyph = "columns"
+    Focus.handleKey(key(Qt.Key_Return), farMiddle, rail([]))
+    check("a stale stop between two live ones lands on the closer, neither the first nor the last", farMiddle.chromeBar.focusedGlyph + "|" + farMiddle.chromeBar.pressed.join(","), "list|")
     var inert = pane("chrome")
     inert.chromeBar.focusedGlyph = "list"
     Focus.handleKey(key(Qt.Key_J, none, "j"), inert, rail([]))

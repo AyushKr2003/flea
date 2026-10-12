@@ -15,6 +15,7 @@ keyreach_until() {
     done
 }
 keyreach_has_path() { [[ -e "$1" ]]; }
+keyreach_on_tab() { [[ "$(keyreach_ipc tabIndex)" == "$1" ]]; }
 keyreach_has_tabs() { [[ "$(keyreach_ipc tabCount)" == "$1" ]]; }
 # Looks the row up among the fixture's three, so a listing that left the fixture fails at once instead of walking its rows.
 keyreach_row_of() {
@@ -27,6 +28,8 @@ keyreach_row_of() {
     done
     fail "keyreach: no row named $want among the fixture's 3"
 }
+# Which side of the dual view holds the keyboard, 0 left and 1 right, from the window's own ipc.
+keyreach_side() { keyreach_ipc dualState | jq -r .focused; }
 keyreach_tab() {
     key -k Tab >/dev/null
     settle
@@ -73,13 +76,20 @@ case_keyreach() {
     key -k Escape >/dev/null
     settle
     keyreach_expect list "Escape from the strip"
+    # Ctrl+Return left the keyboard's tab on the new one, which lists sub; the rename below needs the fixture root's three rows.
+    key 1 >/dev/null
+    keyreach_until 10 "the digit 1 to select the first tab" keyreach_on_tab 0
+    shown=$(keyreach_ipc path)
+    [[ "$shown" == "$dir" ]] || fail "keyreach: tab 1 lists '$shown', not the fixture root '$dir'"
     echo "-- Ctrl+4 is Dual --"
     key -k Escape >/dev/null
     key -M ctrl -k 4 -m ctrl >/dev/null
     settle
     [[ "$(keyreach_ipc dualState | jq -r .active)" == "true" ]] || fail "keyreach: Ctrl+4 did not open the dual view"
+    [[ "$(keyreach_side)" == 0 ]] || fail "keyreach: the dual view opened with the keyboard on side '$(keyreach_side)', not the left"
     keyreach_tab
     keyreach_expect list "Tab from the left list reaches the right one"
+    [[ "$(keyreach_side)" == 1 ]] || fail "keyreach: Tab from the left list left the keyboard on side '$(keyreach_side)', not the right"
     keyreach_tab
     keyreach_expect "chrome:arrow-up" "Tab from the right list reaches the bar"
     shot keyreach-chrome-dual
