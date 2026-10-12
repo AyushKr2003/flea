@@ -736,8 +736,8 @@ mutates under the picture and then calls `start(isPdf)`, held j joins the hold w
 staying, and `close()` calls `cancel()` so nothing queued runs. Space's own open takes no picture: its card and
 dim wait for the content's first frame (`lookReady`, which sets `landed`), and `revealed` is `landed || revealedEarly`.
 The hold ends early over the loading state, shown at once (`heldOff`) for every kind, when the `revealCap` single-shot
-fires at `Swap.CAP_MS` (66 ms) counted from after `show()` returns, beside the swap's own `start()`, so a cold first PDF
-compile is not inside it, or when a press or the wheel lands anywhere on the overlay: the top `holdShield` takes it, through
+fires at `Swap.CAP_MS` (66 ms) counted from the key for a kind already built, armed in `load()` before `show()` builds the Loader items (the cap
+once started after `show()` returned, so the key turn added to the 66 ms and the mark drew a frame late), and from after `show()` for a kind's first build, so a cold PDF compile is not inside it (`builtKinds` tells them apart, `close()` clears `revealCapStart`, and so does an open that arms nothing while no cap runs), or when a press or the wheel lands anywhere on the overlay: the top `holdShield` takes it, through
 its own release, so no click reaches a card that never drew. That early loading state stands `Swap.MIN_SHOW_MS` from
 `loadingSince`: `revealIfReady` asks `Swap.showLeft`, and content ready sooner lands when the `minShow` timer ends, while
 content ready before the reveal lands at once. A move during the hold takes no picture and keeps the open's cap;
@@ -9243,3 +9243,5 @@ The auto-hide rail keeps its Sidebar built after the first reveal but parks the 
 The batch Apply native round in `tests/ui-permissions.sh` no longer waits on an owed re-read, because the re-read keeps a click made before it runs (`tests/permissions-focus.qml` emits a watched `changed`, clicks an unmarked row and expects that one mark and cursor after the re-read, in all five views, 200 to 220 checks in `tests/permissions-focus.sh`, 406 to 417 lines in `tools/flea-file-budget`) and refuses one made while it is out as Loading, so the round repeats its click until one lands; `ui/Ipc.qml` drops `rereadOwed` again and `tests/startup-units.txt` returns its `bytes` line to 1654071.
 
 The stage4 join settles `tests/startup-units.txt` at 1656568, the sum the probe takes over its 175 units once every branch is in (over the 1654071 pin: nattrash +129, statusfs +814, presskeep +571, s4ci -8, qmlfix4 +158, s4vis +833), and drops the seven `tests/staticgates-unqualified.tsv` rows per profile that qmlfix4 and s4ci cleared.
+
+The Quick Look reveal cap starting at the key moves one ceiling, re-derived with `wc -l`: `ui/Preview.qml` 839 to 862, for arming `revealCap` before `show()` for a warm kind and after it for a kind's first build (`builtKinds`, `armRevealCap`, `kindFor`), and the `revealCapStart` and `shownSeq` stamps, ordered by `openSeq`, that `tests/quicklook-firstkind.qml` reads and `close()` clears.

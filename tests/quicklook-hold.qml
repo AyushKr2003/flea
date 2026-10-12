@@ -124,7 +124,7 @@ ShellRoot {
         function onLandedChanged() { if (root.pv().landed) root.landedAt = Date.now() }
     }
 
-    // A cold compile inside show() runs after Preview's own handler and before the loaders start; the cap must not count it.
+    // The stall step opens a kind already built, so its cap counts from the key and is running inside show(); a kind's first build arms it after show() (tests/quicklook-firstkind.sh).
     Connections {
         target: root.stallArmed ? root.pv() : null
         function onActiveChanged() {
@@ -219,8 +219,7 @@ ShellRoot {
         if (s.name === "minshow" && !(root.readyAt > 0 && root.readyAt - root.earlySince < Swap.MIN_SHOW_MS))
             root.fail(root.earlySince <= 0 ? "the early loading state never drew, so the wait went untested" : root.readyAt <= 0 ? "the content never reported ready, so the wait went untested" : "the content was ready " + (root.readyAt - root.earlySince) + " ms after the reveal, so it did not land inside the minimum and the wait went untested")
         if (s.name === "stall" && root.capAfterShow !== true) root.fail(root.capAfterShow === null ? "found no reveal cap Timer" : "the reveal cap was not counting once show() returned")
-        if (s.name === "stall" && root.capInShow !== false) root.fail(root.capInShow === null ? "found no reveal cap Timer" : "the reveal cap was already counting inside show(), so a compile there eats into it")
-        if (s.name === "stall" && root.caps() !== 0) root.fail("the cap revealed a picture that landed inside its cap counted from show(), want 0 caps")
+        if (s.name === "stall" && root.capInShow !== true) root.fail(root.capInShow === null ? "found no reveal cap Timer" : "the reveal cap was not counting inside show() for a kind already built, so the key's turn was outside it")
         if (s.name !== "move" && p.path !== root.fixture + "/" + s.file) root.fail("landed on " + p.path)
     }
 

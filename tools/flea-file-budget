@@ -150,7 +150,7 @@ ui/PaneMenuActions.qml 522
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 797
-ui/Preview.qml 839
+ui/Preview.qml 862
 ui/PreviewColumn.qml 586
 ui/PickerChrome.qml 429
 ui/DeviceMounts.qml 530

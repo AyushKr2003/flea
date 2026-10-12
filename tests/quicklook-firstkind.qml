@@ -35,6 +35,9 @@ ShellRoot {
     property var seen: []
     property var unitsAtKey: null
     property double keyAt: 0
+    // Opens judged so far on this leg, and the first open's cap stamp: the first open builds the kind, the second finds it built.
+    property int opened: 0
+    property int firstCapSeq: -1
 
     function log(line) { console.log("QLFK " + line) }
     function fail(why) { root.failures++; root.log("FAIL " + root.leg + ": " + why) }
@@ -162,6 +165,20 @@ ShellRoot {
         if (root.pv() === null || !root.pv().active) root.fail("Space returned without Quick Look open")
     }
 
+    // The cap counts from the key for a kind already built (armed before show() returns its build) and from after the kind's first build (armed after it, so the compile is outside the cap); openSeq orders the two with no clock.
+    // Sample output: "CAP pdf open=1 cold seq=2 shownSeq=1 caps=0 early=false" is a first open whose cap armed after show() returned.
+    function judgeCap(state) {
+        var cap = state.revealCapStart
+        var cold = root.opened === 1
+        root.log("CAP " + root.leg + " open=" + root.opened + (cold ? " cold" : " warm") + " seq=" + (cap ? cap.seq : "none") + " shownSeq=" + state.shownSeq + " caps=" + state.revealCaps + " early=" + state.revealedEarly)
+        if (!cap) { root.fail("open " + root.opened + " never started the reveal cap"); return }
+        if (cold && cap.seq < state.shownSeq) root.fail("a kind's first build was inside the reveal cap: it armed at " + cap.seq + ", before show() returned at " + state.shownSeq)
+        if (!cold && cap.seq > state.shownSeq) root.fail("a warm open's reveal cap armed at " + cap.seq + ", after show() returned at " + state.shownSeq + ", not from the key")
+        if (!cold && cap.seq <= root.firstCapSeq) root.fail("the second open read the first open's cap stamp " + cap.seq)
+        if (cold) root.firstCapSeq = cap.seq
+        if (state.revealedEarly || state.revealCaps !== 0) root.fail("a fast source drew the loading frame: caps=" + state.revealCaps + " early=" + state.revealedEarly)
+    }
+
     FloatingWindow {
         id: window
         implicitWidth: 1000
@@ -246,6 +263,8 @@ ShellRoot {
             if (look === null || !look.revealed) return
             var state = look.openState()
             root.log("OPENED " + root.leg + " revealed=" + look.revealed + " landed=" + state.landed + " early=" + state.revealedEarly + " lookEmptyFrames=" + state.lookEmptyFrames + " ms=" + (Date.now() - root.keyAt) + " libs=" + root.libs() + " pss=" + root.pssKb())
+            root.opened++
+            root.judgeCap(state)
             root.stage = 5
             root.stageAt = Date.now()
             root.press(Qt.Key_Space, 1)
@@ -253,6 +272,8 @@ ShellRoot {
         }
         if (root.stage === 5) {
             if (root.pv().visible) return
+            if (root.pv().openState().revealCapStart !== null) root.fail("close left the reveal cap stamp of open " + root.opened)
+            if (root.opened < 2) { root.openIt(); return }
             root.finish()
             return
         }
