@@ -43,8 +43,8 @@ output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
 
 verdict=0
 fail() { printf 'FAIL %s\n' "$1"; verdict=1; }
-# Sample input: "  INFO qml: FRAMEGAP DONE checks=4708 failed=0 controls=96 controlMiss=0 focusMiss=0" once, after "FRAMEGAP HOSTS 25 ArchiveCompressDialog,...". Every row is one frame side at one stop and state.
-expected_checks=4708 # 4684 plus the per-folder view row (4720), less 12 rows of its 3 frames now one CLIPPED row each
+# Sample input: "  INFO qml: FRAMEGAP DONE checks=4660 failed=0 controls=96 controlMiss=0 focusMiss=0" once, after "FRAMEGAP HOSTS 25 ArchiveCompressDialog,...". Every row is one frame side at one stop and state.
+expected_checks=4660 # 4708, less 48 rows of the menu cursor frame (ui/MenuRow.qml menuCursorFrame, RULINGS 141) now a fill with no frame side to measure
 expected_hosts=25
 # Every GapDialog, GapCheck, GapChrome and GapCrossing side is a control row and must be flagged; GapChrome only draws its frame focused.
 expected_controls=96 # 72 plus GapCrossing, 4 sides over 3 stops and 2 states
