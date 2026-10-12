@@ -309,4 +309,6 @@ Item {
     GridView.onPooled: { root.pooledEditorRow = root.renaming && root.renamePane !== null ? root.renamePane.renamingIndex : -1; root.pooled = true }
     // The kept editor drops first, while every listing read is still parked, so its retirement always owns the edit.
     GridView.onReused: { root.pooledEditorRow = -1; root.pooled = false }
+    // What the grid last drew here (GridGeometry.heldRow), a plain object no binding tracks.
+    readonly property var rowMemo: ({ row: null, index: -1, listing: 0 })
 }
