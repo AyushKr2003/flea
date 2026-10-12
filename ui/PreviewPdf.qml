@@ -43,6 +43,8 @@ Item {
     property int shownPage: -1
     // A render slower than the listing swap's cap stops passing the old page off as the one asked for.
     property bool fellBack: false
+    // When the loading state went up, 0 while none stands; the page that replaces it waits behind it for Swap.MIN_SHOW_MS.
+    property double fellBackAt: 0
     // What the chrome counts: the page on screen, or the one asked for once nothing else stands in for it.
     readonly property int drawnPage: root.shownPage >= 0 && !root.fellBack ? root.shownPage : root.page
 
@@ -101,7 +103,20 @@ Item {
         if (page.status !== Image.Loading) return
         if (root.shownPage < 0) return
         if (root.page !== root.shownPage) renderCap.start()
-        else { renderCap.stop(); root.fellBack = false }
+        else { renderCap.stop(); root.endFallBack() }
+    }
+
+    // The loading state leaves once it has stood Swap.MIN_SHOW_MS; until then the page waits behind it.
+    function endFallBack() {
+        var left = root.fellBack ? Swap.showLeft(root.fellBackAt, Date.now()) : 0
+        if (left > 0) {
+            renderMin.interval = left
+            renderMin.restart()
+            return
+        }
+        renderMin.stop()
+        root.fellBack = false
+        root.fellBackAt = 0
     }
 
     function turn(delta) {
@@ -113,12 +128,14 @@ Item {
     // Loading a page other than the one on screen starts the cap; a landed or failed render ends it.
     function renderChanged() {
         if (page.status === Image.Loading) {
-            if (root.shownPage >= 0 && page.currentFrame !== root.shownPage)
+            if (root.shownPage >= 0 && page.currentFrame !== root.shownPage) {
+                renderMin.stop()
                 renderCap.restart()
+            }
             return
         }
         renderCap.stop()
-        root.fellBack = false
+        root.endFallBack()
         // A document switch reports Ready for loads that drew nothing, or that drew the last file.
         var landed = page.status === Image.Ready && page.implicitWidth > 0
                      && page.source.toString() === doc.source.toString()
@@ -141,7 +158,9 @@ Item {
             return
         // Another document's page is never this one's: it is dropped, and kept by no render, before the switch.
         renderCap.stop()
+        renderMin.stop()
         root.fellBack = false
+        root.fellBackAt = 0
         root.shownPage = -1
         root.opened = next
     }
@@ -178,10 +197,23 @@ Item {
         onTriggered: { root.fastArmed = false; root.openPending() }
     }
 
+    // The cap draws the loading state by 100 ms, as the listing swap's does, and it then stands Swap.MIN_SHOW_MS.
     Timer {
         id: renderCap
-        interval: Swap.HOLD_MS
-        onTriggered: root.fellBack = true
+        objectName: "renderCap"
+        interval: Swap.CAP_MS
+        onTriggered: {
+            if (!root.fellBack)
+                root.fellBackAt = Date.now()
+            root.fellBack = true
+        }
+    }
+
+    // The loading state has stood its minimum, so the page that landed meanwhile shows now.
+    Timer {
+        id: renderMin
+        objectName: "renderMin"
+        onTriggered: { root.fellBack = false; root.fellBackAt = 0 }
     }
 
     PdfDocument {

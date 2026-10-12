@@ -2,10 +2,10 @@
 
 // The listing swap's decisions, see AGENTS.md "The listing swap"; ui/PaneSwap.qml holds the state and the timer.
 
-// Both swaps' cap and the pane mark's hold-off: with four 120 Hz frames for input, the Timer and the draw, the mark shows by 100 ms.
+// Both swaps' cap, the pane mark's hold-off and a PDF page render's cap: with four 120 Hz frames for input, the Timer and the draw, the mark shows by 100 ms.
 var CAP_MS = 66
 
-// The hold-off of a loading state nothing keeps MIN_SHOW_MS: LoadingState outside the pane, the folder fallback, a PDF page.
+// The hold-off of a loading state nothing keeps MIN_SHOW_MS: LoadingState outside the pane, the folder fallback, a search walk's mark.
 var HOLD_MS = 150
 
 // A drawn loading state stands this long before content replaces it; under 100 ms the two changes read as one blink.
