@@ -47,8 +47,8 @@ done <<< "$open_seq"
 [ "$open_forces" -gt 0 ] && [ "$open_ok" -eq 1 ] || fail 'ui/TrashView.qml: open() forces the scope without releasing emptyAction first'
 # Deferred by name (AGENTS.md): PickerChrome.Framed, now the filter chips alone, waits for Picker040 (v0.3.10), and NetworkForm's TLS box has no board.
 grep -q 'component Framed: Item' ui/PickerChrome.qml || fail 'ui/PickerChrome.qml: Framed moved, update this table'
-# Completeness: a ui/ file declaring the Button accessible role and drawing a border.width (ChromeButton's is its keyboard frame, SidebarRow's the rail row's cursor) is in this list or it is a new hand-built button.
-known="ChromeButton DialogButton DialogField MediaStrip PickerChrome SettingsPanel SettingsSegment SidebarRow"
+# Completeness: a ui/ file declaring the Button accessible role and drawing a border.width (ChromeButton's is its keyboard frame, SidebarRow's the rail row's cursor, TabBar's the New tab mark's keyboard frame) is in this list or it is a new hand-built button.
+known="ChromeButton DialogButton DialogField MediaStrip PickerChrome SettingsPanel SettingsSegment SidebarRow TabBar"
 found=""
 for path in $(grep -rlE 'Accessible\.role[[:space:]]*:[[:space:]]*Accessible\.(Push)?Button' ui --include='*.qml'); do
     grep -q 'border\.width' "$path" && found="$found $(basename "$path" .qml)"
