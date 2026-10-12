@@ -58,6 +58,7 @@ fi
 clipped_rows=$(printf '%s\n' "$output" | grep -ao 'FRAMEGAP CLIPPED.*')
 printf 'FRAMEGAP clipped rows: %s\n' "$(printf '%s' "$clipped_rows" | grep -c .)"
 tab=$(printf '\t')
+# Sample input: "FRAMEGAP CLIPPED SettingsPanel general<TAB>Rectangle<TAB>..." is a Settings section row and kept out; "FRAMEGAP CLIPPED GapDialog<TAB>..." is foreign.
 foreign_clipped=$(printf '%s\n' "$clipped_rows" | grep -v -e '^$' -e "^FRAMEGAP CLIPPED SettingsPanel [^$tab]*$tab")
 if [ -n "$foreign_clipped" ]; then
     fail 'a frame outside the Settings card was called clipped by the fold'
