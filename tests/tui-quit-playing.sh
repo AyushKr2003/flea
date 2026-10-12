@@ -37,7 +37,8 @@ result=$(env -i PATH="$scratch/bin:/usr/bin:/bin" HOME="$scratch/home" XDG_STATE
   /usr/bin/python3 - "$bin" "$scratch/fixture" <<'PY'
 import os, pty, select, signal, struct, sys, time, fcntl, termios
 binary, fixture = sys.argv[1], sys.argv[2]
-FRAME, LEAVE = b"\x1b[3;81f", b"\x1b[?1049l"
+# The stand-in's kitty payload, which no part of the TUI draws, marks one relayed mpv frame.
+FRAME, LEAVE = b"a=T,f=24,s=1,v=1,C=1,q=2,m=0;AAAA", b"\x1b[?1049l"
 pid, fd = pty.fork()
 if pid == 0:
     os.execv(binary, [binary, "--tui", fixture])
@@ -69,7 +70,9 @@ mpv_seen = seen.count(FRAME)
 # Unread, the pty fills, the relay blocks in its write and mpv's pipe fills behind it.
 time.sleep(1.0)
 os.kill(pid, signal.SIGTERM)
-while pump(0.5):
+# A clean exit closes the pty well inside this bound; past it the TUI counts as hung and the kill below ends it.
+drain_end = time.monotonic() + 5
+while time.monotonic() < drain_end and pump(0.5):
     pass
 code, deadline = "killed", time.monotonic() + 3
 while time.monotonic() < deadline:
