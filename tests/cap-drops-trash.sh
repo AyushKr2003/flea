@@ -34,10 +34,11 @@ fixture_home_make() {
     printf '%s\n' "$1" > "$fixture_root/home-seen"
 }
 
-# The real launch from tests/ui.sh, renamed: the case's flea_launch_wrap goes through the code that consumes it.
-real_launch_src=$(sed -n '/^launch() {$/,/^}$/{s/^launch()/real_launch()/;p}' "$repo/tests/ui.sh")
-[[ "$real_launch_src" == real_launch\(\)* ]] || fail "tests/ui.sh has no launch function to run"
+# The real launch and the launch_window it calls from tests/ui.sh, launch renamed: the case's flea_launch_wrap goes through the code that consumes it.
+real_launch_src=$(sed -n '/^launch_window() {$/,/^}$/p;/^launch() {$/,/^}$/{s/^launch()/real_launch()/;p}' "$repo/tests/ui.sh")
+[[ "$real_launch_src" == launch_window\(\)* && "$real_launch_src" == *$'\n'real_launch\(\)* ]] || fail "tests/ui.sh has no launch and launch_window functions to run"
 eval "$real_launch_src"
+declare -F launch_window >/dev/null || fail "the launch_window of tests/ui.sh did not load"
 kill_flea() { :; }
 assert_window() { :; }
 flea_pid() { printf stub; }
