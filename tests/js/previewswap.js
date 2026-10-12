@@ -432,7 +432,7 @@ function runE81(check) {
         pre.indexOf("ViewState.previewAutomatic") >= 0 && pre.indexOf("followSettle.running") >= 0 && pre.indexOf("ExtThumbs.manualHold(") >= 0
         && pre.indexOf("cacheOnly: true") >= 0 && pre.indexOf("backend.thumb(work.ask, true)") >= 0 && pre.indexOf("askMeta") < 0, true)
     check("the interim takes the upright original's rect, never the cache pixels",
-        flat.indexOf("PreviewSwap.interimRect(panes.width, panes.height,") >= 0
+        flat.indexOf("PreviewSwap.interimRect(panes.width, panes.height - (root.isRawFile ? Theme.chromeHeight : 0),") >= 0
         && flat.indexOf("root.interimBox !== null ? root.interimBox.x : 0") >= 0
         && quick.indexOf("thumbLimit(interimPicture") < 0, true)
     var askArm = squashed(bodyOf(quick, "function askImage"))
@@ -440,7 +440,7 @@ function runE81(check) {
         askArm.indexOf("root.imageAsked") >= 0 && askArm.indexOf("followSettle.running") >= 0
         && askArm.indexOf("root.pane.backend.askMeta(root.imageRow, false, false, false)") >= 0, true)
     check("a reply for another row is dropped",
-        flat.indexOf("if (root.isImage && row === root.imageRow && root.imageRowShown())") >= 0, true)
+        flat.indexOf("if (root.isImage && !root.isRawFile && row === root.imageRow && root.imageRowShown())") >= 0, true)
     check("the ask re-resolves a drifted index to the shown file",
         askArm.indexOf("root.resolveImageRow()") >= 0
         && squashed(bodyOf(quick, "function resolveImageRow")).indexOf("root.namedRow(at, root.path) !== null ? at : -1") >= 0, true)

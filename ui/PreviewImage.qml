@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import "." as Flea
 import "js/Format.js" as Format
+import "js/Kinds.js" as Kinds
 import "js/PreviewKeys.js" as PreviewKeys
 import "js/Scroll.js" as Scroll
 import "js/Thumbs.js" as Thumbs
@@ -15,6 +16,13 @@ Item {
     clip: true
 
     property string path: ""
+
+    // A camera RAW is drawn through the copy of its embedded JPEG that Preview.qml's meta reply names, never itself; its picture area stops above the caption band.
+    readonly property bool raw: Kinds.isRaw(root.path)
+    property string embedded: ""
+    property bool embeddedAnswered: false
+    readonly property string drawPath: root.raw ? root.embedded : root.path
+    readonly property real areaHeight: root.raw ? root.height - Theme.chromeHeight : root.height
 
     // Times the fit size, on the PDF's ladder; 1 is fit.
     property real zoom: PreviewKeys.PDF_ZOOM_MIN
@@ -60,8 +68,10 @@ Item {
     // The original's pixels for the thumbnail fit, from Preview.qml's meta reply; 0 while unknown.
     property real origW: 0
     property real origH: 0
+    // The turn of those pixels, so the caption names the picture as drawn.
+    property int origOrient: 1
     // The final decode refused; the thumbnail below stands in when it decoded.
-    readonly property bool pictureFailed: picture.status === Image.Error
+    readonly property bool pictureFailed: picture.status === Image.Error || (root.raw && root.embeddedAnswered && root.embedded.length === 0)
     readonly property bool fallbackShown: root.pictureFailed && root.interimReady
     readonly property string name: root.path.substring(root.path.lastIndexOf("/") + 1)
 
@@ -83,10 +93,10 @@ Item {
     // The cached thumbnail at once, sized to the final's rect by the caller; it stays as the picture at the column fit when the final cannot decode.
     Image {
         id: interimPicture
-        readonly property real ownFit: Thumbs.fitScale(root.width, root.height, implicitWidth, implicitHeight,
+        readonly property real ownFit: Thumbs.fitScale(root.width, root.areaHeight, implicitWidth, implicitHeight,
             Thumbs.posterLimit(false, implicitWidth, implicitHeight, root.origW, root.origH))
         x: root.fallbackShown ? Math.round((root.width - width) / 2) : root.interimX
-        y: root.fallbackShown ? Math.round((root.height - height) / 2) : root.interimY
+        y: root.fallbackShown ? Math.round((root.areaHeight - height) / 2) : root.interimY
         width: root.fallbackShown ? implicitWidth * ownFit : root.interimWidth
         height: root.fallbackShown ? implicitHeight * ownFit : root.interimHeight
         // Only while the decode runs: a final with transparent pixels would show it through.
@@ -108,7 +118,7 @@ Item {
 
     Image {
         id: picture
-        readonly property real fit: Thumbs.fitScale(root.width, root.height, implicitWidth, implicitHeight, 1)
+        readonly property real fit: Thumbs.fitScale(root.width, root.areaHeight, implicitWidth, implicitHeight, 1)
         x: Math.round((flick.contentWidth - width) / 2 - flick.contentX)
         y: Math.round((flick.contentHeight - height) / 2 - flick.contentY)
         width: root.vector ? root.width * root.zoom : implicitWidth * fit * root.zoom
@@ -116,7 +126,7 @@ Item {
         // The sharper layer takes over once it has a frame, so a transparent picture never shows two.
         visible: picture.status === Image.Ready && !sharp.drawn
         // Format.fileUri, not a concatenation: a # or a ? in the name would truncate a hand-built URI.
-        source: root.path.length > 0 && root.interimSettled ? Format.fileUri(root.path) : ""
+        source: root.drawPath.length > 0 && root.interimSettled ? Format.fileUri(root.drawPath) : ""
         fillMode: root.vector ? Image.PreserveAspectFit : Image.Stretch
         // A phone keeps a portrait photo's turn in EXIF, and Qt leaves it unapplied unless asked.
         autoTransform: true
@@ -126,7 +136,7 @@ Item {
         // and 8 MB bound to this box's 2099x1156 surface, measured, for 17 ms more decode.
         // corner: a zero here means unbounded to Qt, so the floor is 1 and never 0.
         sourceSize.width: Math.max(1, Math.round(root.width))
-        sourceSize.height: Math.max(1, Math.round(root.height))
+        sourceSize.height: Math.max(1, Math.round(root.areaHeight))
     }
 
     // Past fit the fit picture is drawn scaled until this layer has a frame.
@@ -141,7 +151,7 @@ Item {
     Flickable {
         id: flick
         width: root.width
-        height: root.zoomed ? root.height - band.height : root.height
+        height: root.zoomed ? root.height - band.height : root.areaHeight
         contentWidth: Math.max(flick.width, picture.width)
         contentHeight: Math.max(flick.height, picture.height)
         interactive: root.zoomed
@@ -156,20 +166,22 @@ Item {
         }
     }
 
-    // The zoom as a number under the picture, a media strip tall with no divider; absent at fit.
+    // The zoom as a number under the picture, a media strip tall with no divider; absent at fit, except that a RAW's fit says what is drawn.
+    readonly property bool captioned: root.raw && !root.zoomed && picture.status === Image.Ready
+    readonly property string caption: "Embedded preview \u00b7 %1 \u00d7 %2".arg(root.origOrient >= 5 ? root.origH : root.origW).arg(root.origOrient >= 5 ? root.origW : root.origH)
     Rectangle {
         id: band
-        visible: root.zoomed
+        visible: root.zoomed || root.captioned
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         height: Theme.chromeHeight
-        color: Theme.color.surface
+        color: root.zoomed ? Theme.color.surface : Theme.color.background
 
         Text {
             anchors.centerIn: parent
-            text: root.zoomLabel
-            color: Theme.color.foreground
+            text: root.zoomed ? root.zoomLabel : root.caption
+            color: root.zoomed ? Theme.color.foreground : Theme.color.muted
             font.family: Theme.font.family
             font.pixelSize: Theme.font.caption
             font.features: { "tnum": 1 }

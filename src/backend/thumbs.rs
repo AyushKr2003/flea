@@ -1,5 +1,6 @@
 use crate::backend::aliases::Aliases;
 use crate::backend::child::{run_with_timeout, Ran};
+use crate::backend::rawpreview;
 use crate::backend::sandbox;
 use crate::backend::thumbargv::argv;
 use crate::backend::thumbcache::{uri_for, Cache};
@@ -169,6 +170,11 @@ pub(crate) fn run_one(tables: &Tables, job: &mut Job) -> Outcome {
     };
     // The cache key is the URI of the path the user named, because that is the key every other application on the box looks under; see AGENTS.md "Thumbnail cache".
     let key_uri = uri_for(&job.path);
+    // A RAW that holds no preview fails here, unmarked, because the walk is cheap and an unwritable cache may be the cause.
+    let input = match input_for(tables, job) {
+        Some(p) => p,
+        None => return Outcome::Failed,
+    };
     let final_path = tables.cache.large_path(&key_uri);
     let dir = match final_path.parent() {
         Some(d) => d.to_path_buf(),
@@ -182,7 +188,7 @@ pub(crate) fn run_one(tables: &Tables, job: &mut Job) -> Outcome {
         None => return Outcome::Failed,
     };
     // corner: an input that will not canonicalise is not recorded in fail/, because a vanished file is not a broken one; see AGENTS.md "Thumbnail pool".
-    let (abs, inner) = match argv(spec, &job.path, &temp, THUMB_SIZE) {
+    let (abs, inner) = match argv(spec, &input, &temp, THUMB_SIZE) {
         Some(a) => a,
         None => return discard(&temp),
     };
@@ -222,6 +228,14 @@ pub(crate) fn run_one(tables: &Tables, job: &mut Job) -> Outcome {
         return discard(&temp);
     }
     Outcome::Ready(final_path)
+}
+
+// What the thumbnailer is handed: a camera RAW's embedded JPEG, copied out once per file version, or the file itself.
+pub(crate) fn input_for(tables: &Tables, job: &Job) -> Option<PathBuf> {
+    match tables.specs.raw_route(&job.mime, &tables.aliases) {
+        Some(_) => rawpreview::ensure(&job.path).map(|copy| copy.file),
+        None => Some(job.path.clone()),
+    }
 }
 
 // A timeout on a non-local file records nothing, so a slow share never stays broken.

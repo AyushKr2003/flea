@@ -97,7 +97,7 @@ Item {
     property string interimStamp: ""
     // The interim's rect off the upright original, null while its pixels are unknown: no
     // interim until then. A cache file is already upright, so no box swap applies here.
-    readonly property var interimBox: PreviewSwap.interimRect(panes.width, panes.height,
+    readonly property var interimBox: PreviewSwap.interimRect(panes.width, panes.height - (root.isRawFile ? Theme.chromeHeight : 0),
         root.imageW, root.imageH, root.imageOrient)
     // True once the interim is on screen at the final's rect; lookReady releases on this.
     readonly property bool interimVisible: root.isImage && root.interimThumb.length > 0
@@ -111,6 +111,10 @@ Item {
     property int imageRow: -1
     // One meta ask per show; onRowsChanged never re-asks behind it.
     property bool imageAsked: false
+    // A camera RAW is drawn through the copy of its embedded JPEG the meta reply names; null until it lands or when the RAW holds none.
+    readonly property bool isRawFile: root.isImage && Kinds.isRaw(root.path)
+    property var rawCopy: null
+    property bool rawAnswered: false
     function swapState() {
         if (root.swap) return root.swap.describe()
         return { holding: false, capturing: false, fellBack: false, holds: 0, fallbacks: 0,
@@ -307,6 +311,8 @@ Item {
         root.imageOrient = 1
         root.imageRow = -1
         root.imageAsked = false
+        root.rawCopy = null
+        root.rawAnswered = false
         stripHideTimer.stop()
         root.active = false
         root.kind = ""
@@ -363,11 +369,13 @@ Item {
         root.interimThumb = newThumb || ""
         root.interimStamp = newPath
         // The meta row is the one captured at open/follow, never the cursor now.
-        root.imageRow = root.isImage && (newThumb || "").length > 0 && newRow !== undefined ? newRow : -1
+        root.imageRow = root.isImage && ((newThumb || "").length > 0 || Kinds.isRaw(newPath)) && newRow !== undefined ? newRow : -1
         root.imageW = 0
         root.imageH = 0
         root.imageOrient = 1
         root.imageAsked = false
+        root.rawCopy = null
+        root.rawAnswered = false
         root.path = newPath
         root.iconName = newIcon
         root.size = newSize
@@ -417,7 +425,7 @@ Item {
     // The original's pixels, which size the interim like the final; only with a thumb to draw,
     // once per show, and never while a held key is still bursting.
     function askImage() {
-        if (!root.isImage || root.interimThumb.length === 0 || !root.pane) return
+        if (!root.isImage || (root.interimThumb.length === 0 && !Kinds.isRaw(root.path)) || !root.pane) return
         if (root.imageRow < 0 || root.imageAsked || followSettle.running) return
         // An insert or a re-sort between capture and ask moves another file to the index,
         // so the row must still name the shown file before anything is asked for it.
@@ -446,11 +454,21 @@ Item {
                 root.archiveMeta = { entries: entries, unpacked: unpacked, archiveFailed: archiveFailed, names: names }
             if (root.isMedia && row === root.mediaRow)
                 root.mediaRate = sampleRate
-            if (root.isImage && row === root.imageRow && root.imageRowShown()) {
+            if (root.isImage && !root.isRawFile && row === root.imageRow && root.imageRowShown()) {
                 root.imageW = w
                 root.imageH = h
                 root.imageOrient = orient
             }
+        }
+        // The RAW's own pixels are not what is drawn, so its size and turn come from the copy and not from the file's header.
+        function onMetaResult(message) {
+            if (!root.isRawFile || message.row !== root.imageRow || !root.imageRowShown()) return
+            root.rawCopy = message.raw || null
+            root.rawAnswered = true
+            if (root.rawCopy === null) return
+            root.imageW = root.rawCopy.w
+            root.imageH = root.rawCopy.h
+            root.imageOrient = root.rawCopy.orient
         }
     }
 
@@ -460,7 +478,7 @@ Item {
         function onRowsChanged() {
             if (root.active && root.isArchive && root.archiveMeta === null) root.askArchive()
             if (root.active && root.isMedia && root.mediaRate === 0) root.askMedia()
-            if (root.active && root.isImage && root.imageW === 0) root.askImage()
+            if (root.active && root.isImage && root.imageW === 0 && !root.rawAnswered) root.askImage()
         }
     }
 
@@ -590,6 +608,9 @@ Item {
                     item.path = Qt.binding(function () { return root.path })
                     item.origW = Qt.binding(function () { return root.imageW })
                     item.origH = Qt.binding(function () { return root.imageH })
+                    item.origOrient = Qt.binding(function () { return root.imageOrient })
+                    item.embedded = Qt.binding(function () { return root.rawCopy !== null ? root.rawCopy.file : "" })
+                    item.embeddedAnswered = Qt.binding(function () { return root.rawAnswered })
                     item.interimThumb = Qt.binding(function () { return root.interimThumb })
                     item.interimVisible = Qt.binding(function () { return root.interimVisible })
                     item.interimX = Qt.binding(function () { return root.interimBox !== null ? root.interimBox.x : 0 })

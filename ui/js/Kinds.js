@@ -52,6 +52,11 @@ function isMarkdown(name) {
     return false
 }
 
+// The eleven camera RAW types the backend copies a preview out of, told apart by extension like a PDF; Sample input: "IMG_0412.CR3" is true.
+function isRaw(name) {
+    return /\.(cr[23]|nef|nrw|arw|sr2|dng|raf|orf|rw2|pef)$/i.test(String(name))
+}
+
 function isPdf(name) {
     var lower = String(name).toLowerCase()
     return lower.length > 4 && lower.indexOf(".pdf", lower.length - 4) !== -1
