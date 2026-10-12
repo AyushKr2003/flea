@@ -11,7 +11,7 @@ ShellRoot {
 
     readonly property string fixture: Quickshell.env("COLHID_DIR")
     // More than one round only for a timing run; the first round alone carries the search.
-    readonly property int rounds: Math.max(1, parseInt(Quickshell.env("COLHID_ROUNDS") || "1", 10))
+    readonly property int rounds: { var n = parseInt(Quickshell.env("COLHID_ROUNDS") || "1", 10); return n > 0 ? n : 1 }
     readonly property int folderRows: 283
     readonly property int deepRow: 200
     readonly property int movedRow: 230
