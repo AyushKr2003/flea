@@ -207,8 +207,8 @@ trash_guard_store() {
         while IFS=$'\t' read -r uri original; do
             [[ "$uri" == trash:///* && -n "$original" ]] || fail "trash: malformed provider row"
             trash_guard "$original"
-            # The trash GLib used for this row follows the original's own device, never the data home's.
-            row_trash=$(sandbox_trash_files_dir "$original") || fail "trash: no GLib trash directory for $original"
+            # The trash GLib used for this row follows the original's own device; callers whose window runs under another HOME pass it as $2.
+            row_trash=$(sandbox_trash_files_dir "$original" "${2:-$HOME}") || fail "trash: no GLib trash directory for $original"
             backing=$(trash_backing "$uri") || fail "trash: unavailable backing path"
             trash_guard_backing "$backing" "$row_trash"
             trash_files=$row_trash
@@ -369,9 +369,9 @@ case_trashfocus() {
     printf 'beta\n' > "$payload/beta.txt"
     launch "$payload"
     wait_listing 2
+    trash_trap_own "$trash_files" "$payload" "trash" alpha.txt beta.txt
     trash_move alpha.txt 0 1
     trash_move beta.txt 1 0
-    trash_trap_own "$trash_files" "$payload" "trash" alpha.txt beta.txt
     trash_rail
     trash_wait '.opened and .total == 2 and (.busy == false)'
     state=$(ipc trashFocusEmpty)
@@ -425,9 +425,9 @@ case_trasharm() {
     printf 'beta\n' > "$payload/beta.txt"
     launch "$payload"
     wait_listing 2
+    trash_trap_own "$trash_files" "$payload" "trasharm" alpha.txt beta.txt
     trash_move alpha.txt 0 1
     trash_move beta.txt 1 0
-    trash_trap_own "$trash_files" "$payload" "trasharm" alpha.txt beta.txt
     trash_rail
     trash_wait '.opened and .total == 2 and (.busy == false)'
     trash_click trashRowCentre 0 left
@@ -787,13 +787,13 @@ trash_stale_confirmations() {
 # trash_guard refuses any path outside it.
 trash_sweep_case() {
     local info recent old_one old_two swept day trash_files trash_info
+    # GLib trashes to the home store or the fixture mount's top trash by device.
+    trash_files=$(sandbox_trash_files_dir "$payload") || fail "trash: no GLib trash directory for $payload"
+    trash_trap_own "$trash_files" "$payload" "trash" keep.txt stale-one.txt stale-two.txt
     for name in keep.txt stale-one.txt stale-two.txt; do
         printf '%s\n' "$name" > "$payload/$name"
         /usr/bin/gio trash -- "$payload/$name" || fail "trash: sweep fixture could not be trashed"
     done
-    # GLib trashes to the home store or the fixture mount's top trash by device.
-    trash_files=$(sandbox_trash_files_dir "$payload") || fail "trash: no GLib trash directory for $payload"
-    trash_trap_own "$trash_files" "$payload" "trash" keep.txt stale-one.txt stale-two.txt
     trash_info="${trash_files%/files}/info"
     [[ -n "$trash_info" && "$trash_info" == /* ]] || fail "trash: no GLib trash info directory for $payload"
     # gio writes DeletionDate into the .trashinfo beside each item, and it is the same field the
@@ -884,9 +884,9 @@ case_trash() {
     printf 'alpha\n' > "$payload/alpha.txt"
     printf 'beta\n' > "$payload/beta.txt"
     wait_listing 2
+    trash_trap_own "$trash_files" "$payload" "trash" beta.txt
     trash_move alpha.txt 0 1
     trash_move beta.txt 1 0
-    trash_trap_own "$trash_files" "$payload" "trash" beta.txt
     trash_wait '.count == 2'
     trash_guard_store 2
     trash_shot trash-full-not-current
@@ -930,9 +930,9 @@ case_trash() {
     mkdir "$payload/locked"
     printf 'survive failed delete\n' > "$payload/locked/child.txt"
     wait_listing 3
+    trash_trap_own "$trash_files" "$payload" "trash" good.txt locked
     trash_move good.txt 0 2
     trash_move locked 1 1
-    trash_trap_own "$trash_files" "$payload" "trash" good.txt locked
     # The lock goes on where the permanent delete will meet it, which is the trash's own backing copy.
     # gio refuses to trash a directory it cannot write at all: measured on the box, "Unable to trash
     # file ...: Permission denied", so locking it before the move left the row in the listing and this

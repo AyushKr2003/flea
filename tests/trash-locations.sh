@@ -231,6 +231,120 @@ sandbox_trash_remove_own "$fake_files" "$test_root" "../escape.txt" && fail "sla
 sandbox_trash_remove_own "$test_root/top" "$test_root" own.txt && fail "non-files trash accepted"
 ok "removal refuses slash names and non-files trashes"
 
+# A %XX escape followed by a glob character decodes literally: the cut for the two hex digits is not a pattern.
+sandbox_trash_unescape 'a%41*b%41[c%41?d%2541' || fail "unescape refused a glob after an escape"
+[[ "$_SANDBOX_TRASH_UNESCAPED" == 'aA*bA[cA?d%41' ]] || fail "glob after an escape decoded to $_SANDBOX_TRASH_UNESCAPED"
+ok "a glob character after an escape decodes literally"
+
+# The EXIT trap legs drive the guard functions in a child shell, each with its own fake mount-top trash inside the marked root.
+trapleg="$test_root/trapleg.sh"
+cat > "$trapleg" <<'LEG'
+#!/usr/bin/env bash
+. "$GUARD"
+mode=$1
+case "$mode" in
+fail)
+    sandbox_trash_trap_own "$FILES" "$ROOT" a.txt || exit 9
+    exit 1
+    ;;
+status)
+    trap 'printf "%s" "$?" > "$FLAG"' EXIT
+    sandbox_trash_trap_own "$FILES" "$ROOT" a.txt || exit 9
+    exit 7
+    ;;
+rechain)
+    sandbox_trash_trap_own "$FILES" "$ROOT" a.txt || exit 9
+    trap 'printf ran > "$FLAG"' EXIT
+    sandbox_trash_trap_own "$FILES" "$ROOT" b.txt || exit 9
+    exit 1
+    ;;
+subshell)
+    trap 'printf parent > "$FLAG"' EXIT
+    (
+        sandbox_trash_trap_own "$FILES" "$ROOT" c.txt || exit 9
+        exit 0
+    )
+    [ -e "$FILES/c.txt" ] && echo SUB_LEFT_C
+    [ -e "$FLAG" ] && echo SUB_RAN_PARENT_EARLY
+    sandbox_trash_trap_own "$FILES" "$ROOT" a.txt || exit 9
+    (
+        sandbox_trash_trap_own "$FILES" "$ROOT" b.txt || exit 9
+        exit 0
+    )
+    [ -e "$FILES/b.txt" ] && echo SUB_LEFT_B
+    [ -e "$FILES/a.txt" ] || echo SUB_TOOK_A
+    [ -e "$FLAG" ] && echo SUB_RAN_PARENT
+    exit 0
+    ;;
+casetrap)
+    trap 'printf parent >> "$FLAG"' EXIT
+    (
+        trap - EXIT
+        trap 'printf case >> "$FLAG"' EXIT
+        sandbox_trash_trap_own "$FILES" "$ROOT" d.txt || exit 9
+        exit 1
+    )
+    [ -e "$FILES/d.txt" ] && echo CASE_LEFT_D
+    [ "$(cat "$FLAG" 2>/dev/null)" = case ] || echo CASE_TRAP_LOST
+    exit 0
+    ;;
+esac
+LEG
+# Makes one trashed entry the trap may remove: a files entry, its payload and a mount-top relative trashinfo.
+trapleg_entry() {
+    local files="$1" top="$2" name="$3"
+    printf 'mine\n' > "$files/$name" || fail "no trap files entry $name"
+    printf 'mine\n' > "$top/payload/$name" || fail "no trap payload $name"
+    printf '[Trash Info]\nPath=payload/%s\nDeletionDate=2026-10-11T00:00:00\n' "$name" > "${files%/files}/info/$name.trashinfo" || fail "no trap info $name"
+}
+# Runs the driver in a fresh fake mount top; sets leg_files, leg_flag and leg_out, and returns the driver's status.
+trapleg_run() {
+    local mode="$1" name rc=0
+    shift
+    leg_top="$test_root/trapleg-$mode"
+    leg_files="$leg_top/.Trash-$uid/files"
+    leg_flag="$leg_top/flag"
+    mkdir -p "$leg_files" "${leg_files%/files}/info" "$leg_top/payload" || fail "no trap leg trash for $mode"
+    for name in "$@"; do trapleg_entry "$leg_files" "$leg_top" "$name"; done
+    leg_out=$(GUARD="$repo/tools/flea-sandbox-guard" FILES="$leg_files" ROOT="$leg_top" FLAG="$leg_flag" bash "$trapleg" "$mode" 2>/dev/null) || rc=$?
+    return "$rc"
+}
+trapleg_gone() {
+    local name
+    for name in "$@"; do
+        [[ ! -e "$leg_files/$name" && ! -e "${leg_files%/files}/info/$name.trashinfo" ]] || return 1
+    done
+}
+
+rc=0; trapleg_run fail a.txt || rc=$?
+[[ "$rc" == 1 ]] || fail "failing leg exited $rc, not 1"
+trapleg_gone a.txt || fail "a failing script left its registered entry in the mount-top trash"
+ok "trap: a registered entry goes when the script exits by exit 1"
+
+rc=0; trapleg_run status a.txt || rc=$?
+[[ "$rc" == 7 ]] || fail "status leg exited $rc, not 7"
+[[ "$(cat "$leg_flag" 2>/dev/null)" == 7 ]] || fail "a trap set before the registration saw status $(cat "$leg_flag" 2>/dev/null), not 7"
+trapleg_gone a.txt || fail "the status leg left its registered entry"
+ok "trap: a trap set before the first registration still runs and sees exit 7"
+
+rc=0; trapleg_run rechain a.txt b.txt || rc=$?
+[[ "$rc" == 1 ]] || fail "rechain leg exited $rc, not 1"
+[[ "$(cat "$leg_flag" 2>/dev/null)" == ran ]] || fail "the trap set after a registration did not run"
+trapleg_gone a.txt b.txt || fail "a trap set after a registration disarmed the recorded removals"
+ok "trap: a trap set after a registration is chained again by the next one"
+
+rc=0; trapleg_run subshell a.txt b.txt c.txt || rc=$?
+[[ "$rc" == 0 && -z "$leg_out" ]] || fail "subshell leg exited $rc with [$leg_out]"
+trapleg_gone a.txt b.txt c.txt || fail "the subshell leg left an entry"
+[[ "$(cat "$leg_flag" 2>/dev/null)" == parent ]] || fail "the parent trap did not run at the parent's exit"
+ok "trap: a subshell removes its own names and never runs the parent's trap or jobs"
+
+rc=0; trapleg_run casetrap d.txt || rc=$?
+[[ "$rc" == 0 && -z "$leg_out" ]] || fail "case trap leg exited $rc with [$leg_out]"
+trapleg_gone d.txt || fail "the case subshell left its registered entry"
+[[ "$(cat "$leg_flag" 2>/dev/null)" == caseparent ]] || fail "a case subshell's own EXIT trap was not chained: flag $(cat "$leg_flag" 2>/dev/null)"
+ok "trap: a case subshell that set its own EXIT trap keeps it chained, as tests/ui.sh runs each case"
+
 # Removes a trash dir this check made once its files and info dirs are empty; anything else stays.
 gio_sweep() {
     [[ "${2:-1}" == 0 ]] || return 0

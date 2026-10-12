@@ -303,7 +303,7 @@ sandbox_trash_unescape() {
     case "$s" in *%*) ;; *) _SANDBOX_TRASH_UNESCAPED=$_SANDBOX_TRASH_UNESCAPED$s; return 0 ;; esac
     pre=${s%%\%*}
     s=${s#*\%}
-    case "$s" in [0-9abcdefABCDEF][0-9abcdefABCDEF]*) hex=${s%${s#??}}; s=${s#??} ;; *) _SANDBOX_TRASH_UNESCAPED=$_SANDBOX_TRASH_UNESCAPED$pre%; continue ;; esac
+    case "$s" in [0-9abcdefABCDEF][0-9abcdefABCDEF]*) hex=${s%"${s#??}"}; s=${s#??} ;; *) _SANDBOX_TRASH_UNESCAPED=$_SANDBOX_TRASH_UNESCAPED$pre%; continue ;; esac
     printf -v ch '%b' "\\0$(printf '%03o' "$((16#$hex))")"
     _SANDBOX_TRASH_UNESCAPED=$_SANDBOX_TRASH_UNESCAPED$pre$ch
   done
@@ -317,22 +317,27 @@ if [ -z "${_SANDBOX_TRASH_TRAP_INIT:-}" ]; then
   _SANDBOX_TRASH_PREV_EXIT=
 fi
 sandbox_trash_trap_own() {
-  local trash=${1:-} root=${2:-} name prev
+  local trash=${1:-} root=${2:-} name live cmd prev= fresh=0
   [ -n "$trash" ] && [ -n "$root" ] && [ $# -ge 3 ] || return 1
   case "$trash" in /*) ;; *) return 1 ;; esac
   case "$root" in /*) ;; *) return 1 ;; esac
   shift 2
+  # The first registration in a shell drops the jobs it inherited from a parent shell, which runs them itself.
+  [ "$_SANDBOX_TRASH_TRAPPED" = "$BASHPID" ] || { fresh=1; _SANDBOX_TRASH_TRAP_JOBS=(); }
   for name in "$@"; do
     case "$name" in ""|*/*|*$'\t'*|*$'\n'*) return 1 ;; esac
     _SANDBOX_TRASH_TRAP_JOBS+=("$trash"$'\t'"$root"$'\t'"$name")
   done
-  # The first registration chains the trap already set instead of replacing it.
-  if [ -z "$_SANDBOX_TRASH_TRAPPED" ]; then
-    _SANDBOX_TRASH_TRAPPED=1
-    prev=$(trap -p EXIT 2>/dev/null) || prev=
-    # trap -p quotes the command for eval, so set -- unquotes one with quotes inside it too.
-    case "$prev" in "trap -- "*) eval "set -- $prev"; prev=${3:-} ;; *) prev= ;; esac
+  # A subshell prints its parent's traps until it runs a trap command, so this reset of an unused signal leaves trap -p showing only this shell's own.
+  trap - URG
+  # trap -p quotes the command for eval, so set -- unquotes one with quotes inside it too.
+  live=$(trap -p EXIT 2>/dev/null) || live=
+  case "$live" in "trap -- "*) eval "set -- $live"; cmd=${3:-} ;; *) cmd= ;; esac
+  # Install when this shell has not yet, or when a later trap replaced ours, and chain the trap this shell set.
+  if [ "$fresh" = 1 ] || [ "$cmd" != sandbox_trash_trap_run ]; then
+    [ "$cmd" = sandbox_trash_trap_run ] || prev=$cmd
     _SANDBOX_TRASH_PREV_EXIT=$prev
+    _SANDBOX_TRASH_TRAPPED=$BASHPID
     trap sandbox_trash_trap_run EXIT
   fi
   return 0

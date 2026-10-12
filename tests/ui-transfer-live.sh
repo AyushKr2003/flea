@@ -579,6 +579,7 @@ transferlive_replace() {
         and .focus == "keep" and ([.buttons[].visible] | all)' "replace: the paste asks about big.bin, on Keep both, with every button up"
     key l >/dev/null
     menus_expect collideState '.opened and .focus == "replace"' "replace: l moves the focus to Replace"
+    trash_trap_own "$replace_trash" "$dir" "transferlive: replace" big.bin
     key -k Return >/dev/null
     transferlive_watch replace "$want" 1 'big\.bin'
     transferlive_settled replace "Copied 1 item · z undoes"
@@ -586,7 +587,6 @@ transferlive_replace() {
     kill_flea
     [[ "$(cat "$replace_trash/big.bin" 2>/dev/null)" == there ]] \
         || fail "transferlive: replace: the replaced big.bin is not in $replace_trash: $(ls -A "$replace_trash" 2>&1)"
-    trash_trap_own "$replace_trash" "$dir" "transferlive: replace" big.bin
     transferlive_holds "$dir/to" "big.bin"
     menus_same_file "replace: the incoming big.bin is byte-identical to its source" "$dir/big.bin" "$dir/to/big.bin"
     # A mount-top trash is shared, so only this run's own entry goes, each pair checked in the command.
