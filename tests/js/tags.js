@@ -1,5 +1,6 @@
 .import "../../ui/js/Tags.js" as Tags
 .import "../../ui/js/Search.js" as Search
+.import "../../ui/js/Filter.js" as Filter
 .import "../../ui/js/Menu.js" as Menu
 .import "menu.js" as MenuSuite
 .import "../../ui/js/Messages.js" as Messages
@@ -91,7 +92,7 @@ function run(check) {
         restoreRecentSort: function () {},
         backend: { searchOpen: function (scope) { openSent.push("searchopen " + scope) },
                    searchQuery: function (query) { openSent.push("searchquery " + query) } } }
-    new Function("root", "Search", "return function (name) {" + openBody + "}")({ pane: openPane }, Search)("Red")
+    new Function("root", "Search", "Filter", "return function (name) {" + openBody + "}")({ pane: openPane }, Search, Filter)("Red")
     check("a tag row click opens a session at home, not the pane's folder, then sends its tag query",
         openSent.join(","), "searchopen /h,searchquery tag:Red")
     // The shared swatch and heading name their constants and leave Qt's Item.palette alone.
