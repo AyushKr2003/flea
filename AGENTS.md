@@ -4050,6 +4050,8 @@ The Dual Tab cycle, the bulk card column inset, the bulk rename menu label and t
 
 Three ceilings that earlier joins moved are recorded with their reasons, each from `wc -l`: `ui/js/Format.js` 299 to 305, a `known_over_cap` row past the 300 JS cap, because the one `Format.fill` replaced four copies of the filler and `RunFile.js` and `Tags.js` lost five lines each; `ui/Backend.qml` 550 to 552 for the `settagged` sample line (tags) and the `archive` failure kind (R4 minors), still 552 here; `ui/UnlockDialog.qml` 439 to 441 for the Cancel race fix (a refusal that leaves `_stage` alone, and closing stdin so `--key-file /dev/stdin` reads EOF), 441 here. The shared `Format.fill` takes `ui/js/Mounts.js` from 298 to 293 by deleting its forwarding `fill`; `ui/DeviceMounts.qml` stays at 528, because its `Format` import is paid for by the shorter comment.
 
+The picker save line's whole-sentence templates and name joints move three ceilings, re-derived with `wc -l`: `ui/js/Picker.js` 328 to 335, for the two save templates and `jointName`, the sentences filling through the shared `Format.fill`; `tests/js/picker.js` 343 to 352 for the `Format` import and the two sentence pins; and `tests/picker-hunt.qml` 448 to 449 for the joint-free `plain` text its collision checks read.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
