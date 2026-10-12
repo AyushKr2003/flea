@@ -1,4 +1,6 @@
 .import "../../ui/js/Crumbs.js" as Crumbs
+.import "../../ui/js/Drag.js" as Drag
+.import "sourcefixture.js" as Source
 
 // The chrome's breadcrumb, issue 45 and Chrome rule 2: the pieces a click can land on, and what
 // fits when the strip is narrower than the path. Split out of tests/js/nav.js with the module.
@@ -127,4 +129,29 @@ function run(check) {
     // The floor's own case: a leaf shorter than it gives up more to the ellipsis than that saves.
     check("and a budget too small for even that keeps the leaf whole rather than cutting it to an ellipsis",
           drawn(Crumbs.fitCrumbs(Crumbs.crumbs("/home/gm/one/two/three/four", "/home/gm"), 6)), "~/\u2026/four")
+
+    // Drops040 specimen e: a crumb takes the folder row's verb, a move within one drive.
+    check("a plain drop on a same-device crumb moves",
+          Drag.verbFor(true, false, false, 56, 56, true), "move")
+    check("and on another device's crumb it copies",
+          Drag.verbFor(true, false, false, 56, 32, true), "copy")
+    // The crumb hands verbFor the device the peek answer carried, never the listing's guess.
+    var dropSrc = Source.source("ui/CrumbDrop.qml")
+    var askBody = Source.block(dropSrc, "function askDev()", "ui/CrumbDrop.qml")
+    var asked = []
+    var askRoot = { dest: "/media/usb", destDev: 77,
+        pane: { backend: { peek: function (path, first) { asked.push(path + "|" + first) } } } }
+    new Function("root", "return function () {" + askBody + "}")(askRoot)()
+    check("a new destination resets the verb to copy and asks the backend for its device",
+        askRoot.destDev + "|" + asked.join(","), "0|/media/usb|0")
+    var landBody = Source.block(dropSrc, "function landDev(path, first, readFailed, dev)", "ui/CrumbDrop.qml")
+    function landed(dest, path, first, readFailed, dev) {
+        var root = { dest: dest, destDev: 0 }
+        new Function("root", "return function (path, first, readFailed, dev) {" + landBody + "}")(root)(path, first, readFailed, dev)
+        return root.destDev
+    }
+    check("the answered device lands on the crumb", landed("/media/usb", "/media/usb", 0, false, 32), 32)
+    check("a reply for another path lands nowhere", landed("/media/usb", "/home/gm", 0, false, 56), 0)
+    check("nor does a column's own reply", landed("/media/usb", "/media/usb", 200, false, 32), 0)
+    check("a failed read stays a copy", landed("/media/usb", "/media/usb", 0, true, 32), 0)
 }
