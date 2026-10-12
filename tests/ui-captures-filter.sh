@@ -195,7 +195,7 @@ cap_filter_empties() {
     done
 }
 
-# Item 2: a file first so the preview column is laid out, then the search miss.
+# Item 2: a file first so the preview column is laid out, then the search miss drops it and clearing the query brings it back.
 cap_filter_preview() {
     local dir="$1" after after_path
     cap_filter_launch "$dir" "$fixture_root/cap-filter-state-preview" '{"keys":"default","view":"columns","columnsLimit":2,"display":{"textSize":{"mode":14}},"preview":{"column":true,"loadOn":"automatic","thumbSize":"medium"}}' "$cap_filter_full_total"
@@ -209,17 +209,19 @@ cap_filter_preview() {
     wait_listing 0
     menus_expect statusFooterState '.listingState == "empty"' "preview search apzqq lists nothing"
     menus_expect emptyHeroState '.visible and .captionOpacity == 1' "preview search apzqq hero settles"
-    # previewColumnState is a bare kind string, so the kind compares raw; the path pins apex.txt.
+    # The preview follows the cursor row and a miss has none (8f200cb46), so the column hides and clears its file.
     after=$(ipc previewColumnState) || fail "cap_filter: the preview state could not be read"
-    [[ "$after" == "text" ]] || fail "cap_filter: the preview shows $after on the miss, not the kept text"
-    after_path=$(ipc previewSelectionState | jq -er .path) || fail "cap_filter: the preview path could not be read"
-    [[ "$after_path" == *apex.txt ]] || fail "cap_filter: the preview keeps $after_path on the miss, not apex.txt"
-    printf 'CAP_FILTER columns2 preview kept on the miss: %s %s\n' "$after" "$after_path"
+    [[ "$after" == "unsupported" ]] || fail "cap_filter: the preview shows $after on the miss, not the dropped unsupported"
+    after_path=$(ipc previewSelectionState | jq -er '[.inlineVisible, .path] | @tsv') || fail "cap_filter: the preview path could not be read"
+    [[ "$after_path" == $'false\t' ]] || fail "cap_filter: the preview column is [$after_path] on the miss, not hidden with no path"
+    printf 'CAP_FILTER columns2 preview dropped on the miss: %s hidden\n' "$after"
     settle
     shot filter-columns2-search-nomatch-preview
-    key -k Escape >/dev/null
-    settle
-    wait_listing "$cap_filter_full_total"
+    cap_filter_escape
+    column_expect apex.txt text
+    after_path=$(ipc previewSelectionState | jq -er '[.inlineVisible, .path] | @tsv') || fail "cap_filter: the preview path could not be read"
+    [[ "$after_path" == true$'\t'*apex.txt ]] || fail "cap_filter: the preview column is [$after_path] once the query is cleared, not apex.txt shown"
+    printf 'CAP_FILTER columns2 preview back once the query is cleared: text %s\n' "${after_path#*$'\t'}"
     kill_flea
 }
 
