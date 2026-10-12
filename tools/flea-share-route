@@ -39,10 +39,10 @@ case $root in /*/*) ;; *) echo "flea-share-route: mktemp gave '$root'" >&2; exit
 sandbox_require "$root" || exit 1
 : > "$root/$SANDBOX_MARKER" || exit 1
 flea_pid=""
-# Stops the process one_run launched, whose pid is the qs pid because flea execs qs; a pid read from qs list could be the operator's own instance.
+# Stops the process group one_run launched under setsid, so a shell relaunched on OpenGL goes too; a pid read from qs list could be the operator's own instance.
 stop_flea() {
-  [ -n "$1" ] || return 0
-  kill "$1" 2>/dev/null
+  [ "$1" -gt 0 ] 2>/dev/null || return 0
+  kill -- "-$1" 2>/dev/null
   timeout 10 tail --pid="$1" -f /dev/null
   wait "$1" 2>/dev/null
   return 0
@@ -56,10 +56,12 @@ if [ "$dry" = yes ]; then
   mkdir "$root/kernel" "$root/gvfs" "$root/stub" "$root/ui" "$root/ui/boot" || exit 1
   echo 120 > "$root/kernel/.delay"; echo 340 > "$root/gvfs/.delay"
   for i in 1 2 3 4 5; do : > "$root/kernel/f$i.txt"; : > "$root/gvfs/f$i.txt"; done
-  printf '#!/bin/bash\necho "$2" > %q/cur.path; date +%%s%%3N > %q/cur.t0; exec sleep 600\n' "$root/stub" "$root/stub" > "$root/stub/flea"
+  # The stub starts a child that outlives it, and records its own pid (exec keeps it) after the child's, so a settled listing means both files exist.
+  printf '#!/bin/bash\nd=%q\necho "$2" > $d/cur.path; date +%%s%%3N > $d/cur.t0\nsleep 600 < /dev/null > /dev/null 2>&1 &\necho $! > $d/child.pid; echo $$ > $d/flea.pid; exec sleep 600\n' "$root/stub" > "$root/stub/flea"
   cat > "$root/stub/qs" <<EOS
 #!/bin/bash
 d=$root/stub
+[ "\$3" = "\$(cat \$d/flea.pid)" ] || exit 1
 path=\$(cat \$d/cur.path); t0=\$(cat \$d/cur.t0); delay=\$(cat "\$path/.delay"); up=\$(( \$(date +%s%3N) - t0 >= delay ))
 case \$6 in
   path) echo "\$path" ;;
@@ -81,6 +83,8 @@ else
   command -v qs >/dev/null || { echo "flea-share-route: qs is not installed" >&2; exit 2; }
 fi
 
+# A live process, not a zombie that nothing has reaped yet.
+alive() { local s; s=$(ps -o stat= -p "$1" 2>/dev/null) && [ -n "$s" ] && [ "${s:0:1}" != Z ]; }
 ipc() { timeout 2 qs ipc --pid "$qpid" call flea "$@" 2>/dev/null; }
 now_ms() { date +%s%3N; }
 out=${OUT:-$root/share-route.csv}
@@ -96,7 +100,9 @@ one_run() {
     setsid nohup "$FLEA_BIN" --gui "$path" > /dev/null 2>&1 < /dev/null &
   flea_pid=$!
   qpid=$flea_pid
+  if [ "$dry" = yes ]; then : > "$root/stub/child.pid"; fi
   while [ $(( $(now_ms) - t0 )) -lt "$LISTED_TIMEOUT_MS" ]; do
+    kill -0 "$qpid" 2>/dev/null || { echo "flea-share-route: the launched shell (pid $qpid) exited before $route run $run settled" >&2; break; }
     where=$(ipc path) || continue
     [ "$where" = "$path" ] || continue
     state=$(ipc state) || continue
@@ -110,6 +116,13 @@ one_run() {
   done
   printf '%s,%s,%s,%s,%s\n' "$route" "$run" "$listed" "$first" "$rows" | tee -a "$out"
   stop_flea "$flea_pid"
+  if [ "$dry" = yes ]; then
+    # The stub's child outlives the stub, so a stop that signals the pid alone leaves it running.
+    local child i
+    child=$(cat "$root/stub/child.pid")
+    for i in 1 2 3 4 5 6 7 8 9 10; do alive "$child" || break; sleep 0.1; done
+    if [ -n "$child" ] && alive "$child"; then echo "flea-share-route: stop_flea left the stub child $child running" >&2; return 1; fi
+  fi
   flea_pid=""
 }
 
