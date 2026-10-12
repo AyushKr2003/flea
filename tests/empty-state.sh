@@ -8,7 +8,7 @@ ui_dir=${FLEA_EMPTY_STATE_UI_DIR:-ui}
 # rather than matching nothing and passing.
 hint_file="$ui_dir/PaneStates.qml"
 column_file="$ui_dir/ColumnPane.qml"
-tip='Press Ctrl+Shift+N for a new folder.'
+tip='Press %1 for a new folder.'
 
 fail() {
     printf 'empty-state: %s\n' "$1" >&2
@@ -32,7 +32,7 @@ fi
 shell_hint=$(sed -n '/hint: Search.live(root.pane)/,/^[[:space:]]*}/p' "$hint_file")
 shell_hint=$(printf '%s' "$shell_hint" | tr -s '[:space:]' ' ')
 [ -n "$shell_hint" ] || fail "no hint binding found in $hint_file"
-expected_hint='hint: Search.live(root.pane) ? "Press Escape to clear." : ViewState.keyHints ? "Press Ctrl+Shift+N for a new folder." : ""'
+expected_hint='hint: Search.live(root.pane) ? "Press Escape to clear." : ViewState.keyHints ? KeyName.hinted("Press %1 for a new folder.", "newFolder") : ""'
 case "$shell_hint" in
     *"$expected_hint"*) ;;
     *) fail 'the hint must show Escape for a live search and the tip only behind the setting' ;;

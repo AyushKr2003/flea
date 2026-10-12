@@ -74,3 +74,23 @@ fn a_drag_records_the_absolute_path_the_pile_holds() {
     let token = shelf.drag_begin(true, &[spelled], 1_000).unwrap();
     assert_eq!(shelf.redeem(&token, 1_100).unwrap().paths, vec![one]);
 }
+
+fn reason(kind: std::io::ErrorKind) -> String {
+    crate::error::io_message(&std::io::Error::from(kind))
+}
+
+#[test]
+fn a_lift_of_something_that_is_gone_says_why_in_words() {
+    let (dir, shelf) = shelf("shelfdraggone");
+    let gone = dir.path().join("never-written").to_string_lossy().to_string();
+    let why = shelf.drag_begin(true, &[gone.clone()], 1_000).unwrap_err();
+    assert_eq!(why, format!("{} could not be read: {}", gone, reason(std::io::ErrorKind::NotFound)));
+}
+
+#[test]
+fn a_drag_file_with_no_folder_above_it_says_so_in_the_shelfs_words() {
+    let (dir, mut shelf) = shelf("shelfdragroot");
+    shelf.drags = std::path::PathBuf::from("/");
+    let why = shelf.drag_begin(true, &[file(&dir, "one.txt")], 1_000).unwrap_err();
+    assert_eq!(why, "the shelf has no folder to write in");
+}

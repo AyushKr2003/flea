@@ -142,7 +142,7 @@ fn a_failed_stdin_write_is_answered_by_the_childs_own_exit() {
     assert_eq!(extract_verdict(wrong.code, true, || Some(true)), Some(WRONG_PASSWORD));
     let other = run_stub_unread("exit 3").expect("the run itself did not fail").expect("exit 3 is a failure");
     assert_eq!(other.code, Some(3));
-    assert_eq!(other.message, "the archive tool exited with status 3", "the failure names the component");
+    assert_eq!(other.message, "the archive tool could not finish (exit status 3)", "the failure names the component");
     assert!(run_stub_unread("exit 0").expect("the run itself did not fail").is_none(), "a child that needed no password succeeded");
 }
 

@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import "." as Flea
+import "js/Format.js" as Format
 import "js/Permissions.js" as Permissions
 
 // One item, one mode; the backend owns its reviewed descriptor for this dialog's lifetime.
@@ -100,7 +101,7 @@ FocusScope {
         return result
     }
     readonly property string scopeText: facts.directory
-        ? "Scope this directory only · enclosed items unchanged · ownership unchanged"
+        ? "Scope this folder only · enclosed items unchanged · ownership unchanged"
         : "Scope this item only · ownership unchanged"
     signal requested(var message)
     signal changed(string note)
@@ -237,7 +238,7 @@ FocusScope {
             multiPending = multiStore.pending
         }
     }
-    function backendFailed(message) {
+    function backendFailed() {
         if (!opened || transportFailed) return
         // A multi Apply counts as applying with an unknown outcome, and ends so Cancel and close work.
         var applying = applyLocked
@@ -245,10 +246,9 @@ FocusScope {
         transportFailed = true
         busy = false
         cancelButton.forceActiveFocus()
-        var reason = message || "the backend stopped"
         errorText = applying
-            ? "Permission change outcome is unknown because " + reason + "; restart Flea and reopen Permissions to check the current mode."
-            : "Permissions is unavailable because " + reason + "; restart Flea and reopen Permissions."
+            ? "Flea stopped responding, so the permission change may not have finished. Restart Flea and reopen Permissions to check."
+            : "Permissions is unavailable because Flea stopped responding. Restart Flea and reopen Permissions."
     }
     function close() {
         // An issued fchmod cannot be cancelled; retain its result before allowing dismissal.
@@ -376,7 +376,7 @@ FocusScope {
                 id: title
                 x: lockMark.x + lockMark.width + Theme.spacing.gap
                 y: Math.floor((titleBand.height - height) / 2) - root.stripTextRise
-                text: root.isMulti ? "Permissions for " + root.multiPaths.length + " items" : "Permissions"
+                text: root.isMulti ? Format.fill(Permissions.WORDS.titleMany, root.multiPaths.length) : "Permissions"
                 color: Theme.color.foreground; textFormat: Text.PlainText; font { family: Theme.font.family; pixelSize: Theme.font.caption; bold: true }
             }
             // Dialogs rule 7: the way out is named beside the mark that performs it, the settings panel's own corner.
@@ -561,7 +561,7 @@ FocusScope {
                         x: scopeMark.x + scopeMark.width + Theme.spacing.gap
                         y: Theme.spacing.gap
                         width: parent.width - x - Theme.spacing.gap
-                        text: "Scope: this directory only. Enclosed files and directories keep every bit."
+                        text: "Scope: this folder only. Items inside it keep their permissions."
                         textFormat: Text.PlainText
                         wrapMode: Text.Wrap
                         color: Theme.color.foreground
@@ -601,9 +601,9 @@ FocusScope {
                     // For several items the grid and Apply are the whole card, so the preview drops out.
                     visible: !root.isMulti
                     text: (root.facts.ok && !root.facts.reason && root.modeValue >= 0
-                        ? "Requested mode " + Permissions.octal(root.modeValue) : "No changes available")
+                        ? Format.fill(Permissions.WORDS.requestedMode, Permissions.octal(root.modeValue)) : "No changes to apply")
                         + "\nPath " + root.path.replace(/\//g, "/\u200b")
-                        + (root.facts.reason ? "\nCurrent mode " + root.facts.mode : "")
+                        + (root.facts.reason ? "\n" + Format.fill(Permissions.WORDS.currentMode, root.facts.mode) : "")
                     textFormat: Text.PlainText
                     wrapMode: Text.WordWrap
                     color: Theme.color.accent

@@ -184,7 +184,7 @@ ShellRoot {
             function () {
                 dialog.open("properties", 9, "/fixture", parking)
                 shell.feed(shell.reply({id: 9, bytes: 8192}))
-                shell.feed({t: "menuaction", id: 9, op: "contents", ok: false, error: "Menu selection expired; reopen the menu."})
+                shell.feed({t: "menuaction", id: 9, op: "contents", ok: false, error: "Selected items changed; reopen the menu."})
                 shell.check("a refused count ends as the floor with no tail and no error line", [shell.line("Size"), shell.line("Contains"), dialog.errorText], ["> 8.2 kB (8192 bytes)", "> 0 items", ""])
                 dialog.close()
             },

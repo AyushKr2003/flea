@@ -248,7 +248,7 @@ permissions_directory() {
     permissions_open site
     shot "permissions-$permissions_group-directory-baseline"
     permissions_wait '.facts.directory and .editable and ([.controls[] | select(.bit == 64 or .bit == 8 or .bit == 1) | .name] == ["Owner enter","Group enter","Everyone enter"])' 'directory traversal bits are labelled enter'
-    permissions_wait '.displayedSummary | contains("Scope this directory only") and contains("enclosed items unchanged") and contains("ownership unchanged")' 'directory summary excludes descendants and ownership'
+    permissions_wait '.displayedSummary | contains("Scope this folder only") and contains("enclosed items unchanged") and contains("ownership unchanged")' 'directory summary excludes descendants and ownership'
     permissions_mode 0755
     permissions_octal 0700
     permissions_apply "$permissions_listing/site" 700
@@ -290,7 +290,7 @@ permissions_readonly_controls() {
     permissions_wait '.opened and (.busy == false)' 'disabled Apply leaves dialog open'
     [[ "$(stat -c '%d:%i:%u:%g:%a:%s' "$path")" == "$before" ]] \
         || fail "permissions: read-only controls changed the item"
-    permissions_wait ".displayedSummary | contains(\"Current mode $mode\") and contains(\"No changes available\")" 'read-only summary reports the retained current mode'
+    permissions_wait ".displayedSummary | contains(\"Current mode $mode\") and contains(\"No changes to apply\")" 'read-only summary reports the retained current mode'
     permissions_wait 'any(.controls[]; .name == "Cancel" and .focused)' 'disabled controls do not steal initial Cancel focus'
     key -k Tab >/dev/null
     permissions_wait 'any(.controls[]; .name == "Close" and .focused)' 'read-only Tab reaches Close'
@@ -515,7 +515,7 @@ permissions_eligibility() {
         permissions_wait ".opened and (.busy == false) and .editable and .title == \"Permissions for $batch_count items\" and (.paths | sort) == $quoted_paths" 'batch card reviews both files with the exact title'
         permissions_wait 'any(.controls[]; .name == "Cancel" and .focused and .enabled)' 'batch opens with keyboard on Cancel'
         permissions_wait '[.controls[] | select(.bit != null) | .value] == ["on","on","some","on","off","some","on","off","some"]' 'batch grid shows all uniform and mixed boxes for 0644 and 0755'
-        permissions_wait '.displayedSummary | endswith("Mixed boxes keep each file\u0027s own bit unless you change them.")' 'batch displays the exact mixed-box note'
+        permissions_wait '.displayedSummary | endswith("Mixed boxes keep each item\u0027s setting unless you change them.")' 'batch displays the exact mixed-box note'
         permissions_wait 'all(.controls[] | select(.name == "Octal"); .visible == false) and any(.controls[]; .name == "Apply" and .visible and .enabled)' 'batch shows the grid without Octal and offers Apply'
         if [[ "$dismissal" == Cancel ]]; then shot "permissions-$permissions_group-multiselection"; fi
         permissions_control "Owner execute"
@@ -762,7 +762,7 @@ PY
         permissions_octal "$wanted"
         permissions_wait '.editable and any(.controls[]; .name == "Apply" and .enabled)' 'owned read-only mount reaches normal Apply'
         permissions_control Apply
-        permissions_wait ".opened and (.busy == false) and .editable and .mode == \"$wanted\" and .displayedError == \"Could not change mode: filesystem is read-only. No change was applied.\"" 'real kernel refusal retains editable fields and reports one sentence'
+        permissions_wait ".opened and (.busy == false) and .editable and .mode == \"$wanted\" and .displayedError == \"Could not change mode: the drive is read-only. No change was applied.\"" 'real kernel refusal retains editable fields and reports one sentence'
         [[ "$(stat -c '%d:%i:%u:%g:%a:%s' "$PERMISSIONS_BIND_FILE")" == "$before" \
             && "$(sha256sum < "$PERMISSIONS_BIND_FILE")" == "$contents" ]] || fail "permissions: refused mode write changed the fixture"
         shot "permissions-$permissions_group-erofs-$wanted"
@@ -855,9 +855,9 @@ permissions_backenddeath() {
         permissions_stopped=""
         trap - EXIT
         if [[ "$phase" == applying ]]; then
-            expected='(.displayedError | contains("outcome is unknown") and contains("check the current mode"))'
+            expected='(.displayedError | contains("may not have finished") and contains("reopen Permissions to check"))'
         else
-            expected='(.displayedError | contains("Permissions is unavailable") and contains("restart Flea"))'
+            expected='(.displayedError | contains("Permissions is unavailable") and contains("Restart Flea"))'
         fi
         permissions_wait ".opened and (.busy == false) and (.editable == false) and .mode == \"$wanted\" and $expected" "$phase backend death retains the draft and reports the actual failure"
         permissions_wait 'all(.controls[] | select(.bit != null or .name == "Octal" or .name == "Apply"); .enabled == false)' 'lost descriptor disables every mutation control'

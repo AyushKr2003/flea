@@ -152,7 +152,7 @@ impl Conn {
 
     fn readable(&mut self, timeout_ms: u32) -> Result<bool, String> {
         poll_in(self.sock.as_raw_fd(), timeout_ms)
-            .map_err(|e| format!("waiting for the compositor failed ({})", e))
+            .map_err(|e| format!("the compositor did not answer ({})", e))
     }
 
     fn fill(&mut self, timeout_ms: u32) -> Result<Fill, String> {

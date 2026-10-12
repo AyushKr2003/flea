@@ -47,7 +47,7 @@ fn gio_runs_under_the_named_wait() {
     let argv = gio_argv(&["trash", "--list"]);
     assert_eq!(&argv[..4], ["timeout", "--kill-after=1s", "10s", "gio"], "the bound gio runs under: {argv:?}");
     assert_eq!(&argv[4..], ["trash", "--list"]);
-    assert_eq!(failure_reason(&None), "gio could not be run to move items to Trash");
+    assert_eq!(failure_reason(&None, false), "the Trash could not be reached, so nothing was moved");
 }
 
 #[test]
@@ -141,10 +141,44 @@ fn no_uri_is_journaled_from_a_list_that_could_not_be_read_whole() {
 fn a_failed_trash_carries_gios_own_last_line() {
     let output = Some(std::process::Output { status: std::process::ExitStatus::from_raw(256),
         stdout: Vec::new(), stderr: b"gio: Error 1: Permission denied\n".to_vec() });
-    assert!(failure_reason(&output).contains("Permission denied"));
+    assert!(failure_reason(&output, false).contains("Permission denied"));
     let timed_out = Some(std::process::Output { status: std::process::ExitStatus::from_raw(124 << 8),
         stdout: Vec::new(), stderr: Vec::new() });
-    assert_eq!(failure_reason(&timed_out), "Trash took too long to answer");
+    assert_eq!(failure_reason(&timed_out, false), "The Trash took too long to answer");
+    let silent = Some(std::process::Output { status: std::process::ExitStatus::from_raw(256), stdout: Vec::new(), stderr: Vec::new() });
+    assert_eq!(failure_reason(&silent, false), "the items could not be moved to the Trash");
+    assert_eq!(failure_reason(&silent, true), "the rest could not be moved to the Trash");
+}
+
+// A later chunk that never reached gio follows a chunk that moved its items, so the reason must not say nothing moved.
+#[test]
+fn a_chunk_that_cannot_reach_the_trash_after_one_that_moved_does_not_say_nothing_moved() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let d = crate::backend::testdir::TestDir::new("trash-second-chunk");
+    let paths: Vec<PathBuf> = (0..TRASH_CHUNK + 1).map(|n| d.file(&format!("f{n}.txt"), "x")).collect();
+    let calls = Rc::new(AtomicUsize::new(0));
+    let seen = Rc::clone(&calls);
+    let _stand = StandIn::hold(Rc::new(move |args: &[&str]| {
+        if args.first() != Some(&"trash") || args.contains(&"--list") { return Some(ok_output()); }
+        if seen.fetch_add(1, Ordering::Relaxed) > 0 { return None; }
+        for path in &args[2..] { std::fs::remove_file(path).unwrap(); }
+        Some(ok_output())
+    }));
+    let (ok, failed, reason) = trash_checked(&paths, None).expect("a partly moved batch is not an error");
+    assert_eq!((ok.len(), failed), (TRASH_CHUNK, 1));
+    assert_eq!(reason, "the Trash could not be reached, so the rest were not moved");
+    assert!(!reason.contains("nothing"), "{reason}");
+}
+
+#[test]
+fn a_gio_that_cannot_restore_says_what_could_not_be_done() {
+    let entry = Entry { original: PathBuf::from("/a/x"), uri: "trash:///d/x".into(), before: Vec::new(), trashed_at: String::new() };
+    let _stand = StandIn::hold(Rc::new(|_args: &[&str]| {
+        Some(std::process::Output { status: std::process::ExitStatus::from_raw(256), stdout: Vec::new(), stderr: Vec::new() })
+    }));
+    assert_eq!(restore(&entry).unwrap_err().msg, "the item could not be restored from the Trash");
+    let _stand = StandIn::hold(Rc::new(|_args: &[&str]| None));
+    assert_eq!(restore(&entry).unwrap_err().msg, "gio is not installed, so nothing can be restored from the Trash");
 }
 
 #[test]
@@ -224,7 +258,7 @@ fn a_step_with_no_settle_time_refuses_even_when_its_path_is_listed() {
     })));
     let err = restore(&e).expect_err("a step with no time must refuse");
     STAND_IN.with(|slot| *slot.borrow_mut() = None);
-    assert_eq!(err.msg, "this item was trashed without a trash entry, so it cannot be restored", "no list ran, so the refusal claims nothing about it");
+    assert_eq!(err.msg, "this item was trashed without a Trash entry, so it cannot be restored", "no list ran, so the refusal claims nothing about it");
 }
 
 #[test]
@@ -382,8 +416,8 @@ fn an_announced_failure_words_itself_as_the_final_result_does() {
 // timeout's own exit is 124 on the first signal; after the kill-after it dies with its group, which std reports as signal 9 and no code.
 #[test]
 fn a_gio_that_outlives_the_first_signal_still_reads_as_taking_too_long() {
-    let said = |raw: i32| failure_reason(&Some(std::process::Output { status: std::process::ExitStatus::from_raw(raw), stdout: Vec::new(), stderr: Vec::new() }));
-    assert_eq!(said(124 << 8), "Trash took too long to answer", "exit 124");
-    assert_eq!(said(9), "Trash took too long to answer", "killed by signal 9 after the kill-after");
-    assert_eq!(said(1 << 8), "gio trash failed", "an ordinary failure with no stderr keeps its own words");
+    let said = |raw: i32| failure_reason(&Some(std::process::Output { status: std::process::ExitStatus::from_raw(raw), stdout: Vec::new(), stderr: Vec::new() }), false);
+    assert_eq!(said(124 << 8), "The Trash took too long to answer", "exit 124");
+    assert_eq!(said(9), "The Trash took too long to answer", "killed by signal 9 after the kill-after");
+    assert_eq!(said(1 << 8), "the items could not be moved to the Trash", "an ordinary failure with no stderr keeps its own words");
 }

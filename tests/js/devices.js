@@ -260,12 +260,12 @@ function run(check) {
     check("an empty device name is unknown, never safe", Eject.verdict(live, ""), "unknown")
 
     // Only the safe verdict may say safe; the other two tell the user to leave the stick in.
-    check("the safe verdict earns the unplug sentence", Eject.sentence("safe", "128GB").text, "Ejected 128GB, it is safe to unplug.")
+    check("the safe verdict earns the unplug sentence", Eject.sentence("safe", "128GB").text, "Ejected 128GB. It is safe to unplug.")
     check("the safe verdict is not an error", Eject.sentence("safe", "128GB").isError, false)
     check("the mounted verdict with the row itself still mounted says try again", Eject.sentence("mounted", "128GB", []).text, "128GB is still mounted; close what is using it.")
     check("the mounted verdict is an error", Eject.sentence("mounted", "128GB", []).isError, true)
-    check("a sibling blocker is named instead of an instruction that would do nothing", Eject.sentence("mounted", "second", ["first"]).text, "second could not be ejected; first on the same drive is still mounted, eject that instead.")
-    check("two blockers are both named", Eject.sentence("mounted", "third", ["first", "second"]).text, "third could not be ejected; first, second on the same drive are still mounted, eject those instead.")
+    check("a sibling blocker is named instead of an instruction that would do nothing", Eject.sentence("mounted", "second", ["first"]).text, "second could not be ejected because first on the same drive is still mounted. Eject that instead.")
+    check("two blockers are both named", Eject.sentence("mounted", "third", ["first", "second"]).text, "third could not be ejected because first, second on the same drive are still mounted. Eject those instead.")
     check("the unknown verdict says do not unplug", Eject.sentence("unknown", "128GB").text, "Could not confirm 128GB was ejected; do not unplug it yet.")
     check("the unknown verdict is an error", Eject.sentence("unknown", "128GB").isError, true)
     var others = ["mounted", "unknown", "", undefined, "SAFE"]

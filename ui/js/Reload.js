@@ -5,9 +5,15 @@
 .import "Nav.js" as Nav
 .import "Swap.js" as Swap
 
+// The status line a reload answers with, one whole sentence per count, each filled by Format.fill.
+var WORDS = {
+    one: "Reloaded · 1 row changed",
+    many: "Reloaded · %1 rows changed"
+}
+
 // Sample input: 2 is "Reloaded · 2 rows changed", 1 is "Reloaded · 1 row changed".
 function line(changed) {
-    return "Reloaded · " + Format.count(changed) + (changed === 1 ? " row changed" : " rows changed")
+    return changed === 1 ? WORDS.one : Format.fill(WORDS.many, Format.count(changed))
 }
 
 // A listing out refuses itself and a search owns its header, so both go quiet.

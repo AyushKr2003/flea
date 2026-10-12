@@ -36,7 +36,7 @@ pub(super) fn one_item(
             if let Some(path) = p.partial.take() {
                 let (manifest, loud) = crate::backend::copymanifest::finish_loud(p.manifest.take());
                 if let (Err(outcome), Some(e)) = (&mut outcome, loud) {
-                    outcome.msg.push_str(&format!("; copy manifest failed: {e}"));
+                    outcome.msg = crate::backend::ops::manifest_failed(&outcome.msg, &e);
                 }
                 steps.push(undo::copied_partial(src, &path, source, manifest)?);
             }

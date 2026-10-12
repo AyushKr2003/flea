@@ -205,10 +205,10 @@ fn short_copy(errno: i32, reported: &str) {
 fn usb_short_write_keeps_its_source() { short_copy(0, "could not write all data"); }
 
 #[test]
-fn usb_enospc_write_keeps_its_source() { short_copy(ENOSPC, "disk full"); }
+fn usb_enospc_write_keeps_its_source() { short_copy(ENOSPC, "the drive is full"); }
 
 #[test]
-fn usb_eio_write_keeps_its_source() { short_copy(durable::EIO, "input/output failed"); }
+fn usb_eio_write_keeps_its_source() { short_copy(durable::EIO, "the drive could not read or write the data"); }
 
 #[test]
 fn usb_cancel_keeps_unfinished_source_and_confirms_landed_files() {

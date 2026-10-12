@@ -134,7 +134,7 @@ ShellRoot {
 
     function checkRefused() {
         var line = saveCard.statusItem
-        check(line.text === "Refused · " + root.refusedName + " · " + PickerLib.NAME_REFUSED, "the refused branch keeps the asked name literal")
+        check(line.text === root.refusedName + " cannot be used: " + PickerLib.NAME_REFUSED, "the refused branch keeps the asked name literal")
         check(line.height + 0.5 >= line.implicitHeight, "the refused row follows the text, unclipped")
     }
 

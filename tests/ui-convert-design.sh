@@ -57,9 +57,9 @@ convert_backend_death() {
         # ui/ConvertDialog.qml's own two sentences, which is what the operator reads: a conversion
         # that was in flight when the backend died has an unknown outcome, and one that never
         # started simply cannot start now.
-        expected='(.error | contains("conversion outcome unknown") and contains("Check the output"))'
+        expected='(.error | contains("conversion may not have finished") and contains("Check the converted file"))'
     else
-        expected='(.error | contains("Backend stopped") and contains("reopen Flea to convert"))'
+        expected='(.error | contains("Flea stopped responding") and contains("Reopen Flea, then convert again"))'
     fi
     request=$(ipc convertState | jq -er .requestId)
     permissions_backend_owned "$pid" || fail "convert: backend identity changed before the failure signal"
@@ -192,7 +192,7 @@ case_convertdesign() (
     menus_expect convertState '.opened | not' 'only attributed conversion success closes the dialog'
     menus_error 'photo (converted).webp already exists' 'successful retry preserves the unacknowledged collision'
     menus_acknowledge
-    menus_message 'Converted to photo (converted).webp.' 'matching conversion result reaches Operations'
+    menus_message 'Converted to photo (converted).webp' 'matching conversion result reaches Operations'
     [[ "$(magick identify -format '%m' "$webp")" == WEBP ]] || fail "convert: output is not a real WebP image"
     [[ "$(sha256sum < "$source")" == "$contents" && "$(cat "$jpeg")" == 'original JPEG collision' \
         && "$(cat "$menu_box/late-collision-kept")" == 'late WebP collision' ]] || fail "convert: conversion changed an original file"

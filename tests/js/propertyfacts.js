@@ -37,7 +37,7 @@ function run(check) {
     check("the final reply ends the count", last.done, true)
     check("a cancelled walk settles as the floor already counted", JSON.stringify(PropertyFacts.next(progress, {ok: true, cancelled: true, bytes: 1, items: 1, partial: false, done: false})), JSON.stringify({bytes: 9000, items: 5, partial: true, done: true}))
     check("a cancelled reply after done changes nothing", PropertyFacts.next(last, {ok: true, cancelled: true, bytes: 1, items: 1, partial: false, done: false}), last)
-    var refused = PropertyFacts.next(progress, {ok: false, error: "Menu selection expired; reopen the menu."})
+    var refused = PropertyFacts.next(progress, {ok: false, error: "Selected items changed; reopen the menu."})
     check("a refused request ends as the floor already counted", JSON.stringify(refused), JSON.stringify({bytes: 9000, items: 5, partial: true, done: true}))
 
     // The value is plain text with a coloured tail, so the markup carries only the tail's colour.

@@ -1,5 +1,6 @@
 // The Hyprland config Flea writes: the two Omarchy file-manager keys for flea --default, and the
 // picker's floating treatment for flea --picker, each one additive block in ~/.config/hypr/bindings.lua.
+use crate::error::io_message;
 use crate::userfile::{config_home, replace_file};
 use std::fs;
 use std::path::PathBuf;
@@ -27,14 +28,14 @@ pub fn claim() -> Result<String, String> {
         return Ok(format!("keys: already Flea's, the flea --default block is in {}", path.display()));
     }
     if let Some(errors) = configerrors().filter(|e| !e.is_empty()) {
-        return Err(format!("hyprctl configerrors already reports a problem, fix that first so a change here can be told apart from it: {}", errors));
+        return Err(already_broken(&errors));
     }
     let were = were_line(current_descriptions());
     replace_file(&path, &with_block(&text))?;
     let keys = format!("{} and {}", BINDS[0].0, BINDS[1].0);
     if !reload() {
         return Ok(format!(
-            "keys: {} open Flea, {}; block appended to {}, not reloaded because hyprctl could not be reached, so run hyprctl reload inside the session",
+            "keys: {} open Flea, {}; block appended to {}. Hyprland could not be reached, so run hyprctl reload inside the session.",
             keys, were, path.display()
         ));
     }
@@ -42,7 +43,7 @@ pub fn claim() -> Result<String, String> {
         // Never leave a config that does not load: put the file back as it was and reload that.
         replace_file(&path, &text)?;
         reload();
-        return Err(format!("the block broke the Hyprland config and was removed again; hyprctl configerrors said: {}", errors));
+        return Err(block_broke(&errors));
     }
     Ok(format!("keys: {} open Flea, {}; block appended to {} and reloaded", keys, were, path.display()))
 }
@@ -56,7 +57,7 @@ pub fn release() -> Result<String, String> {
     replace_file(&path, &without)?;
     if !reload() {
         return Ok(format!(
-            "keys: block removed from {}, not reloaded because hyprctl could not be reached, so run hyprctl reload inside the session",
+            "keys: block removed from {}. Hyprland could not be reached, so run hyprctl reload inside the session.",
             path.display()
         ));
     }
@@ -73,12 +74,12 @@ pub fn float_claim() -> Result<String, String> {
         return Ok(format!("window: already floating, the flea --picker block is in {}", path.display()));
     }
     if let Some(errors) = configerrors().filter(|e| !e.is_empty()) {
-        return Err(format!("hyprctl configerrors already reports a problem, fix that first so a change here can be told apart from it: {}", errors));
+        return Err(already_broken(&errors));
     }
     replace_file(&path, &appended(&text, &float_block()))?;
     if !reload() {
         return Ok(format!(
-            "window: the picker takes Omarchy's floating treatment; block appended to {}, not reloaded because hyprctl could not be reached, so run hyprctl reload inside the session",
+            "window: the picker takes Omarchy's floating treatment; block appended to {}. Hyprland could not be reached, so run hyprctl reload inside the session.",
             path.display()
         ));
     }
@@ -86,7 +87,7 @@ pub fn float_claim() -> Result<String, String> {
         // Never leave a config that does not load: put the file back as it was and reload that.
         replace_file(&path, &text)?;
         reload();
-        return Err(format!("the block broke the Hyprland config and was removed again; hyprctl configerrors said: {}", errors));
+        return Err(block_broke(&errors));
     }
     Ok(format!("window: the picker takes Omarchy's floating treatment; block appended to {} and reloaded", path.display()))
 }
@@ -112,7 +113,17 @@ fn bindings_path() -> Result<PathBuf, String> {
 
 // Omarchy ships the file and hyprland.lua requires it, so a missing one is a broken box and not a first run.
 fn read(path: &std::path::Path) -> Result<String, String> {
-    fs::read_to_string(path).map_err(|e| format!("{} could not be read ({:?}), and it is where the key bindings go; Omarchy ships it", path.display(), e.kind()))
+    fs::read_to_string(path).map_err(|e| format!("{} could not be read: {}. Omarchy keeps the key bindings there.", path.display(), io_message(&e)))
+}
+
+// A config error that was there before this change, so the change was not made.
+fn already_broken(errors: &str) -> String {
+    format!("Hyprland already reports a config error, so nothing was changed. Fix it first: {}", errors)
+}
+
+// A config error this change caused, so the block was taken out again.
+fn block_broke(errors: &str) -> String {
+    format!("The new block caused a Hyprland config error, so it was removed. Hyprland said: {}", errors)
 }
 
 // The unbind comes first, or both bindings fire: the override shape the Omarchy manual documents.
@@ -309,6 +320,22 @@ mod tests {
 
     // Read off this box's hyprctl binds, with SUPER + F's fullscreen record as the distractor.
     const BINDS_TEXT: &str = "bindd\n\tmodmask: 64\n\tsubmap: \n\tkey: F\n\tkeycode: 0\n\tcatchall: false\n\tdescription: Full screen\n\tdispatcher: __lua\n\targ: 27\n\nbindd\n\tmodmask: 65\n\tsubmap: \n\tkey: F\n\tkeycode: 0\n\tcatchall: false\n\tdescription: File manager\n\tdispatcher: __lua\n\targ: 272\n\nbindd\n\tmodmask: 73\n\tsubmap: \n\tkey: F\n\tkeycode: 0\n\tcatchall: false\n\tdescription: File manager (cwd)\n\tdispatcher: __lua\n\targ: 274\n\n";
+
+    #[test]
+    fn a_config_error_is_told_apart_from_the_one_this_change_caused() {
+        assert_eq!(already_broken("line 3"), "Hyprland already reports a config error, so nothing was changed. Fix it first: line 3");
+        assert_eq!(block_broke("line 3"), "The new block caused a Hyprland config error, so it was removed. Hyprland said: line 3");
+    }
+
+    #[test]
+    fn a_bindings_file_that_cannot_be_read_says_why_and_where_the_keys_go() {
+        let dir = crate::backend::testdir::TestDir::new("hyprkeysunreadable");
+        let folder = dir.dir("bindings.lua");
+        assert_eq!(
+            read(&folder).unwrap_err(),
+            format!("{} could not be read: item is a folder. Omarchy keeps the key bindings there.", folder.display())
+        );
+    }
 
     #[test]
     fn descriptions_are_read_off_hyprctl_binds_by_chord() {

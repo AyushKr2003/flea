@@ -1,5 +1,7 @@
 .pragma library
 
+.import "Format.js" as Format
+
 // Phones and shares open through the GVFS FUSE bridge, and Flea starts it the way gvfsd
 // does when the folder is not serving yet. The QML service owns the processes and the three
 // timers; this module owns every decision, so tests/js/gvfsbridge.js pins each one with no
@@ -15,6 +17,12 @@
 // path hangs a helper the deadline kills and nothing else. A served path is classified by
 // the kernel too, so a file under a live bridge is ready without any start (I-3) and a
 // directory costs the one check it always did.
+
+// Whole sentences with "%1" for the device or share and "%2" for the reason; the Starting mark follows ui/Pane.qml's stickyStarting signal, never this text.
+var WORDS = {
+    starting: "Opening %1",
+    failed: "%1 could not be opened because a system service did not start · %2"
+}
 
 // The Starting line stands until the service's own 250 ms timer fires, so a bridge that is
 // already coming up never flashes it.
@@ -46,15 +54,15 @@ function needsBridge(path, dir) {
     return root.length > 0 && (text === root || text.indexOf(root + "/") === 0)
 }
 
-// Sample input: "Pixel 8" answers "Starting the GVFS bridge for Pixel 8".
+// Sample input: "Pixel 8" answers "Opening Pixel 8".
 function startingLine(name) {
-    return "Starting the GVFS bridge for " + name
+    return Format.fill(WORDS.starting, name)
 }
 
 // Sample input: ("Pixel 8", "waiting for the folder timed out") answers the board's
 // failure line word for word.
 function failedLine(name, reason) {
-    return name + " needs the GVFS bridge, and it would not start · " + reason
+    return Format.fill(WORDS.failed, name, reason)
 }
 
 // Sample input: ("Pixel 8") answers the reason a wait that outlived ENSURE_MS carries.
@@ -64,12 +72,7 @@ function timeoutReason() {
 
 // The openShare guard's own refusal, reused so two waiters never start two bridges.
 function busyReason() {
-    return "Another network location is still opening; give it a moment."
-}
-
-// The status strip lights its busy mark exactly while a Starting line stands.
-function isStartingLine(text) {
-    return String(text || "").indexOf("Starting the GVFS bridge for ") === 0
+    return "Another network location is still opening. Try again when it opens"
 }
 
 // Sample input: "" with "/run/user/1000/gvfs/mtp:host=X" answers that leaf.

@@ -79,7 +79,7 @@ pub fn handshake(conn: &mut Conn) -> Result<(), String> {
         bind(conn, name, wire::EXT_MANAGER, EXT_MANAGER_VERSION, MANAGER)?;
         return Ok(());
     }
-    let (name, version) = globals.zwlr.ok_or_else(|| "no clipboard protocol: neither data-control manager is offered".to_string())?;
+    let (name, version) = globals.zwlr.ok_or_else(|| "this compositor does not offer clipboard access".to_string())?;
     bind(conn, name, wire::ZWLR_MANAGER, version.min(ZWLR_MAX_VERSION), MANAGER)?;
     Ok(())
 }

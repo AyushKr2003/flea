@@ -444,8 +444,8 @@ ShellRoot {
                     win.acceptMarks = false
                     win.marksDirty = false
                     win.saveReview = ({})
-                    win.saveError = msg
-                    win.say(msg + "; cancel and reopen this request.", true)
+                    win.saveError = "Flea stopped responding."
+                    win.say("Flea stopped responding. Cancel and reopen this request.", true)
                     win.stepFocus(null, false)
                     return
                 }
@@ -530,8 +530,8 @@ ShellRoot {
                 edge: win.edge
                 offerRecent: !win.saving
                 onChosen: function (path) { win.open(path); win.focusView() }
-                onNetworkCompleted: function(requestId, uri, success, reason) {
-                    if (networkDialog.item) networkDialog.item.mountFinished(requestId, uri, success, reason)
+                onNetworkCompleted: function(requestId, uri, success, reason, connectFailed) {
+                    if (networkDialog.item) networkDialog.item.mountFinished(requestId, uri, success, reason, connectFailed)
                 }
             }
 

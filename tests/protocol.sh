@@ -147,7 +147,7 @@ check "and that id is a real device, not a zero placeholder" "0" "$(echo "$kind_
 printf 'x' > "$D/sub/kept.txt"
 # The stale refusal's leading fields, which the check below cuts the first refusal to.
 stale_paths='{"t":"error","where":"stale","path":"paths"'
-# Sample output: {"t":"error","where":"stale","path":"paths","msg":"the listing changed before this request arrived, so its rows name other files; nothing was done"}
+# Sample output: {"t":"error","where":"stale","path":"paths","msg":"the folder changed before this could run, so nothing was done"}
 out=$(printf '{"c":"list","path":"%s","first":5}\n{"c":"list","path":"%s/sub","first":5}\n{"c":"paths","rows":[0],"listing":1}\n{"c":"trash","rows":[0],"menuId":0,"listing":1}\n{"c":"menuaction","op":"snapshot","id":3,"rows":[0],"cursor":0,"listing":1}\n{"c":"paths","rows":[0],"listing":2}\n{"c":"paths","rows":[0]}\n{"c":"sort","by":"size","desc":false}\n{"c":"paths","rows":[0],"listing":2}\n{"c":"quit"}\n' "$D" "$D" | $BIN --backend)
 check "each rows line names its listing's numbering" "1 2" "$(echo "$out" | grep '"t":"rows"' | grep -oE '"listing":[0-9]+' | cut -d: -f2 | tr '\n' ' ' | sed 's/ $//')"
 check "paths naming the replaced numbering is refused by name and resolves nothing" "$stale_paths" \
@@ -630,12 +630,12 @@ mkdir_refusal() {
   printf '{"c":"mkdir","path":"%s","name":"%s"}\n{"c":"quit"}\n' "$MK" "$1" | $BIN --backend | grep -oE '"msg":"[^"]+"' | cut -d'"' -f4
 }
 for bad in 'a/b' '.' '..'; do
-  check "a name of $bad is refused before any syscall" "a name cannot be . or .., or contain a separator" "$(mkdir_refusal "$bad")"
+  check "a name of $bad is refused before any syscall" "a name cannot be . or .., or contain /" "$(mkdir_refusal "$bad")"
 done
 long=$(head -c 256 /dev/zero | tr '\0' a)
-check "a name past NAME_MAX names the cause in words" "file name is too long" "$(mkdir_refusal "$long")"
+check "a name past NAME_MAX names the cause in words" "that name is too long" "$(mkdir_refusal "$long")"
 check "a relative parent is refused" "a parent must be an absolute path" "$(printf '{"c":"mkdir","path":"relative","name":"x"}\n{"c":"quit"}\n' | $BIN --backend | grep -oE '"msg":"[^"]+"' | cut -d'"' -f4)"
-check "a parent that vanished since the listing names the cause in words" "file or folder not found" "$(printf '{"c":"mkdir","path":"%s/gone","name":"x"}\n{"c":"quit"}\n' "$MK" | $BIN --backend | grep -oE '"msg":"[^"]+"' | cut -d'"' -f4)"
+check "a parent that vanished since the listing names the cause in words" "item not found" "$(printf '{"c":"mkdir","path":"%s/gone","name":"x"}\n{"c":"quit"}\n' "$MK" | $BIN --backend | grep -oE '"msg":"[^"]+"' | cut -d'"' -f4)"
 check "no refusal made anything" "$before" "$(ls -A "$MK" | wc -l | tr -d ' ')"
 
 # A name of only spaces is legal, the same as it is for rename; the field trims, the wire does not.
@@ -909,7 +909,7 @@ for op in copy move; do
     check "$op: restoring the item that was there to its name" "there" "$(cat "$CO/to/photo.png" 2>/dev/null)"
     check "$op: and out of the trash" "no" "$([ -e "$CO_SB/data/Trash/files/photo.png" ] && echo yes || echo no)"
   else
-    check "$op: a trash gio cannot list leaves undo nothing to restore by, and it says so" "this item was trashed without a trash entry, so it cannot be restored" "$(echo "$out" | grep '"where":"undo"' | grep -oE '"msg":"[^"]+"' | cut -d'"' -f4)"
+    check "$op: a trash gio cannot list leaves undo nothing to restore by, and it says so" "this item was trashed without a Trash entry, so it cannot be restored" "$(echo "$out" | grep '"where":"undo"' | grep -oE '"msg":"[^"]+"' | cut -d'"' -f4)"
     check "$op: so the item that was there waits in the sandbox trash" "there" "$(cat "$CO_SB/data/Trash/files/photo.png" 2>/dev/null)"
     check "$op: while undo still took the incoming photo off the name" "no" "$([ -e "$CO/to/photo.png" ] && echo yes || echo no)"
   fi

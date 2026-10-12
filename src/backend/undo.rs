@@ -406,7 +406,7 @@ impl Journal {
                 Ok(None) => return Err(err("there is nothing to undo")),
                 Err(()) => {
                     self.shared = None;
-                    return Err(FleaError { where_: "undo".into(), path: String::new(), msg: "the shared undo journal is unavailable".into() });
+                    return Err(FleaError { where_: "undo".into(), path: String::new(), msg: "the undo history could not be read".into() });
                 }
             };
             // The claim already spent the barrier, so this answers and never replays it.
@@ -468,8 +468,11 @@ impl Journal {
                 self.redo.push(super::redo::Replay::capture(partial));
             }
             return Err(FleaError { where_: "undo".into(), path: String::new(),
-                msg: format!("{} path(s) left in place: {}; {} path(s) restored for redo",
-                    skipped.len(), skipped.join("; "), restored.len()) });
+                msg: match restored.len() {
+                    0 => super::redo::left_in_place(&skipped),
+                    1 => format!("{}; 1 item was restored for redo", super::redo::left_in_place(&skipped)),
+                    n => format!("{}; {n} items were restored for redo", super::redo::left_in_place(&skipped)),
+                } });
         }
         let op = entry.op.clone();
         self.redo.push(super::redo::Replay::capture(entry));

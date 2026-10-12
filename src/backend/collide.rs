@@ -24,7 +24,11 @@ pub const NO_FREE_NAME: &str = "every copy name for this item is already taken";
 // copyfile's own word for a cancelled item, which is what the transfer counts a cancel by.
 pub(crate) const CANCELLED: &str = "cancelled";
 // What a failed put-back adds to the item's error, a cancel's included, so the old item is never reported as untouched.
-pub(crate) const STILL_IN_TRASH: &str = "; the item it replaced is still in Trash";
+pub(crate) const STILL_IN_TRASH: &str = "; the item it replaced is still in the Trash";
+// Sample output: "the link at /d/b.txt could not be removed: stale; the item it replaced is still in the Trash".
+pub(crate) fn kept_in_trash(error: &str) -> String {
+    format!("{error}{STILL_IN_TRASH}")
+}
 
 // The operator's one answer, for every name the question listed.
 #[derive(Clone, Copy, Debug, PartialEq)]

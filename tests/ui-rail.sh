@@ -483,7 +483,7 @@ EOS
     done
     [[ "$(grep -c '^mount -e ' "$gio_log")" == "1" ]] \
         || fail "ejectlines: the held Eject never reached gio, log is: $(cat "$gio_log")"
-    wait_message "Ejecting FLEASTICK, do not unplug it yet."
+    wait_message "Ejecting FLEASTICK. Do not unplug it yet."
     printf 'EJECTLINES ejecting message=%q\n' "$(ipc lastMessage)"
     shot eject-ejecting
     : > "$dir/release"

@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const NAME_BYTES: usize = 255;
+// The one sentence for every fault in making the temporary folder the names file lives in; a fault after that names the folder.
+const PREPARE_FAILED: &str = "Bulk rename could not prepare its temporary folder";
 
 pub struct Batch {
     sources: Vec<(PathBuf, (u64, u64, u32))>,
@@ -26,7 +28,7 @@ impl Batch {
         let mut unique = BTreeSet::new();
         for path in paths {
             if !path.is_absolute() || !unique.insert(path.clone()) { return Err(failure("Rename selection is not a unique absolute selection")); }
-            let name = path.file_name().and_then(|name| name.to_str()).ok_or_else(|| failure("Rename requires UTF-8 filenames"))?;
+            let name = path.file_name().and_then(|name| name.to_str()).ok_or_else(|| failure("Bulk rename cannot handle a name that is not valid text"))?;
             if name.contains(['\n', '\r']) { return Err(failure("Bulk rename cannot represent a filename containing a line break")); }
             let meta = path.symlink_metadata()?;
             sources.push((path, identity(&meta)));
@@ -41,19 +43,10 @@ impl Batch {
         let mut names = NamesFile::new(&document)?;
         let result = terminal.run_editor(&editor, &names.path).and_then(|_| {
             names.check()?;
-            // Linux filename components hold at most 255 bytes, plus one newline per selected name.
-            let limit = self.sources.len().checked_mul(NAME_BYTES + 1).ok_or_else(|| failure("Rename selection is too large"))? as u64;
-            let mut file = regfile::open_if_regular(&names.path, O_NOFOLLOW)?.take(limit + 1);
-            let mut text = String::new();
-            file.read_to_string(&mut text)?;
-            if text.len() as u64 > limit { return Err(failure("Edited names exceed the selected files' filename limits")); }
+            let text = read_names(&names.path, self.sources.len())?;
             self.validate(&text)
         });
-        let cleanup = names.cleanup();
-        match (result, cleanup) {
-            (Err(error), Err(cleanup)) => Err(failure(&format!("{}; cleanup failed: {}", error, cleanup))),
-            (result, cleanup) => result.and(cleanup),
-        }
+        settle(result, names.cleanup())
     }
     fn validate(&mut self, document: &str) -> io::Result<()> {
         self.pending.clear();
@@ -101,17 +94,34 @@ impl Batch {
     }
 }
 
+// The edited names read back, refused past what the selection could name: Linux filename components hold at most 255 bytes, plus one newline per name.
+fn read_names(path: &Path, count: usize) -> io::Result<String> {
+    let limit = count.checked_mul(NAME_BYTES + 1).ok_or_else(|| failure("Rename selection is too large"))? as u64;
+    let mut file = regfile::open_if_regular(path, O_NOFOLLOW)?.take(limit + 1);
+    let mut text = String::new();
+    file.read_to_string(&mut text)?;
+    if text.len() as u64 > limit { return Err(failure("An edited name is too long")); }
+    Ok(text)
+}
+// A cleanup fault joins an earlier error, and otherwise becomes the result.
+fn settle(result: io::Result<()>, cleanup: io::Result<()>) -> io::Result<()> {
+    match (result, cleanup) {
+        (Err(error), Err(cleanup)) => Err(failure(&format!("{}; cleanup could not finish: {}", error, cleanup))),
+        (result, cleanup) => result.and(cleanup),
+    }
+}
+
 struct NamesFile { root: PathBuf, path: PathBuf, identity: (u64, u64, u32), cleaned: bool }
 impl NamesFile {
     fn new(document: &str) -> io::Result<Self> {
         let output = Command::new("mktemp").args(["-d", "/tmp/flea-rename-XXXXXX"]).output()?;
-        if !output.status.success() { return Err(failure("Could not create bulk rename directory")); }
-        let root = PathBuf::from(String::from_utf8(output.stdout).map_err(|_| failure("Bulk rename temporary path is not UTF-8"))?.trim());
+        if !output.status.success() { return Err(failure(PREPARE_FAILED)); }
+        let root = PathBuf::from(String::from_utf8(output.stdout).map_err(|_| failure(PREPARE_FAILED))?.trim());
         if !root.is_absolute() || root.parent() != Some(Path::new("/tmp")) || !root.file_name().is_some_and(|name| name.to_string_lossy().starts_with("flea-rename-")) {
-            return Err(failure("Bulk rename temporary path is outside its owned sandbox"));
+            return Err(failure(PREPARE_FAILED));
         }
         let meta = root.symlink_metadata()?;
-        if !meta.is_dir() { return Err(failure("Bulk rename temporary root is not a directory")); }
+        if !meta.is_dir() { return Err(failure(PREPARE_FAILED)); }
         let owned = identity(&meta);
         let names = Self { path: root.join("names"), root, identity: owned, cleaned: false };
         OpenOptions::new().write(true).create_new(true).mode(0o600).open(&names.path)?.write_all(document.as_bytes())?;
@@ -119,7 +129,7 @@ impl NamesFile {
     }
     fn check(&self) -> io::Result<()> {
         if !self.root.is_absolute() || self.root.as_os_str().is_empty() || identity(&self.root.symlink_metadata()?) != self.identity {
-            return Err(failure("Bulk rename temporary directory changed"));
+            return Err(failure(&format!("Bulk rename stopped because its temporary folder {} changed", self.root.display())));
         }
         Ok(())
     }
@@ -127,14 +137,14 @@ impl NamesFile {
         self.cleaned = true;
         self.check()?;
         if !self.path.is_absolute() || self.path == self.root || !self.path.starts_with(&self.root) {
-            return Err(failure("Refused cleanup outside the bulk rename sandbox"));
+            return Err(failure(&format!("Bulk rename would not remove {}, which is not inside its temporary folder {}", self.path.display(), self.root.display())));
         }
         match fs::remove_file(&self.path) {
             Ok(()) => {}
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error),
         }
-        fs::remove_dir(&self.root).map_err(|error| failure(&format!("Bulk rename scratch files remain at {}: {}", self.root.display(), error)))
+        fs::remove_dir(&self.root).map_err(|error| failure(&format!("Bulk rename left temporary files at {}: {}", self.root.display(), error)))
     }
 }
 impl Drop for NamesFile {
@@ -165,6 +175,39 @@ mod tests {
         batch.complete(&directory.join("renamed-a").to_string_lossy()).unwrap();
         assert_eq!(batch.completed, 1);
         assert_eq!(batch.pending.front().unwrap().0, b);
+    }
+    #[test]
+    fn bulk_rename_refusals_use_plain_words() {
+        use std::os::unix::ffi::OsStringExt;
+        let unreadable = PathBuf::from(std::ffi::OsString::from_vec(b"/tmp/\xff".to_vec()));
+        assert_eq!(Batch::new(vec![unreadable]).err().unwrap().to_string(), "Bulk rename cannot handle a name that is not valid text");
+        let directory = TestDir::new("tui-bulk-words");
+        let names = directory.file("names", &"x".repeat(NAME_BYTES + 2));
+        assert_eq!(read_names(&names, 1).unwrap_err().to_string(), "An edited name is too long");
+        assert_eq!(read_names(&names, 2).unwrap().len(), NAME_BYTES + 2, "two names leave room for it");
+        let joined = settle(Err(failure("first")), Err(failure("second"))).unwrap_err();
+        assert_eq!(joined.to_string(), "first; cleanup could not finish: second");
+        assert_eq!(settle(Ok(()), Err(failure("second"))).unwrap_err().to_string(), "second");
+    }
+    // A temporary folder that changed, a cleanup aimed outside it and one that cannot empty it: each refuses without deleting a thing, in its own sentence.
+    #[test]
+    fn temporary_folder_faults_name_the_folder_and_delete_nothing() {
+        let directory = TestDir::new("tui-bulk-folder");
+        let root = directory.dir("work");
+        let keep = directory.file("work/keep", "kept");
+        let real = identity(&root.symlink_metadata().unwrap());
+        let shown = root.display();
+        let mut names = NamesFile { path: root.join("names"), root: root.clone(), identity: (0, 0, 0), cleaned: true };
+        assert_eq!(names.check().unwrap_err().to_string(), format!("Bulk rename stopped because its temporary folder {shown} changed"));
+        // The identity guard fires first on a changed folder, so cleanup of it says the folder changed, and deletes nothing.
+        names.cleaned = false;
+        assert_eq!(names.cleanup().unwrap_err().to_string(), format!("Bulk rename stopped because its temporary folder {shown} changed"));
+        names = NamesFile { path: root.clone(), root: root.clone(), identity: real, cleaned: false };
+        assert_eq!(names.cleanup().unwrap_err().to_string(), format!("Bulk rename would not remove {shown}, which is not inside its temporary folder {shown}"));
+        names = NamesFile { path: root.join("names"), root: root.clone(), identity: real, cleaned: false };
+        let left = names.cleanup().unwrap_err().to_string();
+        assert!(left.starts_with(&format!("Bulk rename left temporary files at {}: ", root.display())), "{left}");
+        assert_eq!(fs::read_to_string(keep).unwrap(), "kept");
     }
     #[test]
     fn editor_cannot_redirect_a_replaced_source() {

@@ -11,7 +11,7 @@ import "flea/js/Trash.js" as Trash
 ShellRoot {
     id: shell
 
-    readonly property string prompt: "Press d again to trash, or Delete on its own."
+    readonly property string prompt: "Press d again to move it to Trash, or Delete on its own."
     readonly property string notice: "Renamed to notes.txt"
     // How much of the arm's clock is left when the expiry leg arms, and how long past it the harness waits before calling it stuck.
     readonly property int clockLeftMs: 100
@@ -67,12 +67,13 @@ ShellRoot {
     Connections {
         target: view
         function onStatusReported(message, error) { bar.say(message, error) }
+        function onArmReported(text) { bar.sayArm(text) }
     }
 
     // The owner stamps, then says its prompt, the order ui/js/Trash.js and ui/TrashView.qml keep.
     function arm(stampedAt) {
         owner.trashArmedAt = stampedAt
-        bar.say(shell.prompt, false)
+        bar.sayArm(shell.prompt)
     }
 
     function disarmLeg() {
@@ -117,10 +118,10 @@ ShellRoot {
         view.selected = ({ "trash:///fixture.txt": true })
         keys.keyClickChar("d", Qt.NoModifier, -1)
         shell.check("the view's first d arms it and draws its prompt on the bar",
-                    (view.trashArmedAt > 0) + "|" + Status.isPrompt(bar.transient_), "true|true")
+                    (view.trashArmedAt > 0) + "|" + (bar.prompt === Trash.reviewPrompt()), "true|true")
         keys.keyClickChar("d", Qt.NoModifier, -1)
         shell.check("the second d spends the arm", view.trashArmedAt, 0)
-        shell.check("so the bar shows no prompt over the review", bar.transient_, "")
+        shell.check("so the bar keeps no prompt, drawn or held, over the review", bar.prompt + "|" + bar.transient_ + "|" + (bar.arm === null), "||true")
         shell.check("and the review opens", view.confirming, true)
     }
 

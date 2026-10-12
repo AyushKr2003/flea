@@ -1,7 +1,31 @@
 .pragma library
 
+.import "KeyName.js" as KeyName
 .import "Format.js" as Format
 .import "Ops.js" as Ops
+
+// Whole sentences with "%1" for the key that arms and "%2" for the key that acts on its own, filled by Format.fill.
+var WORDS = {
+    trash: "Press %1 again to move it to Trash, or %2 on its own.",
+    review: "Press %1 again to review permanent deletion, or %2 on its own.",
+    trashAlone: "Press %1 again to move it to Trash.",
+    trashMany: "Press %1 again to move them to Trash, or %2 on its own.",
+    trashManyAlone: "Press %1 again to move them to Trash.",
+    reviewAlone: "Press %1 again to review permanent deletion.",
+    deleteOne: "Delete 1 item permanently?",
+    deleteMany: "Delete %1 items permanently?"
+}
+
+// The keys come from the running preset: the arming key, and the key that acts at once when the preset binds one; the count of rows the pair would trash picks it or them.
+function trashPrompt(count) {
+    var alone = KeyName.keyOf("trash", "none"), many = count > 1
+    if (alone.length > 0) return Format.fill(many ? WORDS.trashMany : WORDS.trash, KeyName.keyFor("trash"), alone)
+    return Format.fill(many ? WORDS.trashManyAlone : WORDS.trashAlone, KeyName.keyFor("trash"))
+}
+function reviewPrompt() {
+    var alone = KeyName.keyOf("trash", "none")
+    return alone.length > 0 ? Format.fill(WORDS.review, KeyName.keyFor("trash"), alone) : Format.fill(WORDS.reviewAlone, KeyName.keyFor("trash"))
+}
 
 // The dd pair. A single d used to trash, and it sat in the middle of the letters a name is typed
 // with, so the third keystroke of "Vid" trashed the row (issue 7). Delete and Ctrl+Delete are not
@@ -20,7 +44,7 @@ function arm(pane) {
         return
     }
     pane.trashArmedAt = Date.now()
-    pane.message("Press d again to trash, or Delete on its own.", false)
+    pane.armPrompted(trashPrompt(Ops.targetIndices(pane).length))
 }
 
 // Window-level keys the Trash view borrows: "direct" skips pane.act as Focus.handleKey does, "act" goes through it, "trash" stays here.
@@ -41,7 +65,7 @@ function filled(snapshot) {
 function confirmTitle(snapshot) {
     if (!filled(snapshot)) return ""
     if (snapshot.all) return "Empty Trash?"
-    return snapshot.count === 1 ? "Delete 1 item permanently?" : Format.fill("Delete %1 items permanently?", Format.count(snapshot.count))
+    return snapshot.count === 1 ? WORDS.deleteOne : Format.fill(WORDS.deleteMany, Format.count(snapshot.count))
 }
 
 function confirmBody(snapshot, scope) {

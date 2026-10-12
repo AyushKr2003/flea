@@ -5,12 +5,33 @@ use std::collections::HashMap;
 pub struct Map {
     blocks: Vec<(String, HashMap<String, String>)>,
 }
+// The key names the hints print, read from the keymap once per run so a rebound key reaches its hint.
+#[derive(Default, Clone)]
+pub struct Hints {
+    pub dismiss: String,
+    pub keys: String,
+    pub load_preview: String,
+    pub delete_permanently: String,
+    pub trash: String,
+}
+impl Hints {
+    pub fn new(map: &Map, preset: &str) -> Self {
+        let chord = |action: &str| map.chord(action, preset, "listing").unwrap_or_default();
+        Self {
+            dismiss: chord("escape"),
+            keys: chord("keymapSheet"),
+            load_preview: chord("loadPreview"),
+            delete_permanently: chord("deletePermanently"),
+            trash: chord("trash"),
+        }
+    }
+}
 impl Map {
     pub fn load() -> Self {
         Self::parse(include_str!("../../keys.toml"))
     }
     // Sample input: [[text]]# comment, followed by char = "j" and action = "cursorDown".
-    fn parse(text: &str) -> Self {
+    pub(super) fn parse(text: &str) -> Self {
         let mut map = Self::default();
         for line in text.lines().map(str::trim) {
             if let Some((kind, suffix)) = line
@@ -86,6 +107,15 @@ impl Map {
         }
         String::new()
     }
+    // The first key a preset binds to an action in a context, spelled as the sheet spells it: "Ctrl+Space", "Escape", "?".
+    pub fn chord(&self, action: &str, preset: &str, context: &str) -> Option<String> {
+        self.blocks
+            .iter()
+            .filter(|(_, block)| get(block, "action") == action)
+            .filter_map(|(kind, block)| block_key(kind, block))
+            .find(|(_, key)| self.in_context(key, preset, context) == action)
+            .map(|(name, key)| spell(&key, name))
+    }
     pub fn sheet(&self, preset: &str) -> Vec<String> {
         let mut rows = Vec::new();
         for (_, label) in self.blocks.iter().filter(|(kind, _)| kind == "sheet") {
@@ -95,65 +125,16 @@ impl Map {
             }
             let mut keys = Vec::new();
             for (kind, block) in &self.blocks {
-                let mods = if kind == "preset" {
-                    get(block, "mods")
-                } else {
-                    kind
-                };
-                let name = if kind == "text" {
-                    get(block, "char")
-                } else {
-                    get(block, "key")
-                };
-                if name.is_empty()
-                    || !matches!(
-                        mods,
-                        "text"
-                            | "code"
-                            | "none"
-                            | ""
-                            | "shift"
-                            | "ctrl"
-                            | "ctrlshift"
-                            | "alt"
-                            | "super"
-                            | "supershift"
-                            | "superalt"
-                    )
-                {
+                let Some((name, key)) = block_key(kind, block) else {
                     continue;
-                }
-                let text_key = mods == "text";
-                let key = if text_key {
-                    Key::character(name.chars().next().unwrap(), "")
-                } else {
-                    Key::named(
-                        name,
-                        if matches!(mods, "code" | "none") {
-                            ""
-                        } else {
-                            mods
-                        },
-                    )
                 };
                 let found = self.action(&key, preset);
                 if canonical(&found) != action {
                     continue;
                 }
-                let prefix = match key.mods.as_str() {
-                    "ctrl" => "Ctrl+",
-                    "ctrlshift" => "Ctrl+Shift+",
-                    "alt" => "Alt+",
-                    "super" => "Super+",
-                    "supershift" => "Super+Shift+",
-                    "superalt" => "Super+Alt+",
-                    "shift" => "Shift+",
-                    _ => "",
-                };
                 let chord = format!(
-                    "{}{}{}",
-                    prefix,
-                    name,
+                    "{}{}",
+                    spell(&key, name),
                     if found.ends_with("Arm") { name } else { "" }
                 );
                 if !keys.contains(&chord) {
@@ -168,6 +149,64 @@ impl Map {
         rows.push("q  Quit".into());
         rows
     }
+}
+// A block as the key it binds and the name the sheet prints for it; None for a block that binds no key the sheet can show.
+fn block_key<'a>(kind: &'a str, block: &'a HashMap<String, String>) -> Option<(&'a str, Key)> {
+    let mods = if kind == "preset" {
+        get(block, "mods")
+    } else {
+        kind
+    };
+    let name = if kind == "text" {
+        get(block, "char")
+    } else {
+        get(block, "key")
+    };
+    if name.is_empty()
+        || !matches!(
+            mods,
+            "text"
+                | "code"
+                | "none"
+                | ""
+                | "shift"
+                | "ctrl"
+                | "ctrlshift"
+                | "alt"
+                | "super"
+                | "supershift"
+                | "superalt"
+        )
+    {
+        return None;
+    }
+    let key = if mods == "text" {
+        Key::character(name.chars().next().unwrap(), "")
+    } else {
+        Key::named(
+            name,
+            if matches!(mods, "code" | "none") {
+                ""
+            } else {
+                mods
+            },
+        )
+    };
+    Some((name, key))
+}
+// The key as the sheet and the hints print it: its modifier prefix, then the name the keymap gives it.
+fn spell(key: &Key, name: &str) -> String {
+    let prefix = match key.mods.as_str() {
+        "ctrl" => "Ctrl+",
+        "ctrlshift" => "Ctrl+Shift+",
+        "alt" => "Alt+",
+        "super" => "Super+",
+        "supershift" => "Super+Shift+",
+        "superalt" => "Super+Alt+",
+        "shift" => "Shift+",
+        _ => "",
+    };
+    format!("{}{}", prefix, name)
 }
 fn canonical(action: &str) -> &str {
     match action {
@@ -238,98 +277,5 @@ fn get<'a>(map: &'a HashMap<String, String>, key: &str) -> &'a str {
     map.get(key).map(String::as_str).unwrap_or("")
 }
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn compiled_source_drives_text_and_native_ctrl() {
-        let map = Map::load();
-        assert_eq!(
-            map.action(
-                &Key {
-                    name: "J".into(),
-                    text: "j".into(),
-                    mods: "".into(),
-                    pointer: None,
-                },
-                "default"
-            ),
-            "cursorDown"
-        );
-        assert_eq!(
-            map.action(
-                &Key {
-                    name: "X".into(),
-                    text: "X".into(),
-                    mods: "ctrl".into(),
-                    pointer: None,
-                },
-                "mac"
-            ),
-            ""
-        );
-        assert_eq!(
-            map.action(
-                &Key {
-                    name: "Insert".into(),
-                    text: "".into(),
-                    mods: "shift".into(),
-                    pointer: None,
-                },
-                "vim"
-            ),
-            "paste"
-        );
-    }
-    #[test]
-    fn contexts_share_only_declared_actions_and_sheet_matches_preset() {
-        let map = Map::load();
-        assert_eq!(map.in_context(&Key::character('d', ""), "vim", "pdf"), "");
-        assert_eq!(
-            map.in_context(&Key::named("Space", ""), "mac", "pdf"),
-            "preview"
-        );
-        assert_eq!(
-            map.in_context(&Key::named("Tab", "shift"), "windows", "media"),
-            "focusPrevious"
-        );
-        assert_eq!(
-            map.in_context(&Key::named("Insert", "ctrl"), "default", "editor"),
-            ""
-        );
-        assert_eq!(map.action(&Key::character('y', ""), "vim"), "copyArm");
-        assert!(map.sheet("vim").iter().any(|line| line.contains("yy")));
-        assert!(!map
-            .sheet("default")
-            .iter()
-            .any(|line| line.to_lowercase().contains("grid")));
-    }
-    #[test]
-    fn commented_headers_keep_shipped_mac_navigation_aliases_separate() {
-        let map = Map::load();
-        for (key, action) in [("Up", "parent"), ("Down", "open"), ("Delete", "trash")] {
-            assert_eq!(map.action(&Key::named(key, "ctrl"), "mac"), action);
-        }
-        assert_eq!(map.action(&Key::character('3', "ctrl"), "mac"), "viewGrid");
-    }
-    #[test]
-    fn default_redo_is_control_shift_z() {
-        let map = Map::load();
-        assert_eq!(map.action(&Key::character('Z', "ctrlshift"), "default"), "redo");
-    }
-    #[test]
-    fn header_comments_do_not_strip_quoted_hashes_or_accept_other_suffixes() {
-        let map = Map::parse(r##"
-[[text]] # A header comment can contain = and ]].
-char = "#"
-action = "literal#action"
-# [[preset]] is still a comment.
-[[text]]# No intervening space is required.
-char = "j"
-action = "cursorDown"
-[[code]] unexpected
-"##);
-        assert_eq!(map.blocks.len(), 2);
-        assert_eq!(map.action(&Key::character('#', ""), "default"), "literal#action");
-        assert_eq!(map.action(&Key::character('j', ""), "default"), "cursorDown");
-    }
-}
+#[path = "keymap_tests.rs"]
+mod tests;

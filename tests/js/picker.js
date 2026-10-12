@@ -104,10 +104,10 @@ function run(check) {
     // The save card's lines are whole templates; each rendered line equals today's string except for the zero-width joints.
     check("the refused line is one whole sentence",
         Format.fill(Picker.SAVE_REFUSED, "export.txt", Picker.NAME_REFUSED),
-        "Refused · export.txt · a name cannot be empty, . or .. , or contain a separator")
+        "export.txt cannot be used: a name cannot be empty, . or .., or contain /")
     check("the collision line is one whole sentence",
         Format.fill(Picker.SAVE_EXISTS, Picker.jointName("export.txt")),
-        "export.\u200btxt already exists here · review before continuing")
+        "export.\u200btxt already exists here. Review it before you continue.")
 
     check("a path joins under its directory", Picker.join("/home/gm", "a.txt"), "/home/gm/a.txt")
     check("the root does not double its slash", Picker.join("/", "etc"), "/etc")

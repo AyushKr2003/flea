@@ -2,6 +2,7 @@ import QtQuick
 import "." as Flea
 import "js/Swap.js" as Swap
 import "js/Search.js" as Search
+import "js/KeyName.js" as KeyName
 
 // What a pane draws instead of rows: the empty hero, the reading spiral and the failure block. All
 // three sit over the same slot and are gated on the same listing state, so they live together and
@@ -34,7 +35,7 @@ Item {
         caption: Search.live(root.pane) ? Search.nothingMatches(root.pane.swap.answeredQuery) : ""
         mark: "search"
         hint: Search.live(root.pane) ? "Press Escape to clear."
-            : ViewState.keyHints ? "Press Ctrl+Shift+N for a new folder." : ""
+            : ViewState.keyHints ? KeyName.hinted("Press %1 for a new folder.", "newFolder") : ""
     }
 
     Flea.LoadingState {

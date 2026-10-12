@@ -2,14 +2,21 @@
 
 // Settings > About's Make Flea the default: which state the row is in, the note under it and what a press runs; ui/DefaultClaim.qml runs the processes.
 
+.import "Format.js" as Format
+
+// Whole sentences with "%1" for the program that never started, its name and not its command line.
+var WORDS = {
+    unstarted: "%1 could not start"
+}
+
 // The row's id, which ui/SettingsPanel.qml routes to the run instead of writing it into ui.json.
 var ROW_ID = "makeDefault"
 // The entry flea --default points the desktop at; the box is ticked exactly when xdg-mime answers it.
 var DESKTOP_ID = "com.thisisgm.flea.desktop"
 // src/main.rs claim_both() says this and still exits 0 when a build has no flea.portal to route file dialogs to.
-var SKIPPED = "no portal backend is installed, so the file chooser step was skipped"
-// src/defaults.rs claim() refuses with this when the running binary has no desktop entry to point at.
-var UNINSTALLED = "is not installed in any applications directory"
+var SKIPPED = "no file chooser service is installed, so Flea could not become the file chooser"
+// src/defaults.rs EXIT_UNINSTALLED: the status claim() exits with when the running binary has no desktop entry to point at.
+var UNINSTALLED_STATUS = 3
 // The portal reads its routing once, at startup; try-restart leaves a portal that is not running alone.
 var RESTART = ["systemctl", "--user", "try-restart", "xdg-desktop-portal.service"]
 // flea's own stderr lines start with its name, which the note drops.
@@ -39,7 +46,7 @@ function started(claim, args) {
 }
 
 // Still running until a handler read numbered nextRead or later lands and a switch that went through has restarted the portal.
-// Sample stderr: "flea: no portal backend is installed, so the file chooser step was skipped\n"
+// Sample stderr: "flea: no file chooser service is installed, so Flea could not become the file chooser\n"
 function finished(claim, code, stderr, nextRead) {
     var text = stderr || ""
     var next = Object.assign({}, claim, { reading: true, readFrom: nextRead, restarting: code === 0 })
@@ -47,7 +54,7 @@ function finished(claim, code, stderr, nextRead) {
         next.outcome = text.indexOf(SKIPPED) >= 0 ? "partly" : ""
         return next
     }
-    if (text.indexOf(UNINSTALLED) >= 0) {
+    if (code === UNINSTALLED_STATUS) {
         next.packaged = false
         return next
     }
@@ -102,7 +109,7 @@ function handlerOf(answer) {
 // Sample command: ["/usr/bin/flea", "--default"]
 function unstarted(claim, command) {
     return Object.assign({}, claim, { running: false, reading: false, restarting: false, outcome: "failed",
-                                      error: command.join(" ") + " could not start" })
+                                      error: Format.fill(WORDS.unstarted, String(command[0]).split("/").pop()) })
 }
 
 // A portal that would not restart keeps the switch as it went; partly keeps its own note, whose dialogs never follow.

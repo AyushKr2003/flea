@@ -90,7 +90,7 @@ fn recreated_parent_rebinds_child_destination_without_accepting_a_foreign_parent
     guard(&sandbox, &[&parent, &moved]);
     std::fs::rename(&parent, &moved).unwrap();
     std::fs::create_dir(&parent).unwrap();
-    assert!(redo(&mut journal).unwrap_err().msg.contains("replaced"));
+    assert_eq!(redo(&mut journal).unwrap_err().msg, "the destination folder was replaced, so nothing was redone");
     assert!(!child.exists());
 }
 
@@ -113,7 +113,7 @@ fn redo_refuses_changed_sources_and_destination_collisions() {
     guard(&sandbox, &[&original, &copy]);
     journal.undo().unwrap();
     std::fs::write(&copy, "foreign destination").unwrap();
-    assert!(redo(&mut journal).unwrap_err().msg.contains("already exists"));
+    assert_eq!(redo(&mut journal).unwrap_err().msg, "an item with that name is already there, so redo left it in place");
     assert_eq!(std::fs::read_to_string(&copy).unwrap(), "foreign destination");
 }
 
@@ -156,4 +156,20 @@ fn new_file_is_recreated_but_changed_or_replaced_files_survive_undo() {
     guard(&sandbox, &[&empty, &saved]);
     assert!(journal.undo().is_err());
     assert_eq!(std::fs::read_to_string(empty).unwrap(), "replacement");
+}
+
+// Sample output: "1 item was left in place: a: no", or "2 items were left in place: a: no; b: no".
+#[test]
+fn skipped_items_are_one_whole_sentence_for_one_and_for_many() {
+    assert_eq!(left_in_place(&["a: no".to_string()]), "1 item was left in place: a: no");
+    assert_eq!(left_in_place(&["a: no".to_string(), "b: no".to_string()]), "2 items were left in place: a: no; b: no");
+}
+
+#[test]
+fn an_operation_with_no_recorded_source_says_it_cannot_be_redone() {
+    let created = || Step::Created { path: PathBuf::from("/d/x") };
+    assert_eq!(Replay::capture(Entry { op: "mkdir".into(), steps: vec![created()] }).err().unwrap().msg, "this operation cannot be redone");
+    let (tx, _rx) = channel();
+    let saved = ReplayStep { step: created(), input: None, parent: None };
+    assert_eq!(apply(&saved, 1, 0, &AtomicBool::new(false), &tx, &mut Vec::new()).unwrap_err().msg, "this operation cannot be redone");
 }

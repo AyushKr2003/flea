@@ -19,7 +19,7 @@ Item {
     property color edge: Theme.color.surface
 
     signal chosen(string path)
-    signal networkCompleted(string requestId, string uri, bool success, string reason)
+    signal networkCompleted(string requestId, string uri, bool success, string reason, bool connectFailed)
 
     // SendPicker.html draws Recent above Home, and a save has no history to write into, so the one
     // mode that cannot use the location does not offer it.
@@ -124,7 +124,7 @@ Item {
                 var path = decodeURIComponent(entry.path.substring(7))
                 if (path.charAt(0) !== "/" || path.indexOf("\0") >= 0) throw new Error("not a local file URI")
                 root.chosen(path)
-            } catch (error) { root.picker.say("This favorite has an invalid local file URI.", true) }
+            } catch (error) { root.picker.say("This favorite points to a location Flea cannot open.", true) }
         } else if (entry.path.indexOf("://") >= 0) {
             root.awaitingNetwork = true
             network.openShare(entry.path, false, entry.label, false)
@@ -169,7 +169,7 @@ Item {
     Flea.NetworkMounts {
         id: network
         savedFavourites: Flea.Favourites.records
-        onCompleted: function(requestId, uri, success, reason) { root.networkCompleted(requestId, uri, success, reason) }
+        onCompleted: function(requestId, uri, success, reason, connectFailed) { root.networkCompleted(requestId, uri, success, reason, connectFailed) }
         onOpened: function(path) { if (root.awaitingNetwork) root.chosen(path) }
         // A FUSE path that is a file: the chooser selects it, the way a favourite file resolves.
         onOpenFileRequested: function(path) { if (root.awaitingNetwork) root.chosen(path) }

@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import "." as Flea
 import "js/Convert.js" as Convert
+import "js/Format.js" as Format
 
 // The one popup in the whole design. Every other operation answers in the status bar; this one asks two questions first, so it is the exception the operations design names rather than a pattern.
 Item {
@@ -34,6 +35,8 @@ Item {
 
     signal accepted(var source, string format, bool strip, int requestId)
 
+    // The card title, filled by Format.fill.
+    readonly property string titleWord: "Convert %1"
     readonly property var formats: Convert.FORMATS
     readonly property string outputPath: root.source ? Convert.destination(root.source, root.format) : ""
     readonly property bool editable: !root.busy && !root.unavailable
@@ -176,8 +179,8 @@ Item {
             root.focusPart = 2
             cancelButton.forceActiveFocus()
             root.errorText = pending
-                ? "Backend stopped; conversion outcome unknown. Check the output."
-                : "Backend stopped; reopen Flea to convert."
+                ? "Flea stopped responding, so the conversion may not have finished. Check the converted file."
+                : "Flea stopped responding. Reopen Flea, then convert again."
         }
     }
 
@@ -242,7 +245,7 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.margins: Theme.spacing.rowPaddingX
-                    text: "Convert " + root.name
+                    text: Format.fill(root.titleWord, root.name)
                     elide: Text.ElideMiddle
                 }
 

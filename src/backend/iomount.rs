@@ -73,7 +73,7 @@ pub(crate) fn internal_failure(where_: &str, path: &Path) -> FleaError {
     FleaError {
         where_: where_.to_string(),
         path: path.to_string_lossy().to_string(),
-        msg: "the worker stopped without answering.".to_string(),
+        msg: "the operation stopped without answering.".to_string(),
     }
 }
 // A remote call runs on a worker with a deadline; a local call runs inline with no hop.
@@ -625,5 +625,10 @@ mod tests {
         let text = String::from_utf8(out).expect("the wire is utf-8");
         assert!(text.contains(r#""w":false"#), "the listed line carries the worker's writability: {}", text);
         std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    #[test]
+    fn a_dead_worker_is_an_operation_that_stopped_without_answering() {
+        assert_eq!(internal_failure("rename", Path::new("/a")).msg, "the operation stopped without answering.");
     }
 }

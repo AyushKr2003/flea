@@ -7,6 +7,7 @@ import "js/Anchor.js" as Anchor
 import "js/Archive.js" as Archive
 import "js/BackReturn.js" as BackReturn
 import "js/Nav.js" as Nav
+import "js/Format.js" as Format
 import "js/Ops.js" as Ops
 import "js/Clipboard.js" as Clipboard
 import "js/Permissions.js" as Permissions
@@ -82,7 +83,7 @@ Item {
         onFailed: function (path) { pane.message("No application on this system opened that file.", true) }
         onIsDirectory: function (path) { pane.open(path) }
         onTerminalBusy: function (path) { pane.message("Still opening the last terminal; try again in a moment.", false) }
-        onTerminalFailed: function (path) { pane.message("No terminal on this system opened that directory.", true) }
+        onTerminalFailed: function (path) { pane.message("No terminal on this system opened that folder.", true) }
         // The run card's own answers: a program asks once on its raw ask line, and a file no application claims asks Open with.
         onAskRunRaw: function (path, text) { pane.askRunCard({ path: path, raw: text }) }
         onAskOpenWith: function (path) { pane.showOpenWith(path) }
@@ -225,7 +226,7 @@ Item {
             if (path !== pane.path && !pane.path.startsWith(path + "/"))
                 return
             pane.openWithoutHistory(parent)
-            pane.message("The mount went away, so this folder is no longer available.", false)
+            pane.message("That drive or share was disconnected, so this folder is no longer available", false)
         }
 
         // Sample input: {"t":"changed","path":"/home/gm/Downloads"}
@@ -369,7 +370,7 @@ Item {
         }
 
         function onDuplicated(ok, path) {
-            pane.message("Duplicated to " + Ops.leaf(path) + Status.UNDO_HINT, false)
+            pane.message(Format.fill(Ops.WORDS.duplicated, Ops.leaf(path)) + Status.undoHint(), false)
             pane.refresh(path)
         }
 
@@ -389,7 +390,7 @@ Item {
             if (!pane.linkTargetPendingId || id !== pane.linkTargetPendingId) return
             pane.linkTargetPendingId = 0
             if (directory.length === 0 || (name.length === 0 && directory !== "/")) {
-                pane.message("That link points nowhere to reveal.", true)
+                pane.message("That link points to an item that no longer exists.", true)
                 return
             }
             pane.pendingSelect = name.length === 0 ? "" : directory === "/" ? "/" + name : directory + "/" + name
@@ -408,7 +409,7 @@ Item {
             if (!pane.makeExecPendingId || !message || message.id !== pending || message.op !== "applyMany") return
             pane.makeExecPendingId = 0
             if (message.ok === true) {
-                pane.message("Made it executable." + Status.UNDO_HINT, false)
+                pane.message(Status.withUndo("Made it executable."), false)
                 pane.refresh("")
             } else {
                 pane.message(message.error && message.error.length > 0 ? message.error : "That file could not be made executable.", true)
@@ -424,7 +425,7 @@ Item {
         function onRedone(op, ok) {
             pane.transfer = Ops.emptyTransfer()
             pane.sticky("")
-            pane.message("Redid the " + op + Status.UNDO_HINT, false)
+            pane.message(Ops.redone(op) + Status.undoHint(), false)
             pane.refresh("", op === "permissions" || op === "settags")
         }
 
@@ -446,7 +447,7 @@ Item {
         function onConvertDone(id, ok, path, err, requestId, source, collision) {
             if (requestId && (!pane.convertSource || pane.convertSource.requestId !== requestId || pane.convertSource.path !== source)) return
             pane.sticky("")
-            pane.message(ok ? "Converted to " + Ops.leaf(path) + "." : collision ? err : Errors.sentence("convert", err), !ok)
+            pane.message(ok ? Format.fill(Ops.WORDS.convertedTo, Ops.leaf(path)) : collision ? err : Errors.sentence("convert", err), !ok)
             if (ok) {
                 if (pane.searchMode === Search.RESULTS) root.stale = true
                 else pane.refresh(path)
@@ -501,16 +502,16 @@ Item {
                 pane.renameRequest = null
                 pane.renameKeepsPointerRow = false
                 if (terminal) {
-                    text = "Backend stopped; rename outcome unknown."
+                    text = "Flea stopped responding, so the rename may not have finished. Check the name."
                 } else if (where === "rename-kept" || where === "rename-stranded" || (where === "journal" && input === request.destination)) {
                     // A destination-side journal failure happens after the filesystem rename succeeded.
                     pane.renamingIndex = -1
-                    if (where === "journal") text = Errors.capitalised("renamed, but Undo was not recorded: " + message)
+                    if (where === "journal") text = "Renamed, but undo cannot reverse this rename."
                     pane.message(text, true)
                     root.refreshRename(request, pointer ? "" : (where === "journal" ? request.destination : ""), pointer)
                     return
                 } else {
-                    var reason = Errors.exists(message) ? Ops.leaf(request.destination) + " already exists." : Errors.capitalised(message)
+                    var reason = Errors.exists(message) ? Format.fill(Ops.WORDS.alreadyExists, Ops.leaf(request.destination)) : Errors.capitalised(message)
                     // Grid closing review G1: with no live editor to show it, the
                     // refusal goes to the status bar and the edit closes.
                     Ops.refuseRename(pane, reason)

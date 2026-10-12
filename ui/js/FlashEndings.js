@@ -95,7 +95,7 @@ function endingFor(err, ctx) {
 // A flash that ends while the listing shows reports in the status line as a copy does.
 var DONE_LINE = "Flashed {image} to {drive}."
 var VERIFY_AGAIN_LINE = "{drive} did not verify; flash it again."
-var EJECTED_LINE = "Ejected {drive}, it is safe to unplug."
+var EJECTED_LINE = "Ejected {drive}. It is safe to unplug."
 var STILL_MOUNTED_LINE = "{drive} is still mounted; close what is using it."
 var EJECT_FAILED_LINE = "Could not eject {drive}."
 

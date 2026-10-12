@@ -4,6 +4,7 @@
 use crate::backend::archive::Formats;
 use crate::backend::archiveops::compress;
 use crate::backend::proto::error_line;
+use crate::error::io_message;
 use crate::shelf::Shelf;
 use crate::uistore;
 use std::os::unix::fs::OpenOptionsExt;
@@ -42,7 +43,7 @@ pub fn zip(rest: &[String]) -> i32 {
     let (parent, names) = match relative_to_ancestor(&paths) {
         Some(split) => split,
         None => {
-            eprintln!("flea: those paths have no directory in common to archive them from");
+            eprintln!("flea: those items have no folder in common to archive them from");
             return 2;
         }
     };
@@ -116,8 +117,8 @@ fn writable(parent: &Path) -> Result<(), String> {
         .create_new(true)
         .mode(OWNER_ONLY_FILE)
         .open(&probe)
-        .map_err(|e| format!("{} is the only directory those paths have in common, and it cannot be written in ({:?})",
-                             parent.display(), e.kind()))?;
+        .map_err(|e| format!("{} is the only folder those items share, and it cannot be written in: {}",
+                             parent.display(), io_message(&e)))?;
     let _ = std::fs::remove_file(&probe);
     Ok(())
 }
@@ -131,10 +132,10 @@ fn relocate(from: &Path, to: &Path) -> Result<(), String> {
     if let Err(e) = std::fs::copy(from, to) {
         // A failed copy leaves a partial at the destination, and that name would stay spent.
         let _ = std::fs::remove_file(to);
-        return Err(format!("the archive could not be put on the shelf ({:?})", e.kind()));
+        return Err(format!("the archive could not be put on the shelf: {}", io_message(&e)));
     }
     if let Err(e) = std::fs::remove_file(from) {
-        eprintln!("flea: the staged archive stayed behind at {} ({:?})", from.display(), e.kind());
+        eprintln!("flea: the staged archive stayed behind at {}: {}", from.display(), io_message(&e));
     }
     Ok(())
 }
@@ -162,7 +163,7 @@ fn reserve(path: &Path) -> Result<bool, String> {
     match std::fs::OpenOptions::new().write(true).create_new(true).mode(OWNER_ONLY_FILE).open(path) {
         Ok(_) => Ok(true),
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
-        Err(e) => Err(format!("{} could not be created ({:?})", path.display(), e.kind())),
+        Err(e) => Err(format!("{} could not be created: {}", path.display(), io_message(&e))),
     }
 }
 

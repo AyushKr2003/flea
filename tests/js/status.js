@@ -1,3 +1,4 @@
+.import "../../ui/js/GvfsBridge.js" as GvfsBridge
 .import "../../ui/js/Status.js" as Status
 .import "../../ui/js/Trash.js" as Trash
 .import "../../ui/js/Ops.js" as Ops
@@ -24,16 +25,7 @@ function slot(over) {
     return s
 }
 
-// ui/TrashView.qml's dd prompt, read from its source; sample: else statusReported("Press d again to review permanent deletion, or Delete on its own.", false)
-function trashViewPrompt() {
-    var request = new XMLHttpRequest()
-    request.open("GET", Qt.resolvedUrl("../../ui/TrashView.qml"), false)
-    request.send()
-    var found = String(request.responseText || "").match(/statusReported\("(Press [^"]*)"/)
-    return found ? found[1] : ""
-}
-
-// ui/TrashView.qml's armDelete stamps before it reports; sample: trashArmedAt = paired ? 0 : now ... statusReported("Press d again ...", false)
+// ui/TrashView.qml's armDelete stamps before it reports its prompt; sample: trashArmedAt = paired ? 0 : now ... armReported(TrashKeys.reviewPrompt())
 function trashViewStampsFirst() {
     var request = new XMLHttpRequest()
     request.open("GET", Qt.resolvedUrl("../../ui/TrashView.qml"), false)
@@ -41,7 +33,7 @@ function trashViewStampsFirst() {
     var body = String(request.responseText || "")
     var from = body.indexOf("function armDelete()")
     var stamp = body.indexOf("trashArmedAt = paired ? 0 : now", from)
-    var say = body.indexOf("statusReported(\"Press ", from)
+    var say = body.indexOf("armReported(TrashKeys.reviewPrompt())", from)
     return from >= 0 && stamp > from && say > stamp
 }
 
@@ -114,17 +106,17 @@ function run(check) {
 
     // An arm's prompt stands over errors, search and activity only while the arm lives: its text alone ranks nothing.
     var p = { trashArmedAt: 0, cursorIndex: 3, shown: null, trashedIdx: [], said: "", stampAtSay: -1, selectedIndices: function () { return [] } }
-    p.message = function (text) { p.said = text; p.stampAtSay = p.trashArmedAt }
+    p.armPrompted = function (text) { p.said = text; p.stampAtSay = p.trashArmedAt }
     p.backend = { trash: function (idx) { p.trashedIdx = idx } }
     Trash.arm(p)
     var prompt = p.said
-    check("the listing's dd prompt reads as a prompt", Status.isPrompt(prompt), true)
-    check("and so does the Trash view's own", trashViewPrompt().length > 0 && Status.isPrompt(trashViewPrompt()), true)
-    check("while a result is not one", Status.isPrompt("Moved 4 items to Trash · z undoes"), false)
+    check("the listing's dd prompt is said through the typed arm channel", prompt, "Press d again to move it to Trash, or Delete on its own.")
+    check("and the Trash view's own is its review sentence", Trash.reviewPrompt(), "Press d again to review permanent deletion, or Delete on its own.")
     // ui/StatusBar.qml watches the stamp its owner holds when the prompt is said, so each owner stamps first.
     check("Trash.arm stamps before it says its prompt", p.stampAtSay > 0 && p.stampAtSay === p.trashArmedAt, true)
-    check("and ui/TrashView.qml's armDelete does too", trashViewStampsFirst(), true)
+    check("and ui/TrashView.qml's armDelete does too, saying the review sentence of ui/js/Trash.js", trashViewStampsFirst(), true)
     var older = [{ text: "Copy failed: photo.heic · disk full", detail: "No space left on device", place: "" }]
+    check("no code reads a sentence to find the arm prompt, the typed armPrompted channel carries it", typeof Status.isPrompt, "undefined")
     check("a prompt's text with no live arm does not stand over an error", Status.transientOf(older, prompt).isError, true)
     check("nor over a search that is still reporting",
           Status.centreText(slot({ transient: prompt, searching: true, searchLine: "3 found in 1.6 s" })), "3 found in 1.6 s")
@@ -189,7 +181,7 @@ function run(check) {
     check("a trash refusal carries its key hint", Status.hintOf("This location has no Trash · shift-delete deletes"), " · shift-delete deletes")
     check("and the secondary is handed the key alone", Status.hintKey(Status.trashHint()), "shift-delete deletes")
     check("and the secondary is handed the key alone, because it draws its own separator",
-          Status.hintKey(Status.UNDO_HINT) + "|" + Status.hintKey(Status.PASTE_HINT), "z undoes|p pastes")
+          Status.hintKey(Status.undoHint()) + "|" + Status.hintKey(Status.pasteHint()), "z undoes|p pastes")
 
     // StatusBar board rule 3: the byte total appears only when every selected row is held and every
     // size is known and complete, and nothing here starts a sweep to fill a gap.
@@ -279,20 +271,23 @@ function run(check) {
 
     // D-213: any hint ending in the undo hint is undo-carrying, including a verdict
     // note riding ahead of it, so the split target draws on those lines too.
-    check("a plain undo hint is undo-carrying", Status.hasUndoHint(Status.UNDO_HINT), true)
+    check("a plain undo hint is undo-carrying", Status.hasUndoHint(Status.undoHint()), true)
     check("a verdict note ahead of it stays undo-carrying",
-          Status.hasUndoHint(" · " + Status.VERDICT_NOTES[0] + Status.UNDO_HINT), true)
+          Status.hasUndoHint(" · " + Status.VERDICT_NOTES[0] + Status.undoHint()), true)
     check("and so does the second verdict note",
-          Status.hasUndoHint(" · " + Status.VERDICT_NOTES[1] + Status.UNDO_HINT), true)
-    check("while a paste hint is not", Status.hasUndoHint(Status.PASTE_HINT), false)
+          Status.hasUndoHint(" · " + Status.VERDICT_NOTES[1] + Status.undoHint()), true)
+    check("while a paste hint is not", Status.hasUndoHint(Status.pasteHint()), false)
     check("and an empty hint is not", Status.hasUndoHint(""), false)
 
     // I-211: the busy mark walks while the displayed Starting line stands, and only then.
-    var starting = [{ owner: {}, text: "Starting the GVFS bridge for Pixel 8", transfer: { running: false } }]
+    var starting = [Status.activityChanged([], {}, GvfsBridge.startingLine("Pixel 8"), { running: false }, true)[0]]
     check("a displayed Starting line lights the busy mark", Status.displayedStarting(starting), true)
     check("a Starting line behind another activity lights nothing",
           Status.displayedStarting([{ owner: {}, text: "Copying 1 of 5", transfer: { running: true } }].concat(starting)), false)
     check("and no activity lights nothing", Status.displayedStarting([]), false)
+    // The record carries the fact, so the same words from another owner light nothing and the text is never read.
+    check("the same words said as a plain sticky line do not light it",
+          Status.displayedStarting(Status.activityChanged([], {}, GvfsBridge.startingLine("Pixel 8"), { running: false })), false)
 
     // I-511: one Focus.js predicate gates the z key and the click alike.
     function undoPane(over) {

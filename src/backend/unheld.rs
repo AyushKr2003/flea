@@ -142,10 +142,11 @@ pub(crate) fn summary(top: &Path, moving: bool) -> Option<FleaError> {
         let refused = r.borrow();
         let (first, why) = refused.0.first()?;
         let inside = first.strip_prefix(top).unwrap_or(first).to_string_lossy().to_string();
-        let verb = if moving { "moved" } else { "copied" };
-        let msg = match refused.1 {
-            1 => format!("{inside} could not be {verb}: {why}"),
-            n => format!("{n} items inside could not be {verb}; the first is {inside}: {why}"),
+        let msg = match (refused.1, moving) {
+            (1, true) => format!("{inside} could not be moved: {why}"),
+            (1, false) => format!("{inside} could not be copied: {why}"),
+            (n, true) => format!("{n} items inside could not be moved; the first is {inside}: {why}"),
+            (n, false) => format!("{n} items inside could not be copied; the first is {inside}: {why}"),
         };
         Some(FleaError { where_: "copy".to_string(), path: top.to_string_lossy().to_string(), msg })
     })
@@ -194,3 +195,6 @@ mod tests;
 #[cfg(test)]
 #[path = "unheld_path_tests.rs"]
 mod path_tests;
+#[cfg(test)]
+#[path = "unheld_summary_tests.rs"]
+mod summary_tests;

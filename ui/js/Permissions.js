@@ -1,5 +1,7 @@
 .pragma library
 
+.import "Format.js" as Format
+
 // Keeps the one-shot Make executable id clear of the dialog's own batch ids; both QML readers add their pending id to it.
 var MAKE_EXEC_ID = 1000000
 
@@ -62,7 +64,7 @@ function summarize(modes, reasons) {
     return { bits: bits, mixed: anyMixed, changeable: changeable }
 }
 
-function mixedNote() { return "Mixed boxes keep each file's own bit unless you change them." }
+function mixedNote() { return "Mixed boxes keep each item's setting unless you change them." }
 
 // A mode with special bits is named in the backend's own words, never dropped on parse -1.
 function specialReason(text) {
@@ -127,6 +129,22 @@ function closed(text) {
     return /\.$/.test(text) ? text : text + "."
 }
 
+// Whole sentences with "%1" for a value, filled by fill so each translates as one; a cause is a sentence of its own, never joined in.
+var WORDS = {
+    titleMany: "Permissions for %1 items",
+    requestedMode: "Requested mode %1",
+    currentMode: "Current mode %1",
+    keepsSpecial: "%1 keeps its mode because its %2 bit is set.",
+    keepsOwner: "%1 keeps its mode because you do not own it.",
+    keepsOther: "%1 keeps its mode: %2",
+    manySpecial: "%1 items keep their modes because a special bit is set: %2.",
+    manyOwner: "%1 items keep their modes because you do not own them: %2.",
+    manyOther: "%1 items keep their modes because they cannot be changed: %2.",
+    namesAndMore: "%1 and %2 more",
+    keptOne: "%1 kept its mode.",
+    keptMany: "%1 items kept their modes."
+}
+
 // Sample input: one setuid file answers "special.txt keeps its mode because its setuid bit is set."; two answer "2 items keep their modes because a special bit is set: a, b.".
 function skipNote(skipped) {
     var list = skipped || []
@@ -137,18 +155,18 @@ function skipNote(skipped) {
     if (list.length === 1) {
         var leaf = leafOf(list[0].path)
         if (kinds[0] === "special")
-            return leaf + " keeps its mode because its " + specialLabel(list[0].why) + " bit is set."
+            return Format.fill(WORDS.keepsSpecial, leaf, specialLabel(list[0].why))
         if (kinds[0] === "owner")
-            return leaf + " keeps its mode because you do not own it."
-        return closed(leaf + " keeps its mode: " + list[0].why)
+            return Format.fill(WORDS.keepsOwner, leaf)
+        return closed(Format.fill(WORDS.keepsOther, leaf, list[0].why))
     }
     var names = []
     for (var i = 0; i < list.length && i < SKIP_NAMES_SHOWN; i++)
         names.push(leafOf(list[i].path))
-    var tail = list.length > SKIP_NAMES_SHOWN ? " and " + (list.length - SKIP_NAMES_SHOWN) + " more" : ""
-    var cause = same && kinds[0] === "special" ? "a special bit is set"
-        : same && kinds[0] === "owner" ? "you do not own them" : "they cannot be changed"
-    return list.length + " items keep their modes because " + cause + ": " + names.join(", ") + tail + "."
+    var shown = list.length > SKIP_NAMES_SHOWN ? Format.fill(WORDS.namesAndMore, names.join(", "), list.length - SKIP_NAMES_SHOWN) : names.join(", ")
+    var sentence = same && kinds[0] === "special" ? WORDS.manySpecial
+        : same && kinds[0] === "owner" ? WORDS.manyOwner : WORDS.manyOther
+    return Format.fill(sentence, list.length, shown)
 }
 
 // Sample input: one file answers "special.txt kept its mode."; three answer "3 items kept their modes."; the reason is the card note's, said before Apply.
@@ -157,5 +175,5 @@ function multiResult(skipped) {
     var list = skipped || []
     if (list.length === 0)
         return "Permissions changed."
-    return list.length === 1 ? leafOf(list[0].path) + " kept its mode." : list.length + " items kept their modes."
+    return list.length === 1 ? Format.fill(WORDS.keptOne, leafOf(list[0].path)) : Format.fill(WORDS.keptMany, list.length)
 }

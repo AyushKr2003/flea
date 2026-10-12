@@ -368,6 +368,22 @@ fn pushing_past_depth_drops_manifests_whose_entries_are_gone() {
 }
 
 #[test]
+fn a_partial_mode_undo_that_restored_nothing_leaves_the_redo_clause_out() {
+    use std::os::unix::fs::PermissionsExt;
+    let d = TestDir::new("undopartialnone");
+    let a = d.file("a.txt", "a");
+    std::fs::set_permissions(&a, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let steps = crate::backend::permissions::apply_many(&[(a.clone(), "600".to_string())]).expect("one ordinary file");
+    d.replace_file(&a, "replacement");
+    std::fs::set_permissions(&a, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let mut j = Journal::new();
+    j.push(entry("permissions", steps));
+    let e = j.undo().expect_err("the one replaced path is skipped with a note");
+    assert!(e.msg.starts_with("1 item was left in place: "), "{}", e.msg);
+    assert!(!e.msg.contains("restored for redo"), "nothing was restored, so no clause says so: {}", e.msg);
+}
+
+#[test]
 fn a_partial_mode_undo_keeps_the_restored_half_redoable() {
     use std::os::unix::fs::PermissionsExt;
     let d = TestDir::new("undopartialredo");
@@ -384,8 +400,8 @@ fn a_partial_mode_undo_keeps_the_restored_half_redoable() {
     let mut j = Journal::new();
     j.push(entry("permissions", steps));
     let e = j.undo().expect_err("one replaced path is skipped with a note");
-    assert!(e.msg.contains("1 path(s) left in place"), "{}", e.msg);
-    assert!(e.msg.contains("2 path(s) restored for redo"), "restored half unnamed: {}", e.msg);
+    assert!(e.msg.starts_with("1 item was left in place: "), "{}", e.msg);
+    assert!(e.msg.ends_with("; 2 items were restored for redo"), "restored half unnamed: {}", e.msg);
     assert_eq!(b.metadata().unwrap().mode() & 0o777, 0o644, "the untouched files still restore");
     assert_eq!(c.metadata().unwrap().mode() & 0o777, 0o644, "the untouched files still restore");
     let (tx, _rx) = std::sync::mpsc::channel();

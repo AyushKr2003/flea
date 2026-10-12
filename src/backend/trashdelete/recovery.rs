@@ -27,7 +27,7 @@ impl Recovery {
         tree: Option<&Records>, destination: Option<&Path>) -> Result<Self, String> {
         if !root.is_absolute() { return Err("Recovery storage requires an absolute directory.".into()); }
         std::fs::DirBuilder::new().recursive(true).mode(0o700).create(root)
-            .map_err(|e| format!("Could not create recovery directory {}: {}", root.display(), e))?;
+            .map_err(|e| format!("Could not create the recovery folder {}: {}", root.display(), e))?;
         let directory = open_dir(root)?;
         let name = quarantine_path.file_name().ok_or("Missing quarantine name.")?.to_string_lossy();
         let path = root.join(format!("{}.review", name));
@@ -250,7 +250,7 @@ pub fn recover(root: &Path) -> Result<RecoveryReport, String> {
     let entries = match std::fs::read_dir(root) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(RecoveryReport::default()),
-        Err(error) => return Err(format!("Could not read recovery directory {}: {}", root.display(), error)),
+        Err(error) => return Err(format!("Could not read the recovery folder {}: {}", root.display(), error)),
     };
     let mut result = RecoveryReport::default();
     for entry in entries {

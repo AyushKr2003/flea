@@ -4,7 +4,7 @@
 .import "../../ui/js/SettingsAbout.js" as SettingsAbout
 .import "sourcefixture.js" as Source
 
-// The About section's Updates group: the Update Flea row, the switch that governs the automatic checks, and the note line; then This box's Make Flea the default row.
+// The About section's Updates group: the Update Flea row, the switch that governs the automatic checks, and the note line; then This computer's Make Flea the default row.
 
 function find(rows, id) {
     return rows.filter(function (row) { return row.id === id })[0] || {}
@@ -23,7 +23,7 @@ function group(update) {
     var rows = about(update)
     var labels = rows.map(function (row) { return row.kind + ":" + row.label })
     var from = labels.indexOf("group:Updates") + 1
-    return labels.slice(from, labels.indexOf("group:This box")).join(",")
+    return labels.slice(from, labels.indexOf("group:This computer")).join(",")
 }
 
 function run(check) {
@@ -120,11 +120,12 @@ function runDefault(check) {
     var defaults = Source.source("src/defaults.rs"), main = Source.source("src/main.rs")
     // Sample input: pub const DESKTOP_ID: &str = "com.thisisgm.flea.desktop";
     var rustId = (defaults.match(/pub const DESKTOP_ID: &str = "([^"]*)"/) || [])[1]
-    var refusal = spoken(defaults, "pub fn claim() -> i32 {", rustId)
+    var refusal = spoken(defaults, "fn claim_from(entry: Option<PathBuf>) -> i32 {", rustId)
     var skipped = spoken(main, "fn claim_both() -> i32 {", "")
     check("the box is ticked by the very id src/defaults.rs claims", MakeDefault.DESKTOP_ID, rustId)
-    check("the refusal is defaults::claim()'s own flea: line, and it carries what MakeDefault.js reads",
-          refusal.indexOf("flea: " + rustId + " ") === 0 && refusal.indexOf(MakeDefault.UNINSTALLED) > 0, true)
+    var exitUninstalled = (defaults.match(/pub const EXIT_UNINSTALLED: i32 = (\d+)/) || [])[1]
+    check("the refusal is defaults::claim()'s own flea: line", refusal.indexOf("flea: " + rustId + " ") === 0, true)
+    check("and MakeDefault.js reads the status src/defaults.rs exits with, not the sentence", String(MakeDefault.UNINSTALLED_STATUS), exitUninstalled)
     check("the partly line is claim_both()'s own flea: line, word for word what MakeDefault.js reads",
           skipped, "flea: " + MakeDefault.SKIPPED + "\n")
 
@@ -172,7 +173,7 @@ function runDefault(check) {
            MakeDefault.finished(claiming, 0, skipped, REREAD).restarting,
            MakeDefault.finished(MakeDefault.started(MakeDefault.idle(), RELEASE), 0, "", REREAD).restarting].join("|"), "true|true|true")
     check("a failed run and a refused one do not",
-          MakeDefault.finished(claiming, 1, "flea: no\n", REREAD).restarting + "|" + MakeDefault.finished(claiming, 1, refusal, REREAD).restarting, "false|false")
+          MakeDefault.finished(claiming, 1, "flea: no\n", REREAD).restarting + "|" + MakeDefault.finished(claiming, MakeDefault.UNINSTALLED_STATUS, refusal, REREAD).restarting, "false|false")
     var exited = MakeDefault.finished(claiming, 0, "", REREAD)
     check("still working after the re-read while the restart runs", MakeDefault.state(FLEA, MakeDefault.settled(exited, REREAD)), "working")
     check("and after the restart while the re-read runs", MakeDefault.state(FLEA, MakeDefault.restarted(exited, true)), "working")
@@ -192,9 +193,9 @@ function runDefault(check) {
     check("and as a run's own re-read it ends the run unticked, not working",
           look(MakeDefault.handlerOf(unread), MakeDefault.restarted(MakeDefault.settled(exited, REREAD), true)), "false|false|||")
     var dead = MakeDefault.unstarted(claiming, ["/usr/bin/flea", "--default"])
-    check("a flea that never ran fails at once, naming the command, with no re-read or restart owed",
+    check("a flea that never ran fails at once, naming the program, with no re-read or restart owed",
           look(NAUTILUS, dead) + "|" + dead.reading + "|" + dead.restarting,
-          "false|false|/usr/bin/flea --default could not start|error|right|false|false")
+          "false|false|flea could not start|error|right|false|false")
     check("and the next press tries again", JSON.stringify(MakeDefault.press(NAUTILUS, dead)), JSON.stringify(CLAIM))
     var restarting = MakeDefault.settled(exited, REREAD)
     check("a systemctl that never ran gives the restart-failed note and ends the run",
@@ -228,11 +229,16 @@ function runDefault(check) {
     check("and a claim, blank lines being silence too", MakeDefault.errorLine("\n \n", 1, true), "flea --default exited 1")
     check("a new run drops the last one's error", MakeDefault.started(failed, CLAIM).error + "|" + MakeDefault.started(failed, CLAIM).outcome, "|")
 
-    var refused = MakeDefault.finished(claiming, 1, refusal, REREAD)
+    var refused = MakeDefault.finished(claiming, MakeDefault.UNINSTALLED_STATUS, refusal, REREAD)
     var unpackaged = "false|true|Install a Flea package to make it the default.|foreground|right"
     check("unpackaged from the refusal, before the re-read lands", look(NAUTILUS, refused), unpackaged)
     check("and after it", look(NAUTILUS, MakeDefault.settled(refused, REREAD)), unpackaged)
     check("an unpackaged press runs nothing", MakeDefault.press(NAUTILUS, MakeDefault.settled(refused, REREAD)), null)
+    // The status alone says unpackaged: the refusal's words with any other status are a plain failure, and the status with other words is unpackaged.
+    var wordsOnly = MakeDefault.finished(claiming, 1, refusal, REREAD)
+    check("the refusal's sentence under another status is a failed run, not an unpackaged build", wordsOnly.packaged + "|" + wordsOnly.outcome, "true|failed")
+    var statusOnly = MakeDefault.finished(claiming, MakeDefault.UNINSTALLED_STATUS, "flea: some other words\n", REREAD)
+    check("and the uninstalled status under other words is an unpackaged build", statusOnly.packaged + "|" + statusOnly.outcome, "false|")
     var probedOut = MakeDefault.probed(MakeDefault.idle(), false)
     check("unpackaged from the probe, before any press", look(NAUTILUS, probedOut), unpackaged)
     check("and an entry found later makes the row live again", look(NAUTILUS, MakeDefault.probed(probedOut, true)), "false|false|||")
@@ -275,7 +281,7 @@ function runInstalled(check) {
     check("the same name unsigned is a local makepkg build", SettingsAbout.installedFrom("flea", false), "Local package")
     check("flea-git is the AUR's rolling build", SettingsAbout.installedFrom("flea-git", false), "AUR, flea-git")
     check("any other owner is somebody's own package, signed or not", SettingsAbout.installedFrom("flea-custom", true), "Local package")
-    check("no owner is a cargo build", SettingsAbout.installedFrom("", false), "Unpackaged candidate")
+    check("no owner is a cargo build", SettingsAbout.installedFrom("", false), "Not from a package")
     check("Validated By is read as src/update.rs reads it",
           [SettingsAbout.packageFacts("Validated By    : SHA-256 Sum  Signature\n").signed,
            SettingsAbout.packageFacts("Validated By    : SHA-256 Sum\n").signed,

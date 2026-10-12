@@ -19,7 +19,7 @@ pub(crate) fn start(out: &mut impl Write, ops: &mut Ops, token: &str, dest: &str
     // Redeeming spends the token whatever happens next, so every refusal this drop can earn is
     // earned before it: a burned token leaves the operator with a drag they cannot repeat.
     if ops.live.running().is_some() {
-        return refuse(out, dest, "another operation is running");
+        return refuse(out, dest, "an operation is already running");
     }
     let landing = match usable_dest(dest) {
         Ok(landing) => landing,
@@ -157,7 +157,18 @@ fn refuse(out: &mut impl Write, dest: &str, why: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::moved_paths;
+    use super::{moved_paths, start, Ask, Ops};
+
+    #[test]
+    fn a_drop_while_an_operation_runs_says_the_shared_sentence() {
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let mut ops = Ops::new(tx);
+        let _claim = ops.claim_transfer();
+        let mut out = Vec::new();
+        start(&mut out, &mut ops, "token", "/d", Ask::parse(r#"{"c":"transfer"}"#));
+        let line = String::from_utf8(out).unwrap();
+        assert!(line.contains(r#""msg":"an operation is already running""#), "{}", line);
+    }
 
     #[test]
     fn only_what_the_engine_moved_leaves_the_pile() {

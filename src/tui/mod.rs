@@ -67,6 +67,7 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
         // Rebound after the terminal so it drops first on every exit: mpv's relay writes before the screen is restored.
         let mut model = model;
         let map = keymap::Map::load();
+        model.hints = keymap::Hints::new(&map, &model.preset);
         let theme = theme::Theme::load();
         let mut decoder = input::Decoder::default();
         let started = std::time::Instant::now();
@@ -90,7 +91,7 @@ pub fn run(path: Option<&str>, select: Option<&str>) -> i32 {
             let mut launch_errors = Vec::new();
             model.launches.retain_mut(|(name, child)| match child.try_wait() {
                 Ok(Some(status)) => {
-                    if !status.success() { launch_errors.push(format!("{} failed ({})", name, status)); }
+                    if !status.success() { launch_errors.push(format!("{} could not finish ({})", name, status)); }
                     false
                 }
                 Ok(None) => true,

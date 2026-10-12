@@ -18,9 +18,8 @@ Item {
     // Sentence case, matching the OEM's activePhrases; caption.text below uppercases at render, like PanelHero, not in the source.
     readonly property var messages: [
         "Nothing here yet",
-        "A very tidy directory",
+        "A very tidy folder",
         "Not a file in sight",
-        "This folder keeps its secrets",
         "Quiet in here",
         "No clutter to report",
         "Waiting for something to land",

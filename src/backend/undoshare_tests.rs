@@ -486,6 +486,19 @@ fn a_newer_version_file_is_unavailable_and_never_rewritten() {
     assert!(!target.exists());
 }
 
+// Undo, redo and the redo preview all say one sentence when the shared file is a newer Flea's.
+#[test]
+fn a_journal_a_newer_flea_wrote_reads_as_history_that_could_not_be_read() {
+    let sandbox = TestDir::new("xundo-newer-sentence");
+    let dir = runtime_0700(&sandbox);
+    std::fs::write(dir.join(JOURNAL_FILE), r#"{"v":4,"gen":0,"undo":[],"redo":[]}"#).unwrap();
+    const UNREADABLE: &str = "the undo history could not be read";
+    assert_eq!(shared_journal(&sandbox).undo().unwrap_err().msg, UNREADABLE);
+    assert_eq!(shared_journal(&sandbox).redo_info().unwrap_err().msg, UNREADABLE);
+    let (tx, _rx) = channel();
+    assert_eq!(shared_journal(&sandbox).redo(1, &AtomicBool::new(false), &tx).unwrap_err().msg, UNREADABLE);
+}
+
 // The codec reads v1 through v3 and refuses anything newer.
 #[test]
 fn the_codec_reads_v1_v2_and_v3_and_refuses_newer() {

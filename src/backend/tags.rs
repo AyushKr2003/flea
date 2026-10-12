@@ -265,12 +265,12 @@ pub fn apply(names: &[String], op: &str, tag: &str) -> Result<Vec<String>, FleaE
 // Sample input: "red" answers "Red"; "Custom" answers "Custom"; "" and "a,b" refuse.
 fn check_tag(tag: &str) -> Result<String, FleaError> {
     let trimmed = tag.trim();
-    if trimmed.is_empty() || trimmed.contains(',') || trimmed.contains('\0') || trimmed.chars().any(|c| c.is_control()) {
-        return Err(FleaError {
-            where_: "settags".into(),
-            path: tag.into(),
-            msg: "a tag is one name with no comma in it".into(),
-        });
+    let refuse = |msg: &str| FleaError { where_: "settags".into(), path: tag.into(), msg: msg.into() };
+    if trimmed.contains(',') {
+        return Err(refuse("a tag cannot contain a comma"));
+    }
+    if trimmed.is_empty() || trimmed.contains('\0') || trimmed.chars().any(|c| c.is_control()) {
+        return Err(refuse("a tag name cannot be empty or hold control characters"));
     }
     Ok(known(trimmed).map(str::to_string).unwrap_or_else(|| trimmed.to_string()))
 }
@@ -288,6 +288,13 @@ mod tests {
         assert_eq!(known("red"), Some("Red"));
         assert_eq!(known("GRAY"), Some("Gray"));
         assert_eq!(known("Custom"), None);
+    }
+
+    #[test]
+    fn a_tag_the_wire_cannot_hold_is_refused_in_a_sentence_that_names_why() {
+        assert_eq!(apply(&[], "add", "a,b").unwrap_err().msg, "a tag cannot contain a comma");
+        assert_eq!(apply(&[], "add", "  ").unwrap_err().msg, "a tag name cannot be empty or hold control characters");
+        assert_eq!(apply(&[], "add", "a\nb").unwrap_err().msg, "a tag name cannot be empty or hold control characters");
     }
 
     #[test]

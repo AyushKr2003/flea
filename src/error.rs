@@ -23,7 +23,7 @@ pub fn io_message(error: &std::io::Error) -> String {
         };
     }
     match error.kind() {
-        ErrorKind::NotFound => "file or folder not found",
+        ErrorKind::NotFound => "item not found",
         ErrorKind::PermissionDenied => "permission denied",
         ErrorKind::AlreadyExists => "already exists",
         ErrorKind::ConnectionRefused => "connection refused",
@@ -33,7 +33,7 @@ pub fn io_message(error: &std::io::Error) -> String {
         ErrorKind::AddrInUse => "address is already in use",
         ErrorKind::AddrNotAvailable => "address is unavailable",
         ErrorKind::BrokenPipe => "connection closed",
-        ErrorKind::WouldBlock => "resource is temporarily unavailable",
+        ErrorKind::WouldBlock => "the item is busy; try again",
         ErrorKind::InvalidInput => "invalid input",
         ErrorKind::InvalidData => "invalid data",
         ErrorKind::TimedOut => "operation timed out",
@@ -66,22 +66,22 @@ fn linux_io_message(code: Option<i32>) -> &'static str {
     const ESTALE: i32 = 116;
     const EDQUOT: i32 = 122;
     match code {
-        Some(EIO) => "input/output failed",
+        Some(EIO) => "the drive could not read or write the data",
         Some(EBUSY | ETXTBSY) => "file or device is busy",
-        Some(EXDEV) => "source and destination are on different filesystems",
-        Some(ENODEV) => "device is unavailable",
-        Some(ENOTDIR) => "a path component is not a folder",
+        Some(EXDEV) => "the source and destination are on different drives",
+        Some(ENODEV) => "the drive is unavailable",
+        Some(ENOTDIR) => "part of the path is not a folder",
         Some(EISDIR) => "item is a folder",
         Some(ENFILE | EMFILE) => "too many files are open",
         Some(EFBIG) => "file is too large",
-        Some(ENOSPC) => "disk full",
-        Some(EROFS) => "filesystem is read-only",
-        Some(ENAMETOOLONG) => "file name is too long",
+        Some(ENOSPC) => "the drive is full",
+        Some(EROFS) => "the drive is read-only",
+        Some(ENAMETOOLONG) => "that name is too long",
         Some(ENOTEMPTY) => "folder is not empty",
-        Some(ELOOP) => "too many symbolic links",
+        Some(ELOOP) => "the path has too many links",
         Some(ESTALE) => "file is no longer available",
         Some(EDQUOT) => "storage quota exceeded",
-        _ => "input/output failed",
+        _ => "the operation could not finish",
     }
 }
 
@@ -102,16 +102,17 @@ mod tests {
     fn common_io_causes_are_plain_words() {
         use std::io::{Error, ErrorKind};
         for (kind, expected) in [
-            (ErrorKind::NotFound, "file or folder not found"),
+            (ErrorKind::NotFound, "item not found"),
             (ErrorKind::PermissionDenied, "permission denied"),
             (ErrorKind::AlreadyExists, "already exists"),
             (ErrorKind::InvalidInput, "invalid input"),
             (ErrorKind::TimedOut, "operation timed out"),
-            (ErrorKind::Other, "input/output failed"),
+            (ErrorKind::WouldBlock, "the item is busy; try again"),
+            (ErrorKind::Other, "the operation could not finish"),
         ] {
             assert_eq!(io_message(&Error::from(kind)), expected);
         }
-        assert_eq!(io_message(&Error::from_raw_os_error(i32::MAX)), "input/output failed");
+        assert_eq!(io_message(&Error::from_raw_os_error(i32::MAX)), "the operation could not finish");
     }
 
     #[test]
@@ -125,12 +126,14 @@ mod tests {
     #[cfg(target_os = "linux")]
     fn filesystem_causes_missing_from_rust_177_are_named() {
         for (code, expected) in [
-            (18, "source and destination are on different filesystems"),
-            (20, "a path component is not a folder"),
-            (28, "disk full"),
-            (30, "filesystem is read-only"),
-            (36, "file name is too long"),
-            (40, "too many symbolic links"),
+            (5, "the drive could not read or write the data"),
+            (18, "the source and destination are on different drives"),
+            (19, "the drive is unavailable"),
+            (20, "part of the path is not a folder"),
+            (28, "the drive is full"),
+            (30, "the drive is read-only"),
+            (36, "that name is too long"),
+            (40, "the path has too many links"),
             (116, "file is no longer available"),
         ] {
             assert_eq!(io_message(&std::io::Error::from_raw_os_error(code)), expected);

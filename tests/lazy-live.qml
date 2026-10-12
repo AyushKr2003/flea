@@ -3,7 +3,7 @@ import QtQuick
 import Quickshell
 // Live bridge gate: absent at launch, built on first ensure, local served on the same call.
 // Absent mode (LAZY_BRIDGE_ABSENT=1) runs the same probe in a tree without GvfsBridge.qml:
-// the ensure answers null, the request finishes failed naming that file, with no retry.
+// the ensure answers null, the request finishes failed with a reason, with no retry.
 ShellRoot {
     id: root
     property bool absent: Quickshell.env("LAZY_BRIDGE_ABSENT") === "1"
@@ -40,7 +40,7 @@ ShellRoot {
             if (root.absent) root.retried = true
         }
     }
-    // Absent mode drives the production mount-success leg, so a null ensure ends failed naming its file.
+    // Absent mode drives the production mount-success leg, so a null ensure ends failed with a reason.
     function absentPhase() {
         if (network.bridge !== null) {
             root.finish("LAZY_OBJECTS FAIL bridge built without its file")
@@ -58,10 +58,10 @@ ShellRoot {
                 root.finish("LAZY_OBJECTS FAIL missing bridge asked for a password retry")
             else if (network.result !== "failed")
                 root.finish("LAZY_OBJECTS FAIL missing bridge finished " + network.result)
-            else if (root.failMessage.indexOf("GvfsBridge.qml") < 0)
-                root.finish("LAZY_OBJECTS FAIL missing bridge never named its file")
+            else if (root.failMessage.length === 0)
+                root.finish("LAZY_OBJECTS FAIL missing bridge gave no reason")
             else
-                root.finish("LAZY_OBJECTS bridge-absent-fails-naming-file")
+                root.finish("LAZY_OBJECTS bridge-absent-fails-with-reason")
         }
     }
     Timer {

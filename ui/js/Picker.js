@@ -3,6 +3,13 @@
 .import "Format.js" as Format
 .import "Thumbs.js" as Thumbs
 
+// Whole sentences with "%1" for a value, filled by fill so each translates as one.
+var WORDS = {
+    requestedBy: "Requested by %1",
+    selectedWithSize: "%1 selected · %2",
+    hintsEsc: "%1 · Esc cancel"
+}
+
 // The portal request tools/flea-portal puts in FLEA_PICKER, and the answer ui/picker.qml writes
 // back. Everything here is pure so tests/js/picker.js can drive it without a window.
 
@@ -69,7 +76,7 @@ function title(req) {
 // Only a portal identity is ever shown here. A host application has none, and inventing one from
 // the window title would put a name the desktop never vouched for under a trusted-looking label.
 function subtitle(req) {
-    return req.app.length > 0 ? "Requested by " + req.app : ""
+    return req.app.length > 0 ? Format.fill(WORDS.requestedBy, req.app) : ""
 }
 
 // The primary button. The count rides on it in the multiple case, which is the board's "Send 3".
@@ -96,7 +103,7 @@ function statusLine(count, bytes) {
     if (count === 0) {
         return "0 selected"
     }
-    return Format.count(count) + " selected · " + Format.size(bytes)
+    return Format.fill(WORDS.selectedWithSize, Format.count(count), Format.size(bytes))
 }
 
 // The footer's right half, which says only the keys this mode actually answers.
@@ -105,7 +112,7 @@ function hints(req) {
         return "Enter save · Esc cancel"
     }
     var pick = req.multiple ? (req.directory ? "Enter open · Space mark folder" : "Space select · Enter open/send") : "Enter open"
-    return pick + " · Esc cancel"
+    return Format.fill(WORDS.hintsEsc, pick)
 }
 
 // The chip row: the caller's filters, then All files, which is always explicit. An empty list is no
@@ -195,10 +202,17 @@ function validName(name) {
 }
 
 // What both the strip and the status line say about a name validName() refuses, in ops.rs's words.
-var NAME_REFUSED = "a name cannot be empty, . or .. , or contain a separator"
+var NAME_REFUSED = "a name cannot be empty, . or .., or contain /"
 // Status lines are whole sentences with placeholders, filled by Format.fill.
-var SAVE_REFUSED = "Refused · %1 · %2"
-var SAVE_EXISTS = "%1 already exists here · review before continuing"
+var SAVE_REFUSED = "%1 cannot be used: %2"
+var SAVE_EXISTS = "%1 already exists here. Review it before you continue."
+
+// Whole sentences for the selection check, filled by Format.fill; singular and plural are two sentences.
+var NOTES = {
+    skippedOne: "Selected %1 of %2. 1 was left out: %3 (%4).",
+    skippedMany: "Selected %1 of %2. %3 were left out: %4 (%5) and %6 more."
+}
+
 // A name is one token to the wrapper, so its segment joints carry zero-width breaks; zero width keeps one-line draws identical.
 function jointName(name) {
     return String(name).replace(/([._-])/g, "$1\u200b")

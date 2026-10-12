@@ -1,6 +1,7 @@
 // The ways back to the shelf that are not the bar mark: the keybind's own toggle, and the last five
 // piles a clear left behind. Summon rule 3: the product is whole with any one way in, so none of
 // these may depend on another, and rule 4: one shelf plus the last five piles, no switcher.
+use crate::error::io_message;
 use crate::jsondoc::{self, Json};
 use crate::shelf::{now_ms, Shelf};
 use crate::uistore;
@@ -34,7 +35,7 @@ impl Summon {
     // whether the shelf is open: every write is one ring of the bell. The read and the write are one
     // step under the lock, or two presses in flight both read the same count and one press is lost.
     pub fn ring(&self) -> Result<u64, String> {
-        uistore::make_dir(self.summon.parent().ok_or("the shelf has no directory to write in")?)?;
+        uistore::make_dir(self.summon.parent().ok_or("the shelf has no folder to write in")?)?;
         let lock = self.take()?;
         let next = self.rings() + 1;
         let doc = Json::Obj(vec![("summon".to_string(), Json::Num(next.to_string()))]);
@@ -52,7 +53,7 @@ impl Summon {
     // is not the answer to that question. The lock goes when this process does, either way.
     fn give_back(&self, lock: fs::File) {
         if let Err(e) = uistore::unlock(&lock) {
-            eprintln!("flea: {} could not be unlocked ({:?})", self.lock.display(), e.kind());
+            eprintln!("flea: {} could not be unlocked: {}", self.lock.display(), io_message(&e));
         }
     }
 
@@ -79,7 +80,7 @@ impl Summon {
         if items.is_empty() {
             return Ok(());
         }
-        uistore::make_dir(self.piles.parent().ok_or("the shelf has no directory to write in")?)?;
+        uistore::make_dir(self.piles.parent().ok_or("the shelf has no folder to write in")?)?;
         let lock = self.take()?;
         let mut piles = self.piles();
         piles.insert(0, Json::Obj(vec![("at".to_string(), Json::Num(at_ms.to_string())), ("items".to_string(), Json::Arr(items))]));
@@ -92,7 +93,7 @@ impl Summon {
     // Taking a pile out of the history is what restoring it means: the same pile cannot be restored
     // twice from one entry, and what it replaces takes its place in the list.
     pub fn restore_pile(&self, index: usize) -> Result<Vec<Json>, String> {
-        uistore::make_dir(self.piles.parent().ok_or("the shelf has no directory to write in")?)?;
+        uistore::make_dir(self.piles.parent().ok_or("the shelf has no folder to write in")?)?;
         let lock = self.take()?;
         let mut piles = self.piles();
         if index >= piles.len() {
@@ -182,7 +183,7 @@ pub fn restore_at(index: usize) -> Result<usize, String> {
         Ok(was) => was,
         Err(e) => {
             if let Err(back) = summon.keep(pile, now_ms()) {
-                eprintln!("flea: the shelf would not take the pile and the history would not have it back ({})", back);
+                eprintln!("flea: {}", pile_lost(&back));
             }
             return Err(e);
         }
@@ -191,6 +192,11 @@ pub fn restore_at(index: usize) -> Result<usize, String> {
         return Err(format!("the pile is on the shelf, and what it replaced could not be kept ({})", e));
     }
     Ok(count)
+}
+
+// Both halves refused the pile: the shelf would not take it and the history would not keep it either.
+fn pile_lost(back: &str) -> String {
+    format!("the pile could not be restored, and it could not go back into the history ({})", back)
 }
 
 // The card's menu numbers its rows from one, so the argument is 1-based and the history is not.

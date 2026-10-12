@@ -3,6 +3,16 @@
 // The pile as the bar reads it. Every function here is pure: the Service owns the file and this
 // owns what its bytes mean, so a shape nobody has drawn yet can be tested without a shell at all.
 
+// Whole sentences with "%1" for a value, filled by fill so each translates as one; one per count, because the noun changes with it.
+var WORDS = {
+  holdingOne: "Flea shelf is holding 1 item",
+  holdingMany: "Flea shelf is holding %1 items",
+  clearedOne: "Cleared %1 item \u00b7 z restores",
+  clearedMany: "Cleared %1 items \u00b7 z restores",
+  putBackOne: "Put %1 item back",
+  putBackMany: "Put %1 items back"
+}
+
 // The shape the widget draws when nothing has been read, so no caller ever meets an undefined pile.
 function empty() {
   return { items: [], count: 0, ok: false }
@@ -70,6 +80,14 @@ function grouped(n) {
   return out
 }
 
+// Fills %1 to %9 in one pass (a value prints as given, an unfilled one stays); mirrors ui/js/Format.js fill, which this tree cannot import.
+function fill(template) {
+  var values = arguments
+  return String(template).replace(/%([1-9])/g, function (token, at) {
+    return at < values.length ? String(values[at]) : token
+  })
+}
+
 // BarMark rule 3: the count is never in the bar itself, so this is what the hover tooltip says. It
 // counts the pile alone, as rule 12 does, because a pinned row is not an item anybody sent.
 function tooltip(state) {
@@ -77,7 +95,7 @@ function tooltip(state) {
   if (n === 0) {
     return "Flea shelf is empty"
   }
-  return n === 1 ? "Flea shelf is holding 1 item" : "Flea shelf is holding " + grouped(n) + " items"
+  return n === 1 ? WORDS.holdingOne : fill(WORDS.holdingMany, grouped(n))
 }
 
 // ---- what the card draws, Main board rules 4, 5 and 7 ----
@@ -266,7 +284,7 @@ function clearedText(count) {
   if (!isFinite(n) || n <= 0) {
     return ""
   }
-  return "Cleared " + grouped(n) + (n === 1 ? " item" : " items") + " \u00b7 z restores"
+  return fill(n === 1 ? WORDS.clearedOne : WORDS.clearedMany, grouped(n))
 }
 
 // Sample input, the one line `flea shelf undo` answers with: what it reversed, then how many items
@@ -285,7 +303,7 @@ function undoneText(kind, count) {
     return "Undid the move"
   }
   if (kind === "pile" && n > 0) {
-    return "Put " + grouped(n) + (n === 1 ? " item" : " items") + " back"
+    return fill(n === 1 ? WORDS.putBackOne : WORDS.putBackMany, grouped(n))
   }
   return "Nothing to undo"
 }

@@ -2,6 +2,7 @@
 // the destinations this shelf used last, then Home, the XDG user directories and the bookmarks the
 // rail already draws. Actions: recent destinations first, because the same folder is usually the
 // answer twice running.
+use crate::error::io_message;
 use crate::jsondoc::{self, Json};
 use crate::uistore;
 use std::fs;
@@ -44,7 +45,7 @@ pub fn remember(dest: &str) -> Result<(), String> {
         Json::Arr(kept.into_iter().map(Json::Str).collect()),
     )]);
     let path = file()?;
-    uistore::make_dir(path.parent().ok_or("the shelf has no directory to write in")?)?;
+    uistore::make_dir(path.parent().ok_or("the shelf has no folder to write in")?)?;
     uistore::replace(&path, &jsondoc::render(&doc))
 }
 
@@ -139,7 +140,7 @@ fn flash_choose(rest: &[String]) -> i32 {
     let answer = match fs::read_to_string(&reply) {
         Ok(answer) => answer,
         Err(e) => {
-            eprintln!("flea: {} was not written, so the chooser answered nothing ({:?})", reply.display(), e.kind());
+            eprintln!("flea: {} was not written, so the chooser answered nothing: {}", reply.display(), io_message(&e));
             return 2;
         }
     };
@@ -220,7 +221,7 @@ pub fn choose(rest: &[String]) -> i32 {
     let answer = match fs::read_to_string(&reply) {
         Ok(answer) => answer,
         Err(e) => {
-            eprintln!("flea: {} was not written, so the chooser answered nothing ({:?})", reply.display(), e.kind());
+            eprintln!("flea: {} was not written, so the chooser answered nothing: {}", reply.display(), io_message(&e));
             return 2;
         }
     };

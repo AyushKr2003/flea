@@ -18,12 +18,12 @@ pub fn open_terminal(path: &str) -> i32 {
         Some(p) => p,
         // The reason is elided, never shown raw, and the path is the user's own input.
         None => {
-            eprintln!("flea: that directory could not be opened in a terminal, check that it still exists");
+            eprintln!("flea: that folder could not be opened in a terminal; check that it still exists");
             return FAILED;
         }
     };
     if !target.is_dir() {
-        eprintln!("flea: that directory could not be opened in a terminal, check that it still exists");
+        eprintln!("flea: that folder could not be opened in a terminal; check that it still exists");
         return FAILED;
     }
     // An OsString and not a format!, because Path::display would substitute U+FFFD for a byte that is not UTF-8.

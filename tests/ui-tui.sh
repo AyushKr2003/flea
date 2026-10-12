@@ -600,9 +600,9 @@ class Native:
         self.snapshot("providers-source", lambda text: self.cursor_is(source.name))
 
         for scenario, message, calls in [
-            ("missing", "Taildrop: file or folder not found", 0),
+            ("missing", "Taildrop: item not found", 0),
             ("nonexecutable", "Taildrop: permission denied", 0),
-            ("exit-failure", "Taildrop to Alpha failed (exit status: 7)", 1),
+            ("exit-failure", "Could not send to Alpha (exit status: 7)", 1),
             ("success", "Sent to Alpha", 1),
         ]:
             status(scenario, sender_exit=7 if scenario == "exit-failure" else 0)
@@ -637,7 +637,7 @@ class Native:
         held_status = guard(self.case, self.case / "providers/status-held")
         for scenario, backend, peer, status_exit, capability, reason in [
             ("status-missing", "Running", "Alpha", 0, True, "Taildrop unavailable: tailscale could not start"),
-            ("status-failed", "Running", "Alpha", 7, True, "Taildrop status failed"),
+            ("status-failed", "Running", "Alpha", 7, True, "Tailscale reported an error"),
             ("signed-out-stale-peer", "NeedsLogin", "Alpha", 0, True, "signed out"),
             ("account-disabled-stale-peer", "Running", "Alpha", 0, False, "disabled for this account"),
             ("empty", "Running", None, 0, True, "no peers"),
@@ -707,7 +707,7 @@ class Native:
                     self.snapshot("provider-repeat-refresh-sent-once", lambda text: "Sent to Alpha" in text)
                     assert len(self.provider_calls("omarchy-tailscale-send")) == before + 1, "repeated activation sent more than once"
                 elif scenario == "source-changed-refresh":
-                    self.snapshot("provider-source-changed-refresh-refused", lambda text: "Taildrop cancelled: selection changed" in text or "Selected item changed" in text)
+                    self.snapshot("provider-source-changed-refresh-refused", lambda text: "Taildrop cancelled; selection changed" in text or "Selected item changed" in text)
                     assert len(self.provider_calls("omarchy-tailscale-send")) == before, "changed source reached sender"
                 else:
                     # A new native menu round-trip observes the late reply without mutating product state through IPC.
@@ -846,12 +846,12 @@ class Native:
         self.chord("l", "ctrl")
         self.key(str(guard(self.case, self.case / "missing-directory")))
         self.key("-k", "Return")
-        self.snapshot("missing-path-error", lambda text: "Esc dismisses" in text and "5 items" in text and self.cursor_is("amber"))
+        self.snapshot("missing-path-error", lambda text: "Escape dismisses" in text and "5 items" in text and self.cursor_is("amber"))
         self.key("s")
-        self.snapshot("missing-path-persists", lambda text: "Esc dismisses" in text and "\u00b7 size" in text.splitlines()[0]
+        self.snapshot("missing-path-persists", lambda text: "Escape dismisses" in text and "\u00b7 size" in text.splitlines()[0]
                       and "charlie.txt" in text and self.cursor_is("amber"))
         self.key("-k", "Escape")
-        self.snapshot("missing-path-acknowledged", lambda text: "Esc dismisses" not in text)
+        self.snapshot("missing-path-acknowledged", lambda text: "Escape dismisses" not in text)
         self.key("sss")
         self.snapshot("sort-restored-after-error", lambda text: "\u00b7 name" in text.splitlines()[0] and self.cursor_is("amber"))
         self.rename_changed_identity()
@@ -1226,16 +1226,16 @@ class Native:
                     self.key("-k", "Down")
                 self.snapshot(label + "-unloaded", lambda text: self.cursor_is(name) and "Ctrl+Space to load preview" in text)
                 self.chord("space", "ctrl")
-                self.snapshot(label, lambda text: re.search("permission denied", text, re.IGNORECASE) and "Esc dismisses" in text
+                self.snapshot(label, lambda text: re.search("permission denied", text, re.IGNORECASE) and "Escape dismisses" in text
                               and (index != 1 or "Page 1 / ?" in text))
                 expected = ("Image preview: " if index == 0 else "Media preview: " if index == 2 else "") + "permission denied"
                 if expected not in self.text or "(os error " in self.text:
                     raise RuntimeError(f"preview error copy is not plain words: {self.text.splitlines()[-1]}")
                 self.chord("Tab", "ctrl")
                 self.chord("Tab", "ctrl")
-                self.snapshot(label + "-persists", lambda text: expected in text and "Esc dismisses" in text and "(os error " not in text)
+                self.snapshot(label + "-persists", lambda text: expected in text and "Escape dismisses" in text and "(os error " not in text)
                 self.key("-k", "Escape")
-                self.snapshot(label + "-acknowledged", lambda text: "Esc dismisses" not in text)
+                self.snapshot(label + "-acknowledged", lambda text: "Escape dismisses" not in text)
             finally:
                 guard(self.case, path).chmod(0o600)
             if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
@@ -1249,7 +1249,7 @@ class Native:
             offset = (self.case / "output.bin").stat().st_size
             self.chord("space", "ctrl")
             def recovered(text):
-                return self.cursor_is(name) and "Ctrl+Space to load preview" not in text and "Esc dismisses" not in text \
+                return self.cursor_is(name) and "Ctrl+Space to load preview" not in text and "Escape dismisses" not in text \
                     and (index != 1 or "Page 1 / 2" in text) and (index != 2 or "Play" in text and "0:00 / 0:12" in text)
             self.snapshot(label + "-recovered", recovered)
             if index != 2:

@@ -6,6 +6,7 @@
 .import "Grid.js" as Grid
 .import "Format.js" as Format
 .import "Keymap.js" as Keymap
+.import "KeyName.js" as KeyName
 .import "Marks.js" as Marks
 .import "Mounts.js" as Mounts
 .import "Ops.js" as Ops
@@ -21,6 +22,11 @@
 .import "TextSize.js" as TextSize
 .import "Trash.js" as Trash
 .import "Tabs.js" as Tabs
+
+// Whole sentences with "%1" for the key the running preset binds, filled by KeyName.hinted.
+var WORDS = {
+    filterTip: "Press %1 to filter this folder by name"
+}
 
 var LIST = "list"
 var RAIL = "rail"
@@ -200,7 +206,7 @@ function act(action, root, menuId, paths) {
     // MenuAdditions040: c copies as, P pastes as, V flips the selection.
     case "copyAs": root.openCopyAs(); return
     case "pasteAs":
-        if (root.recentMode.length > 0) { root.message("This listing is a history, and cannot take a paste.", false); return }
+        if (root.recentMode.length > 0) { root.message("Recent cannot take a paste. Open a folder first", false); return }
         root.openPasteAs(); return
     case "invertSelection": root.invertSelection(); return
     case "showOriginal": root.showOriginal(); return
@@ -217,9 +223,9 @@ function act(action, root, menuId, paths) {
         root.pasteLink(action === "pasteAbsoluteLink" ? "absolute" : action === "pasteHardLink" ? "hard" : "relative"); return
     case "cut": Ops.clip(root, true, paths); return
     // Recent is a history, not a directory: pasting or creating there would land in the root it stands on.
-    case "paste": if (root.recentMode.length > 0) { root.message("This listing is a history, and cannot take a paste.", false); return } Ops.paste(root); return
+    case "paste": if (root.recentMode.length > 0) { root.message("Recent cannot take a paste. Open a folder first", false); return } Ops.paste(root); return
     case "movePaste":
-        if (root.recentMode.length > 0) { root.message("This listing is a history, and cannot take a paste.", false); return }
+        if (root.recentMode.length > 0) { root.message("Recent cannot take a paste. Open a folder first", false); return }
         Ops.paste(root, true)
         return
     case "undo": Ops.undo(root); return
@@ -227,7 +233,7 @@ function act(action, root, menuId, paths) {
     // m opens the row menu, or says why no row was under the cursor.
     case "menu":
         if (!root.openCursorMenu())
-            root.message("No row under the cursor to open a menu on.", false)
+            root.message("No item under the cursor to open a menu on", false)
         return
     // The run card's own entrances; see ui/js/Nav.js runCursor.
     case "run": Nav.runCursor(root, root.opener, "open"); return
@@ -253,7 +259,7 @@ function act(action, root, menuId, paths) {
     case "viewColumns": root.chooseView("columns"); return
     case "viewGrid": root.chooseView("grid"); return
     case "viewDual": root.chooseView("dual"); return
-    case "newFolder": if (root.recentMode.length > 0) { root.message("This listing is a history, and cannot take a new folder.", false); return } Ops.newFolder(root); return
+    case "newFolder": if (root.recentMode.length > 0) { root.message("Recent cannot hold a new folder. Open a folder first", false); return } Ops.newFolder(root); return
     // The directory being shown, not the row: the menu row and the chord both land here.
     case "openTerminal": root.openTerminal(); return
     // The background menu's Update Flea row, drawn only while an update is known, opens Omarchy's updater through the pane's opener.
@@ -277,7 +283,7 @@ function act(action, root, menuId, paths) {
     }
     // Tabs run here and handleKey opens the path bar, so neither answers unbuilt any more.
     if (action.indexOf("tab") === 0) { Tabs.act(action, root); return }
-    root.message(action + " is not built yet.", false)
+    root.message("That action is not available yet", false)
 }
 
 // Issue 29: Escape climbs only when nothing else owns it, so each unwound state keeps the key.
@@ -428,7 +434,8 @@ function handleKey(event, root, sidebar) {
     }
     // Unbound printable keys name the filter instead of jumping into destructive bindings.
     if (root.shown === null && Input.isPrintable(event.text)) {
-        root.message("Press / to filter this listing by name.", false)
+        var tip = KeyName.hinted(WORDS.filterTip, "filter")
+        if (tip.length > 0) root.message(tip, false)
         return true
     }
     return false

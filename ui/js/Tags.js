@@ -1,6 +1,7 @@
 .pragma library
 
 .import "Format.js" as Format
+.import "Status.js" as Status
 
 // Flea's seven tag names in menu order, which is also the 1 to 7 key order; src/backend/tags.rs NAMES is the same list.
 var NAMES = ["Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Gray"]
@@ -50,20 +51,20 @@ function statesFrom(applied, mixed) {
 
 // The status bar's own sentence after a tag change; the count agrees with ui/js/Ops.js nouns.
 function statusLine(ok, name) {
-    if (ok === 1) return Format.fill("Tagged %1 item %2 \u00b7 z undoes", ok, name)
-    return Format.fill("Tagged %1 items %2 \u00b7 z undoes", ok, name)
+    if (ok === 1) return Format.fill("Tagged %1 item %2", ok, name) + Status.undoHint()
+    return Format.fill("Tagged %1 items %2", ok, name) + Status.undoHint()
 }
 
 // The same sentence for clearing every tag off the named rows.
 function clearedLine(ok) {
-    if (ok === 1) return Format.fill("Removed all tags from %1 item \u00b7 z undoes", ok)
-    return Format.fill("Removed all tags from %1 items \u00b7 z undoes", ok)
+    if (ok === 1) return Format.fill("Removed all tags from %1 item", ok) + Status.undoHint()
+    return Format.fill("Removed all tags from %1 items", ok) + Status.undoHint()
 }
 
 // The same sentence for taking one tag off the named rows.
 function removedLine(ok, name) {
-    if (ok === 1) return Format.fill("Removed %1 from %2 item \u00b7 z undoes", name, ok)
-    return Format.fill("Removed %1 from %2 items \u00b7 z undoes", name, ok)
+    if (ok === 1) return Format.fill("Removed %1 from %2 item", name, ok) + Status.undoHint()
+    return Format.fill("Removed %1 from %2 items", name, ok) + Status.undoHint()
 }
 
 // The line for a settagged answer, read from the op the backend applied rather than from the UI's guess.

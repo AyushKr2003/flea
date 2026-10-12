@@ -93,7 +93,7 @@ Item {
     running: false
     onExited: function (code) {
       if (code !== 0) {
-        root.refused("That cancel did not reach the transfer.")
+        root.refused("The transfer could not be cancelled.")
       }
     }
   }
@@ -133,7 +133,7 @@ Item {
     if (root.runVerb === "Zipped") {
       root.landed(code === 0 ? Run.zippedText(Number(root.runDest)) : "That pile could not be zipped.")
     } else if (root.runVerb === "Sent") {
-      root.landed(code === 0 ? Run.sentText(root.sending, root.runDest) : "That send did not go.")
+      root.landed(code === 0 ? Run.sentText(root.sending, root.runDest) : "The items could not be sent.")
     } else if (root.runVerb.length > 0) {
       var sentence = root.cancelled
                      ? "Cancelled"
@@ -182,7 +182,7 @@ Item {
     stderr: StdioCollector { waitForEnd: true }
     onExited: function (code) {
       if (code !== 0) {
-        root.refused("Flea would not list its places.")
+        root.refused("Flea could not list its places.")
       }
     }
   }
@@ -225,7 +225,7 @@ Item {
     // A chooser that never opened answers with nothing, which is the same silence as a cancel.
     onExited: function (code) {
       if (code !== 0) {
-        root.refused("That folder chooser did not open.")
+        root.refused("The folder chooser could not open.")
       }
     }
   }

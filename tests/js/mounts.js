@@ -242,13 +242,13 @@ function run(check) {
 
     // Defect 8: gio's stderr is mapped to one plain sentence per known failure, never dropped.
     check("a busy target names what holds it", Devices.mountError("mount", 1, "gio: Error 1: target is busy", "128GB"), "128GB is busy; close what is using it and try again.")
-    check("a polkit refusal names the refusal", Devices.mountError("mount", 1, "Not authorized to perform operation", "Vault"), "Vault was not mounted: not authorized.")
-    check("no volume for the id names the missing volume", Devices.mountError("mount", 1, "No volume for device /dev/sda9", "sda9"), "sda9 is not a volume this system can mount.")
+    check("a polkit refusal names the refusal", Devices.mountError("mount", 1, "Not authorized to perform operation", "Vault"), "Vault was not mounted: you do not have permission.")
+    check("no volume for the id names the missing volume", Devices.mountError("mount", 1, "No volume for device /dev/sda9", "sda9"), "sda9 cannot be mounted on this computer.")
     check("already mounted opens rather than failing", Devices.mountError("mount", 1, "Location is already mounted", "isos"), "")
-    check("no medium names the empty drive", Devices.mountError("mount", 1, "No medium found", "CARD"), "CARD has no medium in it.")
+    check("no medium names the empty drive", Devices.mountError("mount", 1, "No medium found", "CARD"), "CARD has no disc or card in it.")
     check("an unknown error falls back to the plain sentence", Devices.mountError("mount", 1, "weird new failure", "128GB"), "128GB could not be mounted.")
-    check("a refused unmount names the refusal too", Devices.mountError("unmount", 1, "Not authorized", "Vault"), "Vault was not unmounted: not authorized.")
-    check("a refused eject names the eject", Devices.mountError("eject", 1, "Not authorized", "Disk"), "Disk was not ejected: not authorized.")
+    check("a refused unmount names the refusal too", Devices.mountError("unmount", 1, "Not authorized", "Vault"), "Vault was not unmounted: you do not have permission.")
+    check("a refused eject names the eject", Devices.mountError("eject", 1, "Not authorized", "Disk"), "Disk was not ejected: you do not have permission.")
     check("exit 0 never reads stderr", Devices.mountError("mount", 0, "target is busy", "128GB"), "")
 
     // MountFail: a corrupted volume names its damaged file system, and gio's own reason rides as the detail.

@@ -33,7 +33,7 @@ FocusScope {
     // The lines that change in place while the folder counts; the model names them and is not rebuilt as the count moves.
     readonly property var liveLines: facts.ok ? ({size: PropertyFacts.size(facts.bytes, walk), contains: PropertyFacts.contains(walk)}) : ({})
     readonly property var extraPairs: PropertyFacts.extraPairs(extra)
-    readonly property string title: ({moveTo: "Move to", copyTo: "Copy to", properties: "Properties", newFile: "New File", deletePermanently: "Delete permanently"})[action] || ""
+    readonly property string title: ({moveTo: "Move to", copyTo: "Copy to", properties: "Properties", newFile: "New file", deletePermanently: "Delete permanently"})[action] || ""
     // The card and its scrim step aside for the confirmation, and stay aside while it fades out with a closing dialog.
     readonly property bool cardShown: !confirmation.opened && (root.opened || !confirmation.visible)
     // Cleanup a closing reply defers until the fade ended, so the card holds still while it fades out.
@@ -89,7 +89,7 @@ FocusScope {
             confirmation.close()
             opened = true
             closeButton.forceActiveFocus()
-            errorText = message.error || "The requested action failed."
+            errorText = message.error || "That action could not be completed."
             return
         }
         if (message.stale || message.op === "checkDelete" && !message.valid) { refreshDeletion(); return }
@@ -162,11 +162,11 @@ FocusScope {
     function submit() {
         if (!canSubmit) return
         if (action !== "newFile" && field.text.charAt(0) !== "/") {
-            errorText = "Enter an absolute destination folder."
+            errorText = "Enter a full folder path, starting with /."
             return
         }
         if (action === "newFile" && (field.text === "." || field.text === ".." || field.text.indexOf("/") >= 0)) {
-            errorText = "Enter one filename without a path separator."
+            errorText = "Enter a name without a /."
             return
         }
         if (action === "newFile") body.forceActiveFocus()

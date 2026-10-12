@@ -5,6 +5,7 @@ use crate::backend::opsreq::{run_transfer_checked, transferdone_line, transferit
                              transferprogress_line, transferstarted_line, usable_dest, OpMsg};
 use crate::backend::proto::error_line;
 use crate::backend::undo::Step;
+use crate::error::io_message;
 use crate::shelf::{now_ms, Shelf};
 use crate::shelfplaces;
 use crate::shelfundo;
@@ -69,7 +70,7 @@ pub fn transfer(moving: bool, rest: &[String]) -> i32 {
     // A panicking engine reports no item at all, so joining it is the only thing that can tell a
     // clean run from one that died before it started.
     if engine.join().is_err() {
-        eprintln!("flea: the transfer engine stopped before it finished");
+        eprintln!("flea: the transfer stopped before it finished");
         failed += 1;
     }
     cancel.store(true, Ordering::Relaxed);
@@ -188,7 +189,7 @@ pub fn send(rest: &[String]) -> i32 {
             2
         }
         Err(_) => {
-            eprintln!("flea: this box has no omarchy-tailscale-send to send with");
+            eprintln!("flea: omarchy-tailscale-send is not installed, so nothing was sent");
             2
         }
     }
@@ -204,7 +205,7 @@ pub fn peers() -> i32 {
         .stderr(std::process::Stdio::null())
         .output();
     let Ok(out) = out else {
-        eprintln!("flea: this box has no tailscale to ask for peers");
+        eprintln!("flea: Tailscale is not installed, so there are no peers to show");
         return 2;
     };
     if !out.status.success() {
@@ -255,7 +256,7 @@ pub fn cancel() -> i32 {
     match std::fs::write(&marker, "cancel\n") {
         Ok(()) => 0,
         Err(e) => {
-            eprintln!("flea: the cancel could not be written ({:?})", e.kind());
+            eprintln!("flea: the cancel could not be written: {}", io_message(&e));
             2
         }
     }

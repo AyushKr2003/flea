@@ -6,6 +6,12 @@
 
 // The question a paste or a drop asks before it lands on names that exist, as decisions ui/CollideHost.qml and ui/CollideConfirm.qml wire.
 
+// Whole sentences with "%1" for a value, filled by Format.fill so each translates as one; one per count, because the verb changes with it.
+var WORDS = {
+    existsOne: "%1 already exists in %2",
+    existsMany: "%1 items already exist in %2"
+}
+
 // Left to right, the order h, l and Tab walk.
 var BUTTONS = ["cancel", "skip", "keep", "merge", "replace"]
 var LABELS = { cancel: "Cancel", skip: "Skip", keep: "Keep both", merge: "Merge", replace: "Replace" }
@@ -37,8 +43,8 @@ function folderName(dest) {
 // "screenshot.png already exists in Pictures" for one, "3 items already exist in Downloads" for several.
 function title(names, total, dest) {
     if (total === 1 && names.length > 0)
-        return names[0].n + " already exists in " + folderName(dest)
-    return Format.count(total) + " items already exist in " + folderName(dest)
+        return Format.fill(WORDS.existsOne, names[0].n, folderName(dest))
+    return Format.fill(WORDS.existsMany, Format.count(total), folderName(dest))
 }
 
 // The row under the list, empty when every collision is already on it.
@@ -170,7 +176,7 @@ function merged(count, keptBoth, leaf, failed, skipped, cancelled, note) {
     if (cancelled) segments.push("cancelled")
     if (count > 0 && String(note || "").length > 0) segments.push(note)
     var line = segments.join(" · ")
-    return line + (count > 0 ? Status.UNDO_HINT : "")
+    return line + (count > 0 ? Status.undoHint() : "")
 }
 
 // The done line off the transferdone line itself, so a refused merge never mislabels the next copy.

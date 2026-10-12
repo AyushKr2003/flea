@@ -81,7 +81,7 @@ pub fn create_hard(source: &Path, dest_file: &Path) -> Result<(), FleaError> {
         return Err(FleaError {
             where_: "link".to_string(),
             path: dest_file.to_string_lossy().to_string(),
-            msg: "a hard link to a directory is refused".to_string(),
+            msg: "a hard link cannot point to a folder".to_string(),
         });
     }
     std::fs::hard_link(source, dest_file).map_err(|e| {
@@ -91,7 +91,7 @@ pub fn create_hard(source: &Path, dest_file: &Path) -> Result<(), FleaError> {
             FleaError {
                 where_: "link".to_string(),
                 path: dest_file.to_string_lossy().to_string(),
-                msg: format!("cannot hard link across filesystems ({} to {})", from, to),
+                msg: cross_drive_sentence(&from, &to),
             }
         } else {
             link_err(dest_file, &e)
@@ -113,6 +113,11 @@ fn link_err(dest_file: &Path, e: &std::io::Error) -> FleaError {
         }
     }
     from_io("link", &dest_file.to_string_lossy(), e)
+}
+
+// Sample input: "ext4" and "vfat" answer "a hard link cannot cross drives (ext4 to vfat)".
+fn cross_drive_sentence(from: &str, to: &str) -> String {
+    format!("a hard link cannot cross drives ({} to {})", from, to)
 }
 
 // Sample input: Some(vfat) answers the sentence, Some(ext4) and None answer None.
@@ -142,6 +147,11 @@ mod tests {
         assert_eq!(no_links_sentence(Some(0x2011BAB0)), Some("this drive cannot hold links"));
         assert_eq!(no_links_sentence(Some(0xEF53)), None);
         assert_eq!(no_links_sentence(None), None);
+    }
+
+    #[test]
+    fn a_hard_link_across_drives_names_both_drives() {
+        assert_eq!(cross_drive_sentence("ext4", "vfat"), "a hard link cannot cross drives (ext4 to vfat)");
     }
 
     #[test]
@@ -175,7 +185,7 @@ mod tests {
         let src = d.dir("src");
         let dest = d.dir("dest");
         let at = dest_path(&dest, &src).unwrap();
-        assert!(create_hard(&src, &at).is_err());
+        assert_eq!(create_hard(&src, &at).unwrap_err().msg, "a hard link cannot point to a folder");
         assert!(!at.exists() && std::fs::symlink_metadata(&at).is_err());
     }
 

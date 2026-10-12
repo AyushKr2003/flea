@@ -112,7 +112,6 @@ Item {
     // Completion messages cannot acknowledge a failure; each error requires its own dismissal.
     function say(text, isError, detail) {
         if (!text) { root.dismiss(); return }
-        if (!isError && Status.isPrompt(text)) { root.startArm(text); return }
         if (isError) {
             root.errors = Status.withError(root.errors, text, detail, root.path)
             return
@@ -121,6 +120,12 @@ Item {
         root.notice = text
         root.noticeSerial += 1
         root.syncNoticeTimer()
+    }
+
+    // An arm's prompt arrives on its own channel, so the bar starts the arm from the call and not from the sentence.
+    function sayArm(text) {
+        if (!text) { root.dismiss(); return }
+        root.startArm(text)
     }
 
     // A surface replacing its own standing verdict names the one it is replacing. say("") dismisses
@@ -203,14 +208,14 @@ Item {
         return false
     }
 
-    function setActivity(owner, text, transfer) {
-        root.activities = Status.activityChanged(root.activities, owner, transfer.running ? Ops.progressLine(transfer) : text, transfer)
+    function setActivity(owner, text, transfer, starting) {
+        root.activities = Status.activityChanged(root.activities, owner, transfer.running ? Ops.progressLine(transfer) : text, transfer, starting === true)
         root.busy = Status.displayedStarting(root.activities)
     }
 
     // A completion hidden by an error or live activity keeps its full display time after acknowledgement.
     function syncNoticeTimer() {
-        if (root.notice && Status.noticeShown(root.slot()) && root.notice.indexOf(Status.UNDO_HINT) < 0)
+        if (root.notice && Status.noticeShown(root.slot()) && (Status.undoHint().length === 0 || root.notice.indexOf(Status.undoHint()) < 0))
             clear.restart()
         else clear.stop()
     }
@@ -393,13 +398,13 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             visible: root.undoSplit
             width: visible ? implicitWidth : 0
-            text: root.undoSplit ? "z undoes" : ""
+            text: root.undoSplit ? Status.hintKey(Status.undoHint()) : ""
             color: undoHover.hovered ? Theme.color.foreground : Theme.color.muted
             font.family: Theme.font.family
             font.pixelSize: Theme.font.caption
             textFormat: Text.PlainText
             Accessible.role: Accessible.Link
-            Accessible.name: "z undoes"
+            Accessible.name: Status.hintKey(Status.undoHint())
             Accessible.onPressAction: root.clickUndo()
             HoverHandler { id: undoHover; cursorShape: Qt.PointingHandCursor }
             TapHandler {

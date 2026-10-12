@@ -260,11 +260,11 @@ operations_mixed() {
     menus_expect statusActivityState '.undoAvailable and (.notice | contains("Copied 1 item"))' "clicking the informational footer cannot undo a completed copy"
     menus_same_file 'footer click preserves the completed retry' "$source/c.txt" "$destination/c.txt"
     key z >/dev/null
-    menus_message 'Undid the copy.' 'native z reverses the retry'
+    menus_message 'Undid the copy' 'native z reverses the retry'
     [[ ! -e "$destination/c.txt" ]] || fail "operations: retry Undo retained its created file"
     for name in a.txt b.txt d.txt e.txt; do menus_guard "$destination/$name"; done
     key z >/dev/null
-    menus_message 'Undid the copy.' 'native z reverses the earlier committed items'
+    menus_message 'Undid the copy' 'native z reverses the earlier committed items'
     for name in a.txt b.txt d.txt e.txt; do operations_absent "$destination/$name"; done
     for name in a.txt b.txt c.txt d.txt e.txt; do [[ "$(cat "$source/$name")" == "original $name" ]] || fail "operations: source changed through copy or Undo"; done
     kill_flea
@@ -296,7 +296,7 @@ operations_copy_to_collision() {
     menus_equal 'Keep both leaves the photo already there' 'there' "$(cat "$destination/photo.png")"
     menus_same_file 'the free name is copied as it is' "$source/notes.txt" "$destination/notes.txt"
     key z >/dev/null
-    menus_message 'Undid the copy.' 'native z reverses the kept copy'
+    menus_message 'Undid the copy' 'native z reverses the kept copy'
     [[ ! -e "$destination/photo copy.png" && ! -e "$destination/notes.txt" ]] || fail "operations: Undo left the Copy to copies"
     menus_equal 'Undo leaves the photo already there' 'there' "$(cat "$destination/photo.png")"
     kill_flea
@@ -974,7 +974,7 @@ case_footerdiskfull() (
     operations_footer_full_mount empty
     operations_copy_to "$menu_box/full"
     menus_expect statusActivityState '.errors == 1 and (.activities | length) == 0' 'actual bounded filesystem rejects the copy'
-    menus_error 'Copy failed: photo.heic · disk full' 'native failure names the genuine ENOSPC cause'
+    menus_error 'Copy failed: photo.heic · the drive is full' 'native failure names the genuine ENOSPC cause'
     operations_footer_full_mount
     menus_guard "$menu_box/full/photo.heic"
     [[ -f "$menu_box/full/photo.heic" && ! -L "$menu_box/full/photo.heic" ]] || fail 'footerdiskfull: failed copy did not retain its regular partial'
@@ -990,7 +990,7 @@ case_footerdiskfull() (
     error_color=$(ipc palette | cut -d' ' -f6) || fail 'footerdiskfull: semantic error role unavailable'
     [[ -n "$error_color" ]] || fail 'footerdiskfull: semantic error role is empty'
     menus_equal 'only the failure sentence uses the error role' "$error_color" "$(ipc statusColor)"
-    operations_footer_capture disk-full '(.left.text | startswith("1 of 10 selected")) and .centre.text == "Copy failed: photo.heic · disk full" and (.centre.text | contains("(os error") | not) and .secondary.text == " · esc dismisses"'
+    operations_footer_capture disk-full '(.left.text | startswith("1 of 10 selected")) and .centre.text == "Copy failed: photo.heic · the drive is full" and (.centre.text | contains("(os error") | not) and .secondary.text == " · esc dismisses"'
     key -k Escape >/dev/null || fail 'footerdiskfull: native error acknowledgement failed'
     menus_expect statusActivityState '.errors == 0 and (.activities | length) == 0 and (.notice | contains("Copied 0 of 1 · 1 failed"))' 'Escape acknowledges ENOSPC and reveals the truthful outcome'
     operations_footer_full_mount

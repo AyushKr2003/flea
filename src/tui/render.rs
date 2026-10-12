@@ -560,15 +560,16 @@ pub fn deletion_buttons(m: &Model) -> Vec<(bool, usize, usize)> {
 }
 fn footer(m: &Model, theme: &Theme, columns: usize, elapsed: std::time::Duration) -> String {
     let base = format!("\x1b[0m{}{}", theme.background, theme.foreground);
-    let help = "? keys";
-    let available = columns.saturating_sub(text_width(help) + 2);
+    let help = if m.hints.keys.is_empty() { String::new() } else { format!("{} keys", m.hints.keys) };
+    let available = columns.saturating_sub(text_width(&help) + 2);
     let mut parts = Vec::new();
     let chip = format!("{}\x1b[7m", theme.accent);
     if !m.selected.is_empty() { parts.push((chip.as_str(), format!(" V {} ", grouped(m.selected.len())))); }
     parts.push((theme.foreground.as_str(), items(m.total)));
     if !m.error.is_empty() {
         let queued = if m.errors.is_empty() { String::new() } else { format!(" (+{})", m.errors.len()) };
-        parts.push((theme.error.as_str(), format!("{}{} · Esc dismisses", m.error, queued)));
+        let dismiss = if m.hints.dismiss.is_empty() { String::new() } else { format!(" · {} dismisses", m.hints.dismiss) };
+        parts.push((theme.error.as_str(), format!("{}{}{}", m.error, queued, dismiss)));
     }
     if !m.transfer.is_empty() {
         const FRAMES: [&str; 3] = ["░▒▓", "▒▓░", "▓░▒"];
@@ -598,8 +599,8 @@ fn footer(m: &Model, theme: &Theme, columns: usize, elapsed: std::time::Duration
         out.push_str(&base);
         used += width;
     }
-    out.push_str(&" ".repeat(columns.saturating_sub(used + text_width(help))));
-    out.push_str(help);
+    out.push_str(&" ".repeat(columns.saturating_sub(used + text_width(&help))));
+    out.push_str(&help);
     out
 }
 fn selection_line(m: &Model, y: usize, columns: usize) -> String {
@@ -851,17 +852,40 @@ mod tests {
     #[test]
     fn footer_separates_error_color_and_preserves_secondary_progress() {
         let mut model = Model::new(std::path::PathBuf::from("/"), &crate::jsondoc::Json::Null);
+        model.hints = crate::tui::keymap::Hints::new(&Map::load(), "default");
         model.fail("Denied".into());
         model.fail("Missing".into());
         model.transfer = "Copying 2 of 5".into();
         model.search = "Searching 12 matches".into();
         let theme = Theme::from_text("");
         let output = footer(&model, &theme, 120, std::time::Duration::ZERO);
-        assert!(output.contains(&format!("{}Denied (+1) · Esc dismisses\x1b[0m", theme.error)));
+        assert!(output.contains(&format!("{}Denied (+1) · Escape dismisses\x1b[0m", theme.error)));
         assert!(output.find("Denied").unwrap() < output.find("Copying").unwrap());
         assert!(output.find("Copying").unwrap() < output.find("Searching").unwrap());
         assert!(output.ends_with("? keys"));
         assert_eq!(output.matches(&theme.error).count(), 1);
+    }
+    #[test]
+    fn footer_hints_follow_the_keymap_and_vanish_with_their_key() {
+        let rebound = Map::parse(r##"
+[[code]]
+key = "Backspace"
+action = "escape"
+[[text]]
+char = "h"
+action = "keymapSheet"
+"##);
+        let mut model = Model::new(std::path::PathBuf::from("/"), &crate::jsondoc::Json::Null);
+        model.fail("Denied".into());
+        let theme = Theme::from_text("");
+        model.hints = crate::tui::keymap::Hints::new(&rebound, "default");
+        let output = footer(&model, &theme, 120, std::time::Duration::ZERO);
+        assert!(output.contains("Denied · Backspace dismisses"), "{output:?}");
+        assert!(output.ends_with("h keys"), "{output:?}");
+        assert!(!output.contains("Esc"), "{output:?}");
+        model.hints = crate::tui::keymap::Hints::default();
+        let output = footer(&model, &theme, 120, std::time::Duration::ZERO);
+        assert!(output.contains("Denied") && !output.contains("dismisses") && !output.contains("keys"), "{output:?}");
     }
     #[test]
     fn unsafe_names_cannot_emit_terminal_commands() {

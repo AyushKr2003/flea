@@ -1,11 +1,20 @@
 .pragma library
 
 .import "Thumbs.js" as Thumbs
+.import "Format.js" as Format
 
 // The ExtThumbs board's storage-class gate: network shares and phones are off, USB
 // drives are on, and anything else is local and always gets thumbnails. A class is
 // src/backend/extclass.rs's own word, carried beside the fsinfo line once per
 // directory change, so nothing here classifies and there is no second classifier.
+
+// Whole sentences with "%1" for a value, filled by fill so each translates as one; one per state.
+var WORDS = {
+    hide: "Hide %1 thumbnails",
+    show: "Show %1 thumbnails",
+    isOn: "%1 thumbnails are on",
+    isOff: "%1 thumbnails are off"
+}
 
 // Sample input: "network" answers "thumbNetwork", "" answers "".
 function keyForClass(storageClass) {
@@ -63,7 +72,7 @@ function entry(e, p) {
 // Sample input: ("network", false) answers "Show network thumbnails".
 function label(storageClass, on) {
     var noun = storageClass === "usb" ? "USB" : storageClass
-    return (on ? "Hide " : "Show ") + noun + " thumbnails"
+    return Format.fill(on ? WORDS.hide : WORDS.show, noun)
 }
 
 // The status bar's own verdict for the toggle, in the board's words.
@@ -71,7 +80,7 @@ function label(storageClass, on) {
 function statusLine(storageClass, on) {
     var noun = storageClass === "usb" ? "USB"
         : storageClass.charAt(0).toUpperCase() + storageClass.slice(1)
-    return noun + " thumbnails are " + (on ? "on" : "off")
+    return Format.fill(on ? WORDS.isOn : WORDS.isOff, noun)
 }
 
 // A class switched on decodes again: only its cache-only marks leave the map, so a

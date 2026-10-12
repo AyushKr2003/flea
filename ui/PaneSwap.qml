@@ -241,7 +241,7 @@ Item {
         }
         if (path.length > 0) pane.path = path  // the listing landed, so this is where the pane moves
         pane.listingState = total === 0 ? "empty" : "ready"
-        pane.stateMessage = total === 0 ? "This directory is empty; add a file to see it here." : ""
+        pane.stateMessage = total === 0 ? "This folder is empty." : ""
         pane.opened(pane.path)
     }
 

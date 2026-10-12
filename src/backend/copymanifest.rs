@@ -306,7 +306,7 @@ fn unfinished(handle: &Handle, mut report: Report, processed: usize) -> Outcome 
     if processed == 0 {
         return Outcome::Fallback;
     }
-    report.kept.push(Kept { path: handle.root.clone(), reason: "the copy manifest is unreadable" });
+    report.kept.push(Kept { path: handle.root.clone(), reason: "the record of this copy could not be read" });
     Outcome::Done(report)
 }
 
@@ -314,7 +314,7 @@ fn remove_one(handle: &Handle, record: &Decoded, report: &mut Report) {
     // ENOTEMPTY from Linux errno.h: ErrorKind::DirectoryNotEmpty needs Rust 1.83 over the 1.77 floor.
     const ENOTEMPTY: i32 = 39;
     let Some(abs) = contained(&handle.root, &record.rel) else {
-        report.kept.push(Kept { path: handle.root.join(&record.rel), reason: "was replaced after the copy" });
+        report.kept.push(Kept { path: handle.root.join(&record.rel), reason: "it was replaced after the copy" });
         return;
     };
     let meta = match abs.symlink_metadata() {
@@ -322,27 +322,27 @@ fn remove_one(handle: &Handle, record: &Decoded, report: &mut Report) {
         // Gone already is the state undo wanted; it is neither removed nor kept.
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
         Err(_) => {
-            report.kept.push(Kept { path: abs, reason: "could not be removed" });
+            report.kept.push(Kept { path: abs, reason: "it could not be removed" });
             return;
         }
     };
     if meta.dev() != record.dev || meta.ino() != record.ino || meta.mode() & 0o170000 != record.kind {
-        report.kept.push(Kept { path: abs, reason: "was replaced after the copy" });
+        report.kept.push(Kept { path: abs, reason: "it was replaced after the copy" });
         return;
     }
     if meta.is_file() && (meta.len() != record.len || (meta.mtime(), meta.mtime_nsec()) != record.mtime) {
-        report.kept.push(Kept { path: abs, reason: "was modified after the copy" });
+        report.kept.push(Kept { path: abs, reason: "it was modified after the copy" });
         return;
     }
     if meta.is_dir() && !meta.file_type().is_symlink() {
         match std::fs::remove_dir(&abs) {
             Ok(()) => report.removed += 1,
             Err(e) if e.raw_os_error() == Some(ENOTEMPTY) => {
-                report.kept.push(Kept { path: abs, reason: "is not empty" })
+                report.kept.push(Kept { path: abs, reason: "it is not empty" })
             }
             Err(e) => report.kept.push(Kept {
                 path: abs,
-                reason: if e.kind() == std::io::ErrorKind::NotFound { return } else { "could not be removed" },
+                reason: if e.kind() == std::io::ErrorKind::NotFound { return } else { "it could not be removed" },
             }),
         }
         return;
@@ -351,25 +351,30 @@ fn remove_one(handle: &Handle, record: &Decoded, report: &mut Report) {
     match std::fs::remove_file(&abs) {
         Ok(()) => report.removed += 1,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(_) => report.kept.push(Kept { path: abs, reason: "could not be removed" }),
+        Err(_) => report.kept.push(Kept { path: abs, reason: "it could not be removed" }),
     }
 }
 
-// One line for the existing undo reply shape: how many went and what each kept one is.
+// Whole sentences for the existing undo reply shape: how many went, then the first kept item and why; the log names every kept item.
 pub fn summarize(report: &Report) -> String {
-    let mut msg = format!("undo removed {} of {} copied items", report.removed, report.total);
-    if report.kept.is_empty() {
-        return msg;
+    let (removed, total) = (report.removed, report.total);
+    let Some(first) = report.kept.first() else {
+        return if total == 1 {
+            format!("Undo removed {removed} of 1 copied item.")
+        } else {
+            format!("Undo removed {removed} of {total} copied items.")
+        };
+    };
+    for kept in &report.kept {
+        eprintln!("flea: undo kept {}: {}", kept.path.display(), kept.reason);
     }
-    msg.push_str(&format!("; {} kept: ", report.kept.len()));
-    let mut parts: Vec<String> = report.kept.iter().take(3).map(|kept| {
-        format!("{} {}", kept.path.to_string_lossy(), kept.reason)
-    }).collect();
-    if report.kept.len() > 3 {
-        parts.push(format!("and {} more", report.kept.len() - 3));
+    let (path, reason) = (first.path.display(), first.reason);
+    match (total == 1, report.kept.len()) {
+        (true, 1) => format!("Undo removed {removed} of 1 copied item. {path} was kept: {reason}."),
+        (false, 1) => format!("Undo removed {removed} of {total} copied items. {path} was kept: {reason}."),
+        (true, many) => format!("Undo removed {removed} of 1 copied item. {many} were kept, first {path}: {reason}."),
+        (false, many) => format!("Undo removed {removed} of {total} copied items. {many} were kept, first {path}: {reason}."),
     }
-    msg.push_str(&parts.join("; "));
-    msg
 }
 
 pub fn undo_err(to: &Path, msg: String) -> FleaError {

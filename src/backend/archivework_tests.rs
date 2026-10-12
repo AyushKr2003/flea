@@ -101,15 +101,15 @@ fn a_status_alone_is_read_into_a_sentence_naming_the_signal_or_the_exit() {
     let signalled = ExitStatus::from_raw(9);
     let killed_through_bwrap = ExitStatus::from_raw(137 << 8);
     let exited = ExitStatus::from_raw(3 << 8);
-    assert_eq!(failure_message("archive", &signalled, ""), "the archive tool was killed by signal SIGKILL (9)");
+    assert_eq!(failure_message("archive", &signalled, ""), "the archive tool stopped before it finished (signal SIGKILL)");
     assert_eq!(failure_message("archive", &killed_through_bwrap, ""),
-               "the archive tool was killed by signal SIGKILL (9)",
+               "the archive tool stopped before it finished (signal SIGKILL)",
                "137 is how bwrap renders a SIGKILL, and it must not read as a bad archive");
-    assert_eq!(failure_message("archive", &exited, ""), "the archive tool exited with status 3");
+    assert_eq!(failure_message("archive", &exited, ""), "the archive tool could not finish (exit status 3)");
     // No name in the table means the number alone: this function never invents one.
-    assert_eq!(failure_message("archive", &ExitStatus::from_raw(13), ""), "the archive tool was killed by signal 13");
+    assert_eq!(failure_message("archive", &ExitStatus::from_raw(13), ""), "the archive tool stopped before it finished (signal 13)");
     // And 128+n above the table's range is an exit status rather than a claimed kill.
-    assert_eq!(failure_message("archive", &ExitStatus::from_raw(200 << 8), ""), "the archive tool exited with status 200");
+    assert_eq!(failure_message("archive", &ExitStatus::from_raw(200 << 8), ""), "the archive tool could not finish (exit status 200)");
 }
 
 // The tool's own last non-blank line is the diagnosis; a blank stderr falls back to the status.
@@ -120,9 +120,9 @@ fn the_tools_own_last_line_wins_over_the_blank_one_and_over_the_status() {
                "bsdtar: Error opening archive");
     assert_eq!(failure_message("archive", &exited, "warning: x\nbsdtar: Error opening archive\n\n"),
                "bsdtar: Error opening archive", "trailing blank lines are not the diagnosis");
-    assert_eq!(failure_message("archive", &exited, "\n"), "the archive tool exited with status 1",
+    assert_eq!(failure_message("archive", &exited, "\n"), "the archive tool could not finish (exit status 1)",
                "a blank stderr is not a diagnosis either");
-    assert_eq!(failure_message("archive", &exited, "   \n"), "the archive tool exited with status 1",
+    assert_eq!(failure_message("archive", &exited, "   \n"), "the archive tool could not finish (exit status 1)",
                "neither is whitespace");
     assert_eq!(failure_message("archive", &exited, "  bsdtar: could not read  "), "bsdtar: could not read",
                "the line is trimmed, because it is pasted into a sentence");

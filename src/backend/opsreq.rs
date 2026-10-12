@@ -184,7 +184,7 @@ pub fn usable_dest(dest: &str) -> Result<PathBuf, FleaError> {
     super::iomount::call(&p, &body, "transfer", move || match owned.metadata() {
         Ok(m) if m.is_dir() && crate::backend::ops::dir_writable(&owned) => Ok(owned),
         Ok(m) if m.is_dir() => Err(op_err("transfer", &dest_owned, "that folder cannot be written")),
-        Ok(_) => Err(op_err("transfer", &dest_owned, "the destination is not a directory")),
+        Ok(_) => Err(op_err("transfer", &dest_owned, "the destination is not a folder")),
         Err(e) => Err(from_io("transfer", &dest_owned, &e)),
     })
     .unwrap_or_else(Err)
@@ -342,7 +342,7 @@ pub(crate) fn run_transfer_checked(
         }
         let checked = if let Some(items) = &selection {
             items.get(index).filter(|item| item.path == src)
-                .ok_or_else(|| "Menu selection no longer matches this transfer.".to_string())
+                .ok_or_else(|| super::opsdispatch::SELECTION_CHANGED.to_string())
                 .and_then(|item| item.current())
         } else {
             src.symlink_metadata().map_err(|error| io_message(&error))

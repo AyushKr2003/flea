@@ -94,19 +94,19 @@ check "an empty DISPLAY alone refuses" "1" "$(echo "$out" | grep -c 'no graphica
 
 # Each display variable independently permits launch, and an empty peer must not mask it.
 out=$(env -u DISPLAY WAYLAND_DISPLAY=flea-modes-test-display PATH=/nonexistent-flea-test-path $BIN --gui 2>&1 </dev/null)
-check "a non-empty WAYLAND_DISPLAY is accepted" "1" "$(echo "$out" | grep -c 'could not start the shell')"
+check "a non-empty WAYLAND_DISPLAY is accepted" "1" "$(echo "$out" | grep -c 'the window could not start')"
 out=$(env -u WAYLAND_DISPLAY DISPLAY=:99 PATH=/nonexistent-flea-test-path $BIN --gui 2>&1 </dev/null)
-check "a non-empty DISPLAY is accepted" "1" "$(echo "$out" | grep -c 'could not start the shell')"
+check "a non-empty DISPLAY is accepted" "1" "$(echo "$out" | grep -c 'the window could not start')"
 out=$(env WAYLAND_DISPLAY= DISPLAY=:99 PATH=/nonexistent-flea-test-path $BIN --gui 2>&1 </dev/null)
-check "an empty WAYLAND_DISPLAY does not mask DISPLAY" "1" "$(echo "$out" | grep -c 'could not start the shell')"
+check "an empty WAYLAND_DISPLAY does not mask DISPLAY" "1" "$(echo "$out" | grep -c 'the window could not start')"
 out=$(env WAYLAND_DISPLAY=flea-modes-test-display DISPLAY= PATH=/nonexistent-flea-test-path $BIN --gui 2>&1 </dev/null)
-check "an empty DISPLAY does not mask WAYLAND_DISPLAY" "1" "$(echo "$out" | grep -c 'could not start the shell')"
+check "an empty DISPLAY does not mask WAYLAND_DISPLAY" "1" "$(echo "$out" | grep -c 'the window could not start')"
 out=$(env WAYLAND_DISPLAY=flea-modes-test-display DISPLAY=:99 PATH=/nonexistent-flea-test-path $BIN --gui 2>&1 </dev/null)
-check "two non-empty displays are accepted" "1" "$(echo "$out" | grep -c 'could not start the shell')"
+check "two non-empty displays are accepted" "1" "$(echo "$out" | grep -c 'the window could not start')"
 
 # qs missing from PATH is what a bad launcher or .desktop install hits; no errno may leak.
 out=$(env WAYLAND_DISPLAY=flea-modes-test-display PATH=/nonexistent-flea-test-path $BIN --gui 2>&1 </dev/null)
-check "missing qs is elided" "1" "$(echo "$out" | grep -c 'could not start the shell')"
+check "missing qs is elided" "1" "$(echo "$out" | grep -c 'the window could not start')"
 check "missing qs carries no errno" "0" "$(echo "$out" | grep -c 'os error')"
 
 # With no flag and no tty the default must be the window branch, which is what a .desktop launch takes.
@@ -121,11 +121,11 @@ check "no flag at a terminal defaults to the window" "1" "$(echo "$out" | grep -
 out=$($BIN --tui 2>&1 </dev/null | cat)
 check "--tui without a tty refuses" "1" "$(echo "$out" | grep -c 'needs a terminal')"
 
-# Mutually exclusive flags are a usage error; the message is checked too, see AGENTS.md Modes.
+# Flags that cannot be used together are a usage error; the message is checked too, see AGENTS.md Modes.
 out=$($BIN --tui --gui 2>&1 >/dev/null </dev/null)
 rc=$?
 check "--tui --gui is a usage error" "2" "$rc"
-check "--tui --gui names the conflict" "1" "$(echo "$out" | grep -c 'mutually exclusive')"
+check "--tui --gui names the conflict" "1" "$(echo "$out" | grep -c 'cannot be used together')"
 
 # The prctl and renderer choice have to survive exec, so a stub qs reports the launched child.
 D="$FIXTURE_ROOT/flea-thp-test-$$"
@@ -682,9 +682,9 @@ check "and that sentence names the handler" "1" "$(echo "$out" | grep -c 'nothin
 out=$(env PATH="$D/failbin:/usr/bin:/bin" $BIN --open "$D/file.txt" 2>&1)
 rc=$?
 check "a launcher that refuses is an error status, not a green handoff" "2" "$rc"
-# canonicalize already proved the file is there, so the refusal sentence names the launcher instead.
-check "and its refusal is one sentence naming $open_handoff" "1" \
-  "$(echo "$out" | grep -c "$open_handoff open refused")"
+# canonicalize already proved the file is there, so the refusal sentence says no application took it.
+check "and its refusal is one sentence saying no application opened it" "1" \
+  "$(echo "$out" | grep -c 'no application on this system opened that file')"
 check "with no errno in it" "0" "$(echo "$out" | grep -c 'os error')"
 
 out=$($BIN --open 2>&1 </dev/null)
@@ -884,8 +884,8 @@ check "a symlink to a directory is resolved to its target" "1" "$(grep -c -- "^A
 out=$(PATH="$D/bin:/usr/bin:/bin" $BIN --terminal "$D/file.txt" 2>&1)
 rc=$?
 check "a file is refused with the failure status" "2" "$rc"
-check "and that sentence names the directory, which is the thing that was not one" "1" \
-  "$(echo "$out" | grep -c 'that directory could not be opened')"
+check "and that sentence names the folder, which is the thing that was not one" "1" \
+  "$(echo "$out" | grep -c 'that folder could not be opened')"
 # Best effort: a spawned stub may not have written yet, so the two checks above are the strict ones.
 check "and no terminal was started over it" "0" "$(grep -c '^ARGV ' "$ran")"
 
@@ -893,7 +893,7 @@ out=$(PATH="$D/bin:/usr/bin:/bin" $BIN --terminal "$D/broken" 2>&1)
 rc=$?
 check "a path that resolves to nothing is an error status" "2" "$rc"
 check "and one sentence, with no errno" "0" "$(echo "$out" | grep -c 'os error')"
-check "and that sentence names the directory too" "1" "$(echo "$out" | grep -c 'that directory could not be opened')"
+check "and that sentence names the folder too" "1" "$(echo "$out" | grep -c 'that folder could not be opened')"
 
 out=$(env PATH=/nonexistent-flea-test-path $BIN --terminal "$D/dir" 2>&1)
 rc=$?
@@ -982,7 +982,7 @@ printf -- '-- stock omarchy bindings\n' > "$D/config/hypr/bindings.lua"
 out=$(env XDG_DATA_HOME="$D/data" XDG_DATA_DIRS="$D/no-such-data-dir" XDG_CONFIG_HOME="$D/config" \
   $BIN --default 2>&1)
 rc=$?
-check "--default refuses when its desktop entry is not installed" "1" "$rc"
+check "--default refuses when its desktop entry is not installed, with the status the Settings row reads" "3" "$rc"
 check "and names what is missing" "1" "$(echo "$out" | grep -c 'is not installed')"
 check "and mimeapps.list is never created" "0" "$([ -e "$D/config/mimeapps.list" ] && echo 1 || echo 0)"
 check "and bindings.lua is left untouched" "-- stock omarchy bindings" "$(cat "$D/config/hypr/bindings.lua")"
@@ -1053,7 +1053,7 @@ check "and restarts the portal once more" "5" "$(restarts)"
 # Without the session's desktop a claim cannot tell which file the portal reads, so it refuses before either half writes.
 binds_before=$(cat "$D/config/hypr/bindings.lua"; printf x)
 out=$(script -qec "$(printf '%q ' "${no_desktop[@]}" "$BIN_REAL" --picker); echo rc=\$?" /dev/null </dev/null | tr -d '\r')
-check "a claim with no desktop named beside a desktop file refuses" "1" "$(grep -c 'XDG_CURRENT_DESKTOP is not set, so it is unknown whether .*hyprland-portals.conf is the file this desktop reads' <<<"$out")"
+check "a claim with no desktop named beside a desktop file refuses" "1" "$(grep -c 'The desktop is unknown, so Flea cannot tell whether this desktop reads .*hyprland-portals.conf' <<<"$out")"
 check "and exits 1" "1" "$(grep -cx 'rc=1' <<<"$out")"
 check "and leaves that file as it was" "${nautilus}x" "$(cat "$shadow"; printf x)"
 check "and writes no picker window rule into bindings.lua" "$binds_before" "$(cat "$D/config/hypr/bindings.lua"; printf x)"

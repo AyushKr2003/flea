@@ -155,7 +155,7 @@ ShellRoot {
             bar880.searchRunning = true
         } else if (root.step === 6) {
             settleBar(bar880)
-            bar880.say("Can't close the last tab.", false)
+            bar880.say("The last tab cannot be closed", false)
             var serialOwn = bar880.noticeSerial
             bar880.say("Copy failed.", true)
             bar880.withdraw(serialOwn)
@@ -164,7 +164,7 @@ ShellRoot {
             check("and the error is what is drawn", bar880.transient_, "Copy failed.")
         } else if (root.step === 7) {
             settleBar(bar880)
-            bar880.say("Can't close the last tab.", false)
+            bar880.say("The last tab cannot be closed", false)
             var serialStale = bar880.noticeSerial
             bar880.say("Copy failed.", true)
             bar880.say("Later notice.", false)

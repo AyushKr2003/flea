@@ -53,11 +53,11 @@ impl Editor {
             self.error = "Enter a filename before the extension.".into();
             return false;
         }
-        if matches!(self.kind, "rename" | "mkdir" | "newfile")
-            && !crate::backend::ops::valid_name(&self.value)
-        {
-            self.error = "Enter one filename without a path separator.".into();
-            return false;
+        if matches!(self.kind, "rename" | "mkdir" | "newfile") {
+            if let Some(refusal) = crate::backend::ops::name_refusal_sentence(&self.value) {
+                self.error = refusal;
+                return false;
+            }
         }
         if self.kind == "rename" {
             match self.path.symlink_metadata() {
@@ -241,6 +241,17 @@ mod tests {
             assert_eq!(editor.value, name);
         }
         assert_eq!(std::fs::read_to_string(path).unwrap(), "original");
+    }
+
+    // Each refused name gets the sentence for its own fault, never one that names a character it does not hold.
+    #[test]
+    fn a_refused_name_is_told_the_fault_it_has() {
+        for (name, said) in [("a/b", "A name cannot contain /."), ("..", "A name cannot be a single dot or a double dot."), (".", "A name cannot be a single dot or a double dot."),
+                             ("nul\0byte", "A name cannot contain a null character.")] {
+            let mut editor = Editor::new("mkdir", name.into(), "/".into());
+            assert!(!editor.valid(), "{:?}", name);
+            assert_eq!(editor.error, said, "{:?}", name);
+        }
     }
 
     #[test]

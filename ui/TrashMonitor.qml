@@ -73,7 +73,7 @@ Item {
         stdout: SplitParser { onRead: settle.restart() }
         stderr: StdioCollector {}
         onExited: function(code, status) {
-            if (root.watching && code !== 0) root.failed("Trash monitoring is unavailable.")
+            if (root.watching && code !== 0) root.failed("Flea cannot watch the Trash, so its count may be out of date.")
         }
     }
     Process {

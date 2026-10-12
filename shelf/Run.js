@@ -6,6 +6,16 @@
 // already has rather than growing a second one: these are the same wire lines ui/TransferCard.qml
 // reads, off the same backend, and the words are the Actions board's own.
 
+// Whole sentences with "%1" for a value, filled by Model.fill so each translates as one; one per count, because the noun changes with it.
+var WORDS = {
+  zippedOne: "Zipped %1 item into one archive",
+  zippedMany: "Zipped %1 items into one archive",
+  sentOne: "Sent %1 item to %2",
+  sentMany: "Sent %1 items to %2",
+  moveFailed: "The items could not be moved.",
+  copyFailed: "The items could not be copied."
+}
+
 function idle() {
   return { running: false, verb: "", index: 0, count: 0, name: "", bytes: 0, total: 0 }
 }
@@ -94,7 +104,7 @@ function movedText(verb, ok, failed, total, dest, firstError) {
 
 // A run that exited before reporting a single item, so the counts above have nothing to say.
 function runFailedText(verb) {
-  return verb === "Moved" ? "That move did not run." : "That copy did not run."
+  return verb === "Moved" ? WORDS.moveFailed : WORDS.copyFailed
 }
 
 function zippedText(count) {
@@ -102,7 +112,7 @@ function zippedText(count) {
   if (!isFinite(n) || n <= 0) {
     return ""
   }
-  return "Zipped " + Model.grouped(n) + (n === 1 ? " item" : " items") + " into one archive"
+  return Model.fill(n === 1 ? WORDS.zippedOne : WORDS.zippedMany, Model.grouped(n))
 }
 
 function copiedPathsText(count) {
@@ -119,7 +129,7 @@ function sentText(count, peer) {
   if (!isFinite(n) || n <= 0) {
     return ""
   }
-  return "Sent " + Model.grouped(n) + (n === 1 ? " item" : " items") + " to " + peer
+  return Model.fill(n === 1 ? WORDS.sentOne : WORDS.sentMany, Model.grouped(n), peer)
 }
 
 // The destination as the card names it: the leaf, because the flyout already said the whole path.

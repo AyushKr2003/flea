@@ -1,5 +1,6 @@
 // The single-use token a drag out of the shelf carries, and the file it lives in. DragOut rule 1:
 // no row index crosses the process boundary, only a token bound to the entries it was minted for.
+use crate::error::io_message;
 use crate::jsondoc::{self, Json};
 use crate::shelf::{absolute, Shelf};
 use crate::uistore;
@@ -73,7 +74,7 @@ impl Shelf {
     // Sample input, the whole of drags.json:
     // {"drags":[{"token":"9f2c","intent":"move","created":1789426925000,"entries":[{"path":"/a","dev":66305,"ino":12,"bytes":4}]}]}
     fn write_drags(&self, change: impl FnOnce(&Json) -> Result<Json, String>) -> Result<(), String> {
-        let dir = self.drags.parent().ok_or("the shelf has no directory to write in")?;
+        let dir = self.drags.parent().ok_or("the shelf has no folder to write in")?;
         uistore::make_dir(dir)?;
         let lock = uistore::take_lock(&self.lock)?;
         let current = fs::read_to_string(&self.drags)
@@ -82,7 +83,7 @@ impl Shelf {
             .unwrap_or(Json::Obj(Vec::new()));
         let next = change(&current)?;
         let written = uistore::replace(&self.drags, &jsondoc::render(&next));
-        uistore::unlock(&lock).map_err(|e| format!("{} could not be unlocked ({:?})", self.lock.display(), e.kind()))?;
+        uistore::unlock(&lock).map_err(|e| format!("{} could not be unlocked: {}", &self.lock.display(), io_message(&e)))?;
         written
     }
 }
@@ -106,8 +107,8 @@ fn live_drags(drags: &Json, now_ms: u64) -> Vec<Json> {
 
 // The source identity the lift recorded, which is what makes a token name a file rather than a name.
 fn entry_of(path: &str) -> Result<Json, String> {
-    let full = absolute(path).map_err(|e| format!("{} could not be read ({:?})", path, e.kind()))?;
-    let meta = fs::symlink_metadata(&full).map_err(|e| format!("{} could not be read ({:?})", path, e.kind()))?;
+    let full = absolute(path).map_err(|e| format!("{} could not be read: {}", path, io_message(&e)))?;
+    let meta = fs::symlink_metadata(&full).map_err(|e| format!("{} could not be read: {}", path, io_message(&e)))?;
     Ok(Json::Obj(vec![
         ("path".to_string(), Json::Str(full.to_string_lossy().to_string())),
         ("dev".to_string(), Json::Num(meta.dev().to_string())),
@@ -139,8 +140,8 @@ fn number_of(entry: &Json, name: &str) -> Option<String> {
 
 fn mint() -> Result<String, String> {
     let mut bytes = [0u8; TOKEN_BYTES];
-    let mut source = fs::File::open("/dev/urandom").map_err(|e| format!("no randomness for a drag token ({:?})", e.kind()))?;
-    source.read_exact(&mut bytes).map_err(|e| format!("short read of randomness ({:?})", e.kind()))?;
+    let mut source = fs::File::open("/dev/urandom").map_err(|e| format!("no randomness for a drag token: {}", io_message(&e)))?;
+    source.read_exact(&mut bytes).map_err(|e| format!("short read of randomness: {}", io_message(&e)))?;
     Ok(bytes.iter().map(|b| format!("{:02x}", b)).collect())
 }
 

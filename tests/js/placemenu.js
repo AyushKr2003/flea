@@ -156,7 +156,7 @@ function run(check) {
     PlaceMenu.openTabAt(middle, 0)
     check("a middle click on the Trash opens nothing", middle.said + middle.navigationPane.tabs.items.length, "0")
     PlaceMenu.openTabAt(middle, 1)
-    check("and a remote favourite says it opens in this tab only", middle.said, "NAS opens in this tab only.")
+    check("and a remote favourite says it opens in this tab only", middle.said, "NAS opens in this tab only")
     // A home row and a local file:// favourite open a tab on the decoded path.
     function tabSidebar(pane) {
         return { navigationPane: pane, said: "", message: function (text) { this.said = text },

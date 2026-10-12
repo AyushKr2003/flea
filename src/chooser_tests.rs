@@ -128,3 +128,27 @@ fn a_note_left_without_its_line_is_dropped_so_an_undo_restores_nothing_it_names(
     assert!(!out.contains(REPLACED), "{:?}", out);
     assert_eq!(drop_preferred(&out, IFACE).as_deref(), Some("[preferred]\ndefault=hyprland;gtk\n"));
 }
+
+#[test]
+fn a_portal_file_that_cannot_be_read_says_why_in_words() {
+    let dir = TestDir::new("chooserunreadable");
+    // A folder where the file belongs: reading it is refused with a reason a person can act on.
+    let folder = dir.dir("portals.conf");
+    let expected = format!("{} could not be read: item is a folder", folder.display());
+    assert_eq!(claim_chooser((folder.clone(), false)).unwrap_err(), expected);
+    assert_eq!(release_file(&folder, true).unwrap_err(), expected);
+}
+
+// The rerun it asks for is the command the user ran: --picker alone must not be told to make Flea the default for everything.
+#[test]
+fn an_unknown_desktop_asks_for_the_command_the_user_ran() {
+    let found = vec![PathBuf::from("/h/hyprland-portals.conf"), PathBuf::from("/h/sway-portals.conf")];
+    for command in ["flea --picker", "flea --default"] {
+        let asked = unknown_desktop(&found, command);
+        assert!(asked.contains("reads /h/hyprland-portals.conf or /h/sway-portals.conf. "), "{}", asked);
+        assert!(asked.ends_with(&format!("Run {} inside the desktop session.", command)), "{}", asked);
+    }
+    let main = include_str!("main.rs");
+    assert_eq!(main.matches("chooser::claim(\"flea --picker\")").count(), 1, "the picker route names itself");
+    assert_eq!(main.matches("chooser::claim(\"flea --default\")").count(), 1, "the default route names itself");
+}

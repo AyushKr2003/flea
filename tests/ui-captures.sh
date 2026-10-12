@@ -341,7 +341,7 @@ case_cap_menus() {
     click_background
     settle
     [[ "$(ipc contextMenuVisible)" == "true" ]] || fail "cap_menus: the background menu never opened"
-    local background_labels='New Folder|New File|-|Paste|Select all|Invert selection|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|-|Settings'
+    local background_labels='New folder|New file|-|Paste|Select all|Invert selection|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|-|Settings'
     [[ "$(ipc contextMenuEntries)" == "$background_labels" ]] \
         || fail "cap_menus: background specimen drew $(ipc contextMenuEntries), want $background_labels"
     shot cap-menus-background
@@ -789,7 +789,7 @@ cap_permissions_settled() {
 # Permissions040: a selected file removed under the open card, so Apply fails on it, the card names the file in the backend's own words, and a second Apply changes the rest and names the one it left.
 cap_permissions_vanished() {
     local row="$1" gone="$2" listed_after="$3"
-    local want="zz-gone.txt keeps its mode: Could not inspect permissions: file or folder not found."
+    local want="zz-gone.txt keeps its mode: Could not inspect permissions: item not found."
     local left="zz-gone.txt kept its mode."
     [[ "$gone" == /?*/zz-gone.txt && "$gone" == "$fixture_root"/* ]] || fail "cap_permissions: the vanishing file is not inside the case's fixture"
     cap_permissions_open "$row"

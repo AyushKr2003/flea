@@ -70,7 +70,7 @@ function run(check) {
           "Merged 212 items into trip · rclone uploads them in the background · z undoes")
 
     // The journaled op "merge" reaches the bar as whole sentences.
-    check("undo words a merge whole", Ops.undone("merge"), "Undid the merge.")
+    check("undo words a merge whole", Ops.undone("merge"), "Undid the merge")
     // The shipped redo handler runs under doubles, so a rewording for one op goes red.
     var redone = eval("(function (pane, Ops, Status, op, ok) {"
         + Source.block(Source.source("ui/PaneWire.qml"), "function onRedone(op, ok)", "ui/PaneWire.qml") + "})")
@@ -83,9 +83,9 @@ function run(check) {
         redone(pane, Ops, Status, op, true)
         return run
     }
-    check("redo words a copy beside the undo hint", redoneRun("copy").said, "Redid the copy" + Status.UNDO_HINT)
-    check("redo words a move beside the undo hint", redoneRun("move").said, "Redid the move" + Status.UNDO_HINT)
-    check("redo words a merge beside the undo hint", redoneRun("merge").said, "Redid the merge" + Status.UNDO_HINT)
+    check("redo words a copy beside the undo hint", redoneRun("copy").said, "Redid the copy" + Status.undoHint())
+    check("redo words a move beside the undo hint", redoneRun("move").said, "Redid the move" + Status.undoHint())
+    check("redo words a merge beside the undo hint", redoneRun("merge").said, "Redid the merge" + Status.undoHint())
     check("redo refreshes the listing only after permissions", redoneRun("permissions").refreshed, true)
     check("and not after an ordinary op", redoneRun("copy").refreshed, false)
 

@@ -117,7 +117,7 @@ fn open_normally(target: &Path, ask: bool) -> i32 {
                 println!(r#"{{"ask":"openWith"}}"#);
                 return runfile::ASK_OPEN_WITH;
             }
-            eprintln!("flea: gio open refused that file, so no application on this system took it");
+            eprintln!("flea: no application on this system opened that file");
             FAILED
         }
         Err(_) => {

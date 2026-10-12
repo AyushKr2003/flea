@@ -101,7 +101,7 @@ fn redo_skips_a_file_retagged_since_undo_and_refuses_a_replaced_one() {
     std::thread::sleep(std::time::Duration::from_millis(COARSE_TICK_MS));
     crate::backend::tags::write_names(&file, &["Blue".to_string()]).unwrap();
     let skipped = o.journal.redo(1, &stop, &tx).expect_err("a retagged file is not overwritten");
-    assert!(skipped.msg.starts_with("1 path(s) left in place"), "the replay skips the file, never the source check's refusal: {}", skipped.msg);
+    assert!(skipped.msg.starts_with("1 item was left in place: "), "the replay skips the file, never the source check's refusal: {}", skipped.msg);
     assert_eq!(crate::backend::tags::read(&file).unwrap(), vec!["Blue"]);
     // The replaced file is the middle step, so a redo that stopped at it in either order would already have written one.
     let (middle, last) = (d.file("b.txt", "middle"), d.file("c.txt", "last"));

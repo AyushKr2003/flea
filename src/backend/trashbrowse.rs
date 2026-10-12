@@ -11,7 +11,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const SUMMARY_BUDGET_MS: u64 = 2000;
-const STALE_CONFIRMATION: &str = "Trash changed; review a fresh confirmation.";
+const STALE_CONFIRMATION: &str = "The Trash changed; confirm again.";
 
 #[derive(Clone, Debug, PartialEq)]
 struct Item {
@@ -85,6 +85,12 @@ impl Drop for TrashBrowser {
     fn drop(&mut self) { self.cancellation.next(); }
 }
 
+// The one sentence the Trash listing shows when it cannot be read; the cause goes to the log.
+const UNREAD: &str = "The Trash could not be read.";
+fn unread(cause: &str) -> String {
+    eprintln!("flea: {} {}", UNREAD, cause);
+    UNREAD.to_string()
+}
 fn gio(args: &[&str]) -> Result<String, String> {
     let prefix = super::trash::gio_prefix();
     let output = Command::new(&prefix[0])
@@ -92,18 +98,14 @@ fn gio(args: &[&str]) -> Result<String, String> {
         .args(&prefix[1..])
         .args(args)
         .output()
-        .map_err(|e| format!("Could not run the Trash helper: {}", e))?;
+        .map_err(|e| unread(&format!("The Trash helper could not run: {}", crate::error::io_message(&e))))?;
     if !output.status.success() {
         if matches!(output.status.code(), Some(124 | 137)) {
-            return Err("The GIO Trash request timed out.".into());
+            return Err("The Trash took too long to answer.".into());
         }
-        return Err(String::from_utf8_lossy(&output.stderr)
-            .lines()
-            .last()
-            .unwrap_or("gio failed")
-            .to_string());
+        return Err(unread(String::from_utf8_lossy(&output.stderr).lines().last().unwrap_or("the Trash helper failed")));
     }
-    String::from_utf8(output.stdout).map_err(|_| "GIO returned invalid text.".into())
+    String::from_utf8(output.stdout).map_err(|_| unread("the Trash helper answered with text that was not valid"))
 }
 
 // Sample input: "trash:///a.txt\t/home/gm/a.txt\n"; malformed framing must not silently lose an item.
@@ -112,12 +114,12 @@ fn parse_list(text: &str) -> Result<Vec<Item>, String> {
     for line in text.lines() {
         let (uri, original) = line
             .split_once('\t')
-            .ok_or("GIO returned an unreadable Trash listing.")?;
+            .ok_or_else(|| unread("the Trash helper listed an item the wrong way"))?;
         if !uri.starts_with("trash:///")
             || uri.len() <= "trash:///".len()
             || !original.starts_with('/')
         {
-            return Err("GIO returned an invalid Trash identity.".into());
+            return Err(unread("the Trash helper named an item the wrong way"));
         }
         items.push(Item {
             uri: uri.into(),
@@ -126,7 +128,7 @@ fn parse_list(text: &str) -> Result<Vec<Item>, String> {
     }
     items.sort_by(|a, b| a.uri.cmp(&b.uri));
     if items.windows(2).any(|pair| pair[0].uri == pair[1].uri) {
-        return Err("GIO returned duplicate Trash identities.".into());
+        return Err(unread("the Trash helper listed an item twice"));
     }
     Ok(items)
 }
@@ -146,7 +148,7 @@ fn detail(item: &Item) -> Result<Detail, String> {
     let text = gio(&["info", "--nofollow-symlinks", "--attributes=standard::size,standard::type,trash::deletion-date,id::file,id::filesystem,standard::icon,standard::target-uri", &item.uri])?;
     let size = attribute(&text, "standard::size")
         .and_then(|s| s.parse().ok())
-        .ok_or("GIO did not report Trash item size.")?;
+        .ok_or_else(|| unread("the Trash helper gave no size for an item"))?;
     let identity = match (
         attribute(&text, "id::filesystem"),
         attribute(&text, "id::file"),
@@ -202,7 +204,7 @@ fn selection_identity(item: &Detail) -> String {
 
 fn require_selected_identity(item: &Detail, expected: &str) -> Result<(), String> {
     if expected.is_empty() || item.identity.is_empty() || selection_identity(item) != expected {
-        return Err("Trash selection changed; select the item again before acting on it.".into());
+        return Err("The Trash selection changed; select the items again.".into());
     }
     Ok(())
 }
@@ -320,7 +322,7 @@ impl Session {
                 let mut offset = 0;
                 while let Some(bytes) = confirmation.items.records().next(&mut offset)? {
                     let item = load_detail(&record_text(bytes)?, &confirmation.trees)?;
-                    match item.backing.as_ref().ok_or("Trash backing identity is unavailable.".to_string()).and_then(|reviewed| reviewed.delete(&crate::backend::trashdelete::recovery_root()?)) {
+                    match item.backing.as_ref().ok_or("This Trash cannot be checked, so nothing can be deleted.".to_string()).and_then(|reviewed| reviewed.delete(&crate::backend::trashdelete::recovery_root()?)) {
                         Ok(()) => done += 1,
                         Err(error) => failures.push(failure(&item.item, &surviving_identity(&item), &error)),
                     }
@@ -381,7 +383,7 @@ impl Session {
             self.cancellation.check()?;
             let current = detail(item)?;
             if current.identity.is_empty() || current.backing.is_none() {
-                return Err("The Trash provider did not report stable item identities; selection is unavailable.".into());
+                return Err("Items in this Trash cannot be told apart, so they cannot be selected.".into());
             }
             records.append(row(&current).as_bytes())?;
         }
@@ -427,7 +429,7 @@ impl Session {
         let identities = field_str_array(line, "identities");
         let all = field_bool(line, "all");
         if !all && uris.len() != identities.len() {
-            return Err("Trash selection has no reviewed identity; select the item again.".into());
+            return Err("The Trash selection changed; select the items again.".into());
         }
         let mut explicit: HashMap<_, _> = uris.iter().zip(&identities).collect();
         let exclusions: HashSet<_> = field_str_array(line, "exclude").into_iter().collect();
@@ -440,7 +442,7 @@ impl Session {
             }
         } else if token > 0 {
             let selection = self.selection.as_ref().filter(|selection| selection.token == token)
-                .ok_or("Trash selection expired; select the items again.")?;
+                .ok_or("The Trash selection changed; select the items again.")?;
             let mut offset = 0;
             while let Some(bytes) = selection.items.records().next(&mut offset)? {
                 self.cancellation.check()?;
@@ -455,8 +457,8 @@ impl Session {
             for uri in &uris {
                 let Some(expected) = explicit.remove(uri) else { continue; };
                 let item = self.items.iter().find(|item| &item.uri == uri)
-                    .ok_or("Trash selection expired; refresh the view.")?;
-                if expected.is_empty() { return Err("Trash selection has no reviewed identity; select the item again.".into()); }
+                    .ok_or("The Trash selection changed; select the items again.")?;
+                if expected.is_empty() { return Err("The Trash selection changed; select the items again.".into()); }
                 targets.append(format!(r#"{{"uri":"{}","original":"{}","identity":"{}"}}"#,
                     escape(uri), escape(&item.original), escape(expected)).as_bytes())?;
             }
@@ -513,8 +515,8 @@ impl Session {
             if !all && refresh_token == 0 {
                 require_selected_identity(&current, &field_str(&text, "identity").unwrap_or_default())?;
             }
-            if current.identity.is_empty() { return Err("The Trash provider did not report a stable item identity.".into()); }
-            let size = current.backing.as_mut().ok_or("Trash backing identity is unavailable; deletion is unavailable.")?
+            if current.identity.is_empty() { return Err("Items in this Trash cannot be told apart, so they cannot be selected.".into()); }
+            let size = current.backing.as_mut().ok_or("This Trash cannot be checked, so nothing can be deleted.")?
                 .snapshot(&mut trees, &self.scratch, &self.cancellation)?;
             bytes = bytes.checked_add(size).ok_or("Trash byte total exceeds the supported range.")?;
             items.append(save_detail(&current)?.as_bytes())?;
@@ -564,7 +566,7 @@ impl Session {
                 if !field_bool(line, "all") {
                     require_selected_identity(&current, &field_str(&text, "identity").unwrap_or_default())?;
                 }
-                let result = current.backing.as_ref().ok_or("Trash backing identity is unavailable; restore is unavailable.")?
+                let result = current.backing.as_ref().ok_or("This Trash cannot be checked, so nothing can be restored.")?
                     .restore(&PathBuf::from(&item.original), &crate::backend::trashdelete::recovery_root()?);
                 if result.is_err() { retained = surviving_identity(&current); }
                 result
