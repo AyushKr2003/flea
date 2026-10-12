@@ -65,6 +65,7 @@ src/uistore.rs 551
 src/vulkan.rs 751
 tests/js/columns.js 687
 tests/js/drag.js 481
+tests/js/dropsflow.js 301
 tests/js/collide.js 321
 tests/js/devices.js 363
 tests/js/previewswap.js 463
