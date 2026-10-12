@@ -102,9 +102,9 @@ ListView {
     delegate: Flea.Row {
         id: cell
         required property int index
-        // Parked while pooled: each listing read returns its own last value until onReused rebinds it before the next frame.
+        // Parked while pooled: each listing read returns its own last value until onReused rebinds it before the next frame; a row holding the open editor stays live, since a prebuild create pools and reuses the shown rows and pooling would destroy the editor.
         property bool live: true
-        ListView.onPooled: cell.live = false
+        ListView.onPooled: if (!cell.renaming) cell.live = false
         ListView.onReused: {
             // The driver's create can take a pooled row past the shown ones; it parks as a built one does.
             if (cell.index >= root.count) { root.prebuild.parkCell(cell); return }

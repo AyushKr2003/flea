@@ -23,6 +23,7 @@ ShellRoot {
     // A list row's top and height before the editor opens, so opening it is seen to move nothing.
     property var rowsBefore: []
     property bool renameMeasured: false
+    property bool churned: false
     // The fixture's one name with an extension, whose muted run is patched over the field.
     readonly property string extensionName: "a.txt"
     // Where the transfer card sits in the test window: the status bar hosts it in the product, with the bar's right margin.
@@ -142,7 +143,13 @@ ShellRoot {
         var host = pane.renameEditor()
         if (!host) return false
         // The error toggle below queues the tile's height update, so the editor lives one more tick for it to land.
-        if (root.renameMeasured) { root.renameMeasured = false; return true }
+        if (root.renameMeasured) {
+            root.renameMeasured = false
+            // A prebuild create pools and reuses the shown rows, within a frame and again one frame on; the open editor stays on its row.
+            if (root.churned) root.check(pane.renamingIndex === root.extensionIndex() && pane.renameEditor() !== null, tag + " list editor did not survive a pool churn")
+            root.churned = false
+            return true
+        }
         var editor = host.editorField
         if (!editor || !editor.inputItem.activeFocus) return false
         var viewMode = pane.viewMode
@@ -195,6 +202,11 @@ ShellRoot {
             }
             root.check(compared >= 1 && compared === visibleRows, tag + " list compared " + compared + " of " + visibleRows + " visible rows")
         }
+        if (viewMode === "list") {
+            var driver = pane.listArea.prebuild
+            driver.parkCell(driver.model.items.create(driver.hole()))
+            root.churned = true
+        }
         root.renameMeasured = true
         return false
     }
@@ -234,6 +246,9 @@ ShellRoot {
     function clipChain(tag, ring, isBox) {
         var owner = root.ownerOf(ring)
         if (owner && !owner.visible) return
+        // A frame under a hidden row (the network form's TLS box with no TLS) draws nothing for a clip to cut.
+        for (var up = ring.parent; !owner && up; up = up.parent)
+            if (!up.visible) return
         var scrolled = false
         var edge = isBox ? 0 : root.edgeClear
         for (var it = ring.parent; it; it = it.parent) {
