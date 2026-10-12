@@ -1285,7 +1285,8 @@ def series_op(sess, spec, n):
                     if want is not None:
                         return os.path.getsize(os.path.join(real_dst, names[0])) >= want
                     return name != "op.move.cross-fs" or not os.listdir(src)
-                extra["op_s"] = wait_until(done, 900 if o.get("long") else 120)
+                waited = wait_until(done, 900 if o.get("long") else 120)
+                extra["op_s"] = None if waited is None else round((time.monotonic_ns() - t) / NS, 2)
                 sess.rec.wait_quiet(int(QUIET[6] * NS), t, int(CAP[6] * NS))
                 extra.update(op_state_fields(before, activity_state(sess)), esc_before=escs)
                 row = sess.columns(name, t, 6, evidence=ev, extra=extra)
@@ -1327,7 +1328,7 @@ def series_op(sess, spec, n):
                 rows.append(row)
                 sess.send(("key", ("esc",)))
                 sess.settle(1.0, 5)
-        except (RuntimeError, OSError, subprocess.CalledProcessError) as e:
+        except (RuntimeError, OSError, subprocess.SubprocessError) as e:
             rows.append({"journey": name, "row": 6, "view": sess.view, "error": "%s: %s" % (type(e).__name__, e)})
     return rows
 
@@ -1662,45 +1663,45 @@ def end_client(client):
 
 def repeat_probe(keys, rep, runs=5):
     """The key events an idle Qt client receives for the held sweep's exact hold: the overshoot bound."""
-    work = tempfile.mkdtemp(prefix="flea-instant-repeat-")
     interval = 1000.0 / rep["rate"]
     hold_ns = int((rep["delay_ms"] + interval * HOLD_REPEATS + interval / 2) * MS)
     counts = []
-    for _ in range(runs):
-        client, region, masks, logp = calib_window(work, 0)
-        try:
-            code = N.keycode("a")
-            t = time.monotonic_ns()
-            keys._key(code, 1)
-            while time.monotonic_ns() < t + hold_ns:
-                pass
-            keys._key(code, 0)
-            time.sleep(1.0)
-        finally:
-            end_client(client)
-        with open(logp) as f:
-            counts.append(sum(1 for line in f if "CALIB key" in line))
+    with tempfile.TemporaryDirectory(prefix="flea-instant-repeat-") as work:
+        for _ in range(runs):
+            client, region, masks, logp = calib_window(work, 0)
+            try:
+                code = N.keycode("a")
+                t = time.monotonic_ns()
+                keys._key(code, 1)
+                while time.monotonic_ns() < t + hold_ns:
+                    pass
+                keys._key(code, 0)
+                time.sleep(1.0)
+            finally:
+                end_client(client)
+            with open(logp) as f:
+                counts.append(sum(1 for line in f if "CALIB key" in line))
     return {"counts": counts, "max_events": max(counts), "hold_ms": round(hold_ns / MS, 1),
             "expected": 1 + repeats_due(0, hold_ns, rep["delay_ms"], interval)}
 
 
 def negative_control(runs, cap_s=3):
     """No key sent: the recorder over the calibration client's results region must see no change within cap_s."""
-    work = tempfile.mkdtemp(prefix="flea-instant-neg-")
-    rec_bin = S.build_recorder(os.path.join(work, "rec"))
     out = []
-    for _ in range(runs):
-        client, region, masks, _ = calib_window(work, 0)
-        try:
-            rec = S.Recorder(rec_bin, region, masks)
-            time.sleep(0.6)
-            t0 = time.monotonic_ns()
-            time.sleep(cap_s)
-            changed = [f for f in rec.snapshot() if f[0] > t0 and f[1] > 0]
-            rec.stop()
-        finally:
-            end_client(client)
-        out.append(len(changed))
+    with tempfile.TemporaryDirectory(prefix="flea-instant-neg-") as work:
+        rec_bin = S.build_recorder(os.path.join(work, "rec"))
+        for _ in range(runs):
+            client, region, masks, _ = calib_window(work, 0)
+            try:
+                rec = S.Recorder(rec_bin, region, masks)
+                time.sleep(0.6)
+                t0 = time.monotonic_ns()
+                time.sleep(cap_s)
+                changed = [f for f in rec.snapshot() if f[0] > t0 and f[1] > 0]
+                rec.stop()
+            finally:
+                end_client(client)
+            out.append(len(changed))
     return {"runs": runs, "cap_s": cap_s, "changed_frames": out, "clean": all(c == 0 for c in out)}
 
 
@@ -1952,7 +1953,7 @@ def run_series(sess, sp, n):
         rows = SERIES[sp["type"]](sess, sp, n)
     except ExternalWindow as e:
         rows = sess.taken + [e.row]
-    except (RuntimeError, OSError, ValueError, subprocess.CalledProcessError) as e:
+    except (RuntimeError, OSError, ValueError, subprocess.SubprocessError) as e:
         rows = sess.taken + [{"journey": sp["type"], "view": sess.view, "error": "%s: %s" % (type(e).__name__, e)}]
     for r in rows if sess.load else ():
         r.update({"load": sess.load.name, "load_note": sess.load.note})
@@ -1975,7 +1976,7 @@ def run_session(spec, ctx, out):
                 raise RuntimeError("load %s needs a %s fixture" % (spec["load"], "USB" if spec["load"] in ("b", "d") else "NAS"))
         sess = Session(ctx, fixture, spec["view"], spec["region"], right,
                        os.path.join(ctx["out_dir"], "flea-%s.log" % ctx["tag"]))
-    except (RuntimeError, OSError, subprocess.CalledProcessError) as e:
+    except (RuntimeError, OSError, subprocess.SubprocessError) as e:
         emit(out, {"journey": "session", "view": spec.get("view"), "fixture": where,
                    "error": "%s: %s" % (type(e).__name__, e)})
         if spec.get("load") in ("b", "d") and right is not None:
@@ -3249,6 +3250,49 @@ def selftest():
         # A cancel that does not take is named on the row.
         rows, sent = run_op([bar(), bar(), bar("running")], None, {"ISOLATE_CANCEL_CAP_S": 0})
         check("series_op_cancel_that_stays", ("cancel_failed" in rows[0], rows[0]["cancel_escs"]), (True, 1))
+        # op_s counts from the paste chord, not from the wait that follows the 11 s evidence frame of a long copy.
+        ses, sent = op_session([bar()])
+        ses.keys = types.SimpleNamespace(chord=lambda *c: time.monotonic_ns() - 5 * NS if c == ("ctrl", "v") else 0)  # the paste began 5 s ago
+        with mock.patch.dict(globals(), dict(empty_dir=lambda *a: None, reflink=lambda *a: None, wait_until=lambda pred, cap: 0.5)):
+            rows = run_series(ses, {"type": "op", "op": "op.copy.large"}, 1)
+        check("op_s_from_paste", 5.0 <= rows[0]["op_s"] < 60.0, True)
+    # The calibration probes keep their work directory only while they run.
+    works = []
+
+    def fake_window(work, delay):
+        works.append(work)
+        logp = os.path.join(work, "client.log")
+        with open(logp, "w") as f:
+            f.write("CALIB key a\n")
+        return None, None, [], logp
+
+    with mock.patch.dict(globals(), dict(calib_window=fake_window, end_client=lambda client: None)), \
+            mock.patch.object(S, "build_recorder", lambda path: path), \
+            mock.patch.object(S, "Recorder", lambda *a: types.SimpleNamespace(snapshot=lambda: [], stop=lambda: None)), \
+            mock.patch.object(time, "sleep", lambda secs: None):
+        repeat_probe(types.SimpleNamespace(_key=lambda *a: None), {"rate": 40, "delay_ms": 250}, 1)
+        negative_control(1, 0.1)
+    check("probe_dirs_removed", (len(works), [os.path.exists(w) for w in works]), (2, [False, False]))
+    # A qs ipc call that outlives its timeout is an error row for its series, never an abort of the part.
+    class HungIpc(Session):
+        def __init__(self):
+            self.qs_pid, self.view, self.closed, self.load, self.taken = 1, "list", False, None, []
+
+        def close(self):
+            self.closed = True
+
+    def hang(argv, **kw):
+        raise subprocess.TimeoutExpired(argv, kw["timeout"])
+
+    hung, hung_out = HungIpc(), io.StringIO()
+    with mock.patch.object(subprocess, "run", hang), mock.patch.dict(SERIES, {"pairs": lambda s, sp, n: [{"first_ms": s.ipc_int("cursor")}]}), \
+            mock.patch.dict(globals(), {"Session": lambda *a: hung}):
+        try:
+            run_session({"fixture": "f", "view": "list", "region": "content", "series": [{"type": "pairs"}], "n": 1},
+                        {"out_dir": os.devnull, "tag": "t"}, hung_out)
+        except subprocess.SubprocessError as e:
+            fail.append("ipc_timeout: the part aborted on %s" % type(e).__name__)
+    check("ipc_timeout_row", ("TimeoutExpired" in hung_out.getvalue(), hung.closed), (True, True))
     # The fling floor: medians and ranges from fixed arrays, a failed run counted out of n.
     floor = fling_floor([17.0, 18.0, 16.5, None, 17.5], [20.1, 21.0, 19.8, 22.4, 20.5])
     check("fling_floor_wheel", floor["first_wheel_ms"], {"n": 4, "median": 17.2, "min": 16.5, "max": 18.0})

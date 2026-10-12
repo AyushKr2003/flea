@@ -27,6 +27,7 @@ import time
 
 NS = 1_000_000_000
 LAUNCH_QUIET_NS = int(1.5 * NS)  # still time that counts a fresh window as loaded
+HEADER_WAIT_S = 10  # the longest a recorder may take to print its header before it is ended
 VISIBLE_ROWS = 25  # rows a results region shows at the least, in a short window
 HELD_ROWS = 300  # the filter holds 350 rows of a long folder and shows fewer; 300 stays inside the held window
 MS = 1_000_000
@@ -284,8 +285,10 @@ class Recorder:
         self.thread.start()
         t0 = time.monotonic()
         while self.header is None:
-            if self.proc.poll() is not None or time.monotonic() - t0 > 10:
-                raise RuntimeError("the recorder gave no header (exit %s)" % self.proc.poll())
+            if self.proc.poll() is not None or time.monotonic() - t0 > HEADER_WAIT_S:
+                code = self.proc.poll()
+                self.stop()  # a recorder alive without a header is not left running behind the refusal
+                raise RuntimeError("the recorder gave no header (exit %s)" % code)
             time.sleep(0.01)
 
     # Sample input, one recorder line: "F <presentation ns> <received ns> <changed> <first> <last> <col> <col> <ink>" (8 values).
@@ -1626,6 +1629,21 @@ def selftest():
             g.update(saved)
         check("calib_run_spent", [r.get("frames_before_result") for r in rep["rows"]], [[1, 0], [1, 0]])
         check("calib_run_hides", sent, [("shift",), ("a",)] * 4)
+    # A recorder alive but silent is ended before the refusal is raised.
+    ended = []
+    quiet = types.SimpleNamespace(stdout=iter(()), poll=lambda: None,
+                                  terminate=lambda: ended.append("terminate"), wait=lambda t=None: 0, kill=lambda: ended.append("kill"))
+    saved = {k: globals()[k] for k in ("subprocess", "HEADER_WAIT_S", "ENV")}
+    globals().update({"HEADER_WAIT_S": 0.05, "ENV": {},
+                      "subprocess": types.SimpleNamespace(Popen=lambda *a, **k: quiet, PIPE=subprocess.PIPE, TimeoutExpired=subprocess.TimeoutExpired)})
+    try:
+        Recorder("fc", (0, 0, 1, 1))
+        check("silent_recorder_refused", "no refusal", "RuntimeError")
+    except RuntimeError as e:
+        check("silent_recorder_refused", str(e), "the recorder gave no header (exit None)")
+    finally:
+        globals().update(saved)
+    check("silent_recorder_ended", ended, ["terminate"])
     # Recorder._read takes the real 8-value F line and counts any other shape instead of reading it silently.
     rec = Recorder.__new__(Recorder)
     rec.frames, rec.detail, rec.dumps, rec.header, rec.malformed, rec.unstamped = [], [], [], None, 0, 0
