@@ -24,6 +24,7 @@ PreviewMarkdown 1.0 PreviewMarkdown.qml
 MarkdownSource 1.0 MarkdownSource.qml
 MarkdownRemote 1.0 MarkdownRemote.qml
 MarkdownPane 1.0 MarkdownPane.qml
+FontPane 1.0 FontPane.qml
 MarkdownText 1.0 MarkdownText.qml
 MarkdownPictures 1.0 MarkdownPictures.qml
 MarkdownImages 1.0 MarkdownImages.qml

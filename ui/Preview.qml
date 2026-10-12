@@ -30,6 +30,8 @@ Item {
     readonly property bool isPdf: root.kind === "pdf"
     readonly property bool isImage: root.kind === "image"
     readonly property bool isArchive: root.kind === "archive"
+    readonly property bool isFont: root.kind === "font"
+    readonly property bool fontFailed: root.isFont && fontLoader.item !== null && fontLoader.item.failed
     // RenderedPreviews: a Markdown file keeps the text kind and draws its own bar and pane.
     readonly property bool isMarkdown: root.kind === "text" && Kinds.isMarkdown(root.path)
     // r flips the open Markdown Quick Look to Source; close() forgets it, and a move to another file keeps it.
@@ -85,6 +87,7 @@ Item {
         if (root.isArchive) return root.archiveMeta === null ? "loading" : (root.archiveFailed ? "This archive could not be read." : "archive")
         if (root.kind === "text") return root.isMarkdown
             ? (markdownLoader.item ? markdownLoader.item.status : "loading") : textPane.status
+        if (root.isFont) return fontLoader.item ? fontLoader.item.status : "loading"
         return "This file cannot be previewed."
     }
     // The swap's answer: nothing loading, and a PDF with a page on screen or refused.
@@ -570,6 +573,21 @@ Item {
             }
 
             Loader {
+                id: fontLoader
+                anchors.fill: parent
+                anchors.margins: Theme.spacing.hairline
+                active: root.isFont
+                source: "FontPane.qml"
+                onLoaded: {
+                    item.path = Qt.binding(function () { return root.path })
+                    item.size = Qt.binding(function () { return root.size })
+                    item.backend = Qt.binding(function () { return root.pane ? root.pane.backend : null })
+                    item.active = Qt.binding(function () { return root.isFont })
+                    item.closeRequested.connect(root.close)
+                }
+            }
+
+            Loader {
                 id: mediaLoader
                 anchors.fill: parent
                 onLoaded: {
@@ -658,7 +676,7 @@ Item {
                 anchors.centerIn: parent
                 width: parent.width - 2 * Theme.spacing.rowPaddingX
                 spacing: Theme.spacing.gap
-                visible: root.kind === "unsupported" || root.archiveFailed
+                visible: root.kind === "unsupported" || root.archiveFailed || root.fontFailed
 
                 Flea.Glyph {
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -685,7 +703,7 @@ Item {
             // Media still buffering or an image still decoding shows the crawl; LoadingState's hold-off keeps a fast local open from flashing it.
             Flea.LoadingState {
                 anchors.fill: parent
-                visible: root.loadingEarly || (root.isMedia || root.isImage || root.isArchive) && root.status === "loading"
+                visible: root.loadingEarly || (root.isMedia || root.isImage || root.isArchive || root.isFont) && root.status === "loading"
                 heldOff: root.loadingEarly || root.swap !== null && root.swap.fellBack
             }
 

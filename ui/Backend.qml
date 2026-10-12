@@ -81,6 +81,8 @@ Item {
     signal shebang(string path, bool hasShebang, int id)
     // A PDF fetched into a session-private copy under a deadline; err names the refusal, stalled is the wait that ran out.
     signal pdfCopied(int id, string path, string err, bool stalled)
+    // A font's facts and three sample files, or err; ui/FontPane.qml builds the request, see src/backend/fontinfo/render.rs.
+    signal fontLooked(var message)
     signal fsInfo(string fs, real free, string path, string storageClass, bool tagable, bool systemVolume)
     // The one line no request asked for: the directory the current listing came from changed under
     // it. path is that directory, so a pane that has since moved can ignore it; see docs/protocol.md.

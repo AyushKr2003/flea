@@ -605,6 +605,7 @@ fn handle_line(
         Request::PdfCopy { id, slot, path } => {
             super::pdfcopy::spawn(id, slot, PathBuf::from(&path), ops.tx.clone());
         }
+        Request::FontLook(ask) => super::fontinfo::render::spawn(ask, Arc::clone(&tb.mime), Arc::clone(&tb.aliases), ops.tx.clone()),
         // One row, only when a client asked: the same no-sweep rule thumb and dirsize already follow.
         Request::Meta { row, text, media, archive, token } => {
             if row < st.listing.len() {
@@ -708,6 +709,7 @@ fn rows_needed(request: &Request) -> usize {
         | Request::FsInfo
         | Request::Peek { .. }
         | Request::PdfCopy { .. }
+        | Request::FontLook(_)
         | Request::Formats { .. }
         | Request::Permissions { .. }
         | Request::Picker { .. }

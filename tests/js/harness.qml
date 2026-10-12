@@ -28,6 +28,7 @@ import "dropsflow.js" as DropsFlowSuite
 import "dst.js" as DstSuite
 import "errors.js" as ErrorsSuite
 import "facts.js" as FactsSuite
+import "fontfacts.js" as FontFactsSuite
 import "figureservice.js" as FigureServiceSuite
 import "filter.js" as FilterSuite
 import "filter-cursor.js" as FilterCursorSuite
@@ -176,7 +177,7 @@ Item {
             ["dirsizes", DirSizesSuite], ["drag", DragSuite], ["dragout", DragOutSuite], ["dropkeys", DropKeysSuite], ["drops", DropsSuite], ["dropsflow", DropsFlowSuite], ["dst", DstSuite], ["ddtarget", DdtargetSuite],
             ["copyas", CopyAsSuite], ["invert", InvertSuite],
             ["edmonton", DstSuite],
-            ["errors", ErrorsSuite], ["facts", FactsSuite], ["figureservice", FigureServiceSuite], ["filter", FilterSuite], ["filter-cursor", FilterCursorSuite],
+            ["errors", ErrorsSuite], ["facts", FactsSuite], ["fontfacts", FontFactsSuite], ["figureservice", FigureServiceSuite], ["filter", FilterSuite], ["filter-cursor", FilterCursorSuite],
             ["focus", FocusSuite], ["focus-grid", FocusGridSuite], ["focus-forward", FocusForwardSuite],
             ["flash", FlashSuite], ["flashpane", FlashPaneSuite], ["framegap", FramegapSuite],
             ["foldersorts", FolderSortsSuite],
