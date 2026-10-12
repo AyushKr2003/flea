@@ -151,8 +151,7 @@ Item {
                 root.refreshDropboxAccount()
             }
         }
-        // Issue 194's repair shares the peek wire with a crumb's first-0 device ask, so the two race on one signal;
-        // a first-0 reply is never the repair's, and landing it would repair on the crumb's answer.
+        // A first-0 peek is a crumb's device ask racing issue 194's repair on this signal, so only first > 0 repairs.
         function onPeeked(path, hidden, total, rows, readFailed, mode, hiddenLast, first) { if (first > 0) root.repairPeeked(path, rows, readFailed) }
     }
 
