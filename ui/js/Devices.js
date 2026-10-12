@@ -338,10 +338,10 @@ function mountError(op, exitCode, stderr, label) {
     return name + " could not be mounted."
 }
 
-// gio's own reason as the status bar's detail line; sample "Error mounting /dev/sdb1 at /run/media/u/DATA #2: wrong fs type, bad superblock" gives "wrong fs type, bad superblock", "" gives "".
+// gio's own reason as the status bar's detail line; sample "Error mounting /dev/sdb1 at /run/media/u/DATA #2: wrong fs type" and "Error unmounting /dev/sdb1: target is busy" give "wrong fs type" and "target is busy", "" gives "".
 function mountDetail(stderr) {
     var lines = String(stderr || "").split("\n").map(function (line) { return line.trim() }).filter(function (line) { return line.length > 0 })
-    return lines.join(" ").replace(/^gio:\s*/, "").replace(/^Error (?:mounting|unmounting|ejecting) \S+ at .*?:\s+/, "").trim()
+    return lines.join(" ").replace(/^gio:\s*/, "").replace(/^Error (?:mounting|unmounting|ejecting) \S+(?: at .*?)?:\s+/, "").trim()
 }
 
 // Sample: ["/home", "/var/log", "/"] for one btrfs device with several subvolumes mounted, ["[SWAP]"]
