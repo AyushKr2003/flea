@@ -216,3 +216,85 @@ case_dualautohidereveal() {
     export XDG_STATE_HOME="$suite_home"
     kill_flea
 }
+# The divider's x in window pixels: the right edge of the left listing, where its hairline sits.
+dual_divider_x() {
+    local geo area x w
+    geo=$(ipc dragPaneGeometry 0 0) || fail "dualdivider: geometry read failed for pane 0"
+    area=$(jq -er '.area' <<< "$geo") || fail "dualdivider: pane 0 has no list area (geometry=$geo)"
+    read -r x _ w _ <<< "$area"
+    [[ "$x" =~ ^-?[0-9]+$ && "$w" =~ ^[0-9]+$ ]] || fail "dualdivider: pane 0 list area '$area' has no whole x and width"
+    printf '%s\n' "$((x + w))"
+}
+dualdivider_launch() {
+    launch "$1"
+    local ready=false json
+    for _attempt in $(seq 1 100); do
+        json=$(ipc dualState)
+        [[ "$(jq -r '(.panes | length == 2) and all(.panes[]; . != null and .loading == false)' 2>/dev/null <<< "$json")" == "true" ]] && { ready=true; break; }
+        sleep 0.05
+    done
+    [[ "$ready" == true ]] || fail "dualdivider: two listed dual panes never appeared in 5 s (dualState=$json)"
+    settle
+}
+# Asserts the two listing widths differ by at most 1 px, then prints them.
+dualdivider_equal() {
+    local a b d
+    a=$(dual_list_width 0) || exit 1
+    b=$(dual_list_width 1) || exit 1
+    d=$(( a > b ? a - b : b - a ))
+    (( d <= 1 )) || fail "dualdivider: $1: the listings are not equal ($a vs $b)"
+    printf '%s %s\n' "$a" "$b"
+}
+# Dual divider: the 9 px zone drags, the split is remembered across a relaunch, and a double click restores the equal split.
+# The pointer's shape has no native reader, so the zone is proved by the drag it takes; the shape is the column handle's own Qt.SplitHCursor.
+case_dualdivider() {
+    local dir="$fixture_root/dualdivider" suite_home="$XDG_STATE_HOME" rail
+    sandbox_scratch "$dir"
+    mkdir -p "$dir/left" "$dir/right"
+    local i
+    for i in $(seq -f '%02g' 1 40); do : > "$dir/left/l$i.txt"; : > "$dir/right/r$i.txt"; done
+    command -v ydotool >/dev/null || fail "dualdivider: no ydotool on PATH"
+    [[ -S "${XDG_RUNTIME_DIR:-}/.ydotool_socket" ]] || fail "dualdivider: no ydotool socket at ${XDG_RUNTIME_DIR:-}/.ydotool_socket"
+    local drag=120
+    for rail in shown hidden; do
+        seed_ui_state "$fixture_root/dualdivider-state-$rail" "$(jq -cn --arg l "$dir/left" --arg r "$dir/right" --arg rail "$rail" '{view:"dual",places:{rail:$rail},dual:{paths:[$l,$r],focus:0}}')"
+        dualdivider_launch "$dir/left"
+        local w0 w1 wx wy ww wh div y moved0 moved1 stored
+        read -r w0 w1 <<< "$(dualdivider_equal "$rail default")"
+        read -r wx wy ww wh < <(window_box) || fail "dualdivider: native window coordinates unavailable"
+        div=$(dual_divider_x) || exit 1
+        y=$(( wy + wh / 2 ))
+        # The zone starts on the divider pixel and runs 9 px right, so its middle is 4 px past it.
+        omarchy-drive move "$(( wx + div + 4 ))" "$y" >/dev/null || fail "dualdivider: $rail: the move onto the divider failed"
+        YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool mousemove -x 1 -y 0 >/dev/null || fail "dualdivider: $rail: ydotool mousemove failed"
+        YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x40 >/dev/null 2>&1 || fail "dualdivider: $rail: the press failed"
+        column_drag_absolute "$(( wx + div + 4 ))" "$y" "$drag" 4
+        # Nothing re-lays while the pointer is down.
+        read -r moved0 moved1 <<< "$(dual_list_width 0) $(dual_list_width 1)"
+        (( moved0 == w0 && moved1 == w1 )) || fail "dualdivider: $rail: the listings moved during the drag ($w0/$w1 to $moved0/$moved1)"
+        YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || fail "dualdivider: $rail: the release failed"
+        settle
+        read -r moved0 moved1 <<< "$(dual_list_width 0) $(dual_list_width 1)"
+        (( moved0 - w0 >= drag - 3 && moved0 - w0 <= drag + 3 && w1 - moved1 >= drag - 3 && w1 - moved1 <= drag + 3 )) \
+            || fail "dualdivider: $rail: a $drag px drag moved the listings $w0/$w1 to $moved0/$moved1"
+        stored=$(jq -er '.dual.split' "$XDG_STATE_HOME/flea/ui.json") || fail "dualdivider: $rail: ui.json holds no dual.split"
+        (( stored > 5000 )) || fail "dualdivider: $rail: ui.json remembers split $stored"
+        printf 'DUALDIVIDER %s drag=%s/%s split=%s\n' "$rail" "$moved0" "$moved1" "$stored"
+        dualdivider_launch "$dir/left"
+        local r0 r1 d
+        read -r r0 r1 <<< "$(dual_list_width 0) $(dual_list_width 1)"
+        d=$(( r0 > moved0 ? r0 - moved0 : moved0 - r0 ))
+        (( d <= 1 )) || fail "dualdivider: $rail: the relaunch lays the left listing at $r0, the drag left it at $moved0"
+        read -r wx wy ww wh < <(window_box) || fail "dualdivider: native window coordinates unavailable"
+        div=$(dual_divider_x) || exit 1
+        omarchy-drive click "$(( wx + div + 4 ))" "$(( wy + wh / 2 ))" left --double >/dev/null || fail "dualdivider: $rail: the double click failed"
+        settle
+        read -r r0 r1 <<< "$(dualdivider_equal "$rail double click")"
+        d=$(( r0 > w0 ? r0 - w0 : w0 - r0 ))
+        (( d <= 1 )) || fail "dualdivider: $rail: the double click lays the listings at $r0/$r1, the default was $w0/$w1"
+        [[ "$(jq -er '.dual.split' "$XDG_STATE_HOME/flea/ui.json")" == 5000 ]] || fail "dualdivider: $rail: the double click left split $(jq -r '.dual.split' "$XDG_STATE_HOME/flea/ui.json")"
+        printf 'DUALDIVIDER %s double=%s/%s\n' "$rail" "$r0" "$r1"
+    done
+    export XDG_STATE_HOME="$suite_home"
+    kill_flea
+}

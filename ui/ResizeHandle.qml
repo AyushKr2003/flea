@@ -7,6 +7,8 @@ Item {
     property string columnKey: ""
     // True while this column's drag is in flight, held by the caller, not the press.
     property bool hot: false
+    // The accent line's x inside the zone: the centre for a column edge, the zone's first pixel for the Dual divider.
+    property real lineX: (width - Theme.spacing.hairline) / 2
     signal pressed(var mouse)
     signal moved(var mouse)
     signal released()
@@ -29,7 +31,7 @@ Item {
 
     // The accent line shows only while hovered or dragged, so it builds only then; the zone stays live at rest.
     Loader {
-        anchors.centerIn: parent
+        x: root.lineX
         width: Theme.spacing.hairline
         height: parent.height
         active: zone.containsMouse || root.hot

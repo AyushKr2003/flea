@@ -13,7 +13,7 @@ pub const DEFAULTS: &str = r#"{
   "sort": { "key": "name", "reverse": false },
   "rememberSort": true,
   "folderSorts": {},
-  "dual": { "paths": [], "focus": 0 },
+  "dual": { "paths": [], "focus": 0, "split": 5000 },
   "foldersFirst": true,
   "groupByKind": false,
   "hidden": false,
@@ -110,7 +110,7 @@ pub const SORT_KEYS: [&str; 4] = ["name", "size", "date", "kind"];
 pub const MAX_LAST_TABS: usize = 9;
 pub const MAX_FOLDER_SORTS: usize = 500;
 
-pub const DUAL: &[(&str, Rule)] = &[("paths", Rule::Pair), ("focus", Rule::Count(0.0, 1.0))];
+pub const DUAL: &[(&str, Rule)] = &[("paths", Rule::Pair), ("focus", Rule::Count(0.0, 1.0)), ("split", Rule::Count(0.0, 10000.0))];
 
 pub const PLACES: &[(&str, Rule)] = &[
     ("favourites", Rule::Favourites),
@@ -315,6 +315,8 @@ mod tests {
         assert_eq!(d.get("folderSorts").and_then(Json::as_object).map(<[(String, Json)]>::len), Some(0));
         assert_eq!(d.get("dual").and_then(|s| s.get("paths")).and_then(Json::as_array).map(<[Json]>::len), Some(0));
         assert_eq!(d.get("dual").and_then(|s| s.get("focus")).and_then(Json::as_f64), Some(0.0));
+        // The left listing's share of the room right of the rail, in ten-thousandths: 5000 is the equal split 0.3.9 lays out.
+        assert_eq!(d.get("dual").and_then(|s| s.get("split")).and_then(Json::as_f64), Some(5000.0));
         // The shelf ships off, and its switch is what installs the plugin.
         assert_eq!(d.get("shelf").and_then(|s| s.get("enabled")).and_then(Json::as_bool), Some(false));
         assert_eq!(d.get("shelf").and_then(|s| s.get("bar")).and_then(Json::as_bool), Some(true));

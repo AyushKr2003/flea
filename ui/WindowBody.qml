@@ -26,6 +26,16 @@ Rectangle {
     property var host
     readonly property bool dualMode: ViewState.state.view === "dual"
     property int focusSide: (ViewState.state.dual || {}).focus === 1 ? 1 : 0
+    // dual.split: the left listing's share of the room right of the rail in ten-thousandths, 5000 the equal split.
+    readonly property int dualEqualSplit: 5000
+    readonly property real dualRoom: view.width - primaryPane.railInset - Theme.spacing.hairline
+    readonly property real dualSplit: typeof (ViewState.state.dual || {}).split === "number" ? ViewState.state.dual.split : view.dualEqualSplit
+    readonly property real dualShare: view.dualShareOf(view.dualSplit)
+    // Held between the narrowest listing and its mirror, equal when the room fits no two; the stored split is never rewritten by it.
+    function dualShareOf(split) {
+        var low = Theme.dualMinWidth / view.dualRoom
+        return low > 0.5 ? 0.5 : Math.min(1 - low, Math.max(low, split / 10000))
+    }
     // The run card, null until the first ask builds it for the window and keeps it.
     property var runCard: null
     function runLane() {
@@ -278,7 +288,7 @@ Rectangle {
     Flea.Pane {
         id: primaryPane
         anchors.left: parent.left
-        width: view.dualMode ? railInset + (view.width - railInset - Theme.spacing.hairline) / 2 : view.width
+        width: view.dualMode ? railInset + (view.width - railInset - Theme.spacing.hairline) * view.dualShare : view.width
         anchors.top: tabBar.bottom
         anchors.bottom: bar.top
         backend: backend
@@ -392,13 +402,59 @@ Rectangle {
         }
     }
 
-    Rectangle {
+    // The zone starts on the divider pixel and runs right over the second listing's row padding, so the first listing keeps its scroll lane whole.
+    Loader {
         x: primaryPane.width
         y: primaryPane.y
-        width: Theme.spacing.hairline
-        height: primaryPane.height
-        visible: view.dualMode
-        color: Theme.color.muted
+        active: view.dualMode
+        sourceComponent: Item {
+            id: divider
+            property bool dragging: false
+            property bool moved: false
+            property real startX: 0
+            property real dx: 0
+            readonly property real leftWidth: primaryPane.width - primaryPane.railInset
+            width: handle.width
+            height: primaryPane.height
+            function shareAt(travel) { return view.dualShareOf(10000 * (divider.leftWidth + travel) / view.dualRoom) }
+            function begin(mouse) {
+                divider.startX = handle.mapToItem(view, mouse.x, mouse.y).x
+                divider.dx = 0
+                divider.moved = false
+                divider.dragging = true
+            }
+            // A press that never travels is a click and writes nothing; the accent line follows the pointer, held to the clamp.
+            function move(mouse) {
+                if (!divider.dragging) return
+                var travel = handle.mapToItem(view, mouse.x, mouse.y).x - divider.startX
+                if (!divider.moved && Math.abs(travel) < 1) return
+                divider.moved = true
+                divider.dx = view.dualRoom * divider.shareAt(travel) - divider.leftWidth
+            }
+            // One leaf on release, so both listings re-lay from it in the same frame.
+            function end() {
+                if (!divider.dragging) return
+                if (divider.moved) ViewState.changeLeaf("dual", {split: Math.round(10000 * divider.shareAt(divider.dx))})
+                divider.dragging = false
+                divider.moved = false
+                divider.dx = 0
+            }
+            Rectangle {
+                width: Theme.spacing.hairline
+                height: parent.height
+                color: Theme.color.muted
+            }
+            Flea.ResizeHandle {
+                id: handle
+                height: parent.height
+                lineX: divider.dx
+                hot: divider.dragging
+                onPressed: function (mouse) { divider.begin(mouse) }
+                onMoved: function (mouse) { divider.move(mouse) }
+                onReleased: divider.end()
+                onDoubleClicked: ViewState.changeLeaf("dual", {split: view.dualEqualSplit})
+            }
+        }
     }
 
     Flea.StatusBar {
