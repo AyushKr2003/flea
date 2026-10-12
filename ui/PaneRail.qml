@@ -17,9 +17,9 @@ Item {
 
     property var pane: null
     // The window-long network host ui/WindowBody.qml builds lazily on the first open, handed to
-    // the rail below: the rail Loader unloads the Sidebar when the rail hides, but this service
-    // and these connections outlive it, so a mount, a bridge wait or a dialog answer that lands
-    // afterwards still opens, messages and clears its sticky line.
+    // the rail below: a docked rail's Loader unloads the Sidebar when the rail hides, an auto-hide one
+    // keeps it built with its DEVICES poll parked, and this service and these connections outlive both,
+    // so a mount, a bridge wait or a dialog answer that lands afterwards still opens, messages and clears its sticky line.
     property var service: null
     readonly property bool overlay: ViewState.railAutoHide
     readonly property bool hidden: root.overlay ? !root.revealed : ViewState.railHidden
@@ -137,6 +137,7 @@ Item {
             backend: root.pane.backend
             navigationPane: root.pane.railPane
             service: root.service
+            polling: !root.overlay || root.revealed
             focused: root.pane.railPane.focusView === Focus.RAIL
             trashActive: root.pane.railPane.trash.opened
             onOpened: function(path) { RailKeys.openFrom(root.pane.railPane, path, sidebar) }

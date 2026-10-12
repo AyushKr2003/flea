@@ -135,6 +135,7 @@ ui/List.qml 480
 tests/listprebuild.qml 412
 tests/poolpark.qml 409
 tests/touchpad-edge.qml 438
+tests/railmotion.qml 420
 ui/FastScrollHandler.qml 474
 ui/FigureService.qml 405
 ui/FlashView.qml 399
@@ -150,12 +151,12 @@ ui/PickerWindow.qml 797
 ui/Preview.qml 839
 ui/PreviewColumn.qml 586
 ui/PickerChrome.qml 429
-ui/DeviceMounts.qml 528
+ui/DeviceMounts.qml 530
 ui/PreviewMarkdown.qml 625
 ui/Row.qml 496
 ui/SettingsPanel.qml 547
 ui/SettingsRow.qml 409
-ui/Sidebar.qml 705
+ui/Sidebar.qml 708
 ui/StatusBar.qml 471
 ui/Theme.qml 465
 ui/TrashView.qml 468

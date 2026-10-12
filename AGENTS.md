@@ -185,9 +185,20 @@ phase and is not in this tree yet.
    nothing and times nothing, it reads the token seam over IPC from a Flea the operator started, and
    the four direct `qs` launches in `tests/ui.sh` assert a cursor, a selection, a scene-graph error
    and the retry helper's argv rather than a duration, so each is still the right launch for its job.
-   Preview and QtMultimedia are now in the tree and the laziness held: `ui/PreviewMedia.qml`
-   is the only file that imports QtMultimedia, reached through a `Loader` built by the first
-   press of play, because QtMultimedia costs 20 MB before it plays anything.
+   Preview and QtMultimedia are in the tree and instantiated lazily: `ui/PreviewMedia.qml` is the
+   only file that imports QtMultimedia, and `ui/PreviewPdf.qml` the only one that imports
+   QtQuick.Pdf, each reached through a `Loader` built by the first press of play or the first
+   PDF open. Compiling is a separate step: `ui/QuickLookWarm.qml` calls `Qt.createComponent`
+   for the unit of the cursor's file kind (Markdown, PDF, clip or audio, image, text) after a
+   1 s rest on such a file, so a rest on a clip or audio file resolves `import QtMultimedia` and
+   a rest on a PDF resolves `QtQuick.Pdf` with Quick Look never opened, which buys a first Space
+   that compiles nothing, and a window that never rests on one of those loads neither library.
+   Headless offscreen `qs` (`tests/quicklook-firstkind.sh`, five runs, a fresh process each),
+   PSS from `/proc/self/smaps_rollup` after the rest: a text file median 121,816 kB (range
+   89,788 to 127,020), a clip median 129,359 kB (range 68,826 to 147,303), the per-run clip
+   minus text difference median +5,309 kB (-20,962 to +25,487, three of five runs within 5,000
+   to 6,100). The spread is wide because the run shares the box, so this is a headless
+   estimate and not a field number.
    Issue #160: when every Vulkan GPU is a Gen7 or Gen8 Intel GPU (Ivy Bridge to Broadwell and Cherryview, served only by
    Mesa's hasvk), the launcher starts the shell on OpenGL instead and says so once on stderr naming
    hasvk and the fallback, with no retry marker; a CPU-type device such as lavapipe is not a GPU and does
@@ -9215,3 +9226,5 @@ The LocalSend lifecycle test moves one ceiling, re-derived with `wc -l`: `src/ba
 Open With's native menus case and the Permissions viewport follow their board: `tests/ui-menus.sh` expects the card to open on `Field` and Tab through `Applications`, `Always`, `Cancel` and `Open` back to `Field` (OpenWith.html rule 8, set by `82bc0976b`), and `permissions_viewport` in `tests/ui-permissions.sh` now waits for the new read-only `ipc windowSize` (the content the dialogs centre in) to equal hyprctl's size, while `permissions_point` names the control, its centre, hyprctl's size and the QML scene when a centre lies outside the viewport. `ui/Ipc.qml` takes two lines for `windowSize` and stays under its 984 ceiling in `tools/flea-file-budget`, and `tests/startup-units.txt` moves its `bytes` line from 1652296 to 1652557, the sum the probe's tool takes over them.
 
 The crumb device check lands a sample `devs` reply through `Messages.route` and reads its device with `ui/CrumbDrop.qml`'s own `destDev` binding, which moves `tests/js/drag.js` 481 to 493, re-derived with `wc -l`, while the link-walk bound test lives in the new `src/backend/extclass_tests.rs` so `src/backend/extclass.rs` stays under its cap.
+
+The auto-hide rail keeps its Sidebar built after the first reveal but parks the `ui/DeviceMounts.qml` lsblk poll while the rail is withdrawn (`polling` threads from `ui/PaneRail.qml` through `ui/Sidebar.qml`; the first listing, a mount or a release in flight keep it running, and a reveal lists at once), pinned by `tests/railmotion.qml`; it moves `ui/Sidebar.qml` 705 to 708, `ui/DeviceMounts.qml` 528 to 530 and `tests/railmotion.qml` (new, 420), each re-derived with `wc -l`, and the `bytes` line of `tests/startup-units.txt` from 1654071 to 1654534, the sum the probe takes over its units. The context-menu test seam reads `menu.opened`, so a menu in its close fade reads closed.

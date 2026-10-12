@@ -28,6 +28,7 @@ ShellRoot {
     property int keptCursor: -1
     property real xRe: 0
     property real listWidth: 0
+    property int polls: 0
 
     RailIpc { id: railIpc; report: root.check }
     function check(name, actual, expected) {
@@ -56,6 +57,8 @@ ShellRoot {
         if (!root.sidebarRef && root.host) root.sidebarRef = root.find(root.host, "Sidebar")
         return root.sidebarRef
     }
+    // Listings the Sidebar's DeviceMounts has started; the rail keeps polling only while revealed.
+    function devicePolls() { var d = root.find(root.sidebar(), "DeviceMounts"); return d ? d._listingsStarted : -1 }
     function mark(name) { root.marks[name] = Date.now() }
     function since(name) { return Date.now() - root.marks[name] }
     // The pointer: x 1 is inside the edge strip and over the rail's first pixel, x at 60% of the pane is on the listing.
@@ -245,8 +248,25 @@ ShellRoot {
             check("the rail's width never changes", shape.widths, 1)
             check("and every rail row keeps its y through the hide", root.distinct(root.samples.map(function (s) { return s.sig })), 1)
             check("railWidth reads 0 hidden", pane.sidebarWidth, 0)
+            root.polls = root.devicePolls()
+            check("the built Sidebar's DeviceMounts listed before it was withdrawn", root.polls >= 1, true)
+            root.mark("parked")
             return true
         },
+        // The built Sidebar stays, but its DEVICES poll (5000 ms) is parked while the rail is withdrawn, and a reveal lists at once.
+        function () {
+            if (since("parked") < 5600) return false
+            check("a withdrawn rail lists no devices over a full poll interval", root.devicePolls() - root.polls, 0)
+            root.edgeIn()
+            return true
+        },
+        function () {
+            if (!until("the reveal that polls", root.shown())) return false
+            check("the reveal lists devices at once", root.devicePolls() - root.polls >= 1, true)
+            root.edgeOut()
+            return true
+        },
+        function () { return until("the hide after the poll check", root.gone()) },
         // Re-entry mid-hide: show, leave, wait for the hide to start, come back.
         function () { root.edgeIn(); return true },
         function () {

@@ -29,7 +29,7 @@ QtObject {
 
     function state() {
         var menu = root.pane.contextMenu()
-        return JSON.stringify({pane: String(root.pane), opened: menu.visible, entries: menu.entries, cursor: menu.cursor,
+        return JSON.stringify({pane: String(root.pane), opened: menu.opened, entries: menu.entries, cursor: menu.cursor,
             snapshotReady: root.pane.menuActions.ready, snapshotId: root.pane.menuActions.requestId,
             shebangAsked: root.pane.shebangAsked, shebangHas: root.pane.rowHasShebang,
             shebangId: root.pane.shebangId, shebangReply: root.shebangReply, shebangLastReply: root.shebangLastReply,
