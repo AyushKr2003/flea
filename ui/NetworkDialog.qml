@@ -39,8 +39,7 @@ Item {
 
     // A plain overlay, not a QQC Popup, the same call ui/ContextMenu.qml already made.
     anchors.fill: parent
-    // opened flips instantly (open()/close() above), so a caller reading it never races the close
-    // fade; visible only stays true a little longer, until the fade ends, and a closed dialog takes no input.
+    // opened flips at once so no caller races the close fade; visible holds until the fade ends, and a closed dialog takes no input.
     visible: root.opened || root.opacity > 0
     enabled: root.opened
     opacity: 0
@@ -204,8 +203,8 @@ Item {
         return root.retrying ? "Retry" : "Connect and save"
     }
     function formMetrics() { return Math.round(card.padding) + "|" + Math.round(body.spacing) }
-    // "contentY|contentHeight|height" of the scrolling body, so a test sees the clamp and the scroll.
-    function bodyScroll() { return Math.round(body.contentY) + "|" + Math.round(body.contentHeight) + "|" + Math.round(body.height) }
+    // "contentY|contentHeight|height" of the scroller between the pinned title and buttons, so a test sees the clamp and the scroll.
+    function bodyScroll() { return Math.round(body.contentY) + "|" + Math.round(body.contentHeight) + "|" + Math.round(body.scrollItem.height) }
     function formMetricTargets() { return Style.space(16) + "|" + Style.space(12) }
 
     // Dialogs rule 6: the title says what you are doing, so it survives a chip swap; the two entry

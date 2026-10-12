@@ -107,6 +107,8 @@ OPENER
 
         cardsize_focus "resized-$index"
         cardsize_network
+        # A fresh open rises into place for Motion.durMs.open, so the resting chip row is read after it.
+        settle
         base=$(ipc networkChipCentre SMB)
         [[ "$base" =~ ^[0-9]+\ [0-9]+$ ]] || fail "cardsizes: SMB chip has no native centre"
         for protocol in SFTP FTPS WebDAV NFS SMB; do
