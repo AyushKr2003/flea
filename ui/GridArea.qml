@@ -300,11 +300,16 @@ GridView {
     function hoverAt(x, y) {
         root.hoveredIndex = root.tileAt(x + root.contentX, y + root.contentY)
     }
+    // A Flickable puts its handlers in the content item, so the probe's point is read from the scene, which a scroll leaves in place.
+    function hoverScene(scene) {
+        var p = root.mapFromItem(null, scene.x, scene.y)
+        root.hoverAt(p.x, p.y)
+    }
     HoverHandler {
         id: hoverProbe
         enabled: root.visible && !root.hiddenHeld
-        onHoveredChanged: { if (!hovered) root.hoveredIndex = -1; else root.hoverAt(point.position.x, point.position.y) }
-        onPointChanged: if (hovered) root.hoverAt(point.position.x, point.position.y)
+        onHoveredChanged: { if (!hovered) root.hoveredIndex = -1; else root.hoverScene(point.scenePosition) }
+        onPointChanged: if (hovered) root.hoverScene(point.scenePosition)
     }
     // One drop area for every folder tile: a per-tile DropArea costs a delegate each in the landing turn.
     property var dropTile: null
@@ -412,7 +417,7 @@ GridView {
         if (!root.visible || root.hiddenHeld)
             return
         // A scroll under a resting pointer moves the hovered tile without a point change.
-        if (hoverProbe.hovered) root.hoverAt(hoverProbe.point.position.x, hoverProbe.point.position.y)
+        if (hoverProbe.hovered) root.hoverScene(hoverProbe.point.scenePosition)
         root.menu.close()
         if (DirSizes.hasPending(root.pane.dirSizeState)) {
             root.pane.backend.dirsizecancel()

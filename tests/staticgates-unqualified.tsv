@@ -297,7 +297,7 @@ ui/GridArea.qml	279	dragSession	Declared QML id; component context access is val
 ui/GridArea.qml	243	root	Declared QML id; component context access is valid at runtime.
 ui/GridArea.qml	289	dragSession	Declared QML id; component context access is valid at runtime.
 ui/GridArea.qml	280	root	Declared QML id; component context access is valid at runtime.
-ui/GridArea.qml	384	root	Declared QML id; component context access is valid at runtime.
+ui/GridArea.qml	389	root	Declared QML id; component context access is valid at runtime.
 ui/GridTile.qml	159	nameLabel	Declared QML id; component context access is valid at runtime.
 ui/GridTile.qml	159	nameLabel	Declared QML id; component context access is valid at runtime.
 ui/GridTile.qml	159	nameLabel	Declared QML id; component context access is valid at runtime.
@@ -2440,7 +2440,7 @@ ui/GridArea.qml	279	dragSession	Declared QML id; component context access is val
 ui/GridArea.qml	243	root	Declared QML id; component context access is valid at runtime.
 ui/GridArea.qml	289	dragSession	Declared QML id; component context access is valid at runtime.
 ui/GridArea.qml	280	root	Declared QML id; component context access is valid at runtime.
-ui/GridArea.qml	384	root	Declared QML id; component context access is valid at runtime.
+ui/GridArea.qml	389	root	Declared QML id; component context access is valid at runtime.
 ui/GridTile.qml	159	nameLabel	Declared QML id; component context access is valid at runtime.
 ui/GridTile.qml	159	nameLabel	Declared QML id; component context access is valid at runtime.
 ui/GridTile.qml	159	nameLabel	Declared QML id; component context access is valid at runtime.
