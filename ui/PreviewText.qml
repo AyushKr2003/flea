@@ -30,7 +30,7 @@ Item {
     // The row count for a table, the line count for code and text.
     function countText() {
         if (!root.csv) return Markdown.countLine(lines.total)
-        return root.body !== null ? Csv.rowCount(Csv.dataRows(root.body.total)) : ""
+        return root.body !== null ? Csv.rowCount(Csv.dataRows(root.body.records)) : ""
     }
 
     readonly property bool engine: root.backend !== null && typeof root.backend.askCode === "function"

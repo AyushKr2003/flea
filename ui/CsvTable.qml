@@ -51,15 +51,16 @@ Item {
     // "" until the first screen is answered, then styled, plain, binary, large or failed.
     property string answer: ""
     property int total: 0
-    // The held lines by 1-based number, each {t: text}; stamp counts changes to it.
+    property int records: 0
+    // The held physical lines, each {t: text}, with record: ordinal at every reply start; stamp counts changes to it.
     property var held: ({})
     property int stamp: 0
     // The token of the ask in flight, 0 when none: an answer for any other token is dropped.
     property int token: 0
-    // The last line of the first ask, so the first screen is known whole before the table is drawn.
+    // The last record of the first screen, so the first screen is known whole before the table is drawn.
     property int firstTo: 0
     // The table as held: the header cells, the body rows and the column count.
-    property var table: ({ header: null, rows: [], byLine: ({}), cols: 0, open: [] })
+    property var table: ({ header: null, rows: [], byLine: ({}), byRecord: ({}), cols: 0, open: [] })
     // Widths and alignments are measured on the first screen and only extended after it, so no column moves under the reader.
     property bool frozen: false
     property var heads: []
@@ -67,19 +68,21 @@ Item {
     property var rights: []
 
     readonly property bool settled: root.answer === "styled" || root.answer === "plain"
-    readonly property int shown: root.limit > 0 ? Math.min(root.total, root.limit) : root.total
+    readonly property int shown: root.limit > 0 ? Math.min(root.records, root.limit) : root.records
     readonly property bool firstScreen: root.settled && root.covered(1, Math.min(root.shown, root.firstTo))
         && Csv.ready(root.table, Math.min(root.shown, root.firstTo))
     visible: root.firstScreen
     // The scroll view the wheel, the bars and the Quick Look reader read.
     readonly property var list: view
-    // One row per body line, so the grid's height and scroll position are the file's, not what is held.
+    // One delegate per data record; continuation lines never take a row or a number.
     readonly property int bodyRows: Csv.dataRows(root.shown)
     // The plain text of the lines drawn, for the readers that check what is on screen.
     readonly property var lines: {
         root.stamp
         var out = []
-        for (var i = 1; i <= root.shown; i++)
+        var tail = root.table.byRecord[root.shown]
+        var last = root.limit > 0 && root.shown > 1 ? (tail ? tail.line + tail.span - 1 : 0) : root.total
+        for (var i = 1; i <= last; i++)
             out.push(root.held[i] ? root.held[i].t : "")
         return out
     }
@@ -119,12 +122,12 @@ Item {
     }
 
     // Re-reads the held table, and measures each column it has not measured yet; nothing is measured again once the first screen is whole.
-    function refresh() {
-        var t = Csv.table(root.held, root.total, root.delim)
+    function refresh(parsed) {
+        var t = parsed || Csv.table(root.held, root.total, root.delim)
         root.table = t
         if (t.header === null || (root.frozen && root.widths.length >= t.cols))
             return
-        var measured = root.frozen ? t.rows : t.rows.filter(function (rec) { return rec.line <= root.firstTo })
+        var measured = root.frozen ? t.rows : t.rows.filter(function (rec) { return rec.record <= root.firstTo })
         var grid = [t.header].concat(measured.map(function (rec) { return rec.cells }))
         var align = Csv.numericColumns(grid, t.cols)
         var heads = root.frozen ? root.heads.slice() : []
@@ -142,22 +145,22 @@ Item {
         root.rights = rights
     }
 
-    // The lines the view needs held: those in it plus the margin, never past the file or the limit. Line 1 is the header, held first.
+    // The record ordinals the view needs, with the margin, file and limit bounds; ordinal 1 is the header.
     function needed() {
         var rows = Math.max(1, Math.ceil(view.height / Math.max(1, root.rowHeight)))
-        // ListView rounds fractional row heights, so its delegate index is the physical line offset even on a far jump.
+        // ListView rounds fractional row heights, so its delegate index names the record even on a far jump.
         var top = view.contentHeight > 0 ? Math.max(0, view.indexAt(0, view.contentY + 1)) + 2 : 2
         var to = top + rows * (1 + root.margin) - 1
         if (root.limit > 0)
             to = Math.min(to, root.limit)
         if (root.settled)
-            to = Math.min(to, root.total)
+            to = Math.min(to, root.records)
         var from = root.rowAt(1) ? Math.max(2, top - rows * root.margin) : 1
         return { from: from, to: to }
     }
 
     function rowAt(n) {
-        return root.stamp >= 0 ? root.held[n] : undefined
+        return root.stamp >= 0 ? (n === 1 ? root.table.header : root.table.byRecord[n]) : undefined
     }
 
     function covered(from, to) {
@@ -171,6 +174,7 @@ Item {
         root.held = {}
         root.stamp += 1
         root.total = 0
+        root.records = 0
         root.answer = ""
         root.token = 0
         root.firstTo = 0
@@ -178,7 +182,7 @@ Item {
         root.heads = []
         root.widths = []
         root.rights = []
-        root.table = { header: null, rows: [], byLine: ({}), cols: 0, open: [] }
+        root.table = { header: null, rows: [], byLine: ({}), byRecord: ({}), cols: 0, open: [] }
     }
 
     // Starts a view of a new file or text; the first ask waits for the end of the turn so one change of several properties asks once.
@@ -200,9 +204,11 @@ Item {
             held[i + 1] = { t: rows[i] }
         root.held = held
         root.total = rows.length
+        var parsed = Csv.table(held, root.total, root.delim)
+        root.records = parsed.rows.length + (parsed.header !== null ? 1 : 0)
         root.answer = "plain"
         root.firstTo = root.needed().to
-        root.refresh()
+        root.refresh(parsed)
         root.stamp += 1
     }
 
@@ -230,7 +236,7 @@ Item {
         if (root.firstTo === 0)
             root.firstTo = want.to
         // raw sends the lines plain: a table is never coloured as code.
-        var source = root.fromText ? { text: root.text, name: root.path.split("/").pop(), lang: "", raw: true, csv: root.delim } : { path: root.path, raw: true, csv: root.delim }
+        var source = root.fromText ? { text: root.text, name: root.path.split("/").pop(), lang: "", raw: true, csv: root.delim, record: from } : { path: root.path, raw: true, csv: root.delim, record: from }
         root.token = root.backend.askCode(root.slot, source, from, Math.min(root.lineCap, want.to - from + 1))
     }
 
@@ -241,9 +247,12 @@ Item {
         if (!root.settled || message.state === "binary" || message.state === "large" || message.state === "failed")
             root.answer = message.state
         root.total = message.total || 0
+        root.records = message.records || 0
         var rows = message.lines || []
         for (var i = 0; i < rows.length; i++)
             root.held[message.first + i] = { t: rows[i].length > 0 ? rows[i][1] : "" }
+        if (rows.length > 0)
+            root.held[message.first].record = message.firstRecord
         root.refresh()
         root.stamp += 1
         // Binary, large and failed are the file's whole answer: nothing more is asked of it until the view starts a new one.
@@ -326,8 +335,8 @@ Item {
         delegate: Item {
             id: row
             required property int index
-            // A line that starts no record, or is not held yet, draws nothing.
-            readonly property var rec: root.table.byLine[index + 2] || null
+            // A held record occupies exactly one delegate at its ordinal.
+            readonly property var rec: root.table.byRecord[index + 2] || null
             width: root.gridWidth
             height: root.rowHeight
 
@@ -336,7 +345,7 @@ Item {
                 x: 0
                 width: root.numberWidth - Theme.spacing.rowPaddingX
                 y: root.bodyPadY
-                text: row.rec !== null ? String(Csv.rowNumber(row.rec.line)) : ""
+                text: row.rec !== null ? String(Csv.rowNumber(row.rec.record)) : ""
                 horizontalAlignment: Text.AlignRight
                 color: Theme.color.muted
                 font.family: Theme.font.family

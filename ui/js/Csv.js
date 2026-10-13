@@ -16,7 +16,7 @@ function delimiter(path) {
     return ext === "csv" ? "," : ext === "tsv" ? "\t" : ""
 }
 
-// The records of a run of physical lines that starts at a record's first line; each is {cells, span, open}.
+// Records of whole lines, each {cells, span, open}. Sample input: ["h", "1,\"two", "lines\""] with "," gives two records.
 function records(lines, delim) {
     var out = []
     var at = 0
@@ -110,7 +110,7 @@ function numericColumns(rows, columns) {
     return out
 }
 
-// Each held block is a whole-record raw reply; held {1:{t:"h"},5:{t:"5"}} keeps the independently aligned row at 5.
+// Each whole-record block carries its starting ordinal. Sample input: {1:{t:"h"},5:{t:"5",record:3}} keeps record 3 at line 5.
 function table(held, total, delim) {
     var last = 0
     for (var k in held)
@@ -127,30 +127,36 @@ function table(held, total, delim) {
         var lines = []
         while (i <= last && held[i])
             lines.push(held[i++].t)
+        if (start !== 1 && held[start].record === undefined)
+            continue
         var at = start
+        var ordinal = held[start].record || 1
         var recs = records(lines, delim)
         for (var r = 0; r < recs.length; r++) {
             if (recs[r].open && start + lines.length - 1 < total) {
-                open.push({ line: at, to: start + lines.length - 1 })
+                open.push({ line: at, to: start + lines.length - 1, record: ordinal })
                 break
             }
-            all.push({ line: at, cells: recs[r].cells })
+            all.push({ line: at, record: ordinal++, span: recs[r].span, cells: recs[r].cells })
             at += recs[r].span
         }
     }
     if (all.length === 0 || all[0].line !== 1)
-        return { header: null, rows: [], byLine: {}, cols: 0, open: open }
+        return { header: null, rows: [], byLine: {}, byRecord: {}, cols: 0, open: open }
     var cols = columnCount(all.map(function (rec) { return rec.cells }))
-    var rows = all.slice(1).map(function (rec) { return { line: rec.line, cells: padded(rec.cells, cols) } })
+    var rows = all.slice(1).map(function (rec) { return { line: rec.line, record: rec.record, span: rec.span, cells: padded(rec.cells, cols) } })
     var byLine = {}
-    for (var j = 0; j < rows.length; j++)
+    var byRecord = {}
+    for (var j = 0; j < rows.length; j++) {
         byLine[rows[j].line] = rows[j]
-    return { header: padded(all[0].cells, cols), rows: rows, byLine: byLine, cols: cols, open: open }
+        byRecord[rows[j].record] = rows[j]
+    }
+    return { header: padded(all[0].cells, cols), rows: rows, byLine: byLine, byRecord: byRecord, cols: cols, open: open }
 }
 
-// First-screen readiness rejects any unfinished record that overlaps its lines; whole aligned replies leave open empty.
+// First-screen readiness rejects any unfinished record that overlaps its ordinals; whole aligned replies leave open empty.
 function ready(t, to) {
-    return t.open.every(function (rec) { return rec.line > to })
+    return t.open.every(function (rec) { return rec.record > to })
 }
 
 // Match the backend's raw lines: "a,b\n1,2\n" has two lines, and a trailing CR is removed from each.
@@ -195,7 +201,7 @@ function grid(widths, rights, numberWidth, pad) {
     return out
 }
 
-// The lines after the header line, which is what the count line and the row numbers both use. Sample input: dataRows(25) gives 24, and dataRows(0) gives 0.
+// Records after the header, used by the model and count line. Sample input: dataRows(25) gives 24, and dataRows(0) gives 0.
 function dataRows(total) {
     return Math.max(0, total - 1)
 }
@@ -205,7 +211,7 @@ function rowCount(n) {
     return n === 1 ? ROW_ONE : Format.fill(ROW_MANY, Format.count(n))
 }
 
-// The number a row shows: its first line less the header line. Sample input: rowNumber(2) gives 1.
-function rowNumber(line) {
-    return line - 1
+// The data row number is its record ordinal less the header. Sample input: rowNumber(2) gives 1.
+function rowNumber(record) {
+    return record - 1
 }

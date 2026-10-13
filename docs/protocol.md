@@ -1231,7 +1231,7 @@ or that cannot be read, answers `hasShebang` false rather than an error, so the 
 
 ### code
 
-`{"c":"code","token":<uint>,"slot":"<string>","path":"<string>"|"text":"<string>","name":"<string>","lang":"<string>","first":<uint>,"count":<uint>,"raw":<bool>,"csv":"<delimiter>"}`
+`{"c":"code","token":<uint>,"slot":"<string>","path":"<string>"|"text":"<string>","name":"<string>","lang":"<string>","first":<uint>,"count":<uint>,"raw":<bool>,"csv":"<delimiter>","record":<uint>}`
 
 Example: `{"c":"code","token":4,"slot":"look","path":"/home/gm/a.rs","first":40,"count":20}` and
 `{"c":"code","token":5,"slot":"fence:2","text":"fn main() {}","name":"x.rs","lang":"","first":1,"count":10}`
@@ -1255,6 +1255,13 @@ asked end through its record's last line, or EOF for an unterminated quote. Thus
 contains whole records and can exceed the 400-line request cap, bounded by the 1 MiB size
 gate. No second file read or additional stat is made. An absent or invalid `csv`, or one
 without `raw: true`, keeps the ordinary line window.
+
+A raw `csv` ask may also carry `record`, a 1-based record ordinal with the header at 1,
+instead of locating its window by the physical `first` line. The backend locates that
+record in the same scan and asks `count` physical lines from its start, extending the
+end through the last record as above. This lets a table jump directly by delegate index
+without fetching a prefix or receiving a file-wide index. `record` is ignored without a
+valid raw `csv` delimiter; zero is clamped to 1. A record beyond EOF returns no lines.
 
 ### pdfcopy
 
@@ -1879,7 +1886,7 @@ window is closed again, the same rule `meta` follows.
 
 ### code
 
-`{"t":"code","token":<uint>,"slot":"<string>","state":"<string>","first":<uint>,"total":<uint>,"lines":[[<role>,"<string>",...],...]}`
+`{"t":"code","token":<uint>,"slot":"<string>","state":"<string>","first":<uint>,"total":<uint>,"lines":[[<role>,"<string>",...],...][,"records":<uint>,"firstRecord":<uint>]}`
 
 Example: `{"t":"code","token":4,"slot":"look","state":"styled","first":1,"total":2,"lines":[[5,"fn",0," main"],[]]}`
 
@@ -1892,7 +1899,12 @@ line returned: normally the asked line, or the record start for a raw `csv` tabl
 `total` is the line count of the whole text. Each entry of `lines` is one line as a flat run list,
 a role from 0 to 6 then the run's text, in order, an empty line being an empty list; the lines
 returned are those asked for that exist, extended to whole records for a raw `csv` table
-request. `total` remains the physical-line count in either case. The roles are the foreground (0) and bat's ANSI colours
+request. `total` remains the physical-line count in either case. A plain raw `csv` reply
+also carries `records`, the whole file's record count including its header, and `firstRecord`,
+the ordinal of the first returned record. An unterminated quote at EOF still counts as one
+record. An empty file has zero records; an empty reply beyond EOF has the requested record
+ordinal, or the next ordinal after the file for a physical-line ask. Every other reader's
+reply omits these two fields. The roles are the foreground (0) and bat's ANSI colours
 31 to 36 in order: red, green, yellow, blue, magenta, cyan. A one-line `.json` file is formatted
 with `jq` first, so its `total` and lines are those of the formatted text.
 

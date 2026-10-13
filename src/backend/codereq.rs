@@ -36,6 +36,7 @@ pub struct Ask {
     count: usize,
     raw: bool,
     csv: Option<u8>,
+    record: Option<usize>,
 }
 
 enum Source {
@@ -66,6 +67,7 @@ impl Ask {
             count: field_usize(line, "count").unwrap_or(MAX_COUNT).clamp(1, MAX_COUNT),
             raw: field_bool(line, "raw"),
             csv: csvrange::delimiter(line),
+            record: field_usize(line, "record").map(|n| n.max(1)),
         }
     }
 
@@ -252,8 +254,13 @@ fn is_json(path: &str) -> bool {
 }
 
 fn plain(ask: &Ask, data: &[u8]) -> String {
-    let (first, count) = ask.csv.map_or((ask.first, ask.count), |delim| csvrange::align(data, ask.first, ask.count, delim));
-    reply_at(ask, "plain", first, line_count(data), &plain_lines(data, first, count))
+    if let Some(delim) = ask.csv {
+        let range = csvrange::align(data, ask.first, ask.count, delim, ask.record);
+        let mut out = reply_at(ask, "plain", range.first, range.total, &plain_lines(data, range.first, range.count));
+        out.insert_str(out.len() - 1, &format!(r#","records":{},"firstRecord":{}"#, range.records, range.first_record));
+        return out;
+    }
+    reply_at(ask, "plain", ask.first, line_count(data), &plain_lines(data, ask.first, ask.count))
 }
 
 // The asked lines as they are, one foreground run each; a blank line has no run.

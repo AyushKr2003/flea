@@ -56,7 +56,7 @@ function run(check) {
     check("the header row is not tested", Csv.numericColumns([["files"], ["12"]], 1).join(" "), "true")
     check("one word anywhere in a column left-aligns it", Csv.numericColumns([["1"], ["2"], ["x"]], 1).join(" "), "false")
 
-    check("a 25 line file has 24 data rows", Csv.dataRows(25), 24)
+    check("25 records including the header have 24 data rows", Csv.dataRows(25), 24)
     check("an empty file has no data rows", Csv.dataRows(0), 0)
     var held = { 1: { t: "fixture,files" }, 2: { t: "photos,1000" }, 3: { t: "music" } }
     var t = Csv.table(held, 3, ",")
@@ -67,19 +67,29 @@ function run(check) {
     check("a body row is found by its first line", t.byLine[3].cells[0], "music")
     check("a line that starts no record is absent", t.byLine[4], undefined)
     check("a quoted newline shows on one line", Csv.oneLine("two\nlines"), "two lines")
+    var dense = Csv.table({ 1: { t: "id,note", record: 1 }, 2: { t: '1,"two' }, 3: { t: 'lines"' }, 4: { t: "2,last" } }, 4, ",")
+    check("a quoted continuation takes no extra record ordinal", dense.rows.map(function (r) { return r.record }).join(" "), "2 3")
+    check("record 3 is found at physical line 4", dense.byRecord[3].line, 4)
+    check("record ordinals number rows without gaps", dense.rows.map(function (r) { return Csv.rowNumber(r.record) }).join(" "), "1 2")
+    var distant = Csv.table({ 1: { t: "id,note", record: 1 }, 801: { t: '450,"middle', record: 451 }, 802: { t: 'end"' }, 803: { t: "451,last" } }, 900, ",")
+    check("a distant aligned block starts at the backend ordinal", distant.byRecord[451].line, 801)
+    check("a distant continuation takes no delegate ordinal", distant.byRecord[452].cells[0], "451")
+    check("physical gaps are not fabricated into record rows", distant.rows.length, 2)
+    check("an unknown gap ordinal is not numbered by physical line", Csv.table({ 1: { t: "h" }, 5: { t: "v" } }, 5, ",").rows.length, 0)
+
     check("no header until line 1 is held", Csv.table({ 2: { t: "1,2" } }, 2, ",").header, null)
     check("no body rows are keyed without a header", Object.keys(Csv.table({ 2: { t: "1,2" } }, 2, ",").byLine).length, 0)
     check("a block that ends mid-record leaves the open record out", Csv.table({ 1: { t: "a" }, 2: { t: "\"b" } }, 9, ",").rows.length, 0)
     check("a block that ends the file keeps its open record", Csv.table({ 1: { t: "a" }, 2: { t: "\"b" } }, 2, ",").rows.length, 1)
-    check("record-aligned held blocks parse independently", Csv.table({ 1: { t: "a" }, 2: { t: "1" }, 5: { t: "5" }, 6: { t: "6" } }, 6, ",").rows.map(function (r) { return r.line }).join(" "), "2 5 6")
-    var aligned = { 1: { t: "id,note" }, 2: { t: "1,ok" }, 401: { t: '2,"one' }, 402: { t: 'line two",9' }, 403: { t: "3,plain" } }
+    check("record-aligned held blocks parse independently", Csv.table({ 1: { t: "a" }, 2: { t: "1" }, 5: { t: "5", record: 5 }, 6: { t: "6" } }, 6, ",").rows.map(function (r) { return r.line }).join(" "), "2 5 6")
+    var aligned = { 1: { t: "id,note" }, 2: { t: "1,ok" }, 401: { t: '2,"one', record: 400 }, 402: { t: 'line two",9' }, 403: { t: "3,plain" } }
     var t = Csv.table(aligned, 900, ",")
     check("an aligned multiline block keeps its record start", t.byLine[401].cells[1], "one\nline two")
     check("an aligned quoted continuation starts no row", t.byLine[402], undefined)
     check("a complete row after the aligned record is retained", t.byLine[403].cells[0], "3")
     check("a complete first screen is ready", Csv.ready(t, 2), true)
     var pending = Csv.table({ 1: { t: "id,note" }, 2: { t: '1,"open' }, 3: { t: "still" } }, 9, ",")
-    check("an incomplete record reports its line range", JSON.stringify(pending.open), '[{"line":2,"to":3}]')
+    check("an incomplete record reports its line range", JSON.stringify(pending.open), '[{"line":2,"to":3,"record":2}]')
     check("a dropped open first-screen record is not ready", Csv.ready(pending, 3), false)
     check("a completed screen before the open record stays ready", Csv.ready(pending, 1), true)
     var eof = Csv.table({ 1: { t: "a" }, 2: { t: '"open' } }, 2, ",")
@@ -108,5 +118,5 @@ function run(check) {
     check("24 rows reads as 24 rows", Csv.rowCount(24), "24 rows")
     check("no row reads as 0 rows", Csv.rowCount(0), "0 rows")
     check("counts over a thousand are grouped", Csv.rowCount(1024), "1,024 rows")
-    check("the row number is the line number less the header", Csv.rowNumber(2), 1)
+    check("the row number is the record ordinal less the header", Csv.rowNumber(2), 1)
 }

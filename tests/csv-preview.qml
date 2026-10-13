@@ -3,6 +3,7 @@
 import QtQuick
 import Quickshell
 import "flea" as Flea
+import "CsvRecords.js" as RecordChecks
 
 // tests/csv-preview.sh's harness: CSV and TSV as a table in the preview column and in Quick Look, over the real backend. Every ask passes a spy first, so the raw flag is read off what the tables send.
 ShellRoot {
@@ -336,7 +337,7 @@ ShellRoot {
             var t = root.qlTable()
             root.log("MEASURE malformed.csv bytes=1MiB asks=" + (root.asks.length - root.measureAsks) + " first_screen_ms=" + (Date.now() - root.measureStart))
             root.check("malformed: one request draws the first screen", root.asks.length - root.measureAsks, 1)
-            root.check("malformed: one aligned reply retains the record through EOF", t.covered(1, t.total), true)
+            root.check("malformed: one aligned reply retains the record through EOF", Object.keys(t.held).length === t.total, true)
             var rec = t.table.byLine[2]
             root.check("malformed: the open quote at EOF is drawn", rec !== undefined && root.inView(t, rec.cells[1].split("\n").join(" ")), true)
         },
@@ -350,13 +351,16 @@ ShellRoot {
             root.check("quoted: the cell keeps its newline", t.table.byLine[2].cells[1], "two\nlines")
             root.check("quoted: the newline draws as a space", root.drawn(t, "two lines").length > 0, true)
             root.check("quoted: the continuation line starts no row", t.table.byLine[3], undefined)
+            root.check("quoted: the bar counts two records", quick.countText(), "2 rows")
+            root.check("quoted: two model rows", t.bodyRows, 2)
+            RecordChecks.screen(root, t, "quoted", true)
         },
         function () {
             quick.path = root.fixture + "/jump.csv"
             root.wait("jump: first screen", function () { return root.firstScreenOf(root.qlTable()) })
         },
         function () {
-            root.qlTable().list.positionViewAtIndex(678, ListView.Beginning)
+            root.qlTable().list.positionViewAtIndex(399, ListView.Beginning)
             root.wait("jump: the wanted window held", function () { return root.qlTable().held[703] !== undefined })
         },
         function () {
@@ -422,8 +426,8 @@ ShellRoot {
         function () {
             root.check("every ask in the run was raw with its table delimiter", root.asks.length > 0 && root.asks.every(function (a) { return a.source.raw === true && (a.source.csv === "," || a.source.csv === "\t") }), true)
             var columns = root.asks.filter(function (a) { return a.slot === "column" })
-            root.check("column: one ask per file", columns.length, 5)
-            root.check("column: asks stay inside its screen", columns.every(function (a) { return a.first === 1 && a.count <= a.rows + 1 }), true)
+            root.check("column: fills records through the open first-screen record", columns.length, 6)
+            root.check("column: asks stay inside its screen", columns.every(function (a) { return a.first >= 1 && a.first + a.count - 1 <= a.rows + 1 }), true)
             var look = root.asks.filter(function (a) { return a.slot === "look" })
             root.check("quicklook: asks stay in view plus one screen on each side", look.every(function (a) {
                 return a.first >= Math.max(1, a.top - a.rows) && a.first + a.count - 1 <= a.top + 2 * a.rows - 1 && a.count <= 400
@@ -431,7 +435,7 @@ ShellRoot {
             root.check("frames: a table was sampled", root.tableFrames > 0, true)
             root.check("frames: no partial first screen was drawn", root.partialFrames, 0)
         }
-    ]
+    ].concat(RecordChecks.steps(root, column, quick, realBackend))
 
     Timer {
         id: ticker

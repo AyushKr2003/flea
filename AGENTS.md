@@ -2656,6 +2656,8 @@ record clears when the edit leaves that row or the tile is reused, so a pooled t
 
 ## File budget
 
+`tests/csv-preview.qml` is re-derived from 516 to 520 lines with `wc -l` for the record-ordinal regressions and the two-row quoted fixture checks.
+
 xw6 adversarial fixes retain the tab handoff detail and exact payload paths. Each lift
 captures a stable tab identity and its source pane until acknowledgment or the existing
 15-second deadline. Accepted lifts wait for pane settlement beyond that deadline, and source

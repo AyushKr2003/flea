@@ -13,31 +13,50 @@ pub fn delimiter(request: &str) -> Option<u8> {
     }
 }
 
-// Expand the physical-line window to whole RFC 4180 records, scanning the bytes the code request already holds.
-// Sample input: align(b"id,note\n1,\"two\nlines\",9\n2,last\n", 3, 1, b',') returns (2, 2).
-pub fn align(data: &[u8], first: usize, count: usize, delim: u8) -> (usize, usize) {
-    let wanted_end = first.saturating_add(count.saturating_sub(1));
+pub struct Range {
+    pub first: usize,
+    pub count: usize,
+    pub total: usize,
+    pub records: usize,
+    pub first_record: usize,
+}
+
+// Expand the physical-line window to whole RFC 4180 records and count their ordinals in the same scan of the held bytes.
+// Sample input: align(b"id,note\n1,\"two\nlines\",9\n2,last\n", 3, 1, b',', None) has first 2, count 2, records 3 and first_record 2.
+pub fn align(data: &[u8], first: usize, count: usize, delim: u8, record: Option<usize>) -> Range {
+    let mut wanted_end = first.saturating_add(count.saturating_sub(1));
     let mut line = 1;
     let mut record_first = 1;
-    let mut aligned_first = None;
+    let mut records = 0;
+    let mut start = None;
+    let mut end = None;
     let mut quoted = false;
     let mut field_start = true;
     let mut at = 0;
-    while at < data.len() {
-        let byte = data[at];
-        if byte == b'\n' {
-            if !quoted {
-                if aligned_first.is_none() && line >= first {
-                    aligned_first = Some(record_first);
+    loop {
+        let eof = at == data.len();
+        let byte = data.get(at).copied().unwrap_or(b'\n');
+        let last = line - usize::from(eof && (data.is_empty() || data.ends_with(b"\n")));
+        if eof && record_first > last {
+            break;
+        }
+        if eof || (byte == b'\n' && !quoted) {
+            records += 1;
+            let wanted = record.map_or(last >= first, |ordinal| records == ordinal);
+            if start.is_none() && wanted {
+                start = Some((record_first, records));
+                if record.is_some() {
+                    wanted_end = record_first.saturating_add(count.saturating_sub(1));
                 }
-                if line >= wanted_end {
-                    let start = aligned_first.unwrap_or(first);
-                    return (start, line - start + 1);
-                }
-                record_first = line + 1;
-                field_start = true;
             }
-            line += 1;
+            if start.is_some() && end.is_none() && (last >= wanted_end || eof) {
+                end = Some(last);
+            }
+            if eof {
+                break;
+            }
+            record_first = line + 1;
+            field_start = true;
         } else if quoted {
             if byte == b'"' {
                 if data.get(at + 1) == Some(&b'"') {
@@ -48,20 +67,21 @@ pub fn align(data: &[u8], first: usize, count: usize, delim: u8) -> (usize, usiz
             }
         } else if byte == delim {
             field_start = true;
-        } else {
+        } else if byte != b'\n' {
             if byte == b'"' && field_start {
                 quoted = true;
             }
             field_start = false;
         }
+        if byte == b'\n' {
+            line += 1;
+        }
         at += 1;
     }
-    let last = line - usize::from(data.is_empty() || data.ends_with(b"\n"));
-    if first > last {
-        return (first, 0);
-    }
-    let start = aligned_first.unwrap_or(record_first);
-    (start, last - start + 1)
+    let total = line - usize::from(data.is_empty() || data.ends_with(b"\n"));
+    let (first, first_record) = start.unwrap_or((if record.is_some() { total + 1 } else { first }, record.unwrap_or(records + 1)));
+    let count = if start.is_some() { end.unwrap_or(total) - first + 1 } else { 0 };
+    Range { first, count, total, records, first_record }
 }
 
 #[cfg(test)]
@@ -132,7 +152,57 @@ mod tests {
             assert_eq!(window(&reply(data, 3, 1, csv)), (3, 1));
         }
         assert_eq!(delimiter(r#"{"csv":",","raw":false}"#), None);
-        assert_eq!(align(b"", 1, 400, b','), (1, 0));
-        assert_eq!(align(b"h\nv\n", 3, 400, b','), (3, 0));
+        let empty = align(b"", 1, 400, b',', None);
+        let past = align(b"h\nv\n", 3, 400, b',', None);
+        assert_eq!((empty.first, empty.count), (1, 0));
+        assert_eq!((past.first, past.count), (3, 0));
+    }
+
+    #[test]
+    fn code_csv_reports_record_count_and_first_ordinal() {
+        let data = "id,note\n1,\"two\nlines\",9\n2,last\n";
+        let result = reply(data, 3, 1, ",");
+        assert_eq!(result.get("records").and_then(Json::as_f64), Some(3.0), "CSV records include the header, not continuation lines");
+        assert_eq!(result.get("firstRecord").and_then(Json::as_f64), Some(2.0), "firstRecord is the containing record's ordinal");
+        assert_eq!(result.get("total").and_then(Json::as_f64), Some(4.0), "total remains physical lines");
+    }
+
+    #[test]
+    fn code_csv_accepts_a_record_ordinal_for_a_far_window() {
+        let data = "id,note\n1,\"two\nlines\",9\n2,last\n";
+        let request = Ask::parse(&format!(
+            r#"{{"text":"{}","raw":true,"csv":",","record":3,"first":1,"count":1}}"#,
+            escape(data)
+        ));
+        let result = parse(&plain(&request, data.as_bytes())).unwrap();
+        assert_eq!(window(&result), (4, 1), "record 3 begins at physical line 4");
+        assert_eq!(result.get("firstRecord").and_then(Json::as_f64), Some(3.0));
+        assert_eq!(result.get("records").and_then(Json::as_f64), Some(3.0));
+    }
+
+    #[test]
+    fn code_csv_counts_an_unterminated_record_and_tsv_newlines() {
+        for (data, csv) in [
+            ("id,note\n1,\"two\nlines\"\n2,\"last\nend\n", ","),
+            ("id\tnote\n1\t\"two\nlines\"\n2\t\"last\nend", "\t"),
+        ] {
+            let result = reply(data, 5, 1, csv);
+            assert_eq!(window(&result), (4, 2));
+            assert_eq!(result.get("records").and_then(Json::as_f64), Some(3.0), "an open quote at EOF is one record");
+            assert_eq!(result.get("firstRecord").and_then(Json::as_f64), Some(3.0));
+            assert_eq!(result.get("total").and_then(Json::as_f64), Some(5.0));
+        }
+    }
+
+    #[test]
+    fn code_csv_empty_and_header_only_counts_have_no_phantom_record() {
+        for (data, records) in [("", 0.0), ("h\n", 1.0), ("h", 1.0), ("h\n\n", 2.0)] {
+            let result = reply(data, 1, 400, ",");
+            assert_eq!(result.get("records").and_then(Json::as_f64), Some(records));
+        }
+        let request = Ask::parse(r#"{"text":"h\nv\n","raw":true}"#);
+        let result = parse(&plain(&request, b"h\nv\n")).unwrap();
+        assert!(result.get("records").is_none(), "non-CSV replies keep the line-only contract");
+        assert!(result.get("firstRecord").is_none());
     }
 }

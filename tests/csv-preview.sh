@@ -21,6 +21,7 @@ ln -s "$(readlink -m ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -m ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp -a ui "$test_root/config/flea" || exit 1
 cp tests/csv-preview.qml "$test_root/config/shell.qml" || exit 1
+cp tests/csv-records.js "$test_root/config/CsvRecords.js" || exit 1
 printf '{}\n' > "$test_root/state/flea/ui.json"
 
 # Fixtures preserve the board's 24 rows and put later long names beyond big.csv's first screen.
@@ -73,6 +74,29 @@ setup_start=$EPOCHREALTIME
 } > "$fixture/big.csv"
 [ "$(stat -c %s "$fixture/big.csv")" -le "$preview_bytes" ] || { printf 'FAIL csv-preview: big.csv must stay under 1 MiB\n'; exit 1; }
 printf 'id,note\n1,"two\nlines",3\n2,plain\n' > "$fixture/quoted.csv"
+# Multiline records at the top, beyond the first window and at EOF, in both delimiters.
+for extension in csv tsv; do
+    separator=,
+    [ "$extension" != tsv ] || separator=$'\t'
+    for ending in closed open; do
+        {
+            printf 'id%snote\n' "$separator"
+            for ((i = 1; i <= 801; i++)); do
+                case "$i" in
+                    1) printf '1%s"first\nsecond"\n' "$separator" ;;
+                    450) printf '450%s"middle\nsecond\nthird"\n' "$separator" ;;
+                    801)
+                        printf '801%s"last\nend' "$separator"
+                        [ "$ending" != closed ] || printf '"'
+                        printf '\n'
+                        ;;
+                    *) printf '%d%srow%d\n' "$i" "$separator" "$i" ;;
+                esac
+            done
+        } > "$fixture/records-$ending.$extension"
+    done
+done
+
 printf 'a\tb\tc\n1\tx,y\t3\n4\t5\t6\n' > "$fixture/fixture.tsv"
 printf 'a,b\0c\n1,2\n' > "$fixture/nul.csv"
 yes 'a,b,c' | head -c "$((preview_bytes + 1))" > "$fixture/over.csv"
