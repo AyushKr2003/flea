@@ -9170,6 +9170,10 @@ The picker answer row's test, `tests/picker-040.qml`, joins the ceiling table at
 
 The column's continuous PDF stack moves the first-frame `bytes` line in `tests/startup-units.txt` from 1597596 to 1597959 (+363, no unit added): `ui/js/PreviewKeys.js` routes the column's page keys to the stack's scroll instead of the removed strip, while `ui/Ipc.qml` and `ui/IpcPreviewState.qml` lose the strip's state reads.
 
+The two lines together take the `bytes` line to 1598292.
+
+The tall Quick Look rect (`ui/js/QuickLookRect.js`) moves `ui/Preview.qml` from 740 to 773 lines for the card's `shape`, the next card's `shapeNext` and `panes` size, the size reply, the image meta ask for every row and the image pane built after that reply, and `ui/Theme.qml` from 443 to 445 for `preview.edge`, and takes the `bytes` line of `tests/startup-units.txt` to 1598459 over the same 170 units. The card draws `shape`, which takes `shapeNext` only while no swap holds a picture, so a held picture is never stretched, while `panes` already has the next card's size, so the preview built under the hold is whole when the card changes size in the swap's release frame; a reply that comes after the reveal cap leaves the card at today's 82% by 82%. A PDF followed from a PDF holds the old picture until the new document's first page lands, because `lookReady` reads `ui/PdfViewer.qml`'s `opened` against the shown path, so the page-size reply arrives while the swap still holds and the card never draws the unknown shape.
+
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one

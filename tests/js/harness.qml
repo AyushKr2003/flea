@@ -137,6 +137,7 @@ import "transfer.js" as TransferSuite
 import "sort.js" as SortSuite
 import "swap.js" as SwapSuite
 import "previewswap.js" as PreviewSwapSuite
+import "quicklookrect.js" as QuickLookRectSuite
 import "startup.js" as StartupSuite
 import "status.js" as StatusSuite
 import "statusfix.js" as StatusFixSuite
@@ -201,7 +202,7 @@ Item {
             ["phones", PhonesSuite],
             ["picker", PickerSuite],
             ["pickerpath", PickerPathSuite],
-            ["previewkeys", PreviewKeysSuite], ["previewask", PreviewAskSuite], ["mdprepared", MdPreparedSuite], ["previewswap", PreviewSwapSuite],
+            ["previewkeys", PreviewKeysSuite], ["previewask", PreviewAskSuite], ["mdprepared", MdPreparedSuite], ["previewswap", PreviewSwapSuite], ["quicklookrect", QuickLookRectSuite],
             ["protocols", ProtocolsSuite], ["railentries", RailEntriesSuite], ["railkeys", RailKeysSuite],
             ["recent", RecentSuite],
             ["recentmode", RecentModeSuite],

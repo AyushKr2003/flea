@@ -156,7 +156,7 @@ ui/PaneMenuActions.qml 523
 ui/PaneWire.qml 602
 ui/PermissionsDialog.qml 658
 ui/PickerWindow.qml 798
-ui/Preview.qml 936
+ui/Preview.qml 971
 ui/PreviewColumn.qml 545
 ui/DeviceMounts.qml 537
 ui/js/Facts.js 360
@@ -168,7 +168,7 @@ ui/SettingsPanel.qml 547
 ui/SettingsRow.qml 409
 ui/Sidebar.qml 713
 ui/StatusBar.qml 477
-ui/Theme.qml 478
+ui/Theme.qml 480
 ui/TrashView.qml 492
 ui/UnlockDialog.qml 450
 ui/ViewState.qml 549
