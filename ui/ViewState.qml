@@ -183,6 +183,8 @@ QtObject {
     // `preview.width` in src/uischema.rs: the Columns view's last column as a whole percent of the area, 0 for the default share.
     readonly property int previewWidth: root.preview.width || 0
     function setPreviewWidth(percent) { root.changeLeaf("preview", { width: percent }) }
+    // Quick Look's w: long lines wrap in a code or text file; off until pressed, and remembered.
+    readonly property bool previewWrap: root.preview.wrap === true
     readonly property string density: root.state.density || "compact"
     readonly property string addressBar: root.state.addressBar || "breadcrumb"
     readonly property bool hyprlandIcons: root.display.hyprlandIcons === true

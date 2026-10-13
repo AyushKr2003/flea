@@ -1,5 +1,6 @@
 .import "../../ui/js/Focus.js" as Focus
 .import "../../ui/js/PreviewKeys.js" as PreviewKeys
+.import "../../ui/js/Focus.js" as Focus
 .import "../../ui/js/Keymap.js" as Keymap
 .import "sourcefixture.js" as Source
 
@@ -112,10 +113,10 @@ function run(check) {
     check("r stays rename in the listing",
         Keymap.lookupFor("default", 0, "r", Qt.NoModifier, "listing", "gui"), "rename")
     // ButtonSystem040: Tab and Shift+Tab put the keyboard on the Markdown bar's close mark and take it off; Return or Space on it closes.
-    function closePane(markdown) {
+    function closePane(drawsBar) {
         var pane = { closed: 0 }
         pane.preview = {
-            isMarkdown: markdown,
+            hasBar: drawsBar,
             markdownCloseFocused: false,
             revealStrip: function () {},
             toggleMarkdownClose: function () { pane.preview.markdownCloseFocused = !pane.preview.markdownCloseFocused },
@@ -125,7 +126,7 @@ function run(check) {
     }
     var bar = closePane(true)
     PreviewKeys.act("focusNext", bar)
-    check("Tab focuses the Markdown close mark", bar.preview.markdownCloseFocused, true)
+    check("Tab focuses the bar's close mark", bar.preview.markdownCloseFocused, true)
     PreviewKeys.act("focusPrevious", bar)
     check("Shift+Tab takes the focus off it", bar.preview.markdownCloseFocused, false)
     PreviewKeys.act("open", bar)
@@ -142,7 +143,7 @@ function run(check) {
     PreviewKeys.act("focusNext", plain)
     PreviewKeys.act("focusPrevious", plain)
     PreviewKeys.act("open", plain)
-    check("Tab and Return mean nothing to a preview with no Markdown bar", plain.preview.markdownCloseFocused + plain.closed, 0)
+    check("Tab and Return mean nothing to a preview with no bar", plain.preview.markdownCloseFocused + plain.closed, 0)
     check("Tab maps to focusNext in the preview context",
         Keymap.lookupFor("default", Qt.Key_Tab, "\t", Qt.NoModifier, "preview", "gui"), "focusNext")
     check("Shift+Tab maps to focusPrevious in the preview context",
@@ -157,6 +158,13 @@ function run(check) {
     check("previewCloseState reports focused", barSrc.indexOf("focused: barClose.keyboardFocused") >= 0, true)
     check("the Quick Look hands the toggle to the pane",
         quickSrc.indexOf("function toggleMarkdownClose()") >= 0 && quickSrc.indexOf("readonly property bool markdownCloseFocused") >= 0, true)
+    check("the close focus belongs to every pane that draws the bar, not to Markdown alone",
+        quickSrc.indexOf("root.active && root.hasBar && root.markdownCloseFocus") >= 0 && quickSrc.indexOf("readonly property bool hasBar: root.kind === \"text\"") >= 0, true)
+    check("the code pane hands the bar the keyboard state and closes on the bar's request",
+        quickSrc.indexOf("closeFocused: root.markdownCloseFocused\n                onCloseRequested: root.close()") >= 0, true)
+    check("the swap reads the code pane's first screen",
+        quickSrc.indexOf("(root.isCodeText && textPane.firstScreen)") >= 0, true)
+    runWrapKeys(check)
     runThumbThreading(check)
     runImageZoom(check)
 }
@@ -263,4 +271,33 @@ function runImageZoom(check) {
         Keymap.PRESET_KEYS.pop()
     }
     check("the widened e row is gone again", Keymap.PRESET_KEYS.indexOf(wide), -1)
+}
+
+// PV-BAT3: w wraps a code or text Quick Look and means nothing to any other kind; the choice is ui.json's, so the action stores nothing here.
+function runWrapKeys(check) {
+    var w = { key: 0, text: "w", modifiers: Qt.NoModifier }
+    function pane(preview) { return { focusView: "list", viewMode: "list", searchMode: "", recentMode: "", preview: preview } }
+    function open(kind) {
+        return { active: true, isMedia: kind === "audio" || kind === "video", isPdf: kind === "pdf",
+            isCodeText: kind === "code" || kind === "text", isMarkdown: kind === "markdown" }
+    }
+    var kept = Keymap.preset
+    for (var preset of ["default", "vim", "mac", "windows"]) {
+        Keymap.setPreset(preset)
+        for (var kind of ["code", "text"])
+            check(preset + ": w reaches a " + kind + " Quick Look", Focus.lookup(w, pane(open(kind))), "toggleWrap")
+        for (var other of ["markdown", "pdf", "image", "archive", "audio", "video"])
+            check(preset + ": w reaches nothing on a " + other + " Quick Look", Focus.lookup(w, pane(open(other))), "")
+        check(preset + ": w stays close tab in the listing", Focus.lookup(w, pane({ active: false, isMedia: false, isPdf: false })), "tabClose")
+        check(preset + ": r reaches the Markdown view in the preview context", Keymap.lookupFor(preset, 0, "r", Qt.NoModifier, "preview", "gui"), "markdownView")
+        check(preset + ": r in the listing is never the Markdown view", Keymap.lookupFor(preset, 0, "r", Qt.NoModifier, "listing", "gui") !== "markdownView", true)
+    }
+    Keymap.setPreset(kept)
+    var wrapped = { preview: { toggled: 0, revealStrip: function () {}, toggleWrap: function () { this.toggled += 1 } } }
+    PreviewKeys.act("toggleWrap", wrapped)
+    check("the toggleWrap action asks the Quick Look to flip the wrap", wrapped.preview.toggled, 1)
+    var quickSrc = Source.source("ui/Preview.qml")
+    check("the flip is ui.json's preview.wrap and only a code or text Quick Look writes it",
+        quickSrc.indexOf("if (root.isCodeText) ViewState.changeLeaf(\"preview\", { wrap: !ViewState.previewWrap })") >= 0, true)
+    check("the pane draws the remembered wrap", quickSrc.indexOf("wrap: ViewState.previewWrap") >= 0, true)
 }

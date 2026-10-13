@@ -64,7 +64,7 @@ src/tui/input.rs 455
 src/tui/model.rs 1268
 src/tui/mod.rs 419
 src/tui/render.rs 913
-src/uischema.rs 567
+src/uischema.rs 570
 src/uistate.rs 840
 src/uistore.rs 551
 src/vulkan.rs 751
@@ -86,7 +86,6 @@ tests/js/picker.js 352
 tests/picker-grid.qml 465
 tests/picker-hunt.qml 449
 tests/permissions-focus.qml 417
-tests/js/facts.js 346
 tests/js/network.js 307
 tests/js/ops.js 574
 tests/js/slowclick.js 309
@@ -154,7 +153,7 @@ ui/PaneMenuActions.qml 523
 ui/PaneWire.qml 602
 ui/PermissionsDialog.qml 658
 ui/PickerWindow.qml 797
-ui/Preview.qml 898
+ui/Preview.qml 915
 ui/PreviewColumn.qml 608
 ui/PickerChrome.qml 441
 ui/DeviceMounts.qml 537
@@ -168,18 +167,17 @@ ui/StatusBar.qml 477
 ui/Theme.qml 478
 ui/TrashView.qml 492
 ui/UnlockDialog.qml 450
-ui/ViewState.qml 547
+ui/ViewState.qml 549
 ui/WindowBody.qml 816
 ui/js/Anchor.js 379
 ui/js/ColumnsCarry.js 94
 ui/js/Devices.js 391
 ui/js/Filter.js 284
-ui/js/Focus.js 484
-ui/js/Keymap.js 366
+ui/js/Focus.js 487
+ui/js/Keymap.js 367
 ui/js/Nav.js 328
 ui/js/Markdown.js 135
 ui/js/MdBlocks.js 437
-ui/js/Facts.js 354
 ui/js/FigureWorker.mjs 619
 ui/js/MdDocument.js 337
 ui/js/MdLeaf.js 309
@@ -203,7 +201,9 @@ tests/gridjump.qml 516
 tests/gridbare.qml 426
 src/backend/trash.rs 401
 src/backend/trash_tests.rs 423
-tests/permissions-adv.qml 402"
+tests/permissions-adv.qml 402
+tests/quicklook-code.qml 424
+tests/js/previewkeys.js 303"
 
 status=0
 
