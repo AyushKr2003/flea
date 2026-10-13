@@ -784,10 +784,6 @@ QtObject {
         function columnPdfPage(): int { return root.columns ? root.columns.pdfPage() : -1 }
         function columnPdfPages(): int { return root.columns ? root.columns.pdfPages() : -1 }
         function columnPdfLoaded(): bool { return root.columns ? root.columns.pdfLoaded() : false }
-        function columnChevronCentre(dir: string): string {
-            var item = root.columns ? root.columns.pdfChevron(dir) : null
-            return item && item.visible ? root.fleaWindow.centreOf(item) : ""
-        }
         function chromeHeight(): int { return Math.round(Theme.chromeHeight) }
         function tabCount(): int { return Tabs.count(root.pane) }
         function tabIndex(): int { return Tabs.currentIndex(root.pane) }

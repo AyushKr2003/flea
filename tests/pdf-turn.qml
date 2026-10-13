@@ -3,7 +3,7 @@
 import Quickshell
 import QtQuick
 
-// tests/pdf-turn.sh's harness: the real ui/PreviewPdf.qml (the preview column's page) or
+// tests/pdf-turn.sh's harness: the real ui/PreviewPdf.qml (its single page, as Quick Look holds it) or
 // ui/PdfViewer.qml (Quick Look's) turns pages while every frame of the page area is saved, so the
 // script can prove from pixels alone that no frame between two pages was drawn without one.
 ShellRoot {

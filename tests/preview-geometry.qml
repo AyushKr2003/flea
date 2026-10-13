@@ -45,10 +45,10 @@ ShellRoot {
         { surf: "C", kind: "office", src: "181x256", decW: 181, decH: 256, leg: "cache", rule: "office-fill", limit: Infinity },
         { surf: "N", kind: "office", src: "120x68", decW: 120, decH: 68, leg: "cache", rule: "office-own-size", limit: 1 },
         { surf: "N", kind: "office", src: "181x256", decW: 181, decH: 256, leg: "cache", rule: "office-fill", limit: Infinity },
-        { surf: "C", kind: "pdf", src: "400x560", leg: "doc", rule: "pdf-contain" },
-        { surf: "C", kind: "pdf", src: "560x400", leg: "doc", rule: "pdf-contain" },
-        { surf: "N", kind: "pdf", src: "400x560", leg: "doc", rule: "pdf-contain" },
-        { surf: "N", kind: "pdf", src: "560x400", leg: "doc", rule: "pdf-contain" },
+        { surf: "C", kind: "pdf", src: "400x560", leg: "doc", rule: "pdf-fill-width" },
+        { surf: "C", kind: "pdf", src: "560x400", leg: "doc", rule: "pdf-fill-width" },
+        { surf: "N", kind: "pdf", src: "400x560", leg: "doc", rule: "pdf-fill-width" },
+        { surf: "N", kind: "pdf", src: "560x400", leg: "doc", rule: "pdf-fill-width" },
         { surf: "W", kind: "image", src: "64x48", decW: 64, decH: 48, leg: "orig", rule: "image-own-size", limit: 1 },
         { surf: "W", kind: "image", src: "120x68", decW: 120, decH: 68, leg: "orig", rule: "image-own-size", limit: 1 },
         { surf: "W", kind: "image", src: "1920x1080", decW: 1920, decH: 1080, leg: "orig", rule: "image-own-size", limit: 1 },
@@ -193,11 +193,16 @@ ShellRoot {
             var column = root.columnFor(c)
             var page = column.pdfPageItem()
             if (!page) return "no page item to measure"
-            var box = page.parent
-            // The page keeps its own aspect: contain of the box for the src size, in one rule. Sample input: c.src "400x560".
+            // The page fills the frame's inner width at its own proportion, from the stack's origin. Sample input: c.src "400x560".
             var dims = c.src.split("x")
-            var sized = { decW: parseInt(dims[0], 10), decH: parseInt(dims[1], 10), limit: Infinity }
-            return root.checkBox(sized, box.width, box.height, page.width, page.height, page.x, page.y, box.width, box.height)
+            var frame = column.frameItem
+            var inner = frame.width - 2 * frame.border.width
+            var wantH = Math.round(inner * parseInt(dims[1], 10) / parseInt(dims[0], 10))
+            if (!root.near(page.width, inner) || !root.near(page.height, wantH))
+                return "drawn " + page.width.toFixed(1) + "x" + page.height.toFixed(1) + ", rule wants " + inner.toFixed(1) + "x" + wantH
+            if (!root.near(page.x, 0) || !root.near(page.y, 0))
+                return "not at the stack origin: " + page.x.toFixed(1) + "," + page.y.toFixed(1)
+            return ""
         }
         var boxW = 0
         var boxH = 0

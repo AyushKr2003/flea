@@ -10,7 +10,7 @@
 
 // Left/Right's seek step, Task 22's operator ruling; act is the only reader.
 var SEEK_MS = 5000
-// The zoom ladder both PDF strips walk: the bottom rung fits the frame, one step a press, up to four times.
+// The zoom ladder Quick Look's PDF strip walks: the bottom rung fits the frame, one step a press, up to four times.
 var PDF_ZOOM_MIN = 1
 var PDF_ZOOM_MAX = 4
 var PDF_ZOOM_STEP = 0.25
@@ -20,8 +20,17 @@ function zoomStep(zoom, steps) {
     return Math.max(PDF_ZOOM_MIN, Math.min(PDF_ZOOM_MAX, zoom + steps * PDF_ZOOM_STEP))
 }
 
+// The column's PDF has no strip: pages scroll, and Space, Return or e opens Quick Look at the page in view.
+function columnPdfAction(action, viewer) {
+    if (action === "open" || action === "preview" || action === "expand") viewer.toggleExpand()
+    else if (action === "seekBack" || action === "parent") viewer.turnPage(-1)
+    else if (action === "seekForward" || action === "pageForward") viewer.turnPage(1)
+    else if (action === "cursorDown" || action === "cursorUp") viewer.scrollPage(action === "cursorDown" ? 1 : -1)
+}
+
 function pdfAction(action, viewer) {
     var controls = viewer.pdfControls
+    if (controls === undefined) return columnPdfAction(action, viewer)
     if (action === "focusNext" || action === "focusPrevious") {
         var step = action === "focusPrevious" ? -1 : 1
         var next = viewer.pdfControlIndex
@@ -93,13 +102,15 @@ function act(action, root) {
     case "markdownView":
         if (root.preview.isMarkdown) root.preview.toggleMarkdownView()
         return
-    // The Markdown bar's close mark is its one control: Tab and Shift+Tab take the keyboard onto it and off it, and Return on it closes.
+    // Focus.js lets w through for a code or text Quick Look only; the choice is remembered in ui.json.
+    case "toggleWrap": root.preview.toggleWrap(); return
+    // The bar's close mark is its one control on every text pane: Tab and Shift+Tab take the keyboard onto it and off it, and Return on it closes.
     case "focusNext":
     case "focusPrevious":
-        if (root.preview.isMarkdown) root.preview.toggleMarkdownClose()
+        if (root.preview.hasBar) root.preview.toggleMarkdownClose()
         return
     case "open":
-        if (root.preview.isMarkdown && root.preview.markdownCloseFocused) root.preview.close()
+        if (root.preview.hasBar && root.preview.markdownCloseFocused) root.preview.close()
         return
     }
 }

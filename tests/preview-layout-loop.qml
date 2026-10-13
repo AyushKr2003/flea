@@ -326,7 +326,7 @@ ShellRoot {
             } else {
                 var text = shell.find(look, "PreviewText")
                 if (!text || text.status !== "ready") return
-                var f = shell.flick(text)
+                var f = text.list
                 if (!shell.check(text.bodyItem.width === f.width && f.contentHeight > f.height,
                     "text/code overflow is absent")) return
                 if (!shell.scrolling) {
@@ -344,11 +344,10 @@ ShellRoot {
             if (!pdf || pdf.shownPage < 0 || pdf.failed) return
             var pf = pdf.viewport
             if (!shell.check(pf !== null, "PDF viewport is absent")) return
-            if (shell.columnHost) column.pdfZoom = 2
-            else shell.find(look, "PdfViewer").zoom = 2
-            if (!shell.check(pf.contentHeight === pf.height * 2 && pf.contentWidth === pf.width * 2,
-                "PDF zoom extent changed")) return
-            pf.contentY = pf.contentHeight - pf.height
+            if (!shell.columnHost) shell.find(look, "PdfViewer").zoom = 2
+            if (!shell.check(shell.columnHost ? pf.contentWidth === pf.width && pdf.stackHeight === pf.contentHeight
+                : pf.contentHeight === pf.height * 2 && pf.contentWidth === pf.width * 2, "PDF extent changed")) return
+            pf.contentY = Math.max(0, pf.contentHeight - pf.height)
         } else {
             if (shell.columnHost) {
                 if (!column.pictureItem || column.pictureItem.status !== Image.Ready) return

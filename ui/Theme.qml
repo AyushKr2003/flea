@@ -274,6 +274,8 @@ Singleton {
     readonly property QtObject preview: QtObject {
         // Quick-Look sized inset over the window, not a second window.
         readonly property real fraction: 0.82
+        // TallPreviews specimen C leaves 24 px of the window above and below a tall Quick Look, in resolved pixels at base 14.
+        readonly property int edge: 24
     }
 
     // The columns a list of this width can draw, less the ones ViewState hides; Header and Row call

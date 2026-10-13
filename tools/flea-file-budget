@@ -65,7 +65,7 @@ src/tui/input.rs 455
 src/tui/model.rs 1268
 src/tui/mod.rs 419
 src/tui/render.rs 913
-src/uischema.rs 567
+src/uischema.rs 570
 src/uistate.rs 840
 src/uistore.rs 551
 src/vulkan.rs 751
@@ -73,9 +73,9 @@ tests/js/columns.js 687
 tests/js/drag.js 493
 tests/js/dropsflow.js 301
 tests/js/collide.js 319
-tests/js/facts.js 346
+tests/js/facts.js 351
 tests/js/devices.js 406
-tests/js/previewswap.js 469
+tests/js/previewswap.js 475
 tests/js/mdstructure.js 655
 tests/js/keymap.js 356
 tests/js/focus.js 843
@@ -98,6 +98,7 @@ tests/js/watch.js 541
 tests/js/xwwatch.js 299
 tests/js/tabs.js 798
 tests/js/search.js 336
+tests/js/previewkeys.js 314
 tests/button-members.qml 518
 tests/chromering.qml 413
 tests/columnrow-geom.qml 426
@@ -128,14 +129,15 @@ tests/touchpad.qml 882
 tests/xwsettings-tabs.qml 379
 ui/Backend.qml 588
 ui/ChromeBar.qml 352
-ui/ColumnsArea.qml 573
+ui/ColumnsArea.qml 572
 ui/ColumnPane.qml 450
 ui/ContextMenu.qml 781
 ui/ConvertDialog.qml 456
 ui/GridArea.qml 665
-ui/Ipc.qml 987
+ui/Ipc.qml 983
 tests/gridprebuild.qml 457
 tests/code-column.qml 411
+tests/preview-pdf-flow.qml 439
 tests/columnsprebuild.qml 416
 ui/KeymapSheet.qml 551
 ui/List.qml 480
@@ -155,27 +157,29 @@ ui/PaneMenuActions.qml 523
 ui/PaneWire.qml 602
 ui/PermissionsDialog.qml 658
 ui/PickerWindow.qml 812
-ui/Preview.qml 919
-ui/PreviewColumn.qml 608
+ui/Preview.qml 971
+ui/PreviewColumn.qml 545
 ui/DeviceMounts.qml 537
-ui/js/Facts.js 354
+ui/js/Facts.js 360
+ui/PreviewPdf.qml 482
+ui/PickerChrome.qml 295
 ui/PreviewMarkdown.qml 625
 ui/Row.qml 496
 ui/SettingsPanel.qml 547
 ui/SettingsRow.qml 409
 ui/Sidebar.qml 713
 ui/StatusBar.qml 477
-ui/Theme.qml 478
+ui/Theme.qml 480
 ui/TrashView.qml 492
 ui/UnlockDialog.qml 450
-ui/ViewState.qml 547
+ui/ViewState.qml 549
 ui/WindowBody.qml 816
 ui/js/Anchor.js 379
 ui/js/ColumnsCarry.js 94
 ui/js/Devices.js 405
 ui/js/Filter.js 284
-ui/js/Focus.js 484
-ui/js/Keymap.js 366
+ui/js/Focus.js 487
+ui/js/Keymap.js 367
 ui/js/Nav.js 328
 ui/js/Markdown.js 135
 ui/js/MdBlocks.js 437
@@ -202,7 +206,8 @@ tests/gridjump.qml 516
 tests/gridbare.qml 426
 src/backend/trash.rs 401
 src/backend/trash_tests.rs 423
-tests/permissions-adv.qml 402"
+tests/permissions-adv.qml 402
+tests/quicklook-code.qml 424"
 
 status=0
 
