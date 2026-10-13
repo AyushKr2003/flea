@@ -7,15 +7,21 @@ use crate::backend::linecount::count_lines;
 use crate::backend::mediaprobe;
 use crate::backend::opsreq::OpMsg;
 use crate::backend::owner;
-use crate::backend::rawembed::is_raw_name;
+use crate::backend::rawembed::{self, is_raw_name, RawFacts};
 use crate::backend::rawpreview::{self, Extracted};
+use crate::backend::rawtiff;
+use crate::backend::regfile::open_regular;
 use crate::backend::sandbox;
 use crate::json::escape;
+use std::io::Read;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 const SIGKILL: i32 = 9;
+
+// A JPEG's Exif APP1 follows its first segment or two, so the photo facts never read past this.
+pub(crate) const JPEG_EXIF_READ: u64 = 65_536;
 
 pub struct Meta {
     pub width: u32,
@@ -47,11 +53,13 @@ pub struct Meta {
     pub owner: String,
     // The copy of a camera RAW's embedded JPEG that Quick Look draws, with its pixels; None for any other file and for a RAW holding none.
     pub raw: Option<Extracted>,
+    // The camera, lens and exposure facts of a RAW; all absent for everything else.
+    pub photo: RawFacts,
 }
 
 impl Meta {
     fn empty() -> Meta {
-        Meta { width: 0, height: 0, orientation: 1, frames: 0, duration_ms: 0, sample_rate: 0, entries: 0, unpacked: 0, names: Vec::new(), archive_failed: false, lines: 0, lines_partial: false, lines_failed: false, target: String::new(), target_is_dir: false, owner: String::new(), raw: None }
+        Meta { width: 0, height: 0, orientation: 1, frames: 0, duration_ms: 0, sample_rate: 0, entries: 0, unpacked: 0, names: Vec::new(), archive_failed: false, lines: 0, lines_partial: false, lines_failed: false, target: String::new(), target_is_dir: false, owner: String::new(), raw: None, photo: RawFacts::default() }
     }
 }
 
@@ -66,6 +74,7 @@ pub fn read(path: &Path, text: bool, media: bool, archive: Option<&Formats>) -> 
 pub(crate) fn read_in(path: &Path, text: bool, media: bool, archive: Option<&Formats>, raw_dir: &Path) -> Meta {
     let mut m = Meta::empty();
     m.owner = owner::of(path);
+    m.photo = photo(path, false);
     if let Ok(link) = std::fs::read_link(path) {
         m.target = link.to_string_lossy().to_string();
         m.target_is_dir = path.metadata().map(|t| t.is_dir()).unwrap_or(false);
@@ -105,6 +114,69 @@ pub(crate) fn read_in(path: &Path, text: bool, media: bool, archive: Option<&For
         m.lines_failed = counted.failed;
     }
     m
+}
+
+// The photo facts of a camera file: a RAW through the RAW walk, and a JPEG (only when jpeg is set) through its first Exif APP1 and the same reader.
+pub fn photo(path: &Path, jpeg: bool) -> RawFacts {
+    let name = path.to_string_lossy();
+    if rawembed::is_raw_name(&name) {
+        return rawembed::inspect(path).map(|(_, facts)| facts).unwrap_or_default();
+    }
+    let lower = name.to_ascii_lowercase();
+    if !jpeg || !(lower.ends_with(".jpg") || lower.ends_with(".jpeg")) {
+        return RawFacts::default();
+    }
+    let mut head = Vec::new();
+    let Some(file) = open_regular(path) else {
+        return RawFacts::default();
+    };
+    if file.take(JPEG_EXIF_READ).read_to_end(&mut head).is_err() {
+        return RawFacts::default();
+    }
+    exif_segment(&head).map(|tiff| rawtiff::facts_from_slice(tiff, false)).unwrap_or_default()
+}
+
+// Sample input: FF D8 | FF E0 len(2) JFIF... | FF E1 len(2) "Exif\0\0" TIFF...; answers the TIFF, cut at the end of the bytes in hand.
+fn exif_segment(b: &[u8]) -> Option<&[u8]> {
+    let mut at = 2;
+    while b.starts_with(&[0xFF, 0xD8]) && b.get(at) == Some(&0xFF) {
+        let marker = *b.get(at + 1)?;
+        // Fill bytes and the markers that carry no length step by less than a segment.
+        if marker == 0xFF || marker == 0x01 || (0xD0..=0xD8).contains(&marker) {
+            at += if marker == 0xFF { 1 } else { 2 };
+            continue;
+        }
+        if marker == 0xD9 || marker == 0xDA {
+            return None;
+        }
+        let len = u16::from_be_bytes([*b.get(at + 2)?, *b.get(at + 3)?]) as usize;
+        if len < 2 {
+            return None;
+        }
+        let body = b.get(at + 4..(at + 2 + len).min(b.len()))?;
+        if marker == 0xE1 {
+            if let Some(tiff) = body.strip_prefix(b"Exif\0\0") {
+                return Some(tiff);
+            }
+        }
+        at += 2 + len;
+    }
+    None
+}
+
+// Sample output: {"make":"Canon","model":"Canon EOS R6","exp":[1,250],"fnum":[28,10],"iso":400,"focal":[35,1],"taken":"2026:09:12 18:31:00","w":6000,"h":4000}; null when the file names none of them.
+pub fn photo_json(f: &RawFacts) -> String {
+    let text = |key: &str, v: &Option<String>| v.as_ref().map(|s| format!(r#""{}":"{}""#, key, escape(s)));
+    let ratio = |key: &str, v: Option<(u32, u32)>| v.map(|(n, d)| format!(r#""{}":[{},{}]"#, key, n, d));
+    let fields: Vec<String> = [
+        text("make", &f.make), text("model", &f.model), text("lens", &f.lens), ratio("exp", f.exposure),
+        ratio("fnum", f.f_number), f.iso.map(|v| format!(r#""iso":{}"#, v)), ratio("focal", f.focal_mm), text("taken", &f.taken),
+        f.width.zip(f.height).map(|(w, h)| format!(r#""w":{},"h":{}"#, w, h)),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    if fields.is_empty() { "null".to_string() } else { format!("{{{}}}", fields.join(",")) }
 }
 
 // Listing an archive reads its index and extracts nothing, in the same jail every other delegated
@@ -183,7 +255,7 @@ fn list_archive(path: &Path, formats: &Formats) -> Contents {
     contents
 }
 
-// Sample output: {"t":"meta","row":4,"w":0,"h":0,"orient":1,"ms":0,"rate":0,"entries":214,"unpacked":3400,"afailed":false,"names":[{"n":"ui","d":true}],"lines":0,"partial":false,"lfailed":false,"frames":0,"target":"","targetdir":false,"raw":null,"owner":"gm"}
+// Sample output: {"t":"meta","row":4,"w":0,"h":0,"orient":1,"ms":0,"rate":0,"entries":214,"unpacked":3400,"afailed":false,"names":[{"n":"ui","d":true}],"lines":0,"partial":false,"lfailed":false,"frames":0,"photo":null,"target":"","targetdir":false,"raw":null,"owner":"gm"}
 pub fn meta_line(row: usize, m: &Meta) -> String {
     let names: Vec<String> = m
         .names
@@ -191,9 +263,9 @@ pub fn meta_line(row: usize, m: &Meta) -> String {
         .map(|e| format!(r#"{{"n":"{}","d":{}}}"#, escape(&e.name), e.is_dir))
         .collect();
     format!(
-        r#"{{"t":"meta","row":{},"w":{},"h":{},"orient":{},"ms":{},"rate":{},"entries":{},"unpacked":{},"afailed":{},"names":[{}],"lines":{},"partial":{},"lfailed":{},"frames":{},"target":"{}","targetdir":{},"raw":{},"owner":"{}"}}"#,
+        r#"{{"t":"meta","row":{},"w":{},"h":{},"orient":{},"ms":{},"rate":{},"entries":{},"unpacked":{},"afailed":{},"names":[{}],"lines":{},"partial":{},"lfailed":{},"frames":{},"photo":{},"target":"{}","targetdir":{},"raw":{},"owner":"{}"}}"#,
         row, m.width, m.height, m.orientation, m.duration_ms, m.sample_rate, m.entries, m.unpacked,
-        m.archive_failed, names.join(","), m.lines, m.lines_partial, m.lines_failed, m.frames,
+        m.archive_failed, names.join(","), m.lines, m.lines_partial, m.lines_failed, m.frames, photo_json(&m.photo),
         escape(&m.target), m.target_is_dir, raw_json(&m.raw), escape(&m.owner)
     )
 }
@@ -222,6 +294,10 @@ pub fn spawn(row: usize, path: std::path::PathBuf, text: bool, media: bool,
         let _ = tx.send(OpMsg::Meta { line });
     });
 }
+
+#[cfg(test)]
+#[path = "metareq_photo_tests.rs"]
+mod photo_tests;
 
 #[cfg(test)]
 mod tests {
@@ -280,7 +356,7 @@ mod tests {
         std::fs::write(d.join("clip.gif"), &gif).unwrap();
         let m = read(&d.join("clip.gif"), false, false, None);
         assert_eq!((m.width, m.height, m.frames), (4, 4, 3));
-        assert!(meta_line(0, &m).contains(r#""lfailed":false,"frames":3,"target":"#));
+        assert!(meta_line(0, &m).contains(r#""lfailed":false,"frames":3,"photo":null,"target":"#));
         let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
         png.extend_from_slice(&13u32.to_be_bytes());
         png.extend_from_slice(b"IHDR");

@@ -28,10 +28,10 @@ src/backend/gvfslist.rs 513
 src/backend/imagesize.rs 559
 src/backend/iomount.rs 634
 src/backend/localsend.rs 432
-src/backend/menu_actions.rs 658
+src/backend/menu_actions.rs 674
 src/backend/menu_registry.rs 569
 src/backend/meta.rs 550
-src/backend/metareq.rs 465
+src/backend/metareq.rs 541
 src/backend/movebatch.rs 477
 src/backend/movebatch_tests.rs 752
 src/backend/opsdispatch.rs 2273
@@ -74,7 +74,7 @@ tests/js/columns.js 687
 tests/js/drag.js 493
 tests/js/dropsflow.js 301
 tests/js/collide.js 319
-tests/js/facts.js 361
+tests/js/facts.js 415
 tests/js/devices.js 406
 tests/js/previewswap.js 475
 tests/js/mdstructure.js 655
@@ -129,6 +129,7 @@ tests/sidebar-flows.qml 687
 tests/touchpad.qml 882
 tests/xwsettings-tabs.qml 379
 ui/Backend.qml 597
+ui/MenuActionDialog.qml 402
 ui/ChromeBar.qml 352
 ui/ColumnsArea.qml 572
 ui/ColumnPane.qml 450
@@ -162,7 +163,7 @@ ui/PickerWindow.qml 812
 ui/Preview.qml 1011
 ui/PreviewColumn.qml 553
 ui/DeviceMounts.qml 537
-ui/js/Facts.js 360
+ui/js/Facts.js 402
 ui/PreviewPdf.qml 482
 ui/PickerChrome.qml 295
 ui/PreviewMarkdown.qml 668

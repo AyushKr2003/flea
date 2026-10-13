@@ -71,6 +71,12 @@ fn merge(dst: &mut RawFacts, src: RawFacts) {
     if dst.taken.is_none() {
         dst.taken = src.taken;
     }
+    if dst.width.is_none() {
+        dst.width = src.width;
+    }
+    if dst.height.is_none() {
+        dst.height = src.height;
+    }
     if dst.orientation.is_none() {
         dst.orientation = src.orientation;
     }

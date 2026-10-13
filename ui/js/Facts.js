@@ -95,11 +95,48 @@ function lineCount(meta) {
     return (meta.partial ? "> " : "") + Format.count(meta.lines)
 }
 
+// A frame header's size wins; a camera RAW has none, so the sensor size in its photo facts stands in.
 function pixels(meta) {
-    if (!meta || !meta.w || !meta.h) {
-        return ""
+    var size = meta && meta.w && meta.h ? meta : (meta && meta.photo ? meta.photo : null)
+    return size && size.w && size.h ? "%1 × %2".arg(size.w).arg(size.h) : ""
+}
+
+function tenths(value) {
+    return String(Math.round(value * 10) / 10)
+}
+
+// Sample input: a numerator and denominator as [1, 250]; zero on either side is no value.
+function ratio(pair) {
+    return pair && pair[0] > 0 && pair[1] > 0 ? pair[0] / pair[1] : 0
+}
+
+// Sample input, the backend's photo object: {make, model, lens, exp: [1, 250], fnum: [28, 10], iso: 400, focal: [35, 1], taken: "2026:09:12 18:31:00"}.
+// Answers the five worded facts; an absent one is an empty string, which draws no row.
+function photoFacts(photo) {
+    var p = photo || {}
+    var seconds = ratio(p.exp)
+    var parts = []
+    if (seconds > 0) {
+        // The way a camera shows it: 1/N under 0.3 s, one-place seconds from there on.
+        parts.push(seconds < 0.3 ? "1/%1 s".arg(Math.round(p.exp[1] / p.exp[0])) : "%1 s".arg(tenths(seconds)))
     }
-    return meta.w + " × " + meta.h
+    if (ratio(p.fnum) > 0) {
+        parts.push("f/%1".arg(tenths(ratio(p.fnum))))
+    }
+    if (p.iso > 0) {
+        parts.push("ISO %1".arg(p.iso))
+    }
+    var make = p.make || ""
+    var model = p.model || ""
+    var owned = make.length > 0 && model.toLowerCase().indexOf(make.split(" ")[0].toLowerCase()) === 0
+    var stamp = /^(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d)/.exec(p.taken || "")
+    return {
+        camera: owned || !make ? model : (model ? "%1 %2".arg(make).arg(model) : make),
+        lens: p.lens || "",
+        exposure: parts.join(FACT_SEP),
+        focal: ratio(p.focal) > 0 ? "%1 mm".arg(Math.round(ratio(p.focal))) : "",
+        taken: stamp && stamp[1] !== "0000" ? "%1-%2-%3 %4:%5".arg(stamp[1]).arg(stamp[2]).arg(stamp[3]).arg(stamp[4]).arg(stamp[5]) : ""
+    }
 }
 
 // An animated GIF's frame count; a still picture, or a GIF whose walk found no count, states none.
@@ -131,6 +168,8 @@ function archiveExtra(meta) {
     }
 }
 
+var FACT_SEP = " \u00b7 "
+
 // "214 entries · 3.4 GB unpacked", the Quick Look's one line under an archive's name; the column
 // states the same two facts as table rows, and an index that failed or is still arriving states nothing.
 function archiveLine(meta) {
@@ -140,7 +179,7 @@ function archiveLine(meta) {
         return meta && meta.archiveFailed !== true && meta.entries === 0 ? "0 entries" : ""
     }
     var noun = a.entries === "1" ? " entry" : " entries"
-    return a.unpacked ? a.entries + noun + " \u00b7 " + a.unpacked + " unpacked" : a.entries + noun
+    return a.unpacked ? a.entries + noun + FACT_SEP + a.unpacked + " unpacked" : a.entries + noun
 }
 
 // The rows the Archive tile lists above its "+ N more" line, which is the only place a name from
@@ -239,7 +278,10 @@ function stateRows(st, row, meta, kindName, extra) {
                 pair("Modified", Format.date(row.m))]
     switch (st) {
     case IMAGE:
-        return head.concat([pair("Pixels", pixels(meta)), pair("Frames", frames(meta))])
+        // Raw.html: a camera file's EXIF facts sit between Modified and Pixels, and Taken closes the table.
+        var photo = photoFacts(meta && meta.photo)
+        return head.concat([pair("Camera", photo.camera), pair("Lens", photo.lens), pair("Exposure", photo.exposure),
+                            pair("Focal", photo.focal), pair("Pixels", pixels(meta)), pair("Frames", frames(meta)), pair("Taken", photo.taken)])
     case VIDEO:
         return head.concat([pair("Duration", e.duration || ""), pair("Pixels", pixels(meta))])
     case AUDIO:

@@ -1858,13 +1858,15 @@ existing `archivedone` terminal line remains unchanged for archive clients.
 
 ### meta
 
-`{"t":"meta","row":<uint>,"w":<uint>,"h":<uint>,"orient":<uint>,"ms":<uint>,"rate":<uint>,"entries":<uint>,"unpacked":<uint>,"afailed":<bool>,"names":[{"n":"<string>","d":<bool>},...],"lines":<uint>,"partial":<bool>,"lfailed":<bool>,"target":"<string>","targetdir":<bool>,"raw":{"file":"<string>","w":<uint>,"h":<uint>,"orient":<uint>}|null,"owner":"<string>"}`
+`{"t":"meta","row":<uint>,"w":<uint>,"h":<uint>,"orient":<uint>,"ms":<uint>,"rate":<uint>,"entries":<uint>,"unpacked":<uint>,"afailed":<bool>,"names":[{"n":"<string>","d":<bool>},...],"lines":<uint>,"partial":<bool>,"lfailed":<bool>,"frames":<uint>,"photo":<object|null>,"target":"<string>","targetdir":<bool>,"raw":{"file":"<string>","w":<uint>,"h":<uint>,"orient":<uint>}|null,"owner":"<string>"}`
 
-Example: `{"t":"meta","row":4,"w":0,"h":0,"orient":1,"ms":0,"rate":0,"entries":214,"unpacked":3400,"afailed":false,"names":[{"n":"ui","d":true}],"lines":0,"partial":false,"lfailed":false,"target":"","targetdir":false,"raw":null,"owner":"gm"}`
+Example: `{"t":"meta","row":4,"w":0,"h":0,"orient":1,"ms":0,"rate":0,"entries":214,"unpacked":3400,"afailed":false,"names":[{"n":"ui","d":true}],"lines":0,"partial":false,"lfailed":false,"frames":0,"photo":null,"target":"","targetdir":false,"raw":null,"owner":"gm"}`
 
 Every field a row did not ask for is zero, false or empty. `w` and `h` are pixels, read from the
 file's own header, as stored and before any turn. `ms` and `rate` come from the probe. `lines` is a
 newline count with `partial` true when it stopped at its 1 MiB budget, so the column states it as a floor.
+
+`photo` is the camera file's EXIF facts as stored, from the same RAW walk and in the same reply: `{"make":"Canon","model":"Canon EOS R6","lens":"RF35mm F1.8 MACRO IS STM","exp":[1,250],"fnum":[28,10],"iso":400,"focal":[35,1],"taken":"2026:09:12 18:31:00","w":6000,"h":4000}`, where `exp`, `fnum` and `focal` are numerator and denominator pairs, `w` and `h` are the sensor size from the EXIF pixel dimensions (sent together or not at all) and an absent fact is left out. It is `null` for every row that is not a RAW and for a RAW whose walk names none of them; a JPEG's facts are never in this reply. The `properties` reply of `menuaction` carries the same `photo` object, and for a `.jpg` or `.jpeg` it is read from the first `Exif` APP1 within the file's first 64 KiB.
 
 `orient` is the EXIF orientation, 1 to 8, from the same read of the same open. The walk that finds a
 JPEG's frame header reads the head of its first `Exif` APP1 on the way past. It is 1 for every file that
