@@ -4400,8 +4400,8 @@ waits for its consumer.
   coverage.
 - `tools/flea-field-bench` is the cold-cache comparison against the installed field and the
   instrument behind `docs/baseline-2026-08-30b.md`. **Run it from a copy outside this tree**, because
-  it launches the tree it measures; `~/bench/` is where it runs here. It needs the sudo password on
-  stdin for `drop_caches`, and it launches Flea through `$FLEA_BIN --gui`, never `qs` directly:
+  it launches the tree it measures; `~/bench/` is where it runs here. A working NOPASSWD rule for
+  `drop_caches` needs no stdin; otherwise the sudo password is read from stdin. It launches Flea through `$FLEA_BIN --gui`, never `qs` directly:
   measuring Flea by a path no user takes cost a whole field run, since `qs` alone misses the
   `prctl` in `exec_qs` and reads 104 MB against the real path's 45 MB.
 - `tools/flea-field-nav measure` with the `ql` column journeys Quick Look on a 40-row-table-first Markdown document
@@ -4412,7 +4412,11 @@ waits for its consumer.
 - **The tested Flea starts from its own caches, as an installed one does after its first launch.** Its
   QML units go to `target/qmlcache` of the tree under test (`QML_DISK_CACHE_PATH`), and
   `tools/flea-field-bench` parks the operator's `~/.cache/flea/prefetch` for the run and restores it
-  at exit (gated by `tests/field-prefetch-park.sh`). One untimed warm launch compiles the units and
+  at exit (gated by `tests/field-prefetch-park.sh`). On TERM, INT or another exit, teardown first
+  stops the background warm shell and its process group with bounded TERM and KILL waits, then
+  sweeps the warm Flea and its control group before restoring the operator's caches. The suite
+  checks the shell and group both before Flea starts and while it polls, including a setup child
+  that ignores TERM; dropping the warm-job stop makes these checks red. One untimed warm launch compiles the units and
   records the first list; each timed launch then reads the list the launch before it recorded, so
   every list it reads comes from the build under test. A list recorded by another build names that
   build's binary, QML and units, so its prefetch reads the wrong files and the right ones are read cold.
@@ -4529,7 +4533,12 @@ waits for its consumer.
   manager on the box by name and refuses to start beside one, which is correct for a field run and
   wrong for re-measuring one row on a box somebody is using: the operator's own windows are not the
   harness's to close. With `ONLY` set, both the kill list and the start-up refusal cover only that
-  entrant's own processes. A re-measured row is a row from a different day and the manifest says so
+  entrant's own processes. Run order retains each selected absent entrant with place `-`, so the
+  real launch loop prints its SKIP once per run; only installed entrants rotate and consume launch
+  places. `tests/field-launch-order.sh` drives that loop with missing GUI and TUI commands and a
+  missing Strata binary, and checks that ONLY excludes their SKIPs as well as their launches.
+  Strata provenance parses a Cargo.toml `version = "1.0.0"` line and the binary's `strata 1.0.0`
+  output, with the exact formats documented beside its parser. A re-measured row is a row from a different day and the manifest says so
   in its own words, the way `docs/bench/media-rc-2044.manifest.md` does for strata.
 - **Two rules for the report, which the harness cannot enforce.** The thumbnail count prints beside
   every timing number in every table, not only in the CSV: a settle time without its count is not

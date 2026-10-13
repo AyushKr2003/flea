@@ -592,6 +592,18 @@ def search_version(members, ent_name, arms, field_entries, flea_label, jsonl_pat
     return ent["fields"][3]
 
 
+def plural(count, noun):
+    return "%d %s%s" % (count, noun, "" if count == 1 else "s")
+
+
+# The app count under the Speed heading; the terminal clause drops out when no terminal app ran.
+def apps_sentence(gui, tui):
+    text = plural(gui, "GUI app")
+    if tui:
+        text += " and " + plural(tui, "terminal app")
+    return text + " on the same machine."
+
+
 # The whole Performance section body for a run directory of field CSVs.
 def section_text(dir_path, search_path=None, search_manifest_path=None, flea_label=None,
                  allow_dirty=False, with_anchor=False, docs_stem=None, cargo_toml=None):
@@ -660,8 +672,8 @@ def section_text(dir_path, search_path=None, search_manifest_path=None, flea_lab
             dates = sorted(dates + [search_date])
     out = ["Measured on **%s**, using the **%s** source tree."
            % (", ".join(format_date(d) for d in dates), flea_label),
-           "Cold caches, %d runs per app, medians below. %d GUI apps and %d terminal apps "
-           "on the same machine." % (min(counts), len(gui_ids), len(tui_ids)),
+           "Cold caches, %d runs per app, medians below. %s"
+           % (min(counts), apps_sentence(len(gui_ids), len(tui_ids))),
            "", "### Speed", ""]
     for tag in sorted(blocks):
         out += fixture_heading(blocks[tag])
@@ -1026,7 +1038,7 @@ def selftest():
         text_two, _ = section_text(two_dir, flea_label="0.3.9", docs_stem="demo")
         for label, needle in (("two-dates", "Measured on **30 September 2026, 2 October 2026**"),
                 ("two-runs", "Cold caches, 1 runs per app"),
-                ("two-count", "3 GUI apps and 0 terminal apps")):
+                ("two-count", "3 GUI apps on the same machine.")):
             if needle not in text_two:
                 failures.append(label)
         check_delims("two-fixtures", text_two)
@@ -1099,7 +1111,7 @@ def selftest():
             section_manifest % ("yazi tui yazi 26.9.1-2", "0"))
         text_p, _ = section_text(split_dir, flea_label="0.3.9", docs_stem="demo")
         for label, needle in (("split-flea", "| **Flea** | 0.3.9, source abc1234 |"),
-                ("split-count", "2 GUI apps and 1 terminal apps"),
+                ("split-count", "2 GUI apps and 1 terminal app on the same machine."),
                 ("split-link", "[GUI local CSV](docs/bench/gui-local-demo.csv)")):
             if needle not in text_p:
                 failures.append(label)
@@ -1519,6 +1531,14 @@ def selftest():
         os.mkdir(ghost_docs)
         apply_readme(ghost_readme)
         apply_refusal("apply-unknown-version", ghost_run, ghost_readme, ghost_docs, ("no version",))
+        # The app count reads in the singular for one, and its terminal clause drops out when no terminal app ran.
+        for label, got, want in (
+                ("apps-one-gui", apps_sentence(1, 0), "1 GUI app on the same machine."),
+                ("apps-gui-only", apps_sentence(7, 0), "7 GUI apps on the same machine."),
+                ("apps-one-terminal", apps_sentence(2, 1), "2 GUI apps and 1 terminal app on the same machine."),
+                ("apps-terminals", apps_sentence(1, 2), "1 GUI app and 2 terminal apps on the same machine.")):
+            if got != want:
+                failures.append("%s: %r" % (label, got))
         if failures:
             sys.stderr.write("flea-bench-readme selftest FAILED: %s\n" % ", ".join(failures))
             return 1

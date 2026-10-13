@@ -20,6 +20,47 @@ UPGRADE_STALE_HOURS=${UPGRADE_STALE_HOURS:-24}
 
 say() { printf '%s\n' "$*" >> "$OUT"; }
 
+# The harness that ran: its sha256 and whether it matches the arm's committed copy.
+harness_marker() {
+  local tool=${HARNESS_TOOL:-} sum sha blob
+  [ -n "$tool" ] && [ -r "$tool" ] || { printf 'not recorded by the caller'; return; }
+  sum=$(sha256sum "$tool" | cut -d' ' -f1)
+  sha=$(git -C "$FLEA_REPO" rev-parse --short HEAD 2>/dev/null) || sha=unreadable
+  if git -C "$FLEA_REPO" cat-file -e HEAD:tools/flea-field-bench 2>/dev/null; then
+    blob=$(git -C "$FLEA_REPO" show HEAD:tools/flea-field-bench | sha256sum | cut -d' ' -f1)
+    if [ "$blob" = "$sum" ]; then
+      printf 'sha256 %s, identical to tools/flea-field-bench at %s, unpatched' "$sum" "$sha"
+    else
+      printf 'sha256 %s, PATCHED: differs from tools/flea-field-bench at %s' "$sum" "$sha"
+    fi
+  else
+    printf 'sha256 %s, no committed tools/flea-field-bench at %s to compare, so patched status is unknown' "$sum" "$sha"
+  fi
+}
+
+# The manifest tool that wrote: its absolute path and sha256, so a stale sibling never passes silently.
+manifest_tool_marker() {
+  local tool=${MANIFEST_TOOL:-} sum
+  [ -n "$tool" ] && [ -r "$tool" ] || { printf 'not recorded by the caller'; return; }
+  sum=$(sha256sum "$tool" | cut -d' ' -f1)
+  printf '%s sha256 %s' "$tool" "$sum"
+}
+
+# The anchor arm's tree, sha and tag, or the fact that no anchor arm ran in this run.
+anchor_line() {
+  local sha tag anchor=${ANCHOR_REPO:-} flea=${FLEA_REPO:-}
+  if [ -n "$anchor" ]; then
+    anchor=$(readlink -f "$anchor") || { printf '%s at unreadable untagged' "$ANCHOR_REPO"; return; }
+  fi
+  if [ -n "$flea" ]; then flea=$(readlink -f "$flea") || flea=""; fi
+  if [ -z "$anchor" ] || [ "$anchor" = "$flea" ]; then
+    printf 'no anchor arm ran in this run'; return
+  fi
+  sha=$(git -C "$anchor" rev-parse --short HEAD 2>/dev/null) || sha=unreadable
+  tag=$(git -C "$anchor" describe --tags --exact-match HEAD 2>/dev/null) || tag=untagged
+  printf '%s at %s %s' "$anchor" "$sha" "$tag"
+}
+
 # Entries in Quickshell's QML disk cache; arms run from sandbox paths add to it, and a cold launch pays for its size.
 qmlcache_count() {
   local d="${XDG_CACHE_HOME:-$HOME/.cache}/quickshell/qmlcache"
@@ -225,6 +266,19 @@ say "- fixture kind: ${FIXTURE_KIND:-btrfs}"
 say "- fixture payload: $(ls -U "$FIXTURE" | wc -l) visible entries, filesystem $(findmnt -no FSTYPE -T "$FIXTURE")"
 say "- TUI terminal: $TUI_TERMINAL $(pkg_version "$TUI_TERMINAL")"
 say "- flea launch line: ${FLEA_LAUNCH_LINE:-not recorded by the caller}"
+say "- harness: $(harness_marker)"
+say "- manifest tool: $(manifest_tool_marker)"
+say "- anchor arm (flea-anchor): $(anchor_line)"
+if [ -x "${STRATA_BIN:-}" ]; then
+  say "- strata binary: $STRATA_BIN reports '$("$STRATA_BIN" --version 2>&1 | head -1)', built from ${STRATA_SRC:-an unrecorded source tree}"
+fi
+# Each kind's rows rotate one place a run, so the place an entrant held is recorded beside the numbers.
+say "- launch order: each kind's rows rotate one place a run and reverse every other full cycle; place N is the Nth entrant of its kind that launched in that run, after ONLY and absence"
+if [ -n "${LAUNCH_ORDER:-}" ]; then
+  say '```'
+  printf '%s\n' "$LAUNCH_ORDER" >> "$OUT"
+  say '```'
+fi
 # An idle box is a run condition, so it is recorded rather than assumed. cargo test is a run
 # condition too now: its deadline test asserts three reads are instant, so a suite running inside
 # this window fails there and reads as an archive regression.

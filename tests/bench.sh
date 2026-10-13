@@ -355,9 +355,9 @@ done
 # trap hard rule 7 names first. The second was derived from the class field and quietly resolved to
 # a window class rather than a program, which the manifest would have printed as "absent".
 bench="$repo/tools/flea-field-bench"
-rows=$(sed -n '/^declare -a ENTRANTS=(/,/^)/p' "$bench" | grep '^  "' | tr -d '"')
+rows=$(sed -n '/^  declare -ga ENTRANTS=(/,/^  )/p' "$bench" | grep '^    "' | tr -d '"')
 # -f8-, matching the bench: the command field may hold a pipe and cut -f8 would stop at it.
-flea_cmd=$(printf '%s\n' "$rows" | grep '^  flea|' | cut -d'|' -f8-)
+flea_cmd=$(printf '%s\n' "$rows" | grep '^    flea|' | cut -d'|' -f8-)
 tui_term=$(grep -m1 '^TUI_TERM=' "$bench" | cut -d= -f2)
 # The header and the row are written in two different places, so a column added to one and not the
 # other produces a CSV that parses and is wrong from that column rightward.
@@ -367,7 +367,7 @@ check "the CSV header and the row have the same column count" "$header_fields" "
 
 # tools/flea-bench-capability reads the same entrant table. A row extraction that comes back empty
 # would report every entrant as capable of nothing, which reads as a result.
-cap_gui=$(sed -n '/^declare -a ENTRANTS=(/,/^)/p' "$bench" | grep '^  "' | tr -d '"' | grep -c '|gui|')
+cap_gui=$(sed -n '/^  declare -ga ENTRANTS=(/,/^  )/p' "$bench" | grep '^    "' | tr -d '"' | grep -c '|gui|')
 if [ "$cap_gui" -ge 5 ]; then
   echo "ok   the capability pass can see the GUI entrants: $cap_gui of them"
 else
@@ -454,7 +454,7 @@ case $scope_cg in
 esac
 
 # nautilus's indexer outlives it and crawled $HOME under every later entrant's cold launch, so the kill list ends it after nautilus.
-FLEA_UI=/nonexistent TUI_TERM=kitty TUI_CLASS=flea-bench-kitty
+FLEA_UI=/nonexistent ANCHOR_UI=/nonexistent TUI_TERM=kitty TUI_CLASS=flea-bench-kitty
 eval "$(sed -n '/^declare -a KILL_TARGETS=(/,/^)/p; /^kill_comms_for() {/,/^}/p' "$bench")"
 kill_rows=" ${KILL_TARGETS[*]} "
 case $kill_rows in *" localsearch-3| "*) indexer=listed ;; *) indexer=missing ;; esac
@@ -521,13 +521,13 @@ check "and an empty daemon set never fails" "0" "$rc"
 # Header and row are pinned whole, so a column moved or dropped in either one fails here.
 # Sample input, one run_one line: echo "id,run,mapped_ms,settled_ms,..." (the header, quoted).
 header_line=$(sed -n 's/^echo "\(id,run,[^"]*\)".*/\1/p' "$bench")
-check "the CSV header names every column in order" "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun,first_rows_ms" "$header_line"
+check "the CSV header names every column in order" "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun,first_rows_ms,launch_pos" "$header_line"
 row_line=$(grep '^  printf .%s,%s' "$bench" | head -1)
 row_specs=$(printf '%s\n' "$row_line" | grep -o '%s' | wc -l)
 check "run_one's row carries one %s per header column" "$(printf '%s\n' "$header_line" | tr ',' '\n' | wc -l)" "$row_specs"
 # Sample input, one run_one line: printf '%s,%s...\\n...' "$id" "$RUN_INDEX" ... (the row, quoted).
 row_args=$(printf '%s\n' "$row_line" | sed 's/^.*\\n. //')
-check "run_one's row prints the header's columns in its order" '"$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N" "$first_rows"' "$row_args"
+check "run_one's row prints the header's columns in its order" '"$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N" "$first_rows" "$LAUNCH_POS"' "$row_args"
 
 # ---------------------------------------------------------------- report Version column
 # Every versioned table names the version beside the app, read off the manifest line only.
@@ -627,6 +627,99 @@ sed 's/^polo[[:space:]].*/polo       gui  source abc1234 untagged (STALE), relea
 "$repo/tools/flea-bench-report" "$baddirty_csv" >"$scratch/baddirty.md" 2>"$scratch/baddirty.err"
 check "an unknown dirty word is refused" 1 $?
 holds "and names the entrant's version line" "the manifest version line for entrant 'polo' is unparseable" "$scratch/baddirty.err"
+
+# The EXIT trap on a clean run: every teardown step already ran once, so each helper stays 0 with nothing parked.
+cleanup_home="$scratch/cleanup-home"
+mkdir -p "$cleanup_home/.cache/flea" "$cleanup_home/.cache/thumbnails"
+cleanup_out=$((
+  HOME="$cleanup_home"
+  fail() { echo "refused: $*"; exit 3; }
+  eval "$(sed -n '/^token_pids() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^sweep_token() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^pids_for() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^kill_entrant() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^clean_bench() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^close_entrant_dialogs() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^cg_empty() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^sweep_cg() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^release_run_cg() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^restore_thumbs() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^restore_prefetch() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^prefetch_keep() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^watch_kill() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^safe_rm_tmpdir() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^stop_warm_job() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^bench_cleanup() {/,/^}/p' "$bench")"
+  BENCH_TOKEN="bench-clean-$$-$RANDOM"
+  SWEEP_TERM_POLLS=20 SWEEP_KILL_POLLS=20
+  KILL_TARGETS=() ENTRANTS=() WATCH_PIDS=()
+  ROWS_PID="" ENTRANT_LAUNCHED=yes RUN_CG="" ENTRANT_SCOPE=""
+  BENCH_CG="$scratch/cg"
+  THUMBS="$HOME/.cache/thumbnails" THUMBS_PARKED="$scratch/thumb-parked" THUMBS_PARKED_OK=no
+  PREFETCH="$HOME/.cache/flea/prefetch" PREFETCH_PARKED="$scratch/prefetch-parked" PREFETCH_PARKED_OK=no
+  PREFETCH_ARM="" PERF_TMP_MARK=.flea-perf-tmp
+  TUI_CONF="$scratch/clean-tui" && mkdir -p "$TUI_CONF"
+  FLEA_STATE=$(mktemp -d /tmp/flea-bench-state.XXXXXX) || exit 3
+  ANCHOR_STATE=$(mktemp -d /tmp/flea-bench-state.XXXXXX) || exit 3
+  trap 'rm -rf "$FLEA_STATE" "$ANCHOR_STATE"' EXIT
+  printf 'owner=%s\n' "$$" > "$TUI_CONF/$PERF_TMP_MARK" || exit 3
+  printf 'owner=%s\n' "$$" > "$FLEA_STATE/$PERF_TMP_MARK" || exit 3
+  printf 'owner=%s\n' "$$" > "$ANCHOR_STATE/$PERF_TMP_MARK" || exit 3
+  restore_thumbs; [ $? -eq 0 ] || exit 3
+  restore_thumbs; [ $? -eq 0 ] || exit 3
+  restore_prefetch; [ $? -eq 0 ] || exit 3
+  restore_prefetch; [ $? -eq 0 ] || exit 3
+  release_run_cg; [ $? -eq 0 ] || exit 3
+  release_run_cg; [ $? -eq 0 ] || exit 3
+  THUMBS_PARKED_OK=yes; restore_thumbs; [ $? -eq 0 ] || exit 3
+  restore_thumbs; [ $? -eq 0 ] || exit 3
+  PREFETCH_PARKED_OK=yes; restore_prefetch; [ $? -eq 0 ] || exit 3
+  restore_prefetch; [ $? -eq 0 ] || exit 3
+  true
+  ( bench_cleanup )
+) 2>&1)
+cleanup_rc=$?
+[ "$cleanup_rc" -eq 0 ] || { printf '%s\n' "$cleanup_out"; }
+check "a repeated teardown stays 0 and the clean-run trap exits 0" 0 "$cleanup_rc"
+
+# safe_rm_tmpdir removes only a directory this run made; symlink, foreign and missing markers refuse.
+tmpdir_out=$((
+  fail() { echo "refused: $*"; exit 3; }
+  eval "$(sed -n '/^safe_rm_tmpdir() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^materialize_tui_socket() {/,/^}/p' "$bench")"
+  PERF_TMP_MARK=.flea-perf-tmp
+  happy="$scratch/tmp-happy" && mkdir -p "$happy"
+  printf 'owner=%s\n' "$$" > "$happy/$PERF_TMP_MARK"
+  safe_rm_tmpdir "$happy" "TUI config" || exit 3
+  [ -e "$happy" ] && exit 3
+  target="$scratch/tmp-target" && mkdir -p "$target" && printf 'data' > "$target/f"
+  link="$scratch/tmp-link" && ln -s "$target" "$link"
+  safe_rm_tmpdir "$link" "TUI config" 2>/dev/null && exit 3
+  [ -f "$target/f" ] || exit 3
+  [ -L "$link" ] || exit 3
+  foreign="$scratch/tmp-foreign" && mkdir -p "$foreign"
+  printf 'owner=%s\n' "99999999" > "$foreign/$PERF_TMP_MARK"
+  safe_rm_tmpdir "$foreign" "TUI config" 2>/dev/null && exit 3
+  [ -d "$foreign" ] || exit 3
+  bare="$scratch/tmp-bare" && mkdir -p "$bare"
+  safe_rm_tmpdir "$bare" "TUI config" 2>/dev/null && exit 3
+  [ -d "$bare" ] || exit 3
+  marklink="$scratch/tmp-marklink" && mkdir -p "$marklink"
+  printf 'owner=%s\n' "$$" > "$scratch/real-marker"
+  ln -s "$scratch/real-marker" "$marklink/$PERF_TMP_MARK"
+  safe_rm_tmpdir "$marklink" "TUI config" 2>/dev/null && exit 3
+  [ -d "$marklink" ] || exit 3
+  TUI_CONF="$scratch/tmp-tuiconf" && mkdir -p "$TUI_CONF/kitty"
+  printf 'listen_on unix:/tmp/flea-bench-kitty\n' > "$TUI_CONF/kitty/kitty.conf"
+  materialize_tui_socket || exit 3
+  grep -q "unix:$TUI_CONF/flea-bench-kitty" "$TUI_CONF/kitty/kitty.conf" || exit 3
+  grep -q "unix:/tmp/flea-bench-kitty" "$TUI_CONF/kitty/kitty.conf" && exit 3
+  TUI_CONF="$scratch/tmp-noconf" && mkdir -p "$TUI_CONF"
+  materialize_tui_socket || exit 3
+) 2>&1)
+tmpdir_rc=$?
+[ "$tmpdir_rc" -eq 0 ] || { printf '%s\n' "$tmpdir_out"; }
+check "a symlinked dir, a foreign or missing marker, and the TUI socket behave" 0 "$tmpdir_rc"
 
 # The selftest log stays on disk so a red check still names its labels.
 "$repo/tools/flea-bench-readme" selftest >"$scratch/readme-selftest.log" 2>&1

@@ -20,8 +20,9 @@ case $scratch in
   /*/*) ;;
   *) echo "FAIL: mktemp -d gave '$scratch', which is not an absolute path two components deep"; exit 1 ;;
 esac
+: > "$scratch/.flea-test-sandbox"
 writer=""
-trap '[ -n "$writer" ] && kill "$writer" 2>/dev/null; rm -rf "$scratch"' EXIT
+trap '[ -n "$writer" ] && kill "$writer" 2>/dev/null; case $scratch in /?*) [ -f "$scratch/.flea-test-sandbox" ] && rm -rf -- "$scratch" ;; esac' EXIT
 
 block=$(sed -n '/^# tui frame begin$/,/^# tui frame end$/p' "$bench")
 [ -n "$block" ] || { echo "FAIL: no tui frame block in $bench"; exit 1; }
@@ -69,9 +70,10 @@ check "each TUI entrant is probed before it is measured" yes "$([ -n "$probe_lin
 probe_block=$(printf '%s\n' "$run_one" | sed -n '/^  if \[ "\$RUN_MODE" = rows \]; then$/,/^  fi$/p')
 check "a rows probe ends its launch and returns" 11 "$(printf '%s\n' "$probe_block" | grep -c '^    watch_kill; clean_bench; release_run_cg$')$(printf '%s\n' "$probe_block" | grep -c '^    return 0$')"
 check "a probe has a control group of its own" 1 "$(printf '%s\n' "$run_one" | grep -c '\[ "\$RUN_MODE" = rows \] && leaf="\$leaf-rows"')"
-tui_lines=$(grep -c '^  "[a-z-]*|tui|' "$bench")
-check "every TUI entrant's kitty takes the dump flag, escaped for the launch's eval" "$tui_lines" "$(grep '^  "[a-z-]*|tui|' "$bench" | grep -c -- '--class \$TUI_CLASS \\\$TUI_DUMP_FLAG ')"
-check "no TUI entrant's kitty names a dump of its own" 0 "$(grep '^  "[a-z-]*|tui|' "$bench" | grep -c -- '--dump-bytes')"
+tui_lines=$(grep -c '^    "[a-z-]*|tui|' "$bench")
+check "the roster reader finds TUI entrants" yes "$([ "$tui_lines" -gt 0 ] && echo yes || echo no)"
+check "every TUI entrant's kitty takes the dump flag, escaped for the launch's eval" "$tui_lines" "$(grep '^    "[a-z-]*|tui|' "$bench" | grep -c -- '--class \$TUI_CLASS \\\$TUI_DUMP_FLAG ')"
+check "no TUI entrant's kitty names a dump of its own" 0 "$(grep '^    "[a-z-]*|tui|' "$bench" | grep -c -- '--dump-bytes')"
 check "a window that never mapped shows no rows, and rows before the map are stamped at it" 1 "$(printf '%s\n' "$run_one" | grep -c 'if \[ "\$mapped" -lt 0 \]; then first_rows=-1; elif \[ "\$first_rows" -ge 0 \] && \[ "\$mapped" -gt "\$first_rows" \]; then first_rows=\$mapped; fi')"
 check "a window that mapped but listed nothing says so on stderr" 1 "$(printf '%s\n' "$run_one" | grep -c '\[ "\$first_rows" -lt 0 \] && \[ "\$mapped" -ge 0 \] && echo .*no fixture entry name reached kitty.s output.* >&2')"
 check "a probe refuses a dump on disk" 1 "$(printf '%s\n' "$run_one" | grep -c '\[ -n "\$TUI_DUMP_FLAG" \] && \[ "\$TUI_CONF_FS" != tmpfs \] && fail ')"
@@ -81,7 +83,8 @@ launched() {
     set +u
     TUI_TERM=fake_term TUI_CLASS=flea-bench-kitty TUI_CONF=$scratch FLEA_STATE=$scratch/state FLEA_BIN=/bin/flea-stub FIXTURE=/fixture
     TUI_DUMP=$scratch/kitty.dump TUI_DUMP_FLAG=""
-    eval "$(sed -n '/^declare -a ENTRANTS=($/,/^)$/p' "$bench")"
+    eval "$(sed -n '/^build_entrants() {$/,/^}$/p' "$bench")"
+    WITH_ANCHOR=no; build_entrants
     setsid() { "$@"; }; nohup() { "$@"; }
     fake_term() { printf '%s\n' "$*" >> "$scratch/argv"; }
     TUI_DUMP_FLAG=$1
@@ -104,8 +107,8 @@ check "run_one launches the entrant from a background group of this shell" 'eval
 check "a probe's launch hands every TUI kitty the dump" "$tui_lines" "$(grep -c -- "--class flea-bench-kitty --dump-bytes $scratch/kitty.dump " "$scratch/argv")"
 : > "$scratch/argv"; launched ""
 check "a measured launch hands no TUI kitty a dump" "$tui_lines 0" "$(grep -c -- '--class flea-bench-kitty ' "$scratch/argv") $(grep -c -- '--dump-bytes' "$scratch/argv")"
-check "the header ends with first_rows_ms" 1 "$(grep -c '^echo "id,run,.*,rerun,first_rows_ms" >> "\$OUT"$' "$bench")"
-check "the row ends with the first rows" 1 "$(grep -c '"\$WG_CLEAN" "\$RERUN_N" "\$first_rows"$' "$bench")"
+check "the header ends with first_rows_ms,launch_pos" 1 "$(grep -c '^echo "id,run,.*,rerun,first_rows_ms,launch_pos" >> "\$OUT"$' "$bench")"
+check "the row ends with the first rows and the launch place" 1 "$(grep -c '"\$WG_CLEAN" "\$RERUN_N" "\$first_rows" "\$LAUNCH_POS"$' "$bench")"
 
 [ "$bad" = 0 ] && echo "field-tui-frame: all passed" || echo "field-tui-frame: failures above"
 exit "$bad"
