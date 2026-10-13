@@ -9,8 +9,7 @@ Item {
   property color color: "white"
   // The size token every OEM bar mark takes, never a literal and never iconSmall.
   property real iconSize: Style.font.icon
-  // 0.8125 matches OEM bar marks ink for ink: 13 px ink at a 16 px icon token, so this box is the ink.
-  // A bar that fits measured bounds scales this box to its own icon size.
+  // 0.8125 gives 13 px ink at a 16 px token for OEM ink-for-ink parity; measured-bounds bars scale this ink box to their icon size.
   readonly property real opticalScale: 0.8125
   implicitWidth: Math.round(root.iconSize * root.opticalScale)
   implicitHeight: root.implicitWidth
