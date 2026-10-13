@@ -1,4 +1,5 @@
 use crate::backend::aliases::Aliases;
+use crate::backend::appicon;
 use crate::backend::extclass;
 use crate::backend::icons::Names;
 use crate::backend::kind::Kinds;
@@ -46,6 +47,8 @@ pub fn rows_line(
         let mime_name = mime.lookup(name);
         // A directory or a special file is never thumbnailed, so the spec lookup is skipped for one; see AGENTS.md "Thumbnail requests".
         let can_thumb = thumbnailable(m.mode) && mime_name.is_some_and(|m| thumbs.for_mime(m, aliases).is_some());
+        // Only a thumbnailable AppImage carries a, so Images mode can draw its own icon without admitting every executable.
+        let appimage = if can_thumb && mime_name.is_some_and(|m| appicon::is_appimage(m, aliases)) { r#","a":true"# } else { "" };
         // A symlink to a directory carries d:false by contract, so only the ICON follows the target.
         let folder_icon = is_dir || m.target_is_dir;
         let icon = icons.icon_for(mime_name, folder_icon, m.mode);
@@ -86,7 +89,7 @@ pub fn rows_line(
         };
         // The icon is escaped like every other field: the escape is the contract, not an optimisation.
         s.push_str(&format!(
-            r#"{{"n":"{}","d":{},"s":{},"m":{},"p":{},"i":"{}","t":{},"k":{}{}{}{}}}"#,
+            r#"{{"n":"{}","d":{},"s":{},"m":{},"p":{},"i":"{}","t":{},"k":{}{}{}{}{}}}"#,
             escape(name),
             is_dir,
             m.size,
@@ -97,7 +100,8 @@ pub fn rows_line(
             k,
             link,
             dev,
-            tg
+            tg,
+            appimage
         ));
     }
     let kinds_json: String = kind_list.iter().map(|k| format!(r#""{}""#, escape(k))).collect::<Vec<_>>().join(",");
@@ -219,6 +223,32 @@ mod tests {
         let s = rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
         assert!(s.contains(r#""n":"photo.jpg","d":false,"s":1,"m":2,"p":33188,"i":"image-x-generic","t":true"#));
         assert!(s.contains(r#""n":"notes.txt","d":false,"s":4,"m":5,"p":33188,"i":"text-x-generic","t":false"#));
+    }
+
+    #[test]
+    fn only_a_thumbnailable_appimage_row_carries_the_a_flag() {
+        let mut l = Listing::new();
+        for name in ["app.AppImage", "setup.exe", "photo.jpg", "sub"] {
+            l.push(name, name == "sub");
+        }
+        let aliases = Aliases::from_str("");
+        // The exe has a third-party thumbnailer and the same generic icon, which is the row Images mode must keep as a mark.
+        let exe = "[Thumbnailer Entry]\nTryExec=/bin/sh\nExec=/bin/sh %i %o\nMimeType=application/x-ms-dos-executable;\n";
+        let thumbs = Thumbnailers::from_entries(&[("e.thumbnailer".to_string(), exe.to_string())], &aliases).with_appimage_route(&aliases, true);
+        let mime = Db::from_str("50:application/vnd.appimage:*.AppImage\n50:application/x-ms-dos-executable:*.exe\n50:image/jpeg:*.jpg\n");
+        let icons = Names::from_str("application/vnd.appimage:application-x-executable\napplication/x-ms-dos-executable:application-x-executable\n");
+        let mut kinds = Kinds::from_pairs(&[]);
+        let metas: Vec<Meta> = [33188, 33188, 33188, 16877].iter().map(|&mode| Meta { size: 1, mtime: 2, mode, target_is_dir: false, target: String::new(), dev: 0 }).collect();
+        let s = rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
+        let rows: Vec<&str> = s.split("},{").collect();
+        assert!(rows[0].contains(r#""i":"application-x-executable","t":true"#) && rows[0].contains(r#""a":true"#), "{}", rows[0]);
+        assert!(rows[1].contains(r#""i":"application-x-executable","t":true"#), "the exe lost its thumbnailer: {}", rows[1]);
+        assert!(!rows[1].contains(r#""a""#), "an exe carried the AppImage flag: {}", rows[1]);
+        assert!(!rows[2].contains(r#""a""#) && !rows[3].contains(r#""a""#));
+        // No route and no thumbnailer for the type, so the row is not thumbnailable and carries no flag.
+        let bare = Thumbnailers::from_entries(&[], &aliases);
+        let s = rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &bare, &mut kinds);
+        assert!(!s.contains(r#""a":true"#), "{}", s);
     }
 
     #[test]

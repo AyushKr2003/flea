@@ -1,4 +1,5 @@
 use crate::backend::aliases::Aliases;
+use crate::backend::appicon;
 use crate::backend::child::{run_with_timeout, Ran};
 use crate::backend::{sandbox, thumbbind};
 use crate::backend::thumbargv::argv;
@@ -167,6 +168,9 @@ pub(crate) fn run_one(tables: &Tables, job: &mut Job) -> Outcome {
         Some(s) => s,
         None => return Outcome::Failed,
     };
+    if appicon::is_route(spec) {
+        return appicon::run(tables, job);
+    }
     // The cache key is the URI of the path the user named, because that is the key every other application on the box looks under; see AGENTS.md "Thumbnail cache".
     let key_uri = uri_for(&job.path);
     let final_path = tables.cache.large_path(&key_uri);
@@ -216,15 +220,19 @@ pub(crate) fn run_one(tables: &Tables, job: &mut Job) -> Outcome {
         // corner: a child that never started is the machine's fault, not the file's, so it is not recorded in fail/; see AGENTS.md "Thumbnail pool".
         return discard(&temp);
     }
-    // The child wrote a bare PNG, so the spec's own metadata is added before the file is published.
-    if stamp(&temp, &key_uri, job.mtime).is_err() || std::fs::rename(&temp, &final_path).is_err() {
-        return discard(&temp);
+    publish(&temp, &key_uri, job.mtime, final_path)
+}
+
+// The child wrote a bare PNG, so the spec's own metadata is added before the file is published.
+pub(crate) fn publish(temp: &Path, key_uri: &str, mtime: i64, final_path: PathBuf) -> Outcome {
+    if stamp(temp, key_uri, mtime).is_err() || std::fs::rename(temp, &final_path).is_err() {
+        return discard(temp);
     }
     Outcome::Ready(final_path)
 }
 
 // A timeout on a non-local file records nothing, so a slow share never stays broken.
-fn records_marker(ran: &Ran, class: &str) -> bool {
+pub(crate) fn records_marker(ran: &Ran, class: &str) -> bool {
     match ran {
         Ran::Succeeded | Ran::Failed => true,
         Ran::TimedOut => class.is_empty(),
@@ -233,17 +241,17 @@ fn records_marker(ran: &Ran, class: &str) -> bool {
 }
 
 // A decoder that ran to completion and left an empty file has judged these bytes, which is exactly what a fail marker records.
-fn wrote_something(temp: &Path) -> bool {
+pub(crate) fn wrote_something(temp: &Path) -> bool {
     std::fs::metadata(temp).map(|m| m.len() > 0).unwrap_or(false)
 }
 
 // Every failing path drops its own temp; the one path that cannot is a worker abandoned at exit, which run.rs sweeps by pid.
-fn discard(temp: &Path) -> Outcome {
+pub(crate) fn discard(temp: &Path) -> Outcome {
     let _ = std::fs::remove_file(temp);
     Outcome::Failed
 }
 
-fn record_failure(cache: &Cache, uri: &str, mtime: i64, table: &str) {
+pub(crate) fn record_failure(cache: &Cache, uri: &str, mtime: i64, table: &str) {
     let path = cache.fail_path(uri);
     let dir = match path.parent() {
         Some(d) => d.to_path_buf(),

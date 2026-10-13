@@ -151,8 +151,8 @@ function posterLimit(isVideo, thumbWidth, thumbHeight, originalWidth, originalHe
     return thumbLimit(thumbWidth, thumbHeight, originalWidth, originalHeight)
 }
 
-// Backend icon identity distinguishes image thumbnails from video without opening any extra file.
+// Backend icon identity distinguishes image thumbnails from video without opening any extra file; an AppImage's own icon is its identity, so Images draws a row the backend flagged a.
 function allowed(row, mode) {
     if (!row || !row.t || mode === "off") return false
-    return mode !== "images" || row.i === "image-x-generic"
+    return mode !== "images" || row.i === "image-x-generic" || row.a === true
 }

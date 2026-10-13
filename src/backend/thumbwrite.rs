@@ -1,3 +1,4 @@
+use crate::backend::archivework::WORK_PREFIX;
 use crate::backend::thumbcache::TABLE_KEY;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -46,9 +47,17 @@ pub fn exclusive_temp(dir: &Path) -> Option<PathBuf> {
     None
 }
 
+// The AppImage icon job's work folder is named by this tag, so the same sweep can find this process's and no other process's.
+pub(crate) const WORK_TAG: &str = "appicon";
+
+fn work_prefix() -> String {
+    format!("{}{}-{}-", WORK_PREFIX, WORK_TAG, std::process::id())
+}
+
 // A worker abandoned at shutdown dies between its temp and its own discard, so the process that made them removes its own; see AGENTS.md "Thumbnail requests".
 pub fn sweep_own_temps(dir: &Path) {
     let prefix = temp_prefix();
+    let work = work_prefix();
     let read = match std::fs::read_dir(dir) {
         Ok(r) => r,
         Err(_) => return,
@@ -57,6 +66,8 @@ pub fn sweep_own_temps(dir: &Path) {
         let name = item.file_name().to_string_lossy().to_string();
         if name.starts_with(&prefix) && name.ends_with(".png") {
             let _ = std::fs::remove_file(item.path());
+        } else if name.starts_with(&work) && item.file_type().is_ok_and(|t| t.is_dir()) {
+            let _ = std::fs::remove_dir_all(item.path());
         }
     }
 }
@@ -185,6 +196,7 @@ pub fn write_marker(path: &Path, uri: &str, mtime: i64, table: Option<&str>) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::archivework::Work;
     use crate::backend::testdir::TestDir;
     use crate::backend::thumbcache::png_text;
 
@@ -266,6 +278,24 @@ mod tests {
         let kept = published.exists() && other_pid.exists() && other_app.exists();
         assert!(gone, "the sweep left this process's own temp behind");
         assert!(kept, "the sweep removed a file it did not create");
+    }
+
+    #[test]
+    fn the_sweep_takes_an_abandoned_icon_work_folder_of_this_process_only() {
+        let dir = TestDir::new("sweep-work");
+        // A killed worker never runs the Work drop, so the folder is forgotten rather than dropped.
+        let work = Work::new(dir.path(), WORK_TAG).unwrap();
+        let mine = work.dir.clone();
+        std::fs::write(mine.join("list.txt"), b"x").unwrap();
+        std::mem::forget(work);
+        let other_pid = dir.join(".flea-work-appicon-1-0");
+        let other_tag = dir.join(&format!("{}archive-{}-0", WORK_PREFIX, std::process::id()));
+        for p in [&other_pid, &other_tag] {
+            std::fs::create_dir(p).unwrap();
+        }
+        sweep_own_temps(dir.path());
+        assert!(!mine.exists(), "the sweep left this process's abandoned work folder behind");
+        assert!(other_pid.exists() && other_tag.exists(), "the sweep removed a folder it did not create");
     }
 
     #[test]

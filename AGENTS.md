@@ -4123,6 +4123,8 @@ The office preview queue records one ceiling, re-derived with `wc -l`: `src/back
 
 The code column reload guard records one ceiling, re-derived with `wc -l`: `tests/code-column.qml` crosses the hard cap at 411 for the listing guard check, which counts the code asks and queued loads made while the reload's listing is out, and the fixture restore that lets both harness runs share one fixture; recorded rather than split because both pin the same reload.
 
+The AppImage icon route, merged from `gm/0310-pv-appi` onto the 0.3.11 stage, moves two ceilings, each re-derived with `wc -l` on the merged tree: `src/backend/thumbs.rs` 495 to 503 for the route dispatch in `run_one`, the `publish` split and the table argument that `record_failure` now takes, and `src/backend/thumbspec.rs` 410 to 426 for the internal AppImage spec, `is_runnable` and the `with_appimage_route` hook. `src/backend/appicon.rs` (373) and `src/backend/appicon_tests.rs` (398) stay under the hard cap.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
