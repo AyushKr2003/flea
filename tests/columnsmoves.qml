@@ -4,6 +4,7 @@ import QtTest
 import Quickshell
 import "flea" as Flea
 import "flea/js/Nav.js" as Nav
+import "flea/js/Swap.js" as Swap
 import "columnsframes.js" as Frames
 
 // Every move runs through a real Pane and ColumnsArea; replies and assertions advance by rendered frames.
@@ -21,6 +22,12 @@ ShellRoot {
     property int failures: 0
     property bool warmed: false
     property bool freezePeeks: false
+    property bool freezeLists: false
+    property var waitStep: null
+    property bool samplingSupersede: false
+    property int supersedeFrames: 0
+    property bool supersedeBlank: false
+    property double shownAt: 0
     readonly property string base: "/fixture/group/a"
     readonly property string railPath: Quickshell.env("HOME")
     readonly property var cases: ["parent-click", "grandparent-click", "third-click", "right", "enter", "left", "back", "chrome-up", "backspace", "rail", "arrow", "parent-file-click"]
@@ -92,8 +99,9 @@ ShellRoot {
     }
 
     function pump() {
-        var ready = queue.filter(function (one) { return one.due <= root.frameNumber && !(root.freezePeeks && one.request.c === "peek") })
-        queue = queue.filter(function (one) { return one.due > root.frameNumber || root.freezePeeks && one.request.c === "peek" })
+        var blocked = function (one) { return root.freezePeeks && one.request.c === "peek" || root.freezeLists && one.request.c === "list" }
+        var ready = queue.filter(function (one) { return one.due <= root.frameNumber && !blocked(one) })
+        queue = queue.filter(function (one) { return one.due > root.frameNumber || blocked(one) })
         for (var item of ready) {
             var one = item.request, all = dirs[one.path] || []
             if (one.c === "list") {
@@ -109,6 +117,11 @@ ShellRoot {
     }
     function census() { return Frames.census(area) }
     function sample() {
+        if (samplingSupersede && pane.path === "/elsewhere/rail") {
+            supersedeFrames++
+            var columns = census().columns
+            if (!area.landing.loading(area.parentPath) && (!columns[0] || columns[0].rows === 0)) supersedeBlank = true
+        }
         if (phase !== 3 || !area) return
         var state = census()
         samples.push(state)
@@ -179,8 +192,103 @@ ShellRoot {
         console.log("COLUMNMOVES CONTROL " + (ok ? "PASS " : "FAIL ") + label)
     }
     function finish() { console.log("COLUMNMOVES DONE " + cases.length + " moves, " + failures + " failed"); Qt.quit() }
+    function until(label, condition, then) {
+        waitStep = { label: label, condition: condition, then: then, deadline: Date.now() + 3000 }
+    }
+    Timer {
+        interval: 4; running: root.waitStep !== null; repeat: true
+        onTriggered: {
+            var step = root.waitStep
+            if (step.condition()) { root.waitStep = null; step.then() }
+            else if (Date.now() >= step.deadline) { root.waitStep = null; root.control(false, step.label + " timed out"); root.finish() }
+        }
+    }
+    function findItem(item, predicate) {
+        if (predicate(item)) return item
+        if (item.children !== undefined)
+            for (var child of item.children) { var found = findItem(child, predicate); if (found) return found }
+        return null
+    }
+    function supersede() {
+        freezePeeks = true
+        pane.open("/elsewhere/rail")
+        until("first landing with a pending ancestor", function () { return !pane.listInFlight && pane.path === "/elsewhere/rail" }, function () {
+            var drawn = area.rowsFor(area.parentPath)
+            control(area.landing.waiting(area.parentPath) && drawn.length > 0, "first landing holds its pending ancestor")
+            freezeLists = true
+            pane.open("/fixture/other")
+            control(area.rowsFor(area.parentPath).length > 0, "superseding request keeps the on-screen ancestor")
+            control(area.landing.held["/fixture"] && area.landing.held["/fixture"].rows === drawn, "new hold takes the rows the old slot draws")
+            samplingSupersede = true
+            until("two superseding frames", function () { return supersedeFrames >= 2 }, function () {
+                control(!supersedeBlank, "every superseding frame keeps the on-screen ancestor until the swap or cap")
+                samplingSupersede = false; freezeLists = false; freezePeeks = false
+                until("superseding landing settles", settled, function () {
+                    control(pane.path === "/fixture/other" && area.rowsFor(area.parentPath)[0].n === "group", "superseding landing draws the new ancestor")
+                    timedFallback()
+                })
+            })
+        })
+    }
+    function timedFallback() {
+        freezePeeks = true
+        var began = Date.now()
+        pane.open("/elsewhere/rail")
+        until("timed fallback lands", function () { return !pane.listInFlight && pane.path === "/elsewhere/rail" }, function () {
+            var column = findItem(area, function (item) { return item.viewport !== undefined && item.pane === null && item.visible && item.width > 0 })
+            control(column !== null && area.rowsFor(area.parentPath).length > 0, "pending ancestor starts with held rows")
+            if (!column) { finish(); return }
+            column.visible = false
+            until("past the real cap", function () { return Date.now() - began >= Swap.CAP_MS + 35 }, function () {
+                control(area.landing.loading(area.parentPath) && area.rowsFor(area.parentPath).length === 0, "real cap timer replaces held rows with reading")
+                var mark = findItem(column, function (item) { return item.shown !== undefined && item.heldOff !== undefined })
+                if (!mark) { control(false, "cap builds the LoadingState"); finish(); return }
+                mark.shownChanged.connect(function () { if (mark.shown) root.shownAt = Date.now() })
+                until("minimum passes while the mark is hidden", function () { return Date.now() - began >= Swap.CAP_MS + Swap.MIN_SHOW_MS + 60 }, function () {
+                    column.visible = true
+                    control(mark.shown && shownAt > 0, "LoadingState reports when its mark is shown")
+                    freezePeeks = false; pump()
+                    control(area.landing.loading(area.parentPath) && area.landing.held[area.parentPath] && area.landing.held[area.parentPath].ready,
+                            "reply during the shown minimum stays covered")
+                    until("real minimum timer releases the reply", function () { return !area.landing.waiting(area.parentPath) }, function () {
+                        control(Date.now() - shownAt >= Swap.MIN_SHOW_MS && !column.loadingRows && area.rowsFor(area.parentPath).length > 0,
+                                "real minimum timer releases only after the mark stands MIN_SHOW_MS")
+                        loadingSupersede()
+                    })
+                })
+            })
+        })
+    }
+    function loadingSupersede() {
+        pane.open("/fixture/other")
+        until("reading supersede starts from a settled listing", settled, function () {
+            freezePeeks = true
+            pane.open("/elsewhere/rail")
+            var column = findItem(area, function (item) { return item.viewport !== undefined && item.pane === null && item.visible && item.width > 0 })
+            var appearedAt = 0
+            column.loadingShown.connect(function (shown) { if (shown && appearedAt === 0) appearedAt = Date.now() })
+            until("ancestor's real cap shows reading", function () {
+                var mark = findItem(column, function (item) { return item.shown !== undefined && item.heldOff !== undefined })
+                return !pane.listInFlight && column.loadingRows && mark && mark.shown
+            }, function () {
+                pane.open("/fixture/other")
+                control(column.loadingRows, "superseding request keeps the shown reading state")
+                until("reading supersede lands", function () { return !pane.listInFlight && pane.path === "/fixture/other" }, function () {
+                    var mark = findItem(column, function (item) { return item.shown !== undefined && item.heldOff !== undefined })
+                    control(column.loadingRows && mark && mark.shown, "superseding landing carries the shown reading state")
+                    freezePeeks = false
+                    until("reading supersede's reply lands", settled, function () {
+                        control(Date.now() - appearedAt >= Swap.MIN_SHOW_MS && !column.loadingRows && area.rowsFor(area.parentPath).length > 0,
+                                "superseding reading state keeps its shown minimum before releasing to the new rows")
+                        finish()
+                    })
+                })
+            })
+        })
+    }
     function advance() {
         frameNumber++; pump(); waited++
+        if (phase >= 6) return
         if (waited > 300) { console.log("COLUMNMOVES FAIL stalled " + cases[caseIndex] + " phase=" + phase); Qt.quit(); return }
         if (phase === 0) {
             Flea.ViewState.state = { view: "columns", keys: "default", columnsLimit: 3 }
@@ -208,20 +316,7 @@ ShellRoot {
         } else if (phase === 5 && settled()) {
             control(area.rowsFor(area.parentPath).some(function (row) { return row.n === "fresh" }), "watching refresh survives a lateral landing and updates in place")
             control(area.deniedMode(area.parentPath) === -1, "successful refresh removes the previous denial")
-            freezePeeks = true
-            pane.open("/elsewhere/rail")
-            phase = 6; waited = 0
-        } else if (phase === 6 && !pane.listInFlight) {
-            var parent = area.parentItemAt(0)
-            control(area.landing.waiting(area.parentPath) && parent && parent.row, "a changed ancestor keeps its old rows")
-            area.landing.expire()
-            control(area.landing.loading(area.parentPath) && area.rowsFor(area.parentPath).length === 0, "cap replaces old rows with reading")
-            freezePeeks = false; phase = 7; waited = 0
-        } else if (phase === 7 && !queue.length) {
-            control(area.landing.loading(area.parentPath) && area.landing.held[area.parentPath].ready, "a reply inside the reading minimum stays covered")
-            area.landing.releaseMinimum()
-            control(!area.landing.waiting(area.parentPath) && area.rowsFor(area.parentPath).length > 0, "reading minimum releases the completed ancestor")
-            finish()
+            phase = 6; supersede()
         }
     }
 }

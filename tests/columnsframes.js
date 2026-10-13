@@ -7,10 +7,13 @@ function census(area) {
         var o = stack.pop()
         if (!o) continue
         if (o.viewport !== undefined && o.drawsEmpty !== undefined && o.visible && o.width > 0) {
-            var count = 0, kids = o.viewport.contentItem.children
+            var count = 0, firstName = "", firstY = Infinity, kids = o.viewport.contentItem.children
             for (var it of kids)
-                if (it.live && it.visible && it.row && it.y + it.height > o.viewport.contentY && it.y < o.viewport.contentY + o.viewport.height) count++
-            found.push({ x: Math.round(o.mapToItem(area, 0, 0).x), rows: count, total: o.rowTotal })
+                if (it.live && it.visible && it.row && it.y + it.height > o.viewport.contentY && it.y < o.viewport.contentY + o.viewport.height) {
+                    count++
+                    if (it.y < firstY) { firstY = it.y; firstName = it.row.n }
+                }
+            found.push({ x: Math.round(o.mapToItem(area, 0, 0).x), rows: count, total: o.rowTotal, firstName: firstName })
         }
         if (o.children !== undefined) for (var child of o.children) stack.push(child)
     }

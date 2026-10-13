@@ -415,6 +415,7 @@ Item {
                 rows: root.greatGrandparentShown ? root.rowsFor(root.greatGrandparentPath) : []
                 enabled: !neighbourLanding.waiting(root.greatGrandparentPath)
                 loadingRows: neighbourLanding.loading(root.greatGrandparentPath)
+                onLoadingShown: function (shown) { neighbourLanding.markShown(root.greatGrandparentPath, shown) }
                 peekSource: root.peekSource(root.greatGrandparentPath)
                 lockedMode: root.greatGrandparentShown ? root.deniedMode(root.greatGrandparentPath) : -1
                 drawsEmpty: root.greatGrandparentShown && root.answered(root.greatGrandparentPath) && !neighbourLanding.waiting(root.greatGrandparentPath)
@@ -443,6 +444,7 @@ Item {
                 rows: root.grandparentShown ? root.rowsFor(root.grandparentPath) : []
                 enabled: !neighbourLanding.waiting(root.grandparentPath)
                 loadingRows: neighbourLanding.loading(root.grandparentPath)
+                onLoadingShown: function (shown) { neighbourLanding.markShown(root.grandparentPath, shown) }
                 peekSource: root.peekSource(root.grandparentPath)
                 lockedMode: root.grandparentShown ? root.deniedMode(root.grandparentPath) : -1
                 drawsEmpty: root.grandparentShown && root.answered(root.grandparentPath) && !neighbourLanding.waiting(root.grandparentPath)
@@ -469,6 +471,7 @@ Item {
             rows: (root.showParent && root.parentShown) ? root.rowsFor(root.parentPath) : []
             enabled: !neighbourLanding.waiting(root.parentPath)
             loadingRows: neighbourLanding.loading(root.parentPath)
+            onLoadingShown: function (shown) { neighbourLanding.markShown(root.parentPath, shown) }
             peekSource: root.peekSource(root.parentPath)
             lockedMode: (root.showParent && root.parentShown) ? root.deniedMode(root.parentPath) : -1
             drawsEmpty: root.parentShown && root.answered(root.parentPath) && !neighbourLanding.waiting(root.parentPath)

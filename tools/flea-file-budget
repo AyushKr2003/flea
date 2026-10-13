@@ -129,8 +129,8 @@ tests/touchpad.qml 882
 tests/xwsettings-tabs.qml 379
 ui/Backend.qml 597
 ui/ChromeBar.qml 352
-ui/ColumnsArea.qml 587
-ui/ColumnPane.qml 456
+ui/ColumnsArea.qml 590
+ui/ColumnPane.qml 461
 ui/ContextMenu.qml 737
 ui/ConvertDialog.qml 456
 ui/GridArea.qml 665

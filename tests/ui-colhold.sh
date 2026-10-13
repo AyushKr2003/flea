@@ -41,6 +41,7 @@ PY
     [[ "$(ipc columnNames child)" == b.txt ]] || fail "colhold: the new child never drew its row"
     shot colhold-landed
     frames="$evidence_dir/colhold-frames.jsonl"
+    # Sample input: COLHOLD FRAME {"path":"/fixture/b","columns":[{"rows":2,"firstName":"a"},{"rows":1,"firstName":"child"},{"rows":1,"firstName":"b.txt"}],"hasThird":true}
     python3 - "$flea_log" "$frames" "$dir/a" "$dir/b" <<'PY'
 import json
 import pathlib
@@ -52,7 +53,7 @@ for line in pathlib.Path(log).read_text(errors="replace").splitlines():
         frames.append(json.loads(line.split("COLHOLD FRAME ", 1)[1]))
 start = next((i for i, f in enumerate(frames) if f["path"] == before and len(f["columns"]) == 3 and all(c["rows"] for c in f["columns"])), None)
 assert start is not None, "colhold: no settled original frame"
-end = next((i for i in range(start + 1, len(frames)) if frames[i]["path"] == after and len(frames[i]["columns"]) == 3 and all(c["rows"] for c in frames[i]["columns"])), None)
+end = next((i for i in range(start + 1, len(frames)) if frames[i]["path"] == after and len(frames[i]["columns"]) == 3 and frames[i]["columns"][-1]["firstName"] == "b.txt"), None)
 assert end is not None, "colhold: no settled completed frame"
 seen = frames[start:end + 1]
 pathlib.Path(output).write_text("".join(json.dumps(f) + "\n" for f in seen))
