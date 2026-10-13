@@ -97,7 +97,7 @@ package() {
   install -Dm644 shelf/manifest.json shelf/README.md shelf/*.qml shelf/*.js -t "$pkgdir/usr/share/flea/shelf"
   # The package's own version on the copy, so every build and rebuild replaces the user's (docs/release.md).
   sed -i "s/^  \"version\": \"[^\"]*\",\$/  \"version\": \"$pkgver-$pkgrel\",/" "$pkgdir/usr/share/flea/shelf/manifest.json"
-  grep -qF "  \"version\": \"$pkgver-$pkgrel\"," "$pkgdir/usr/share/flea/shelf/manifest.json" || { echo "the shelf manifest version stamp missed" >&2; return 1; }
+  grep -qF "  \"version\": \"$pkgver-$pkgrel\"," "$pkgdir/usr/share/flea/shelf/manifest.json" || { echo "$pkgname: /usr/share/flea/shelf/manifest.json does not carry the version $pkgver-$pkgrel" >&2; return 1; }
   # Commons and Ui are Omarchy's own, reached as qs.Commons: the checkout links them and so does the
   # package. Both directories get the pair, because that import resolves against the config root and
   # ui/boot is the config root the entries are launched from.
