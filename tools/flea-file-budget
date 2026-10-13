@@ -77,7 +77,7 @@ tests/js/facts.js 351
 tests/js/devices.js 406
 tests/js/previewswap.js 475
 tests/js/mdstructure.js 655
-tests/js/keymap.js 356
+tests/js/keymap.js 366
 tests/js/focus.js 843
 tests/js/mounts.js 349
 tests/js/menu.js 596
@@ -136,7 +136,7 @@ ui/ConvertDialog.qml 456
 ui/GridArea.qml 665
 ui/Ipc.qml 983
 tests/gridprebuild.qml 457
-tests/code-column.qml 411
+tests/code-column.qml 416
 tests/preview-pdf-flow.qml 439
 tests/columnsprebuild.qml 416
 ui/KeymapSheet.qml 551
@@ -158,12 +158,12 @@ ui/PaneWire.qml 602
 ui/PermissionsDialog.qml 658
 ui/PickerWindow.qml 812
 ui/Preview.qml 1009
-ui/PreviewColumn.qml 545
+ui/PreviewColumn.qml 546
 ui/DeviceMounts.qml 537
 ui/js/Facts.js 360
 ui/PreviewPdf.qml 482
 ui/PickerChrome.qml 295
-ui/PreviewMarkdown.qml 625
+ui/PreviewMarkdown.qml 628
 ui/Row.qml 496
 ui/SettingsPanel.qml 547
 ui/SettingsRow.qml 409
@@ -178,8 +178,8 @@ ui/js/Anchor.js 379
 ui/js/ColumnsCarry.js 94
 ui/js/Devices.js 405
 ui/js/Filter.js 284
-ui/js/Focus.js 489
-ui/js/Keymap.js 368
+ui/js/Focus.js 491
+ui/js/Keymap.js 370
 ui/js/Nav.js 328
 ui/js/Markdown.js 135
 ui/js/MdBlocks.js 437

@@ -32,7 +32,6 @@ Item {
     property bool loadingHeldOff: false
     property int selectionCount: 0
     property var selectedRows: []
-    // The row's own absolute path, which the PDF page needs and nothing else here does.
     property string path: ""
     readonly property real pdfScrollY: pdfFlick.contentY
     readonly property var pdfFrameItem: frame
@@ -271,6 +270,7 @@ Item {
                     item.active = Qt.binding(function () { return root.markdownActive })
                     item.truncate = Qt.binding(function () { return root.truncateText })
                     item.compact = true
+                    item.externalScrollBars = true
                 }
             }
             // The PDF's pages, one under another at the frame's width; QtPdf is reached only through this Loader, so a folder with no PDF never opens one.
@@ -408,14 +408,17 @@ Item {
         }
     }
 
+    Flea.PreviewScroll {
+        id: scrolling
+        column: root
+    }
+
+    function pageBy(direction) { scrolling.pageBy(direction) }
     // The page under the frame's top, read back over IPC too, and the turn that scrolls to the next or previous one.
     function pdfPage() { return pdfLoader.item ? pdfLoader.item.page : 0 }
     function turnPage(delta) { if (pdfLoader.item) pdfLoader.item.turn(delta) }
     function toggleExpand() { root.expandRequested() }
-    function scrollPage(delta) {
-        pdfFlick.contentY = Math.max(0, Math.min(pdfFlick.contentHeight - pdfFlick.height,
-            pdfFlick.contentY + delta * Theme.rowHeight))
-    }
+    function scrollPage(delta) { scrolling.scrollPage(delta, pdfFlick) }
     // Whether a PdfDocument exists at all, which is what makes the Loader worth having.
     function pdfLoaded() { return pdfLoader.item !== null }
     function pdfLanded() { return pdfLoader.item ? pdfLoader.item.landedPages() : [] }
@@ -443,9 +446,7 @@ Item {
         }
         return out.join("\n")
     }
-    // The swap waits on the text that is actually drawn: the rendered document for Markdown.
-    readonly property bool textLoading: root.isMarkdownRow
-        ? (markdown ? markdown.loading : true) : lines.loading
+    readonly property bool textLoading: scrolling.loading
     function archiveNames() { return root.meta && root.meta.names ? root.meta.names.map(function (e) { return e.n }).join("|") : "" }
     function failureText() { return root.failure }
     function toggleFacts() { ViewState.changeKey("previewFacts", ViewState.previewFacts === "compact" ? "full" : "compact") }

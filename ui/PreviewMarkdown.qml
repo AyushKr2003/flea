@@ -11,6 +11,8 @@ Item {
     property bool active: false
     property string path: ""
     property int size: 0
+    readonly property alias viewport: body
+    property bool externalScrollBars: false
     // "rendered" or "source"; anything else reads as rendered. Only the Quick Look's r asks for source.
     property string view: Markdown.RENDERED
 
@@ -585,6 +587,7 @@ Item {
 
         Flea.ViewportScrollBar {
             parent: root
+            visible: !root.externalScrollBars && overflow && body.visible
             anchors { top: parent.top; right: parent.right }
             flickable: body
         }

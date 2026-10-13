@@ -31,6 +31,7 @@ Item {
     readonly property string fileText: file.text()
     // The line view, built the first time a text or code file is previewed so a launch that never previews one loads none of it.
     readonly property var code: codeLoader.item
+    readonly property var viewport: root.code ? root.code.viewport : null
     readonly property string answer: root.code ? root.code.answer : ""
     readonly property string shownText: root.fromFile ? root.fileText : root.lines.join("\n")
     readonly property var lines: root.code ? root.code.lines : []
@@ -70,7 +71,8 @@ Item {
             item.text = Qt.binding(function () { return root.fromFile && file.loaded ? root.fileText : null })
             item.active = Qt.binding(function () { return root.active && !root.overSize })
             item.numbered = Qt.binding(function () { return root.numbered })
-            item.limit = root.maxLines
+            item.limit = 0
+            item.scrolls = true
             item.margin = 0
             item.pixelSize = Theme.font.caption
         }
