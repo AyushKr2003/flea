@@ -93,6 +93,12 @@ whenever a component is added, so a figure pinned in this paragraph would be sta
 hold exactly that many. The two symlinks are why `omarchy` is a hard dependency: they point into a
 directory that package owns.
 
+## An iPhone's tethering connection
+
+Pairing an iPhone also switches it to its tethering USB configuration, so iOS shows Personal Hotspot
+as active while it is plugged in; Flea does not use that connection. To keep this machine from routing
+through the phone, add a NetworkManager `conf.d` drop-in with `unmanaged-devices=driver:ipheth`.
+
 ## Uninstall
 
 ```
