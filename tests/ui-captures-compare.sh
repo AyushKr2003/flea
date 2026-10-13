@@ -55,7 +55,7 @@ cap_compare_shot() {
 
 # Every specimen enters through two listing marks and the menu's Compare row.
 cap_compare_open() {
-    local dir="$1" first="$2" second="$3" answer="$4" title="$5"
+    local dir="$1" first="$2" second="$3" answer="$4" title="$5" menu_state
     seed_ui_state "${dir%/*}/state-$answer" '{"keys":"default","view":"list","display":{"textSize":{"mode":14}},"menu":{"hidden":[]}}'
     launch "$dir"
     wait_listing 2
@@ -69,6 +69,11 @@ cap_compare_open() {
     [[ "$(ipc selectionCount)" == 2 ]] || fail "compare: the two files were not marked"
     key m >/dev/null
     menus_expect menuState '.opened' "the two-file menu opens"
+    menu_state=$(ipc menuState)
+    if ! jq -e 'any(.entries[]; .label == "Compare")' <<< "$menu_state" >/dev/null; then
+        printf 'compare: menuState before missing Compare: %s\n' "$menu_state" >&2
+        fail "compare: no row labelled Compare"
+    fi
     menu_seek Compare
     key -k Return >/dev/null
     menus_expect compareState ".opened and .visible and .landed and .ready and .answer == \"$answer\"" "the $answer specimen lands"

@@ -1,6 +1,7 @@
 //@ pragma ShellId flea-pv-compare-menu-test
 import QtQuick
 import Quickshell
+import "flea" as Flea
 import "flea/js/Ops.js" as Ops
 
 // The real pane, menu snapshot and Compare activation over marks farther apart than one held window.
@@ -24,7 +25,7 @@ ShellRoot {
     property int identityPolls: 0
     property string snapshotAskedIdentity: ""
 
-    function pane() { return body.item.currentPane }
+    function pane() { return body.item ? body.item.currentPane : null }
     function check(label, actual, expected) {
         checks++
         var ok = JSON.stringify(actual) === JSON.stringify(expected)
@@ -43,6 +44,39 @@ ShellRoot {
         return pane().contextMenu().entries.filter(function (entry) { return entry.action === "compare" })[0] || null
     }
     function openMenu() { pane().contextMenu().openAt(Qt.point(400, 200)) }
+    function lateKinds(p, menu) {
+        var heldRows = p.rows
+        p.menuActions.ready = false
+        p.rows = heldRows.map(function (entry) { var copy = Object.assign({}, entry); copy.p = 0; return copy })
+        check("rows before stat expose unknown Compare kinds", menu.compareKinds, [0, 0])
+        check("unknown modes do not retain stale Compare", row(), null)
+        p.menuActions.identity = "retired selection"
+        p.menuActions.selectedKinds = [root.regularKind, root.regularKind]
+        p.menuActions.ready = true
+        check("a ready snapshot for another identity cannot supply unread kinds", [menu.compareKinds, row()], [[0, 0], null])
+        p.backend.menuResult({op: "snapshot", id: p.menuActions.requestId - 1, ok: true, count: 2,
+            kinds: [root.regularKind, root.regularKind]})
+        check("a snapshot reply for an old request cannot add Compare", [menu.compareKinds, row()], [[0, 0], null])
+        p.menuActions.ready = false
+        menu.refreshProviderRows()
+        check("a menu built before stat has no Compare", row(), null)
+        p.rows = heldRows
+        check("the late stat exposes both regular Compare kinds", menu.compareKinds.map(function (kind) { return kind & root.typeMask }), [root.regularKind, root.regularKind])
+        check("late stat adds Compare before the delayed snapshot", row() ? row().label : null, "Compare")
+        p.menuActions.identity = p.menuSelectionIdentity()
+        p.backend.menuResult({op: "snapshot", id: p.menuActions.requestId, ok: true, count: 2,
+            kinds: [root.regularKind, root.regularKind]})
+        check("a matching snapshot after menu build keeps Compare", [p.menuActions.ready, row() ? row().label : null], [true, "Compare"])
+        menu.setEntries([])
+        menu.setEntries(menu.buildEntries())
+        check("a matching snapshot before menu build offers Compare", row() ? row().label : null, "Compare")
+        var state = JSON.parse(menuReader.state())
+        check("menu IPC reports both kinds, both identities and each marked row's own mode",
+            [state.compareKinds, state.snapshotKinds, state.snapshotIdentity === state.menuSelectionIdentity,
+                state.markedRows.map(function (entry) { return [entry.index, entry.p] })],
+            [[root.regularKind, root.regularKind], [root.regularKind, root.regularKind], true,
+                [[0, heldRows[0].p], [1, heldRows[1].p]]])
+    }
     function tick() {
         if (finished) return
         if (Date.now() - started > stepBudgetMs) {
@@ -85,9 +119,9 @@ ShellRoot {
                 return
             }
             check("both held rows retain regular modes", [p.rowFor(0).p & root.typeMask, p.rowFor(1).p & root.typeMask], [root.regularKind, root.regularKind])
+            lateKinds(p, menu)
             p.menuActions.selectedKinds = [root.linkKind, root.linkKind]
             check("the ready matching snapshot inspects two links", [p.menuActions.ready, p.menuActions.identity === p.menuSelectionIdentity(), p.menuActions.selectedKinds], [true, true, [root.linkKind, root.linkKind]])
-            menu.refreshProviderRows()
             check("inspected links hide Compare over held regular rows", row(), null)
             check("Quick Look is unbuilt before the refused choice", body.item.quickLook === null, true)
             Ops.open(p, [fixture + "/f0000.txt", fixture + "/f0001.txt"])
@@ -137,6 +171,12 @@ ShellRoot {
             menu.close()
             finish()
         }
+    }
+
+    Flea.IpcMenuState {
+        id: menuReader
+        pane: root.pane()
+        fleaWindow: QtObject { function rectOf(item) { return "" } }
     }
 
     FloatingWindow {

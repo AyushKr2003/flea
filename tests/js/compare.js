@@ -48,6 +48,12 @@ function run(plain) {
     check("an old snapshot cannot supply an unheld kind", Menu.canCompare(Ops.menuKinds(wide)), false)
     Ops.open(wide, ["/wide/b.txt", "/wide/a.txt"])
     check("an old snapshot cannot open Compare", opened.length, 1)
+    wide.menuActions.identity = "wide"
+    wide.menuActions.ready = false
+    check("an unready snapshot cannot supply an unheld kind", Menu.canCompare(Ops.menuKinds(wide)), false)
+    wide.menuActions.ready = true
+    wide.menuActions.selectedKinds = [REG]
+    check("a matching snapshot with the wrong count cannot supply an unheld kind", Menu.canCompare(Ops.menuKinds(wide)), false)
 
     var shown = actions([REG, REG])
     check("the row is present for two files", shown.indexOf("compare") >= 0, true)
@@ -55,6 +61,16 @@ function run(plain) {
     check("the row is absent for three files", actions([REG, REG, REG]).indexOf("compare"), -1)
     check("the row is absent for one file", actions([REG]).indexOf("compare"), -1)
     check("the row is absent with no kinds read", actions(undefined).indexOf("compare"), -1)
+    var hidden = menuState([REG, REG])
+    hidden.hiddenActions = ["compare"]
+    check("Settings can hide Compare over two regular files", Menu.listingEntries(hidden).some(function (entry) { return entry.action === "compare" }), false)
+    var background = menuState([REG, REG])
+    background.hasRow = false
+    check("a background menu omits Compare despite two regular marks", Menu.listingEntries(background).some(function (entry) { return entry.action === "compare" }), false)
+    check("header, rail, Places and Trash inventories omit Compare",
+        [Menu.headerEntries([], false), Menu.railEntries({kind: "favourite"}), Menu.placeEntries(menuState([REG, REG])), Menu.trashEntries(2, false)]
+            .map(function (entries) { return entries.some(function (entry) { return entry.action === "compare" }) }),
+        [false, false, false, false])
     var row = Menu.listingEntries(menuState([REG, REG])).filter(function (r) { return r.action === "compare" })[0]
     check("the row is Compare with the columns glyph and no submenu", [row.label, row.glyph, row.submenu === undefined], ["Compare", "columns", true])
     check("no key opens it", Keymap.PRESET_KEYS.concat(Keymap.SHARED_KEYS).filter(function (r) { return r.action === "compare" }).length, 0)

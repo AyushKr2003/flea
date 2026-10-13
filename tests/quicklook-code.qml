@@ -79,6 +79,11 @@ ShellRoot {
         return found.length > 0 ? found[0] : null
     }
     function code() { var t = root.textPane(); return t ? t.bodyItem : null }
+    function checkTextState(label, wrapped, total) {
+        var state = JSON.parse(previewReader.previewTextState(false))
+        root.check(label, [state.path, state.visible, state.ready, state.wrap, state.total],
+            [root.textPane().path, true, true, wrapped, total])
+    }
     function bar() {
         var found = root.within(root.textPane(), function (n) { return typeof n.geometry === "function" && typeof n.closeState === "function" })
         return found.length > 0 ? found[0] : null
@@ -181,6 +186,7 @@ ShellRoot {
                 if (!root.calm(root.drawn(op.open, "styled"))) return false
                 if (op.remembered) {
                     root.check("a Quick Look opened under a remembered wrap draws wrapped", [root.textPane().wrap, root.code().wrap], [true, true])
+                    root.checkTextState("Quick Look IPC reports remembered wrap and ready code", true, root.iconLines)
                 }
                 return true
             }
@@ -258,6 +264,7 @@ ShellRoot {
             root.awaiting = function () {
                 if (!root.calm(Flea.ViewState.previewWrap === false && root.savedWrap() === "false")) return false
                 root.check("w unwraps and the unwrapped choice is written", [root.textPane().wrap, root.savedWrap()], [false, "false"])
+                root.checkTextState("Quick Look IPC reports w unwrapped and ready code", false, root.iconLines)
                 return true
             }
         } else if (op.done) {
@@ -283,6 +290,7 @@ ShellRoot {
     }
     function judgeIcons() {
         var t = root.textPane(), c = root.code(), g = root.bar().geometry(), row = root.pane().rowFor(root.pane().cursorIndex)
+        root.checkTextState("Quick Look IPC reports non-empty ready code before w", false, root.iconLines)
         root.check("the bar draws the row's mark, the name and the count, a close mark and no segment",
             [g.markName, g.name.text, g.lines.text, g.countShown, g.segment !== null, g.close !== null],
             [Icons.glyphForRow(row.i, row.p), "01-icons.rs", "132 lines", true, false, true])
@@ -333,6 +341,7 @@ ShellRoot {
                   var lb = root.longBody()
                   root.topBefore = root.topLine()
                   root.check("before w the long line is one row ending in an ellipsis", [lb.lineCount, lb.truncated, Flea.ViewState.previewWrap], [1, true, false])
+                  root.checkTextState("Quick Look IPC reports unwrapped long code before w", false, 60)
                   root.key("w") } },
             { state: "on", test: function () { return Flea.ViewState.previewWrap && t.wrap && root.longBody() !== null && root.longBody().lineCount > 3 && root.savedWrap() === "true" },
               act: function () {
@@ -340,10 +349,12 @@ ShellRoot {
                   root.check("w wraps the long line into several rows under its own gutter number", [lb.lineCount > 3, number.length], [true, 1])
                   root.check("the first visible line is the one it was", root.topLine(), root.topBefore)
                   root.check("the choice is written to ui.json", root.savedWrap(), "true")
+                  root.checkTextState("Quick Look IPC reports w wrapped and ready code", true, 60)
                   root.key("w") } },
             { state: "off again", test: function () { return !Flea.ViewState.previewWrap && !t.wrap && root.longBody() !== null && root.longBody().lineCount === 1 && root.savedWrap() === "false" },
               act: function () {
                   root.check("w again unwraps: one row, the first visible line kept, the choice written", [root.longBody().lineCount, root.topLine(), root.savedWrap()], [1, root.topBefore, "false"])
+                  root.checkTextState("Quick Look IPC reports second w unwrapped and ready code", false, 60)
                   root.key("w") } },
             { state: "on last", test: function () { return Flea.ViewState.previewWrap && root.longBody() !== null && root.longBody().lineCount > 3 && root.savedWrap() === "true" },
               act: function () { root.check("a third w wraps again", root.topLine(), root.topBefore) } }
@@ -357,6 +368,8 @@ ShellRoot {
             return n >= steps.length
         }
     }
+
+    Flea.IpcPreviewState { id: previewReader; pane: root.pane() }
 
     FloatingWindow {
         id: window

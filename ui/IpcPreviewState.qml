@@ -89,8 +89,8 @@ QtObject {
     // Both code surfaces expose their live viewport; absent or unbuilt text answers an empty object.
     function previewTextState(column: bool): string {
         var surface = column ? (root.pane ? root.pane.previewColumnItem : null) : root.look.kind === "text" ? root.look.surfaceItem() : null
-        var code = surface ? (column ? surface.linesItem.code : surface.bodyItem) : null
-        var viewport = surface ? (column ? surface.linesItem.viewport : surface.list) : null
+        var code = surface ? (column ? surface.linesItem.code : surface) : null
+        var viewport = surface ? (column ? surface.linesItem.viewport : surface.viewport) : null
         if (!code || !viewport) return "{}"
         var bounds = Scroll.limitsY(viewport)
         var swap = column ? surface.swap : root.look.swapState()

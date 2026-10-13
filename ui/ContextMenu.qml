@@ -54,7 +54,7 @@ Item {
     property int selectionCount: 0
     // MenuAdditions040: Permissions takes the whole selection.
     property var selectionModes: []
-    // Compare: the marked rows' type bits, read once at menu open.
+    // Compare follows held metadata and the matching snapshot while the menu is open.
     property var compareKinds: []
     // OpenWith.html's flyout rows, filled by ui/PaneMenuActions.qml when the registry answers.
     property var openWithApps: []
@@ -780,4 +780,5 @@ Item {
             }
         }
     }
+    onCompareKindsChanged: root.refreshProviderRows()
 }

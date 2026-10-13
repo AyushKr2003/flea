@@ -29,8 +29,15 @@ QtObject {
 
     function state() {
         var menu = root.pane.contextMenu()
+        var marked = root.pane.selectedIndices().map(function (index) {
+            var row = root.pane.rowFor(index)
+            return { index: index, name: row ? row.n : null, p: row ? row.p : null }
+        })
         return JSON.stringify({pane: String(root.pane), opened: menu.opened, entries: menu.entries, cursor: menu.cursor,
             snapshotReady: root.pane.menuActions.ready, snapshotId: root.pane.menuActions.requestId,
+            compareKinds: menu.compareKinds, snapshotKinds: root.pane.menuActions.selectedKinds,
+            snapshotIdentity: root.pane.menuActions.identity, menuSelectionIdentity: root.pane.menuSelectionIdentity(),
+            markedRows: marked,
             shebangAsked: root.pane.shebangAsked, shebangHas: root.pane.rowHasShebang,
             shebangId: root.pane.shebangId, shebangReply: root.shebangReply, shebangLastReply: root.shebangLastReply,
             submenu: menu.submenuOpen, submenuCursor: menu.submenuCursor, submenuEntries: menu.submenuEntries,
