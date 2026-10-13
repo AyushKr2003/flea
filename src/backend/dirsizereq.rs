@@ -74,6 +74,7 @@ mod tests {
             base,
             asked: Vec::new(),
             outstanding: 0,
+            deferred: Default::default(),
             window_meta: HashMap::new(),
             dirsizes: HashMap::new(),
             dirsize_queue: Vec::new(),

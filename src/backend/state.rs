@@ -42,6 +42,8 @@ pub struct State {
     // Only the rows a client named, so this never grows with the directory; see AGENTS.md "Thumbnail requests".
     pub asked: Vec<(PathBuf, usize)>,
     pub outstanding: usize,
+    // Rows the pool has no room for yet, in request order; each is also in asked, so its answer still follows its row.
+    pub deferred: crate::backend::thumbdefer::Deferred,
     // The last window's mode, mtime and link-dir flag per row, so a thumb request reuses them with no stat.
     pub window_meta: HashMap<usize, (u32, i64, bool)>,
     // Answered directory rows, kept until the next list or sort reassigns what a row index names.
@@ -76,7 +78,7 @@ impl State {
     // One below FIRST_LISTING, so the forget_rows a first list runs numbers its rows FIRST_LISTING.
     pub fn new(dirsize_worker: super::dirsizeworker::Worker) -> State {
         State {
-            listing: Listing::new(), base: PathBuf::new(), asked: Vec::new(), outstanding: 0,
+            listing: Listing::new(), base: PathBuf::new(), asked: Vec::new(), outstanding: 0, deferred: Default::default(),
             window_meta: HashMap::new(),
             dirsizes: HashMap::new(), dirsize_queue: Vec::new(), dirsize_worker,
             search: None, search_reported: Instant::now(), generation: FIRST_LISTING - 1, held: Held::List,

@@ -118,7 +118,7 @@ pub(crate) fn thumb_rows(
     }
 }
 
-// One entry per queued or running job, so the pool's own queue bound plus the worker count bounds this map too.
+// One entry per queued, waiting or running job, so MAX_QUEUE, MAX_DEFERRED and the worker count bound this map too.
 fn queue_row(
     out: &mut impl Write,
     st: &mut State,
@@ -132,16 +132,14 @@ fn queue_row(
     if st.asked.iter().any(|(p, _)| *p == path) {
         return;
     }
+    // corner: past MAX_DEFERRED nothing waits any longer, so the row is answered empty at once; see AGENTS.md "Thumbnail requests".
+    if st.deferred.full() {
+        writeln!(out, "{}", thumbed_line(row, "", 0.0)).ok();
+        return;
+    }
     st.asked.push((path.clone(), row));
     st.outstanding += 1;
-    // A job the pool dropped to make room will never report, so its row is unmapped and answered here rather than at shutdown.
-    for job in pool.submit(Job { path, mtime, mime, trace: trace(row) }) {
-        st.outstanding = st.outstanding.saturating_sub(1);
-        if let Some(at) = st.asked.iter().position(|(p, _)| *p == job.path) {
-            let dropped_row = st.asked.remove(at).1;
-            writeln!(out, "{}", thumbed_line(dropped_row, "", 0.0)).ok();
-        }
-    }
+    st.deferred.enqueue(pool, Job { path, mtime, mime, trace: trace(row) });
 }
 
 // A job already inside a worker cannot be cancelled, so its row stays mapped until it reports.
@@ -150,17 +148,25 @@ pub(crate) fn cancel_row(st: &mut State, pool: &Pool, row: usize) {
         Some(i) => i,
         None => return,
     };
-    let dropped = pool.cancel(&st.asked[at].0);
+    // A row still waiting for room is taken back from the deferred queue, and a queued one from the pool.
+    let mut dropped = st.deferred.take(&st.asked[at].0);
+    if dropped.is_empty() {
+        dropped = pool.cancel(&st.asked[at].0);
+    }
     if dropped.is_empty() {
         return;
     }
     st.outstanding = st.outstanding.saturating_sub(dropped.len());
     st.asked.remove(at);
+    // The room a cancel frees goes to the next waiting row now, not at the next report.
+    st.deferred.pump(pool);
 }
 
 // A result whose path is no longer mapped belongs to a superseded listing and is dropped, never reported against the current one.
-pub(crate) fn report_done(out: &mut impl Write, st: &mut State, done: Done) {
+pub(crate) fn report_done(out: &mut impl Write, st: &mut State, pool: &Pool, done: Done) {
     st.outstanding = st.outstanding.saturating_sub(1);
+    // Workers have taken jobs off the pool since the last pump, so the oldest waiting rows go in now.
+    st.deferred.pump(pool);
     let row = match st.asked.iter().position(|(p, _)| *p == done.path) {
         Some(i) => st.asked.remove(i).1,
         None => return,

@@ -131,6 +131,7 @@ fn a_watch_starts_once_and_the_second_is_silent() {
         base: Default::default(),
         asked: Vec::new(),
         outstanding: 0,
+        deferred: Default::default(),
         window_meta: Default::default(),
         dirsizes: Default::default(),
         dirsize_queue: Vec::new(),

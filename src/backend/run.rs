@@ -174,7 +174,7 @@ fn dispatch<W: Write>(event: Event, out: &mut W, st: &mut State, tb: &Tables, po
                 return Control::Quit;
             }
         }
-        Event::Thumb(d) => report_done(out, st, d),
+        Event::Thumb(d) => report_done(out, st, pool, d),
         Event::Flash(m) => flash.report(out, &m),
         Event::DirSize(d) => report_dirsize(out, st, d),
         // A slow mount's figures, printed only for the directory on screen now.
@@ -517,7 +517,7 @@ fn handle_line(
         Request::ThumbCancel { rows } => {
             if rows.is_empty() {
                 // An empty rows cancels everything queued, and every job it drops has to leave the map with it; see AGENTS.md "Thumbnail requests".
-                for job in pool.cancel_all() {
+                for job in pool.cancel_all().into_iter().chain(st.deferred.take_all()) {
                     forget_one(st, &job.path);
                 }
             } else {
@@ -781,7 +781,7 @@ fn on_search_walked(out: &mut impl Write, st: &mut State, tb: &Tables, pool: &Po
 // A new row order invalidates every outstanding index, so the queue goes and no result can be reported against the new listing.
 pub fn forget_rows(st: &mut State, pool: &Pool) {
     st.generation += 1;
-    st.outstanding = st.outstanding.saturating_sub(pool.cancel_all().len());
+    st.outstanding = st.outstanding.saturating_sub(pool.cancel_all().len() + st.deferred.take_all().len());
     st.asked.clear();
     st.window_meta.clear();
     // A list or a sort changes which row an index names, the same reason thumbnails clear their map.
@@ -864,7 +864,7 @@ pub(crate) fn drain(
     // A trash batch past its announce has freed the slot but still owes its journal entry, so the drain waits for it too.
     while st.outstanding > 0 || ops.live.running().is_some() || !ops.settling.is_empty() || !ops.detached.is_empty() || flash.slot.running().is_some() {
         match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
-            Ok(Event::Thumb(d)) => report_done(out, st, d),
+            Ok(Event::Thumb(d)) => report_done(out, st, pool, d),
             Ok(Event::Op(m)) => report_op(out, ops, m),
             Ok(Event::Flash(m)) => flash.report(out, &m),
             Ok(_) => {}

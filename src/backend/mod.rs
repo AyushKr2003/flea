@@ -97,9 +97,15 @@ pub mod thumbbind;
 pub mod thumbcache;
 pub mod sandbox;
 pub mod jail;
+// The bounded reap kill_tree ends a jail with, so a child the kernel holds never holds a caller; see jail.rs.
+pub mod jailreap;
 pub mod child;
 pub mod thumbs;
 pub mod thumbreq;
+pub mod thumbdefer;
+// Test-only: a request wider than the pool's queue waits for a worker rather than being answered empty.
+#[cfg(test)]
+mod thumbdefer_tests;
 pub mod thumbwrite;
 // The pre-linked video thumbnailer and the backend's link to it; see AGENTS.md "Thumbnail worker".
 pub mod fdpass;
@@ -224,5 +230,8 @@ pub mod scanhold;
 // Test-only: keeps the deliberate worker panics quiet without any test swapping the process-wide hook.
 #[cfg(test)]
 pub mod quietpanic;
+// Test-only: holds a child's reap as an uninterruptible sleep would, so kill_tree's bound is pinned.
+#[cfg(test)]
+pub mod reaphold;
 
 pub mod dirsizeworker;
