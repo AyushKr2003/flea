@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import "flea" as Flea
 import "flea/js/Messages.js" as Messages
+import "flea/js/Thumbs.js" as Thumbs
 
 // A camera RAW in Quick Look and in the column, on the real Preview and SelectionPreview over a stub pane whose backend answers with the meta line the backend writes.
 ShellRoot {
@@ -22,6 +23,7 @@ ShellRoot {
         { n: "d.dng", copy: "", w: 0, h: 0, orient: 1 }
     ]
     property int rawAsks: 0
+    property int refusedThumbs: 0
 
     function log(line) { console.log("PVRAW " + line) }
     function quit() { Quickshell.execDetached(["kill", String(Quickshell.processId)]) }
@@ -50,13 +52,17 @@ ShellRoot {
         signal meta(int row, int w, int h, int orient, real durationMs, int sampleRate, int entries, real unpacked, bool archiveFailed, var names, real lines, bool partial, bool linesFailed, string target, bool targetDir, string owner)
         property int nextToken: 0
         property var pending: []
+        property var pendingThumbs: []
         function askMeta(index) {
             nextToken += 1
             pending.push({ token: nextToken, index: index })
             metaTimer.restart()
             return nextToken
         }
-        function thumb(rows) {}
+        function thumb(rows, cacheOnly) {
+            for (var i = 0; i < rows.length; i++) pendingThumbs.push({ row: rows[i], cacheOnly: cacheOnly === true })
+            thumbTimer.restart()
+        }
     }
     Timer {
         id: metaTimer
@@ -67,6 +73,23 @@ ShellRoot {
             for (var i = 0; i < asks.length; i++) {
                 if (asks[i].index === 0 || asks[i].index === 1) shell.rawAsks++
                 Messages.route(stubBackend, JSON.parse(shell.metaLine(asks[i].index, asks[i].token)))
+            }
+        }
+    }
+
+    Timer {
+        id: thumbTimer
+        interval: 5
+        onTriggered: {
+            var asks = stubBackend.pendingThumbs
+            stubBackend.pendingThumbs = []
+            for (var i = 0; i < asks.length; i++) {
+                if (asks[i].row === 3 && !asks[i].cacheOnly) {
+                    var it = shell.item()
+                    shell.check(look.rawAnswered && look.rawCopy === null && it !== null && it.thumbPending && !it.failed && it.status === "loading", "a RAW with no preview did not wait for its thumbnail reply")
+                    shell.refusedThumbs++
+                }
+                stub.thumbState = Thumbs.remember(stub.thumbState, asks[i].row, "", shell.files.length)
             }
         }
     }
@@ -178,6 +201,7 @@ ShellRoot {
                     shell.check(shell.near(c.pictureItem.y + c.pictureItem.height / 2, c.height / 2), "a JPEG is not centred on the whole surface")
                     shell.openRow(3, function (d) {
                         shell.check(d.failed && d.status === "This image could not be read." && !d.band.visible, "a RAW with no preview did not draw the unreadable state, status " + d.status)
+                        shell.check(shell.refusedThumbs === 1 && look.thumbRow === -1, "a RAW with no preview did not settle after one thumbnail refusal")
                         look.close()
                         shell.checkColumn()
                     })
