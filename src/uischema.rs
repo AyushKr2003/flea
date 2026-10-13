@@ -48,7 +48,7 @@ pub const DEFAULTS: &str = r#"{
     "column": true, "loadOn": "automatic",
     "thumbnails": "media", "thumbSize": "medium",
     "thumbNetwork": false, "thumbPhone": false, "thumbUsb": true,
-    "ctrlZoom": true, "volume": 100, "width": 0
+    "ctrlZoom": true, "volume": 100, "width": 0, "wrap": false
   },
   "previewFacts": "compact",
   "keys": "default",
@@ -158,6 +158,8 @@ pub const PREVIEW: &[(&str, Rule)] = &[
     ("ctrlZoom", Rule::Bool),
     ("volume", Rule::Count(0.0, 100.0)),
     ("width", Rule::Count(0.0, 100.0)),
+    // Quick Look's w: wraps long lines in a code or text file; off until pressed.
+    ("wrap", Rule::Bool),
 ];
 
 // mode is "system" or one stop, so there is nowhere to put a free number; see the handoff's Display row.
@@ -359,6 +361,7 @@ mod tests {
         assert!(d.get("preview").and_then(|p| p.get("markdownView")).is_none());
         // TallPreviews: the tall kinds show one compact facts line until `i` opens the full table.
         assert_eq!(d.get("previewFacts").and_then(Json::as_str), Some("compact"));
+        assert_eq!(d.get("preview").and_then(|p| p.get("wrap")).and_then(Json::as_bool), Some(false));
         assert_eq!(d.get("display").and_then(|p| p.get("textSize")).and_then(|t| t.get("mode")).and_then(Json::as_str), Some("system"));
         let display: Vec<&str> = d.get("display").and_then(Json::as_object).expect("display").iter().map(|(k, _)| k.as_str()).collect();
         assert_eq!(display, ["textSize", "hyprlandIcons"], "the compositor owns opacity, icons and shadows");

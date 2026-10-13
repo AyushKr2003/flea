@@ -324,7 +324,7 @@ ShellRoot {
             } else {
                 var text = shell.find(look, "PreviewText")
                 if (!text || text.status !== "ready") return
-                var f = shell.flick(text)
+                var f = text.list
                 if (!shell.check(text.bodyItem.width === f.width && f.contentHeight > f.height,
                     "text/code overflow is absent")) return
                 if (!shell.scrolling) {

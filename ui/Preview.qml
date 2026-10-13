@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import "." as Flea
 import "js/Facts.js" as Facts
+import "js/Icons.js" as Icons
 import "js/Kinds.js" as Kinds
 import "js/Search.js" as Search
 import "js/Thumbs.js" as Thumbs
@@ -36,14 +37,17 @@ Item {
     readonly property bool fontFailed: root.isFont && fontLoader.item !== null && fontLoader.item.failed
     // RenderedPreviews: a Markdown file keeps the text kind and draws its own bar and pane.
     readonly property bool isMarkdown: root.kind === "text" && Kinds.isMarkdown(root.path)
+    // Code and plain text share ui/PreviewText.qml; every text kind draws the Quick Look bar.
+    readonly property bool isCodeText: root.kind === "text" && !root.isMarkdown
+    readonly property bool hasBar: root.kind === "text"
     // r flips the open Markdown Quick Look to Source; close() forgets it, and a move to another file keeps it.
     property bool markdownSource: false
     // The file whose first Markdown read may block the key, decided from its listing row before the path moves; "" when none may.
     property string inlineMarkdownPath: ""
-    // Tab put the keyboard on the Markdown bar's close mark; a move off Markdown or a close lets it go.
+    // Tab put the keyboard on the bar's close mark, Markdown or code; a move off the text kinds or a close lets it go.
     property bool markdownCloseFocus: false
-    readonly property bool markdownCloseFocused: root.active && root.isMarkdown && root.markdownCloseFocus
-    onIsMarkdownChanged: if (!root.isMarkdown) root.markdownCloseFocus = false
+    readonly property bool markdownCloseFocused: root.active && root.hasBar && root.markdownCloseFocus
+    onHasBarChanged: if (!root.hasBar) root.markdownCloseFocus = false
     // The backend's meta answer for the open archive, null until it lands; archiveRow is the row it was asked for.
     property var archiveMeta: null
     property int archiveRow: -1
@@ -97,7 +101,8 @@ Item {
     // An interim cache thumbnail shown counts as whole, never as a half-built frame.
     readonly property bool lookReady: !root.active || PreviewSwap.lookReady(root.status, root.isPdf,
         root.pdfItem !== null && root.pdfItem.shownPage >= 0, root.pdfItem !== null && root.pdfItem.failed,
-        root.interimShown, root.isMarkdown && markdownLoader.item !== null && markdownLoader.item.firstScreen)
+        root.interimShown, (root.isMarkdown && markdownLoader.item !== null && markdownLoader.item.firstScreen)
+        || (root.isCodeText && textPane.firstScreen))
     // The cached thumbnail held at open, drawn under the full decode at the final rect; the stamp retires a stale one.
     property string interimThumb: ""
     property string interimStamp: ""
@@ -308,7 +313,12 @@ Item {
     }
 
     function toggleMarkdownClose() {
-        if (root.isMarkdown) root.markdownCloseFocus = !root.markdownCloseFocus
+        if (root.hasBar) root.markdownCloseFocus = !root.markdownCloseFocus
+    }
+
+    // w wraps the open code or text Quick Look; ui.json keeps the choice for the next one.
+    function toggleWrap() {
+        if (root.isCodeText) ViewState.changeLeaf("preview", { wrap: !ViewState.previewWrap })
     }
 
     // The picture is taken now, so the settled load below changes the panes under it.
@@ -693,10 +703,17 @@ Item {
             Flea.PreviewText {
                 id: textPane
                 anchors.fill: parent
-                anchors.margins: Theme.spacing.gap
-                active: root.kind === "text" && !root.isMarkdown
+                anchors.margins: Theme.spacing.hairline
+                active: root.isCodeText
                 path: root.path
                 size: root.size
+                backend: root.pane ? root.pane.backend : null
+                markName: Icons.glyphFor(root.iconName)
+                // The column's rule: code gets the gutter, plain text none.
+                numbered: Kinds.kindState(root.iconName) === Kinds.CODE || Kinds.isCode(root.path)
+                wrap: ViewState.previewWrap
+                closeFocused: root.markdownCloseFocused
+                onCloseRequested: root.close()
                 // ExtThumbs: Quick Look reads at most the first 256 KiB on network and phone storage.
                 maxBytes: ExtThumbs.textLimit(root.pane ? root.pane.storageClass : "")
                 truncate: root.pane ? (root.pane.storageClass === "network" || root.pane.storageClass === "phone") : false
