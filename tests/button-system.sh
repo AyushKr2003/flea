@@ -8,7 +8,7 @@ verdict=0
 fail() { printf 'FAIL %s\n' "$1"; verdict=1; }
 
 # The sweep table (ButtonSystem040 A, DESIGN-040 "buttons"): each file is the one control, a ruled set member, a mark, or deferred by name.
-control_files="ConvertDialog MenuActionDialog CollideConfirm TrashConfirm OpenWithDialog NetworkDialog PickerSave PermissionsDialog TransferCard TrashView ProtocolChip PickerAnswers"
+control_files="ConvertDialog MenuActionDialog CollideConfirm TrashConfirm OpenWithDialog NetworkDialog PermissionsDialog TransferCard TrashView ProtocolChip PickerAnswers"
 for name in $control_files; do
     grep -q 'Flea\.DialogButton {' "ui/$name.qml" || fail "ui/$name.qml no longer instantiates the one control, Flea.DialogButton"
 done

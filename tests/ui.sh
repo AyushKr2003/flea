@@ -15074,13 +15074,15 @@ case_formats() {
     [[ "$(ipc columnPdfPages)" == "2" && "$(ipc columnPdfPage)" == "0" ]] || fail "formats: manual.pdf shows $(ipc columnPdfPages) pages, page $(ipc columnPdfPage)"
     lit=$(column_frame_lit manual-p1)
     (( lit > 200 )) || fail "formats: manual.pdf's first page painted $lit lit pixels"
-    read -r cx cy <<< "$(ipc columnChevronCentre right)"
-    omarchy-drive click "$((wx + cx))" "$((wy + cy))" left >/dev/null
+    # The column is a continuous stack: scroll to its second page, then prove the end refuses more scrolling.
+    capmarkdown_column_pointer formats-pdf-page-turn
+    omarchy-drive scroll down 8 >/dev/null || fail 'formats: the PDF stack wheel failed'
+    pdf_expect false '.pages == 2 and .scrollY > 0 and (.landed | index(1) != null)' 'formats second stacked page decoded after scrolling'
+    p1=$(ipc pdfState false | jq -r '.scrollY')
+    omarchy-drive scroll down 8 >/dev/null || fail 'formats: the PDF stack end wheel failed'
     settle
-    [[ "$(ipc columnPdfPage)" == "1" ]] || fail "formats: the right chevron left manual.pdf on page $(ipc columnPdfPage)"
-    omarchy-drive click "$((wx + cx))" "$((wy + cy))" left >/dev/null
-    settle
-    [[ "$(ipc columnPdfPage)" == "1" ]] || fail "formats: the right chevron went past the last page to $(ipc columnPdfPage)"
+    p2=$(ipc pdfState false | jq -r '.scrollY')
+    [[ "$p2" == "$p1" ]] || fail "formats: the PDF stack scrolled past its last page, $p1 to $p2"
     column_expect broken.pdf error
     [[ "$(ipc columnFailure)" == "This file could not be read." ]] || fail "formats: broken.pdf's sentence is '$(ipc columnFailure)'"
     column_expect sample.txt text

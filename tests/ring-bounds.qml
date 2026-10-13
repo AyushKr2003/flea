@@ -307,7 +307,8 @@ ShellRoot {
     function checkPins(key, dialog, unpinnedWhy) {
         var got = root.pinsOf(dialog)
         console.log("RINGBOUNDS POS " + key + " " + JSON.stringify(got))
-        var want = Pins.PINS[key]
+        var pinned = Pins.PINS[key]
+        var want = typeof pinned === "function" ? pinned(captionProbe.implicitHeight) : pinned
         if (unpinnedWhy !== undefined) {
             root.check(want === undefined, key + " is listed unpinned (" + unpinnedWhy + ") and also pinned")
             return
@@ -633,6 +634,13 @@ ShellRoot {
         implicitHeight: 650
         Flea.WindowBody { id: body; host: window }
         Item { anchors.fill: parent; TestEvent { id: driver } }
+        // An independent native caption line box, so save-field Y follows the same font on both Qt images without reading the field's own geometry.
+        Text {
+            id: captionProbe
+            visible: false
+            text: "Filename"
+            font { family: Flea.Theme.font.family; pixelSize: Flea.Theme.font.caption }
+        }
         // The save picker's answer area, which lives in its own window in the product, at the picker's 840 px.
         Flea.PickerSave { id: saveCard; picker: fakePicker; width: 840; z: 100 }
         // The transfer card, which the status bar hosts in the product, with the status bar's right margin.
