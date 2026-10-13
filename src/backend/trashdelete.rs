@@ -8,7 +8,7 @@ use crate::json::{escape, field_str, field_usize};
 use crate::oflags::O_NOFOLLOW;
 use std::ffi::{CString, OsStr, OsString};
 use std::fs::{File, Metadata, OpenOptions};
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, ErrorKind, Read};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
@@ -205,8 +205,11 @@ fn fd_path(file: &File, name: &OsStr) -> PathBuf {
 }
 // The error is io_message's plain clause, so each caller can say it under the outcome of its own step.
 fn rename(from: &File, old: &OsStr, to: &File, new: &OsStr) -> Result<(), String> {
-    let old = CString::new(old.as_bytes()).map_err(|_| "Invalid Trash filename.")?;
-    let new = CString::new(new.as_bytes()).map_err(|_| "Invalid quarantine filename.")?;
+    rename_claim(from, old, to, new).map_err(|(_, reason)| reason)
+}
+fn rename_claim(from: &File, old: &OsStr, to: &File, new: &OsStr) -> Result<(), (ErrorKind, String)> {
+    let old = CString::new(old.as_bytes()).map_err(|_| (ErrorKind::InvalidInput, "Invalid Trash filename.".into()))?;
+    let new = CString::new(new.as_bytes()).map_err(|_| (ErrorKind::InvalidInput, "Invalid quarantine filename.".into()))?;
     if unsafe {
         renameat2(
             from.as_raw_fd(),
@@ -220,18 +223,18 @@ fn rename(from: &File, old: &OsStr, to: &File, new: &OsStr) -> Result<(), String
         let error = std::io::Error::last_os_error();
         // A kernel without the flag answers EINVAL or EOPNOTSUPP, so the path fallback moves it.
         return match error.raw_os_error() {
-            Some(EINVAL) | Some(EOPNOTSUPP) => rename_by_path(from, &old, to, &new),
-            _ => Err(crate::error::io_message(&error)),
+            Some(EINVAL) | Some(EOPNOTSUPP) => rename_by_path(from, &old, to, &new).map_err(|e| (e.kind(), crate::error::io_message(&e))),
+            _ => Err((error.kind(), crate::error::io_message(&error))),
         };
     }
     Ok(())
 }
 
 // The fd rename above names no path, so the fallback resolves both ends through this process's own descriptor table.
-fn rename_by_path(from: &File, old: &CString, to: &File, new: &CString) -> Result<(), String> {
+fn rename_by_path(from: &File, old: &CString, to: &File, new: &CString) -> std::io::Result<()> {
     let from_path = PathBuf::from(format!("/proc/self/fd/{}", from.as_raw_fd())).join(OsStr::from_bytes(old.as_bytes()));
     let to_path = PathBuf::from(format!("/proc/self/fd/{}", to.as_raw_fd())).join(OsStr::from_bytes(new.as_bytes()));
-    crate::backend::renamecompat::rename_noreplace(&from_path, &to_path).map_err(|e| crate::error::io_message(&e))
+    crate::backend::renamecompat::rename_noreplace(&from_path, &to_path)
 }
 fn identity(path: &Path) -> std::io::Result<Identity> {
     path.symlink_metadata().map(|m| Identity::of(&m))
@@ -544,14 +547,14 @@ impl Reviewed {
             }
             return Err(Refusal::new(Outcome::Prepare(op), format!("Could not claim Trash item: {}", error)).because(error));
         }
-        let info_claim = rename(&infos, info_name, &quarantine, OsStr::new("metadata"));
+        let info_claim = rename_claim(&infos, info_name, &quarantine, OsStr::new("metadata"));
         let checked = identity(&fd_path(&quarantine, OsStr::new("payload"))).ok().as_ref() == Some(&self.payload)
             && info_claim.is_ok()
             && identity(&fd_path(&quarantine, OsStr::new("metadata"))).ok().as_ref() == Some(&self.metadata);
         if !checked {
             let refused = match &info_claim {
-                Err(reason) => Refusal::new(Outcome::Prepare(op), format!("Could not claim Trash metadata: {reason}")).because(reason.clone()),
-                Ok(()) => Refusal::new(Outcome::ConfirmAgain, "Trash changed; no operation attempted. Confirm again."),
+                Err((ErrorKind::NotFound, _)) | Ok(()) => Refusal::new(Outcome::ConfirmAgain, "Trash changed; no operation attempted. Confirm again."),
+                Err((_, reason)) => Refusal::new(Outcome::Prepare(op), format!("Could not claim Trash metadata: {reason}")).because(reason.clone()),
             };
             let payload_back = rename(&quarantine, OsStr::new("payload"), &files, name);
             let info_back = if info_claim.is_ok() {

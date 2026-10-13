@@ -2659,6 +2659,7 @@ record clears when the edit leaves that row or the tile is reused, so a pooled t
 COPY-TRASH on the 0.3.11 stage moves the `src/backend/trashbrowse.rs` ceiling from 900 to 1025 (`wc -l`) for the approved typed refusals, per-item damaged-record failures and backward target naming, retaining the stage's newest-first listing and membership checks.
 The same port moves `src/backend/trashdelete.rs` from 938 to 965 (`wc -l`) for the approved outcome wrappers and cleanup logging, with the failed child put-back logging credited once to this port.
 Copytrash5 raises `src/backend/trashdelete.rs` from 965 to 984 (`wc -l`) for truthful record completion outcomes, preserving the first claim refusal after rollback and logging cleanup failures, plus stable temporary-folder paths.
+Copytrash6 raises `src/backend/trashdelete.rs` from 984 to 987 (`wc -l`) to retain the metadata claim's OS error kind and request confirmation again when its file disappeared, preserving the rollback and other claim diagnostics.
 
 xw6 adversarial fixes retain the tab handoff detail and exact payload paths. Each lift
 captures a stable tab identity and its source pane until acknowledgment or the existing

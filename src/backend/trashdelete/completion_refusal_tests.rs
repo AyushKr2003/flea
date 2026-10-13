@@ -41,6 +41,30 @@ fn completed_delete_and_restore_report_a_record_removed_without_confirmed_sync()
 }
 
 #[test]
+fn metadata_removed_between_review_and_claim_asks_to_confirm_again() {
+    for op in [Op::Delete, Op::Restore] {
+        let d = TestDir::new("refusal-metadata-gone");
+        let original = d.join("restored");
+        let (path, reviewed) = fixture(&d, &original);
+        let root = d.dir("recovery");
+        let seen = logged().len();
+        let refused = reviewed.with_claimed(op, &root, (op == Op::Restore).then_some(original.as_path()), || {
+            guard(&d, &reviewed.info);
+            std::fs::remove_file(&reviewed.info).unwrap();
+        }, |_| panic!("missing metadata must not perform the operation")).unwrap_err();
+        assert_eq!(refused.outcome(), &Outcome::ConfirmAgain);
+        assert_eq!(refused.shown(), "The Trash changed, so nothing was done; confirm again.");
+        assert_logged(seen, "Trash changed; no operation attempted. Confirm again.");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "payload");
+        assert!(!reviewed.info.exists());
+        assert!(!original.exists());
+        let remaining: Vec<_> = std::fs::read_dir(d.join("files")).unwrap().map(|entry| entry.unwrap().path()).collect();
+        assert_eq!(remaining, vec![path]);
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+    }
+}
+
+#[test]
 fn a_claim_failure_keeps_its_cause_when_record_cleanup_also_fails() {
     for op in [Op::Delete, Op::Restore] {
         for metadata_claim in [false, true] {
