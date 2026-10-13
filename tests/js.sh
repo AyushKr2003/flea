@@ -38,30 +38,39 @@ run() {
   fi
   printf '%s' "$out" | grep -qE "checks, 0 failed" || exit 1
   if [ -z "${2:-}" ] || [ "$2" = devices ]; then
-    # Each call pairs its begin and end markers across lines and counts the intervening lines; grep cannot carry that pairing, while awk does it in one pass and a while-read loop needs the same three state variables (active, expected, warnings) plus more code.
-    printf '%s\n' "$out" | awk '
-      /^qml: power-off warning begin: / {
-        if (active) bad = 1
-        expected = substr($0, length("qml: power-off warning begin: ") + 1)
-        active = 1; warnings = 0; next
-      }
-      /^qml: power-off warning end$/ {
-        if (!active || warnings != (expected != "")) bad = 1
-        if (expected != "") fallbacks++; else valid++
-        active = 0; next
-      }
-      active {
-        warnings++
-        if ($0 != "qml: " expected) bad = 1
-      }
-      END {
-        if (active || bad || !fallbacks || !valid) {
-          print "FAIL power-off warning: expected one exact warning per fallback and none for valid listings"
-          exit 1
-        }
-        print "ok   power-off warnings: " fallbacks " fallbacks, " valid " valid listings"
-      }
-    ' || exit 1
+    local active=0 expected="" warnings=0 bad=0 fallbacks=0 valid=0 line
+    while IFS= read -r line; do
+      case "$line" in
+        "qml: power-off warning begin: "*)
+          [ "$active" -eq 0 ] || bad=1
+          expected=${line#"qml: power-off warning begin: "}
+          active=1
+          warnings=0
+          ;;
+        "qml: power-off warning end")
+          [ "$active" -eq 1 ] || bad=1
+          if [ -n "$expected" ]; then
+            [ "$warnings" -eq 1 ] || bad=1
+            fallbacks=$((fallbacks + 1))
+          else
+            [ "$warnings" -eq 0 ] || bad=1
+            valid=$((valid + 1))
+          fi
+          active=0
+          ;;
+        *)
+          if [ "$active" -eq 1 ]; then
+            warnings=$((warnings + 1))
+            [ "$line" = "qml: $expected" ] || bad=1
+          fi
+          ;;
+      esac
+    done <<< "$out"
+    if [ "$active" -ne 0 ] || [ "$bad" -ne 0 ] || [ "$fallbacks" -eq 0 ] || [ "$valid" -eq 0 ]; then
+      echo "FAIL power-off warning: expected one exact warning per fallback and none for valid listings"
+      exit 1
+    fi
+    printf 'ok   power-off warnings: %d fallbacks, %d valid listings\n' "$fallbacks" "$valid"
   fi
   [ "$code" = 0 ] || exit "$code"
 }
