@@ -271,3 +271,7 @@ safe direction, and it is not a reason to leave the number out.
   says untagged
 - DIRTY on flea and flea-anchor is the bench harness's marker patch (18 console.log timing lines and one
   objectName, in 13 UI files, applied identically to every Flea arm); the code is otherwise the named commit
+- order check after this run, same host, 2,000-file media fixture, 5 cold runs per entrant (roots
+  field039.mju5Epc7 and field039.oso5Mr8F): the Flea arm in the first slot maps later than the one in the
+  second. 0.3.10 in the second slot took a median 501 ms in both checks; 0.3.9 in the first slot took
+  517 ms. The first-window gap between flea and flea-anchor above follows the run order, not the version
