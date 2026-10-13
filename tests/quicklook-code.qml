@@ -13,7 +13,7 @@ ShellRoot {
     readonly property bool again: Quickshell.env("QLCODE_RUN") === "again"
     readonly property int settleMs: 250
     readonly property int giveUpMs: 12000
-    readonly property int fixtureRows: 8
+    readonly property int fixtureRows: 10
     // The fixture's lines: the 132-line file, and the long file's 60 lines with the 6,000-character one at 40.
     readonly property int iconLines: 132
     readonly property int longAt: 40
@@ -45,7 +45,8 @@ ShellRoot {
         { move: "01-icons.rs", kind: "styled" }, { icons: true }, { scrollEnd: true }, { tab: true },
         { move: "02-more.rs", kind: "styled", walk: true }, { move: "03-plain.txt", kind: "text" },
         { remoteOn: true }, { move: "03-remote.txt", kind: "remote" }, { move: "04-nul.txt", kind: "binary" }, { move: "05-over.log", kind: "large" },
-        { move: "06-long.rs", kind: "plain" }, { wrap: true }, { reopen: true }, { tabReturn: true }, { done: true }]
+        { move: "06-long.rs", kind: "plain" }, { wrap: true }, { reopen: true }, { tabReturn: true },
+        { csv: "07-table.csv" }, { csv: "08-table.tsv" }, { done: true }]
     readonly property var againOps: [{ boot: true }, { open: "01-icons.rs", remembered: true }, { unwrap: true }, { done: true }]
     readonly property var ops: root.again ? root.againOps : root.freshOps
 
@@ -265,6 +266,20 @@ ShellRoot {
                 if (!root.calm(Flea.ViewState.previewWrap === false && root.savedWrap() === "false")) return false
                 root.check("w unwraps and the unwrapped choice is written", [root.textPane().wrap, root.savedWrap()], [false, "false"])
                 root.checkTextState("Quick Look IPC reports w unwrapped and ready code", false, root.iconLines)
+                return true
+            }
+        } else if (op.csv) {
+            if (root.pv().active) root.key("j")
+            else {
+                root.pane().setCursor(root.indexOf(op.csv))
+                root.press(Qt.Key_Space)
+            }
+            root.awaiting = function () {
+                if (!root.calm(root.nameOf() === op.csv && root.code() && root.code().firstScreen && root.pv().lookReady)) return false
+                var state = JSON.parse(previewReader.previewTextState(false))
+                root.check("Quick Look IPC reports ready " + op.csv,
+                    [state.path, state.ready, state.wrap, state.total, state.height > 0],
+                    [root.textPane().path, true, null, 3, true])
                 return true
             }
         } else if (op.done) {

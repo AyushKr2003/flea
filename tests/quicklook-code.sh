@@ -35,6 +35,8 @@ for i in $(seq 1 60); do
     if [ "$i" -eq 40 ]; then printf 'fn long() { let s = "'; head -c 6000 /dev/zero | tr '\0' x; printf '"; }\n'
     else printf 'fn l%d() {}\n' "$i"; fi
 done > "$fixture/06-long.rs"
+printf 'name,value\nfirst,1\nsecond,2\n' > "$fixture/07-table.csv"
+printf 'name\tvalue\nfirst\t1\nsecond\t2\n' > "$fixture/08-table.tsv"
 
 failures=0
 legs=0

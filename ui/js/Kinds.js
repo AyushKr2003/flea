@@ -124,6 +124,7 @@ function isPreviewable(row) {
 function stateByExtension(name) {
     if (isPdf(name)) return PDF
     if (Archive.isArchive(name)) return ARCHIVE
+    if (/\.(csv|tsv)$/i.test(String(name))) return TEXT
     return ""
 }
 
@@ -132,6 +133,7 @@ function quickLookKind(icon, name, thumbnailed) {
     if (isPdf(name)) return PDF
     if (isFont(name)) return FONT
     if (isMarkdown(name)) return TEXT
+    if (/\.(csv|tsv)$/i.test(String(name))) return TEXT
     // The client's own extension rule, because the backend's icon cannot name the widened formats.
     if (Archive.isArchive(name)) return ARCHIVE
     var byIcon = kindState(icon)

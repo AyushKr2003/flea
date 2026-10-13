@@ -97,7 +97,7 @@ QtObject {
         var ready = code.firstScreen && !(swap && (swap.holding || swap.capturing))
         return JSON.stringify({ path: surface.path, visible: surface.visible,
             ready: ready && (column ? !surface.textLoading : root.look.openState().landed),
-            focused: surface.activeFocus, wrap: code.wrap, y: viewport.contentY,
+            focused: surface.activeFocus, wrap: code.wrap === undefined ? null : code.wrap, y: viewport.contentY,
             minY: bounds.min, maxY: bounds.max, height: viewport.height, total: code.total })
     }
     // One entry per figure block; "" while no Markdown body is mounted, so a case keeps polling.

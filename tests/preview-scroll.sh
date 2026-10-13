@@ -32,6 +32,9 @@ def chunk(kind, data):
     + chunk(b'IDAT', zlib.compress((b'\x00' + b'\x55\x88\xaa' * 16) * 16)) + chunk(b'IEND', b''))
 (root / '06-empty.txt').write_text('')
 (root / '07-large.md').write_text('large\n' + 'x' * preview_max_bytes)
+for name, delimiter in (('08-long.csv', ','), ('09-long.tsv', '\t')):
+    (root / name).write_text(delimiter.join(('name', 'value')) + '\n'
+        + '\n'.join(delimiter.join(('row%d' % i, str(i))) for i in range(1, 133)))
 PY
 env XDG_STATE_HOME="$test_root/state" XDG_CONFIG_HOME="$test_root/home/.config" "$bin" --ui-state '{}' >/dev/null || exit 1
 env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \

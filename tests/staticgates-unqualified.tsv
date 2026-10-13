@@ -29,18 +29,18 @@ ui/ChromeModes.qml	38	root	Declared QML id; component context access is valid at
 ui/ChromeModes.qml	39	root	Declared QML id; component context access is valid at runtime.
 ui/ChromeModes.qml	37	root	Declared QML id; component context access is valid at runtime.
 ui/ChromeModes.qml	40	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	198	root	Declared QML id; Source and fence components read their creation context.
-ui/CodeLines.qml	199	view	Declared QML id; Source and fence components read their creation context.
 ui/CodeLines.qml	200	root	Declared QML id; Source and fence components read their creation context.
-ui/CodeLines.qml	203	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	204	root	Declared QML id; Source and fence components read their creation context.
-ui/CodeLines.qml	217	root	Declared QML id; Source and fence components read their creation context.
-ui/CodeLines.qml	217	root	Declared QML id; Source and fence components read their creation context.
-ui/CodeLines.qml	219	metrics	Declared QML id; Source and fence components read their creation context.
-ui/CodeLines.qml	220	root	Declared QML id; Source and fence components read their creation context.
-ui/CodeLines.qml	223	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	201	view	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	202	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	205	root	Declared QML id; component context access is valid at runtime.
+ui/CodeLines.qml	206	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	219	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	219	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	221	metrics	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	222	root	Declared QML id; Source and fence components read their creation context.
 ui/CodeLines.qml	225	root	Declared QML id; Source and fence components read their creation context.
 ui/CodeLines.qml	227	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	229	root	Declared QML id; Source and fence components read their creation context.
 ui/ColumnPane.qml	248	view	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	249	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	287	root	Declared QML id; component context access is valid at runtime.
@@ -1705,7 +1705,7 @@ ui/PreviewMarkdown.qml	644	index	Delegate context supplies this model role at ru
 ui/PreviewMarkdown.qml	645	root	Declared QML id; Source and fence components read their creation context.
 ui/PreviewMarkdown.qml	646	root	Declared QML id; Source and fence components read their creation context.
 ui/PreviewMarkdown.qml	647	root	Declared QML id; Source and fence components read their creation context.
-ui/PreviewScroll.qml	183	bars	Declared QML id; Loader context access is valid at runtime.
+ui/PreviewScroll.qml	189	bars	Declared QML id; Loader context access is valid at runtime.
 ui/PreviewSwap.qml	266	content	Declared QML id; component context access is valid at runtime.
 ui/PreviewSwap.qml	266	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewSwap.qml	266	root	Declared QML id; component context access is valid at runtime.
@@ -2267,18 +2267,18 @@ ui/ChromeModes.qml	38	root	Declared QML id; component context access is valid at
 ui/ChromeModes.qml	39	root	Declared QML id; component context access is valid at runtime.
 ui/ChromeModes.qml	37	root	Declared QML id; component context access is valid at runtime.
 ui/ChromeModes.qml	40	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	198	root	Declared QML id; Source and fence components read their creation context.
-ui/CodeLines.qml	199	view	Declared QML id; Source and fence components read their creation context.
 ui/CodeLines.qml	200	root	Declared QML id; Source and fence components read their creation context.
-ui/CodeLines.qml	203	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	204	root	Declared QML id; Source and fence components read their creation context.
-ui/CodeLines.qml	217	root	Declared QML id; Source and fence components read their creation context.
-ui/CodeLines.qml	217	root	Declared QML id; Source and fence components read their creation context.
-ui/CodeLines.qml	219	metrics	Declared QML id; Source and fence components read their creation context.
-ui/CodeLines.qml	220	root	Declared QML id; Source and fence components read their creation context.
-ui/CodeLines.qml	223	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	201	view	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	202	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	205	root	Declared QML id; component context access is valid at runtime.
+ui/CodeLines.qml	206	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	219	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	219	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	221	metrics	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	222	root	Declared QML id; Source and fence components read their creation context.
 ui/CodeLines.qml	225	root	Declared QML id; Source and fence components read their creation context.
 ui/CodeLines.qml	227	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	229	root	Declared QML id; Source and fence components read their creation context.
 ui/ColumnPane.qml	248	view	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	249	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	287	root	Declared QML id; component context access is valid at runtime.
@@ -3272,7 +3272,7 @@ ui/PreviewMarkdown.qml	644	index	Delegate context supplies this model role at ru
 ui/PreviewMarkdown.qml	645	root	Declared QML id; Source and fence components read their creation context.
 ui/PreviewMarkdown.qml	646	root	Declared QML id; Source and fence components read their creation context.
 ui/PreviewMarkdown.qml	647	root	Declared QML id; Source and fence components read their creation context.
-ui/PreviewScroll.qml	183	bars	Declared QML id; Loader context access is valid at runtime.
+ui/PreviewScroll.qml	189	bars	Declared QML id; Loader context access is valid at runtime.
 ui/PreviewSwap.qml	266	content	Declared QML id; component context access is valid at runtime.
 ui/PreviewSwap.qml	266	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewSwap.qml	266	root	Declared QML id; component context access is valid at runtime.

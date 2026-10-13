@@ -86,6 +86,10 @@ Item {
             v.contentY = Math.max(bounds.min, Math.min(bounds.max, bounds.min + root.wanted.y))
         }
         v.forceLayout()
+        if (!root.markdown && !root.code.firstScreen) {
+            root.applying = false
+            return
+        }
         root.pendingRestore = false
         root.applying = false
         root.drawnY = v.contentY
@@ -155,6 +159,7 @@ Item {
     Connections {
         target: root.code
         function onFirstScreenChanged() {
+            if (root.pendingRestore) Qt.callLater(root.restore)
             if (root.code.firstScreen && root.viewport && !root.pendingRestore)
                 root.drawnY = root.viewport.contentY
             else
@@ -165,6 +170,7 @@ Item {
         target: root.viewport
         function onCountChanged() { Qt.callLater(root.restore) }
         function onContentHeightChanged() { Qt.callLater(root.restore) }
+        function onOriginYChanged() { Qt.callLater(root.restore) }
         function onContentYChanged() { root.moved() }
     }
     Flea.FastScrollHandler {

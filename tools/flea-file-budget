@@ -8,6 +8,7 @@ soft_js=200;   hard_js=300
 
 # Recorded debts and scoped release exceptions retain exact per-file ceilings; global limits stay unchanged.
 known_over_cap="shelf/Model.js 701
+tests/csv-preview.qml 520
 shelf/Panel.qml 443
 shelf/ShelfCard.qml 444
 shelf/ShelfService.qml 481
@@ -73,7 +74,7 @@ tests/js/columns.js 687
 tests/js/drag.js 493
 tests/js/dropsflow.js 301
 tests/js/collide.js 319
-tests/js/facts.js 351
+tests/js/facts.js 361
 tests/js/devices.js 406
 tests/js/previewswap.js 475
 tests/js/mdstructure.js 655
@@ -209,7 +210,7 @@ tests/gridbare.qml 426
 src/backend/trash.rs 401
 src/backend/trash_tests.rs 423
 tests/permissions-adv.qml 402
-tests/quicklook-code.qml 437"
+tests/quicklook-code.qml 452"
 
 status=0
 

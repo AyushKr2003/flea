@@ -682,6 +682,8 @@ rows and the absent parent rows, `tests/js/nav.js` the target.
 
 ## The preview swap
 
+CSV and TSV in the Columns preview expose the table body through the same viewport contract as code: wheel and F/B page the body, the sticky header stays fixed, and returning restores the file position before the preview hold releases. Restore stays pending until the visible records are held and reapplies against the final ListView origin, so fractional row layout cannot move the returning file. The body model counts every data record while requests cover only the visible records; Quick Look keeps its existing two-axis grid. CSV and TSV suffixes route both surfaces to text even when the MIME icon is a spreadsheet; binary spreadsheets retain their unsupported state. Both table and code views mark destruction before queued window requests can run, preserving their models until their children are destroyed. The text IPC reader reports the live table viewport and null for its absent wrap field. The startup pin remains 168 units, with 1,627,754 bytes from the `wc -c` sum over `tests/startup-units.txt`; `CsvTable.qml` stays outside the first frame. `tests/quicklook-code.qml` has a 452-line ceiling and `tests/js/facts.js` a 361-line ceiling by `wc -l` for the CSV and TSV IPC and routing cases. The `CodeLines.qml` and `PreviewScroll.qml` allowances in both unqualified-read profiles use the merged source lines; the available profile is measured by `tests/staticgates.py`.
+
 A cursor move drew the next preview half-built: v0.3.4 shows 145 to 151 mid frames over 18 column
 moves and 13 to 15 over 16 Quick Look moves, measured headless through `tests/preview-swap.sh`.
 `ui/PreviewSwap.qml` owns the hold and `ui/js/PreviewSwap.js` decides. The host's children go into a
@@ -1095,7 +1097,7 @@ the file proves its directory unchanged since it was written (rule 4 above).
 keeps that map early, what decides the first frame's contents, the one accepted cost, and how the
 file chooser, which is off the measured path, keeps its own window whole.
 
-**The context menu waits for the first frame (2026-10-13).** Each pane builds `ui/MenuHost.qml`, which holds the menu's inputs, its closed state and reply validation (`ui/js/MenuContext.js`), and loads `ui/ContextMenu.qml` asynchronously one idle second after the first frame swaps and the listing settles; a menu asked for before then loads it synchronously, so the first right-click or menu key never waits on that timer. The merged startup gate pins 583 objects by the census, 168 first-frame units and 1,627,609 bytes by the `wc -c` sum over `tests/startup-units.txt`: `tests/startup-objects.sh` checks that the nine units only the menu uses and the ContextMenu root are absent at its cut, and `tests/menu-settle.sh` that a warmed menu keeps one root across reopen. The merged ceilings are `ui/Pane.qml` 1234, `ui/PaneMenuActions.qml` 527, `ui/ContextMenu.qml` 737 and `tests/js/menu.js` 669, each re-derived with `wc -l`; both unqualified-read profiles follow the merged source lines, with the available profile measured by `tests/staticgates.py`.
+**The context menu waits for the first frame (2026-10-13).** Each pane builds `ui/MenuHost.qml`, which holds the menu's inputs, its closed state and reply validation (`ui/js/MenuContext.js`), and loads `ui/ContextMenu.qml` asynchronously one idle second after the first frame swaps and the listing settles; a menu asked for before then loads it synchronously, so the first right-click or menu key never waits on that timer. The merged startup gate pins 583 objects by the census, 168 first-frame units and 1,627,754 bytes by the `wc -c` sum over `tests/startup-units.txt`: `tests/startup-objects.sh` checks that the nine units only the menu uses and the ContextMenu root are absent at its cut, and `tests/menu-settle.sh` that a warmed menu keeps one root across reopen. The merged ceilings are `ui/Pane.qml` 1234, `ui/PaneMenuActions.qml` 527, `ui/ContextMenu.qml` 737 and `tests/js/menu.js` 669, each re-derived with `wc -l`; both unqualified-read profiles follow the merged source lines, with the available profile measured by `tests/staticgates.py`.
 
 **Qt never caches a Quickshell config.** Quickshell serves its config through its own `qs:@/qs/`
 URL scheme (`src/core/rootwrapper.cpp`, intercepted in `src/core/qsintercept.cpp`) and Qt's QML
@@ -2722,6 +2724,9 @@ real WindowBody it drives.
 reaches the card under either icon mark, pinned at `Nav.openCursor`.
 `ui/GridArea.qml` is 665 lines by `wc -l`, its recorded ceiling (moved from 663 for the `viewTop()` helper and its comment, which keeps the viewport top at `contentY - originY` for the drift check and `coversCursor`); the column and row-count handlers restart that drift check with `coalesce.restart()`, so a resize that re-flows the tiles asks for the window they draw without waiting for a scroll.
 
+`tests/csv-preview.qml` is recorded at 520 lines by `wc -l`: one real-backend harness drives every CSV and TSV case (record-aligned
+jumps, first-screen continuation, capped replies, plain line counts and the drawn Quick Look elision) over one fixture
+set, including the record-ordinal regressions and two-row quoted fixture checks; splitting it would start a second backend per file.
 The budget is a smell detector, not a target, and **it is not a reason to refactor a
 stable file**. Three files cross the hard cap purely as arithmetic of a clean merge for 0.1.4, with
 no conflict and no new code: `ui/ChromeBar.qml`, `ui/Sidebar.qml` and `ui/Row.qml`, the last by a

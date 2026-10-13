@@ -32,6 +32,7 @@ ShellRoot {
     readonly property int rewrittenLines: 200
     property real savedCode: 0
     property real savedMarkdown: 0
+    property real savedCsv: 0
     property string restoring: ""
     property real restoreY: 0
     property int restoreFrames: 0
@@ -41,7 +42,8 @@ ShellRoot {
     readonly property var ops: ["open", "listing-ready", "seams", "supersede-scroll", "supersede-page", "supersede-return", "cancel-scroll", "cancel-return", "cancel-page", "cancel-reset", "capture-code-rest", "code-click", "code-wheel", "forward", "capture-code-paged", "back", "code-save", "code-next", "code-return",
         "code-memory", "code-end", "forward-end", "code-top", "back-top", "short", "short-check", "markdown",
         "capture-markdown-rest", "markdown-click", "markdown-wheel", "forward", "capture-markdown-paged", "back", "markdown-save", "markdown-next", "markdown-return", "markdown-memory",
-        "markdown-end", "forward-end", "markdown-top", "back-top", "image", "image-check", "code-again", "rewrite", "rewrite-check",
+        "markdown-end", "forward-end", "markdown-top", "back-top", "csv", "csv-seams", "capture-csv-rest", "csv-wheel", "forward", "capture-csv-paged", "back", "csv-save",
+        "csv-code", "csv-markdown", "csv-return", "csv-memory", "capture-csv-restored", "tsv", "tsv-check", "image", "image-check", "code-again", "rewrite", "rewrite-check",
         "empty", "empty-check", "large", "large-check", "capacity", "list", "list-check", "done"]
 
     function check(label, actual, expected) {
@@ -116,6 +118,18 @@ ShellRoot {
             root.stable()
             return true
         }
+    }
+    function textState(label) {
+        var state = JSON.parse(previewReader.previewTextState(true))
+        root.check(label + " IPC reports ready text and its body", [state.path, state.ready, state.y, state.height, state.total],
+            [root.col().path, true, root.view().contentY, root.view().height, root.code().total])
+        root.check(label + " IPC reports absent wrap as null", state.wrap, null)
+    }
+    function csvPosition() {
+        var v = root.view()
+        var index = v.indexAt(0, v.contentY + 1)
+        var item = v.itemAtIndex(index)
+        return { y: v.contentY, origin: v.originY, index: index, offset: item ? item.y - v.contentY : null }
     }
     function sample() {
         var c = root.col(), v = root.view()
@@ -207,30 +221,48 @@ ShellRoot {
                 if (!root.col().textLoading) root.key(end ? "F" : "B")
                 return false
             }
-        } else if (op === "code-save" || op === "markdown-save") {
+        } else if (op === "code-save" || op === "markdown-save" || op === "csv-save") {
             root.page("F")
             var saveReady = root.waiting
             root.waiting = function () {
                 if (!saveReady()) return false
                 root.check("saved place is below the top", root.view().contentY > Scroll.limitsY(root.view()).min, true)
                 if (op === "code-save") root.savedCode = root.view().contentY
-                else root.savedMarkdown = root.view().contentY
+                else if (op === "markdown-save") root.savedMarkdown = root.view().contentY
+                else root.savedCsv = root.view().contentY
+                if (op === "csv-save") console.log("PVSCROLL CSV SAVED " + JSON.stringify(root.csvPosition()))
                 return true
             }
         } else if (op === "code-next" || op === "markdown-next") {
             root.key("j")
             root.waitFile(op === "code-next" ? "01-other.rs" : "04-other.md")
-        } else if (op === "code-return" || op === "markdown-return") {
-            root.restoring = op === "code-return" ? "00-long.rs" : "03-long.md"
-            root.restoreY = op === "code-return" ? root.savedCode : root.savedMarkdown
+        } else if (op === "code-return" || op === "markdown-return" || op === "csv-return") {
+            root.restoring = op === "code-return" ? "00-long.rs" : op === "markdown-return" ? "03-long.md" : "08-long.csv"
+            root.restoreY = op === "code-return" ? root.savedCode : op === "markdown-return" ? root.savedMarkdown : root.savedCsv
             root.restoreFrames = 0
-            root.key("k")
-            root.waitFile(root.restoring)
-        } else if (op === "code-memory" || op === "markdown-memory") {
+            if (op === "csv-return") root.moveTo(8, root.restoring)
+            else { root.key("k"); root.waitFile(root.restoring) }
+        } else if (op === "code-memory" || op === "markdown-memory" || op === "csv-memory") {
+            if (op === "csv-memory") console.log("PVSCROLL CSV RETURN " + JSON.stringify(root.csvPosition()))
             root.near("file returns to its saved position", root.view().contentY, root.restoreY)
             root.check("return sampled its first live frame", root.restoreFrames > 0, true)
             root.check("no live frame at top or with missing code", root.badFrames, 0)
             root.restoring = ""
+            if (op === "csv-memory") root.textState("CSV restored")
+        } else if (op === "csv") {
+            root.pane.setCursor(8)
+            root.waiting = function () { return root.ready("08-long.csv") && root.code() && root.code().settled }
+        } else if (op === "csv-seams") {
+            root.check("CSV exposes its body as viewport", !!root.view() && root.view() === root.code().list, true)
+            if (!root.view()) { root.finish(); return }
+            root.check("CSV keeps all 132 body rows", root.view().count, 132)
+            root.textState("CSV")
+        } else if (op === "csv-code") root.moveTo(0, "00-long.rs")
+        else if (op === "csv-markdown") root.moveTo(3, "03-long.md")
+        else if (op === "tsv") root.moveTo(9, "09-long.tsv")
+        else if (op === "tsv-check") {
+            root.check("TSV exposes all body rows", root.view().count, 132)
+            root.textState("TSV")
         } else if (op === "short") root.moveTo(2, "02-short.txt")
         else if (op === "short-check") {
             root.check("short file has ten lines", root.view().count, 10)
@@ -333,6 +365,7 @@ ShellRoot {
         }
     }
     Flea.PreviewScroll { id: coldScroll; column: firstMarkdown }
+    Flea.IpcPreviewState { id: previewReader; pane: root.pane }
     Connections {
         target: frameProbe.Window.window
         function onAfterAnimating() { root.sample() }

@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell.Io
 import qs.Commons
+import "js/Csv.js" as Csv
 
 // The first lines of a text file in the preview column's frame, coloured by the backend for code; a network or phone file is read here, under the size gate.
 Item {
@@ -27,10 +28,12 @@ Item {
 
     // The caller reads the file when the backend must not open it, or when it cannot colour it.
     readonly property bool engine: root.backend !== null && typeof root.backend.askCode === "function"
+    // A .csv or .tsv draws as a table; every other text or code file keeps the line view.
+    readonly property bool csv: Csv.delimiter(root.path) !== ""
     readonly property bool fromFile: root.truncate || !root.engine
     readonly property string fileText: file.text()
     // The line view, built the first time a text or code file is previewed so a launch that never previews one loads none of it.
-    readonly property var code: codeLoader.item
+    readonly property var code: root.csv ? csvLoader.item : codeLoader.item
     readonly property var viewport: root.code ? root.code.viewport : null
     readonly property string answer: root.code ? root.code.answer : ""
     readonly property string shownText: root.fromFile ? root.fileText : root.lines.join("\n")
@@ -59,10 +62,27 @@ Item {
     Component.onCompleted: if (root.active) root.built = true
 
     Loader {
+        id: csvLoader
+        anchors.fill: parent
+        active: root.built && root.csv
+        source: "CsvTable.qml"
+        onLoaded: {
+            item.backend = Qt.binding(function () { return root.backend })
+            item.path = Qt.binding(function () { return root.path })
+            item.fromText = Qt.binding(function () { return root.fromFile })
+            item.text = Qt.binding(function () { return root.fromFile && file.loaded ? root.fileText : null })
+            item.active = Qt.binding(function () { return root.active && !root.overSize })
+            item.limit = 0
+            item.margin = 0
+            item.pixelSize = Theme.font.caption
+        }
+    }
+
+    Loader {
         id: codeLoader
         anchors.fill: parent
         anchors.margins: Theme.spacing.gap
-        active: root.built
+        active: root.built && !root.csv
         source: "CodeLines.qml"
         onLoaded: {
             item.backend = Qt.binding(function () { return root.backend })

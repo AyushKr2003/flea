@@ -38,6 +38,7 @@ Item {
     property int stamp: 0
     // The token of the ask in flight, 0 when none: an answer for any other token is dropped.
     property int token: 0
+    property bool retiring: false
     // The window of that ask, so the same window is not asked for twice while it is in flight.
     property var asking: null
     readonly property bool settled: root.answer === "styled" || root.answer === "plain"
@@ -89,7 +90,7 @@ Item {
             rows.pop()
         var held = {}
         for (var i = 0; i < rows.length && (root.limit <= 0 || i < root.limit); i++)
-            held[i + 1] = [0, rows[i]]
+            held[i + 1] = [0, rows[i].endsWith("\r") ? rows[i].slice(0, -1) : rows[i]]
         root.held = held
         root.stamp += 1
         root.total = rows.length
@@ -116,7 +117,7 @@ Item {
     }
 
     function ask() {
-        if (!root.active || !root.engine || view.height <= 0)
+        if (root.retiring || !root.active || !root.engine || view.height <= 0)
             return
         if (root.answer === "binary" || root.answer === "large" || root.answer === "failed")
             return
@@ -165,6 +166,7 @@ Item {
     onTextChanged: root.fresh()
     onFromTextChanged: root.fresh()
     onActiveChanged: root.fresh()
+    Component.onDestruction: root.retiring = true
     onEngineChanged: root.fresh()
     onLimitChanged: Qt.callLater(root.ask)
 

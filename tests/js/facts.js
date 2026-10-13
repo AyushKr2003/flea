@@ -43,6 +43,16 @@ function run(check) {
           Facts.state(named("report.odt", "x-office-document"), 1, false, ""), "unsupported")
     check("but a pdf sharing that icon is still told apart by its extension",
           Facts.state(named("manual.pdf", "x-office-document"), 1, false, ""), "pdf")
+    check("CSV and TSV reach text despite their spreadsheet icon",
+          ["table.csv", "table.TSV"].map(function (name) {
+              return Facts.state(named(name, "x-office-spreadsheet"), 1, false, "")
+                  + ":" + Kinds.quickLookKind("x-office-spreadsheet", name)
+          }).join("|"), "text:text|text:text")
+    check("binary spreadsheets and names containing csv remain unsupported",
+          ["table.xlsx", "table.ods", "table.csv.bak"].map(function (name) {
+              return Facts.state(named(name, "x-office-spreadsheet"), 1, false, "")
+                  + ":" + Kinds.quickLookKind("x-office-spreadsheet", name)
+          }).join("|"), "unsupported:unsupported|unsupported:unsupported|unsupported:unsupported")
     // The canvas's own Text tile is field-bench-notes.md, and .md carries the office icon too.
     check("and markdown reaches the text frame, which is what the canvas draws",
           Facts.state(named("field-bench-notes.md", "x-office-document"), 1, false, ""), "text")
