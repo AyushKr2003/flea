@@ -85,6 +85,8 @@ make_fixture() {
 # the board's navigation contract: Parent climbs, the cursor steps, Enter opens a directory.
 walk_to_fixture() {
     local want step
+    # Save requests start in Filename; this navigation leg deliberately moves to the list.
+    if [[ "$(ipc accept)" == Save ]]; then press -M shift -k Tab -m shift; fi
     press -k BackSpace
     for step in 1 2 3 4 5 6 7 8 9 10; do
         [[ "$(ipc path)" == "/home" ]] && break
@@ -289,8 +291,7 @@ case_savename() {
     omarchy-drive focus "$title" >/dev/null || fail "the picker window would not take focus"
     ipc_is_live
     [[ -z "$(ipc saveName)" ]] || fail "the caller's traversal was adopted into the field as $(ipc saveName)"
-    # Enter reaches accept() only from a file row: on a directory it walks in, which is the board's
-    # own rule and is why case_save walks here too before pressing it.
+    # This leg deliberately walks the listing before accepting from a file row.
     walk_to_fixture
     press -k Return
     [[ "$(ipc message)" == *"Name the file"* ]] || fail "Enter on the refused name said $(ipc message)"

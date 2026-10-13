@@ -43,7 +43,7 @@ ShellRoot {
         property string path: "/tmp"
         property string saveName: "export.txt"
         property string saveError: ""
-        property bool saveCollision: true
+        property bool collisionReview: true
         property var req: ({ name: "export.txt" })
         function stepFocus() {}
         function control() { return null }

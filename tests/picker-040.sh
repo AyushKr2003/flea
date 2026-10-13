@@ -26,14 +26,14 @@ failures=0
 phases=0
 probe_timeout_seconds=15
 for view in list grid; do
-    for scenario in path collision replace replace-button return-twice ends cancel far probe tab answers single marked; do
+    for scenario in fresh-save pointer-save list-folder list-file field-cancel field-keys path collision replace replace-button return-twice ends cancel far probe tab answers single marked; do
         phase="$test_root/$view-$scenario"
         mkdir -p "$phase"/{home,state/flea,cache,data,runtime,tmp}
         chmod 700 "$phase/runtime"
         mode=open
         multiple=true
         preset=default
-        case "$scenario" in collision|replace|replace-button|return-twice|ends|cancel|probe|tab) mode=save; multiple=false ;; esac
+        case "$scenario" in fresh-save|pointer-save|list-folder|list-file|field-cancel|field-keys|collision|replace|replace-button|return-twice|ends|cancel|probe|tab) mode=save; multiple=false ;; esac
         [ "$scenario" = single ] && multiple=false
         # The path leg keeps one favourite, so a typed name shows the Jump dropdown over the listing.
         places=""
@@ -44,6 +44,7 @@ for view in list grid; do
 import json,sys
 request=dict(mode=sys.argv[1],multiple=sys.argv[2]=='true',folder=sys.argv[3],name='new.txt' if sys.argv[4]=='probe' else 'a.txt',title='Picker hunt')
 if sys.argv[4] in ('path','far','collision','replace','replace-button','return-twice','ends','cancel','tab'):request['filters']=[dict(label='Text',globs=['*.txt'],mimes=[])]
+if sys.argv[4] in ('fresh-save','pointer-save','list-folder','list-file','field-cancel','field-keys'):request['name']='report.pdf'
 if sys.argv[4]=='single':request.update(title='X \u00b7 Firefox')
 if sys.argv[4]=='answers':request.update(title='All Files',app='org.chromium.Chromium',current='Pictures',filters=[dict(label=name,globs=[glob],mimes=[]) for name,glob in (('Text','*.txt'),('Pictures','*.png'),('Data','*.dat'))])
 print(json.dumps(request))
@@ -72,7 +73,9 @@ PY
         # A save answer is the reply file too: only Replace answers OK over a taken name, a second Return answers nothing, Cancel refuses.
         case "$scenario" in
             replace|replace-button) want="{\"response\":0,\"uris\":[\"file://$fixture/a.txt\"],\"filter\":0}" ;;
-            cancel) want='{"response":1}' ;;
+            fresh-save|list-file) want="{\"response\":0,\"uris\":[\"file://$fixture/report.pdf\"],\"filter\":-1}" ;;
+            pointer-save) want="{\"response\":0,\"uris\":[\"file://$test_root/report.pdf\"],\"filter\":-1}" ;;
+            field-cancel|cancel) want='{"response":1}' ;;
             *) want="" ;;
         esac
         if [ "$scenario" = return-twice ] && { [ -e "$phase/reply.json" ] || [ "$(cat "$fixture/a.txt")" != a ]; }; then

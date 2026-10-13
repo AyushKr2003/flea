@@ -102,7 +102,7 @@ Item {
     function editClosed() {
         root.asked = ""
         root.leaf = ""
-        root.picker.focusView()
+        root.picker.focusDefault()
     }
 
     // Every listing of the leaf's folder, its first or a re-read, renumbers the rows, so the leaf is located afresh against it.

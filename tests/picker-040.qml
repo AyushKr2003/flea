@@ -160,6 +160,63 @@ ShellRoot {
         root.check("Cancel sits one gap left of the answer", root.near(root.at(cancel, cancel.width, 0).x + Flea.Theme.spacing.gap, root.at(accept, 0, 0).x), true)
         root.check("the buttons are the 30 px body control", [cancel.height, accept.height], [30, 30])
     }
+    readonly property var focusScenarios: ["fresh-save", "pointer-save", "list-folder", "list-file", "field-cancel", "field-keys"]
+    property string answerFolder: ""
+    function focusStep() {
+        var field = root.saveForm().fieldItem
+        if (stage === 0) {
+            if (!win.saveReady) return
+            root.logic = root.pickerLogic()
+            root.answerFolder = win.path
+            root.listingsBefore = root.listings
+            root.check("a fresh save starts with a folder row", win.rowFor(0).n, "big")
+            root.check("a fresh save focuses Filename and selects only the stem", [field.activeFocus, field.selectedText, win.viewItem().activeFocus], [true, "report", false])
+            root.stage = 40
+            root.stamp = Date.now()
+            if (scenario === "pointer-save") {
+                var up = root.named("pickerUp")
+                root.answerFolder = root.parentOf(win.path)
+                keys.mouseClick(up, up.width / 2, up.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
+                root.stage = 41
+            } else if (scenario === "list-folder" || scenario === "list-file") {
+                root.press(Qt.Key_Backtab, Qt.ShiftModifier)
+                root.check("Shift+Tab deliberately focuses the listing", win.viewItem().activeFocus, true)
+                if (scenario === "list-file") win.cursorIndex = root.rowIndex("a.txt")
+                else root.stage = 42
+                root.expectAnswer = scenario === "list-file"
+                root.press(Qt.Key_Return)
+            } else if (scenario === "field-cancel") {
+                root.expectAnswer = true
+                root.press(Qt.Key_Escape)
+            } else if (scenario === "field-keys") {
+                root.press(Qt.Key_X)
+                root.check("typing replaces the selected stem only", win.saveName, "x.pdf")
+                root.press(Qt.Key_L, Qt.ControlModifier)
+                root.check("an unhandled field key still opens the path bar", root.pathEntry().editing, true)
+                root.finish()
+            } else {
+                root.expectAnswer = true
+                root.press(Qt.Key_Return)
+            }
+            return
+        }
+        if (stage === 41) {
+            if (win.path !== root.answerFolder || win.listingState === "loading" || !win.saveReady) return
+            root.check("pointer Up returns focus to Filename", [field.activeFocus, win.viewItem().activeFocus], [true, false])
+            root.listingsBefore = root.listings
+            root.expectAnswer = true
+            root.stage = 40
+            root.press(Qt.Key_Return)
+        } else if (stage === 42) {
+            if (win.path !== root.startFolder() + "/big" || win.listingState !== "ready") return
+            root.check("Enter on a deliberately focused folder opens it without answering", [win.answered, win.viewItem().activeFocus], [false, true])
+            root.finish()
+        } else if (stage === 40 && win.path !== root.answerFolder) {
+            root.check("Enter saves in the shown folder without navigation", win.path, root.answerFolder)
+            root.finish()
+        }
+    }
+
     // The 0.3.10 save area: the column under the listing, the collision review, the marked rows and the Tab walk.
     property bool expectAnswer: false
     readonly property var saveScenarios: ["collision", "replace", "replace-button", "return-twice", "ends", "cancel", "tab", "marked"]
@@ -550,6 +607,8 @@ ShellRoot {
         function onAnsweredChanged() {
             if (!root.win.answered) return
             root.check("the picker answered", root.win.answered, true)
+            if (root.focusScenarios.indexOf(scenario) >= 0 && scenario !== "field-cancel")
+                root.check("Enter saves in the shown folder without navigation", [win.path, root.listings - root.listingsBefore], [root.answerFolder, 0])
             root.verdict()
         }
     }
@@ -570,6 +629,7 @@ ShellRoot {
                 return
             }
             if (!win || win.listingState !== "ready" || !win.rows.length) return
+            if (root.focusScenarios.indexOf(scenario) >= 0) { root.focusStep(); return }
             if (scenario === "answers" || scenario === "single") { root.answersStep(); return }
             if (root.saveScenarios.indexOf(scenario) >= 0) { root.saveStep(); return }
             if (stage === 0) {

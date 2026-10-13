@@ -539,6 +539,29 @@ def test_save():
     check("SP07 SaveFile created nothing", not (fixture / "new.txt").exists())
 
 
+def test_savefocus():
+    saving = Request("SP07-save-focus", "SaveFile", current_name=GLib.Variant("s", "report.pdf")).opened()
+    before = saving.until("fresh save ready with a folder first", lambda state: state["saveReady"]
+                          and state["rows"] and state["rows"][0]["n"] == "folder")
+    check("fresh save focuses Filename and leaves the listing unfocused",
+          any(item["name"] == "Filename" and item["focused"] for item in before["controls"])
+          and not before["listFocus"] and not before["gridFocus"], before)
+    saving.capture("fresh")
+    saving.key("-k", "Return")
+    saving.answered(0, [(fixture / "report.pdf").as_uri()])
+    check("fresh Enter records the caller reply without creating a file",
+          (root / "response-SP07-save-focus.json").is_file() and not (fixture / "report.pdf").exists())
+
+    moved = Request("SP07-save-focus-up", "SaveFile", folder=fixture / "folder",
+                    current_name=GLib.Variant("s", "report.pdf")).opened()
+    moved.until("initial save destination ready", lambda state: state["saveReady"])
+    moved.click("Parent folder")
+    moved.until("pointer Up returns Filename focus in the shown folder", lambda state: state["path"] == str(fixture)
+                and state["saveReady"] and any(item["name"] == "Filename" and item["focused"] for item in state["controls"]))
+    moved.key("-k", "Return")
+    moved.answered(0, [(fixture / "report.pdf").as_uri()])
+
+
 def test_cancel():
     for name, action in [("escape", "escape"), ("pointer", "pointer"), ("close", "close")]:
         cancel = Request(f"SP08-{name}").opened()
@@ -843,6 +866,8 @@ def test_sorting():
     # a3c7508f6: SP12's last sort is the default now, so the save opens on size descending and s steps to modified.
     saving.until("the collision is reviewed", lambda state: state["saveReady"] and state["collision"] and state["state"] == "ready"
                  and state["sortBy"] == "size" and state["sortDesc"])
+    saving.key("-M", "shift", "-k", "Tab", "-m", "shift")
+    saving.until("deliberate list focus before sorting", lambda state: state["listFocus"])
     saving.key("s")
     saving.until("a sort keeps the filename and its collision answer", lambda state: state["sortBy"] == "mtime" and not state["sortDesc"]
                  and state["state"] == "ready" and state["saveName"] == "report.txt" and state["saveReady"] and state["collision"])
@@ -1098,7 +1123,7 @@ def take_display_lock(runtime_dir):
 def main():
     groups = {"single": test_single, "multiple": test_multiple, "directory": test_directory,
               "filters": test_filters, "changed": test_changed, "save": test_save,
-              "cancel": test_cancel, "failure": test_failure, "keys": test_keys,
+              "savefocus": test_savefocus, "cancel": test_cancel, "failure": test_failure, "keys": test_keys,
               "sorting": test_sorting, "path": test_path}
     selected = sys.argv[1:] or list(groups)
     for name in selected:
