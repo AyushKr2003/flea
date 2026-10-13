@@ -184,6 +184,44 @@ cap_unlock_launch() {
     printf 'LAUNCH unlock dev=%q pid=%s\n' "$dev" "$(flea_pid)"
 }
 
+# The previous open-file leg may have unmounted, so a cwd holder needs both the unlocked row and the live mount.
+cap_unlock_unmount_in_use() {
+    local mount="$1" unmount_label="$2" row rail_idx mounted_label busy_status status end _attempt
+    row=$(ipc railEntries | jq -c --arg mount "$mount" '[to_entries[] | select(.value.path == $mount and .value.locked != true and (.value.device // "") != "")][0] // null')
+    if [[ "$row" == null ]] || ! mountpoint -q -- "$mount"; then
+        printf 'CAP SKIP unlock-unmount-in-use: the open-file leg left no mounted unlocked S1LUKS row at %s\n' "$mount"
+        inuse_receipt=skipped
+        return 0
+    fi
+    rail_idx=$(jq -r .key <<< "$row")
+    mounted_label=$(jq -er '.value.label | select(length > 0)' <<< "$row") || fail "cap_unlock: the mounted S1LUKS row has no name"
+    ( cd -- "$mount" && exec sleep 60 ) &
+    holder=$!
+    for _attempt in $(seq 1 40); do
+        [[ "$(readlink "/proc/$holder/cwd" 2>/dev/null)" == "$mount" ]] && break
+        sleep 0.05
+    done
+    [[ "$(readlink "/proc/$holder/cwd" 2>/dev/null)" == "$mount" ]] || { kill "$holder" 2>/dev/null || true; fail "cap_unlock: nothing holds $mount, so Unmount could not be refused"; }
+    click_rail_row "$rail_idx" right
+    settle
+    menu_seek "$unmount_label"
+    key -k Return >/dev/null
+    # DeviceMounts.qml:231,500 passes the mounted row's label to Devices.js:344, not the locked container's label.
+    busy_status="$mounted_label is busy; close what is using it and try again."
+    end=$((SECONDS + 25))
+    while (( SECONDS < end )); do
+        status=$(ipc statusPrimary 2>/dev/null || printf "")
+        [[ "$status" == "$busy_status" ]] && break
+        sleep 0.1
+    done
+    [[ "$status" == "$busy_status" ]] || { kill "$holder" 2>/dev/null || true; fail "cap_unlock: Unmount of a volume in use did not say it was busy, status [$status]"; }
+    settle
+    shot unlock-unmount-in-use
+    kill "$holder" 2>/dev/null || true
+    wait "$holder" 2>/dev/null || true
+    holder=""
+}
+
 # Unlock: the locked row, the card wrong-then-right, the unlocked row and the Eject that relocks it.
 case_cap_unlock() {
     # The container is FLEA_CAP_LUKS_DEV (LUKS2 over a vfat labelled S1LUKS); its test-only passphrase is FLEA_CAP_LUKS_KEY.
@@ -512,34 +550,7 @@ case_cap_unlock() {
         wait "$holder" 2>/dev/null || true
         holder=""
         rm -f "$mount/hold.txt"
-        # A cwd on the volume keeps Unmount itself busy, so it is shot before the clean one.
-        ( cd -- "$mount" && exec sleep 60 ) &
-        holder=$!
-        for _attempt in $(seq 1 40); do
-            [[ "$(readlink "/proc/$holder/cwd" 2>/dev/null)" == "$mount" ]] && break
-            sleep 0.05
-        done
-        [[ "$(readlink "/proc/$holder/cwd" 2>/dev/null)" == "$mount" ]] || { kill "$holder" 2>/dev/null || true; fail "cap_unlock: nothing holds $mount, so Unmount could not be refused"; }
-        rail_idx=$(ipc railEntries | jq -r '[to_entries[] | select(.value.path | endswith("/S1LUKS")) | .key][0] // -1')
-        [[ "$rail_idx" != "-1" ]] || { kill "$holder" 2>/dev/null || true; fail "cap_unlock: the rail has no unlocked S1LUKS row"; }
-        click_rail_row "$rail_idx" right
-        settle
-        menu_seek "$unmount_label"
-        key -k Return >/dev/null
-        # Only the refusal (ui/js/Devices.js:327) is the in-use state; "unmounted but could not be locked" (ui/js/Unlock.js:46) means the unmount went through.
-        busy_status="$label is busy; close what is using it and try again."
-        end=$((SECONDS + 25))
-        while (( SECONDS < end )); do
-            status=$(ipc statusPrimary 2>/dev/null || printf "")
-            [[ "$status" == "$busy_status" ]] && break
-            sleep 0.1
-        done
-        [[ "$status" == "$busy_status" ]] || { kill "$holder" 2>/dev/null || true; fail "cap_unlock: Unmount of a volume in use did not say it was busy, status [$status]"; }
-        settle
-        shot unlock-unmount-in-use
-        kill "$holder" 2>/dev/null || true
-        wait "$holder" 2>/dev/null || true
-        holder=""
+        cap_unlock_unmount_in_use "$mount" "$unmount_label"
         # Clean unmount through the same menu for the locked row it leaves behind.
         crypt=$(ipc railEntries | jq -r '[.[] | select(.path | endswith("/S1LUKS")) | .device][0] // ""')
         if [[ -z "$crypt" ]]; then

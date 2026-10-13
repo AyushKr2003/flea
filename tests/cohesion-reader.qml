@@ -96,6 +96,12 @@ ShellRoot {
                 var primaries = open.st.controls.filter(function (c) { return c.kind === "DialogButton" && c.primary })
                 root.check(primaries.length === 1, "one primary button: " + primaries.length)
                 root.check(open.st.controls.every(function (c) { return c.kind !== "DialogButton" || (c.hoverable && c.pressable) }), "every dialog button reports hover and press")
+                if (Quickshell.env("FLEA_COH_CAPTURE") === "true") {
+                    var targets = open.st.controls.filter(function(c) { return c.surface === "PermissionsDialog" && c.exposed })
+                    root.check(targets.filter(function(c) { return c.kind === "DialogButton" && c.pressLive }).length === 2, "capture buttons belong to the open Permissions surface")
+                    root.check(targets.filter(function(c) { return c.kind === "CheckBox" && c.hoverLive && c.pressLive }).length === 9, "capture checkboxes read their parent's actual handlers")
+                    root.check(targets.every(function(c) { return c.name !== "Back" && c.name !== "Parent folder" }), "window controls behind the dialog are excluded from its targets")
+                }
                 var focus = open.st.focus
                 root.check(!!focus && (focus.via === "owner" || focus.via === "flag"), "the focus is found by the owner walk or the focused flag, not the fallback: " + JSON.stringify(focus))
                 root.check(!!focus && (["DialogButton", "CheckBox"].indexOf(focus.kind) >= 0 || (focus.kind === "ChromeButton" && focus.name === root.closeMark)),

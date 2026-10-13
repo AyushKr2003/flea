@@ -67,12 +67,12 @@ picker_env["HYPRLAND_INSTANCE_SIGNATURE"] = HYPRLAND_ALIAS
 picker_env["HOME"] = str(theme_home)
 picker_env["WAYLAND_DISPLAY"] = str(Path(drive_env["XDG_RUNTIME_DIR"]) / drive_env["WAYLAND_DISPLAY"])
 picker_env["FLEA_BIN"] = str(Path(os.environ["FLEA_BIN"]).resolve(strict=True))
-picker_env["FLEA_UI"] = str(REPO / "ui")
+picker_env["FLEA_UI"] = str(Path(os.environ["FLEA_UI"]).resolve(strict=True))
 listing = root / "files"
 listing.mkdir()
 for name in ("alpha.txt", "beta.txt", "gamma.txt"):
     (listing / name).write_text(f"b72 picker fixture: {name}\n")
-(listing / "photo.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+subprocess.run(["magick", "-size", "64x64", "xc:#336699", str(listing / "photo.png")], env=picker_env, check=True)
 portals = root / "portals"
 portals.mkdir()
 (portals / "flea.portal").write_text("[portal]\nDBusName=org.freedesktop.impl.portal.desktop.flea\nInterfaces=org.freedesktop.impl.portal.FileChooser;\n")
@@ -185,18 +185,25 @@ class Request:
     def control(self, name):
         found = [item for item in self.state()["controls"] if item["name"] == name and item["visible"]]
         if not found:
+            found = [dict(item, centre=f"{item['targetX']} {item['targetY']}")
+                     for item in self.ipc("cohesionControls")["controls"] if item["name"] == name and item["exposed"]]
+        if not found:
             raise AssertionError(f"picker shows no {name}")
         return found[-1]
 
     def pointer(self, name, click=False):
         x, y = map(int, self.control(name)["centre"].split())
         wx, wy = self.window()["at"]
-        run(["omarchy-drive", "click" if click else "move", wx + x, wy + y, *(["left"] if click else [])])
+        run(["bash", "-c", 'source "$1"; pointer_glide "$2" "$3"', "capture-pointer",
+             REPO / "tests/lib/pointer-glide.sh", wx + x, wy + y])
+        if click:
+            run(["omarchy-drive", "click", wx + x, wy + y, "left"])
         time.sleep(SETTLE_SECONDS)
 
     def park(self):
         wx, wy = self.window()["at"]
-        run(["omarchy-drive", "move", wx + 6, wy + PICKER_HEIGHT - 6])
+        run(["bash", "-c", 'source "$1"; pointer_glide "$2" "$3"', "capture-pointer",
+             REPO / "tests/lib/pointer-glide.sh", wx + 6, wy + PICKER_HEIGHT - 6])
         time.sleep(SETTLE_SECONDS)
 
     # Sample input: {"focus":{"kind":"DialogButton","name":"Cancel"},"controls":[{"name":"Cancel","hoverable":true,"hovered":true}]}
@@ -262,7 +269,7 @@ def open_states():
     wait("first row marked", lambda: not ask.state()["marksBusy"] and len(ask.state()["marks"]) == 1)
     ask.park()
     ask.shot("L1", "picker-list", "marked-cursor")
-    ask.shot("L2", "picker-chips", "rest")
+    ask.shot("L2", "picker-filter", "rest")
     ask.shot("L3", "picker-strip", "rest")
     ask.press("-k", "Down")
     ask.press("-k", "Down")
@@ -287,16 +294,27 @@ def open_states():
         else:
             print(f"B72_MISS {theme} picker the Tab after Cancel landed on {accept}", flush=True)
             missed.append("accept focus")
-    if ask.tab_to("Text"):
-        ask.shot("L2", "picker-chips", "chosen-focus")
-    if ask.tab_to("Images"):
-        ask.shot("L2", "picker-chips", "unchosen-focus")
-        if ask.hover("All files"):
-            ask.shot("L2", "picker-chips", "unchosen-focus-other-hover")
-    ask.park()
+    # PickerFilter.qml replaces the old chips with one trigger and a menu containing the same choices.
+    if not ask.tab_to("Filter"):
+        raise AssertionError("picker never focused its filter trigger")
+    ask.shot("L2", "picker-filter", "trigger-focus")
     ask.press("-k", "Return")
-    wait("Images chosen", lambda: ask.state()["filter"] == 1)
-    ask.shot("L2", "picker-chips", "chosen-after-enter-focus")
+    wait("chosen filter focused", lambda: ask.control("Text")["focused"])
+    ask.shot("L2", "picker-filter", "chosen-focus")
+    ask.press("-k", "Down")
+    wait("unchosen filter focused", lambda: ask.control("Images")["focused"])
+    ask.shot("L2", "picker-filter", "unchosen-focus")
+    if not ask.hover("All files"):
+        raise AssertionError("picker never hovered its All files choice")
+    ask.shot("L2", "picker-filter", "all-files-hover")
+    if ask.state()["filter"] != 0:
+        raise AssertionError("hover changed the chosen filter")
+    ask.park()
+    ask.press("-k", "Up")
+    wait("Images focused again", lambda: ask.control("Images")["focused"])
+    ask.press("-k", "Return")
+    wait("Images chosen", lambda: ask.state()["filter"] == 1 and ask.state()["total"] == 1)
+    ask.shot("L2", "picker-filter", "chosen-after-enter-focus")
     ask.press("-k", "Escape")
     ask.closed(1)
 
@@ -306,6 +324,10 @@ def save_states():
     wait("collision reviewed", lambda: ask.state()["saveReady"] and ask.state()["collision"])
     ask.park()
     ask.shot("L9", "picker-save", "collision-rest")
+    ask.pointer("Save", click=True)
+    wait("collision review shown", lambda: ask.state()["collisionReview"] and not ask.state()["submitting"])
+    ask.park()
+    ask.shot("L9", "picker-save", "collision-review")
     stopped = []
     try:
         held = ask.backends()
@@ -314,7 +336,7 @@ def save_states():
         for backend in held:
             os.kill(backend, signal.SIGSTOP)
             stopped.append(backend)
-        ask.pointer("Use this location", click=True)
+        ask.pointer("Replace", click=True)
         wait("submission held", lambda: ask.state()["submitting"])
         ask.park()
         ask.shot("L9", "picker-save", "submitting")

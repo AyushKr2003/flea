@@ -309,6 +309,7 @@ case_cap_archives_format_kanagawa() {
     [[ -f "$src" ]] || fail "cap_archives_format_kanagawa: kanagawa colors.toml absent at $src"
     local sweep_root="$fixture_root/cap-archives-format-kanagawa-home" sweep_home="$fixture_root/cap-archives-format-kanagawa-home/home" sweep_real_bin="$flea_bin"
     local real_foreground="" flea_bin="$flea_bin"
+    sandbox_make "$sweep_root"
     fixture_home_make "$sweep_home"
     cp "$src" "$sweep_home/.local/state/omarchy/current/theme/colors.toml"
     printf 'kanagawa\n' > "$sweep_home/.local/state/omarchy/current/theme.name"

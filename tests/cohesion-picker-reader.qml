@@ -8,6 +8,7 @@ ShellRoot {
     property var win: null
     property int ticks: 0
     property bool focused: false
+    property bool menuOpened: false
     property int checks: 0
     property var failures: []
 
@@ -53,7 +54,19 @@ ShellRoot {
             if (!win || win.listingState !== "ready" || win.contentItem.width !== 1040) return
             var st = JSON.parse(root.handler().cohesionControls())
             if (root.focused) {
-                root.check(!!st.focus && st.focus.via === "owner" && st.focus.kind === "DialogButton", "the focus names the answer by the owner walk: " + JSON.stringify(st.focus))
+                if (!root.menuOpened)
+                    root.check(!!st.focus && st.focus.via === "owner" && st.focus.kind === "DialogButton", "the focus names the answer by the owner walk: " + JSON.stringify(st.focus))
+                if (Quickshell.env("FLEA_COH_CAPTURE") === "true") {
+                    if (!root.menuOpened) {
+                        root.find(win.contentItem, "PickerFilter").open()
+                        root.menuOpened = true
+                        return
+                    }
+                    var choices = st.controls.filter(function(c) { return c.kind === "MenuRow" && c.exposed })
+                    if (choices.length === 0) return
+                    root.check(choices.length === 2 && choices[0].name === "Text" && choices[1].name === "All files", "capture reader observes the actual dropdown choices")
+                    root.check(choices[0].focused && choices.every(function(c) { return c.surface === "ContextMenu" && c.hoverLive }), "dropdown targets keep their real cursor, surface and hover handlers")
+                }
                 root.report()
                 return
             }

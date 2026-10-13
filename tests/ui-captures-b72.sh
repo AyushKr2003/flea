@@ -61,13 +61,15 @@ b72_tab_to() {
 }
 
 # Sample input: {"controls":[{"kind":"ChromeButton","x":1050,"y":10,"w":28,"h":28,"hoverable":true,"hovered":true,"pressable":true,"pressed":false}]}
-# Polls the reader until some control under X Y that reports FLAG (hovered or pressed) shows it; no such control covering the point is a miss, never a pass.
+# MediaStrip's play Item has a TapHandler but no hover effect; its hover shot requires the real exposed hit target after pointer_glide verified the pointer.
 b72_flag_at() {
     local x="$1" y="$2" flag="$3" surface="$4" able=hoverable end=$((SECONDS + coh_wait_s))
     [[ "$flag" == pressed ]] && able=pressable
     while (( SECONDS < end )); do
         ipc cohesionControls | jq -e --argjson x "$x" --argjson y "$y" --arg flag "$flag" --arg able "$able" \
-            '[.controls[] | select(.[$able] and .x <= $x and $x < .x + .w and .y <= $y and $y < .y + .h)] | length > 0 and any(.[]; .[$flag])' >/dev/null 2>&1 && return 0
+            '[.controls[] | select((.[$able] or ($flag == "hovered" and .kind == "MediaPlay" and .exposed))
+                and .x <= $x and $x < .x + .w and .y <= $y and $y < .y + .h)]
+                | length > 0 and any(.[]; .[$flag] or ($flag == "hovered" and .kind == "MediaPlay" and .exposed and (.hoverable | not)))' >/dev/null 2>&1 && return 0
         sleep "$coh_poll_s"
     done
     printf 'B72_SOFT %s %s: no %s control at %s,%s ever reported %s\n' "$coh_theme" "$surface" "$able" "$x" "$y" "$flag"
@@ -96,7 +98,7 @@ b72_hover_press() {
         b72_miss "$item $surface press"
     fi
     local moved=1
-    coh_ydotool mousemove -x 0 -y "-$coh_away_px" || moved=0
+    coh_pointer_to "$coh_approach_px" "$((coh_win_h - coh_approach_px))" || moved=0
     coh_ydotool click 0x80 || fail "b72: pointer release failed"
     coh_held=0
     [ "$moved" = 1 ] || fail "b72: pointer move off the control failed, so the release landed on it"
@@ -303,9 +305,12 @@ case_cap_b72() {
     local list='{"keys":"default","view":"list","menu":{"hidden":[]}}'
     local cols='{"keys":"default","view":"columns","columnsLimit":3,"preview":{"column":true,"loadOn":"automatic"},"menu":{"hidden":[]}}'
     local themes="${B72_THEMES:-live gruvbox kanagawa}" want="${B72_SURFACES:-all}"
+    local flea_ui
+    flea_ui=$(coh_capture_ui) || fail "b72: the UI fixture could not be prepared"
     coh_fixture "$coh_dir"
     ffmpeg -y -f lavfi -i "testsrc=duration=15:size=320x180:rate=10" "$coh_dir/clip.mp4" >/dev/null 2>&1
     [[ -s "$coh_dir/clip.mp4" ]] || fail "b72: ffmpeg produced no clip.mp4"
+    mkdir -p "$evidence_dir" || fail "b72: the evidence directory could not be created"
     : > "$evidence_dir/b72-manifest.tsv"
     for coh_theme in $themes; do
         for s in network settings permissions qlpdf media convert openwith main picker; do

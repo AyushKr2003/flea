@@ -84,7 +84,7 @@ picker_env["HYPRLAND_INSTANCE_SIGNATURE"] = HYPRLAND_ALIAS
 picker_env["HOME"] = str(theme_home)
 picker_env["WAYLAND_DISPLAY"] = str(Path(drive_env["XDG_RUNTIME_DIR"]) / drive_env["WAYLAND_DISPLAY"])
 picker_env["FLEA_BIN"] = str(Path(os.environ["FLEA_BIN"]).resolve(strict=True))
-picker_env["FLEA_UI"] = str(REPO / "ui")
+picker_env["FLEA_UI"] = str(Path(os.environ["FLEA_UI"]).resolve(strict=True))
 listing = root / "files"
 listing.mkdir()
 for name in ("alpha.txt", "beta.txt", "gamma.txt"):
@@ -266,10 +266,8 @@ try:
 
     def pointer_to(x, y):
         wx, wy = owned_window()["at"]
-        run(["omarchy-drive", "move", wx + x - 6, wy + y])
-        run(["omarchy-drive", "move", wx + x, wy + y])
-        ydo("mousemove", "-x", "1", "-y", "0", strict=False)
-        ydo("mousemove", "-x", "-1", "-y", "0", strict=False)
+        run(["bash", "-c", 'source "$1"; pointer_glide "$2" "$3"', "capture-pointer",
+             REPO / "tests/lib/pointer-glide.sh", wx + x, wy + y])
 
     def park():
         pointer_to(6, PICKER_HEIGHT - 6)
@@ -281,7 +279,10 @@ try:
             return True
         deadline = time.monotonic() + FLAG_WAIT_SECONDS
         while time.monotonic() < deadline:
-            if any(sig(each) == sig(entry) and each[flag] for each in controls().get("controls", [])):
+            if any(each["kind"] == entry["kind"] and each["name"] == entry["name"] and each[flag]
+                   and each["x"] <= entry["targetX"] < each["x"] + each["w"]
+                   and each["y"] <= entry["targetY"] < each["y"] + each["h"]
+                   for each in controls().get("controls", [])):
                 return True
             time.sleep(POLL_SECONDS)
         print(f"COH_MISS {coh_theme} picker {sig(entry)} never reported {flag}", flush=True)
@@ -313,12 +314,16 @@ try:
     looks, targets = set(), []
     for entry in controls().get("controls", []):
         look = (entry["kind"], entry["primary"], entry["destructive"], entry["member"], entry["value"], entry["enabled"])
-        if entry["w"] > 2 and entry["h"] > 2 and look not in looks:
+        if entry["exposed"] and entry["w"] > 2 and entry["h"] > 2 and look not in looks:
             looks.add(look)
             targets.append(entry)
     closed = False
     for index, entry in enumerate(targets[:COH_TARGET_LIMIT]):
-        pointer_to(entry["x"] + entry["w"] // 2, entry["y"] + entry["h"] // 2)
+        pointer_to(entry["targetX"], entry["targetY"])
+        if not entry["enabled"]:
+            coh_shot(f"cohesion-{coh_theme}-picker-disabled-{index}", "disabled", index, sig(entry))
+            park()
+            continue
         if not flag_seen(entry, "hovered"):
             park()
             continue
@@ -328,6 +333,9 @@ try:
         if entry["kind"] in ("MenuRow", "SidebarRow"):
             park()
             continue
+        if not entry["pressLive"]:
+            park()
+            continue
         # The release always follows the press, off the control, whatever fails in between.
         try:
             ydo("click", "0x40")
@@ -335,10 +343,10 @@ try:
                 time.sleep(CAPTURE_SETTLE_SECONDS + POINTER_EXTRA_SECONDS)
                 coh_shot(f"cohesion-{coh_theme}-picker-press-{index}", "press", index, sig(entry))
         finally:
-            moved = ydo("mousemove", "-x", "0", "-y", f"-{COH_AWAY_PX}", strict=False)
-            ydo("click", "0x80")
-            if not moved:
-                raise RuntimeError(f"pointer move off {sig(entry)} failed, so the release landed on it")
+            try:
+                pointer_to(6, PICKER_HEIGHT - 6)
+            finally:
+                ydo("click", "0x80")
         time.sleep(CAPTURE_SETTLE_SECONDS)
         if not any(window.get("pid") == picker_pid for window in windows()):
             print(f"COH_PICKER closed after {sig(entry)}", flush=True)

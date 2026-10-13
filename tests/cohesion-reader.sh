@@ -64,12 +64,12 @@ cat > "$probe/data/recently-used.xbel" <<XML
 XML
 env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state \
     '{"preview":{"column":false,"thumbnails":"off"},"updates":{"autoCheck":false}}' >/dev/null || exit 1
-# One qs run per leg, each with its own shell directory: LEG RECEIPT SHELL_QML [ENV=VALUE...].
+# One qs run per leg, each with its own shell directory: LEG RECEIPT SHELL_QML UI [ENV=VALUE...].
 leg() {
-    local name="$1" receipt="$2" shell="$3" config="$probe/config-$1" log="$probe/$1.log" tick tally
-    shift 3
+    local name="$1" receipt="$2" shell="$3" ui="$4" config="$probe/config-$1" log="$probe/$1.log" tick tally
+    shift 4
     mkdir -p "$config" || return 1
-    ln -s "$PWD/ui" "$config/flea"
+    ln -s "$ui" "$config/flea"
     ln -s "$(readlink -f ui/boot/Commons)" "$config/Commons"
     ln -s "$(readlink -f ui/boot/Ui)" "$config/Ui"
     # The window loads its tab catcher from the shell directory, so the probe ships it as the product does.
@@ -96,7 +96,13 @@ leg() {
         return 1
     fi
 }
-leg window COHREADER tests/cohesion-reader.qml FLEA_PATH="$probe/home/fixture" || exit 1
+leg window COHREADER tests/cohesion-reader.qml "$PWD/ui" FLEA_PATH="$probe/home/fixture" || exit 1
 # The picker leg opens the portal's window on the same fixture, as a file request would.
 request=$(printf '{"mode":"open","multiple":true,"folder":"%s","name":"a.txt","title":"Cohesion picker","filters":[{"label":"Text","globs":["*.txt"],"mimes":[]}]}' "$probe/home/fixture")
-leg picker COHPICKER tests/cohesion-picker-reader.qml FLEA_PICKER="$request" FLEA_PICKER_REPLY="$probe/reply.json" || exit 1
+leg picker COHPICKER tests/cohesion-picker-reader.qml "$PWD/ui" FLEA_PICKER="$request" FLEA_PICKER_REPLY="$probe/reply.json" || exit 1
+mkdir -p "$probe/capture-ui" || exit 1
+cp -a ui/. "$probe/capture-ui/" || exit 1
+cp tests/ui-captures-reader.qml "$probe/capture-ui/IpcControls.qml" || exit 1
+leg capture-window COHREADER tests/cohesion-reader.qml "$probe/capture-ui" FLEA_PATH="$probe/home/fixture" FLEA_COH_CAPTURE=true || exit 1
+leg capture-picker COHPICKER tests/cohesion-picker-reader.qml "$probe/capture-ui" FLEA_PICKER="$request" FLEA_PICKER_REPLY="$probe/capture-reply.json" FLEA_COH_CAPTURE=true || exit 1
+leg capture COHCAPTURE tests/cohesion-capture-reader.qml "$probe/capture-ui" || exit 1
