@@ -30,27 +30,20 @@ Large directories stay responsive: the window loads rows and requests thumbnails
 
 - **Four views.** List, columns, grid and two panes side by side, with tabs and natural filename sorting.
 - **Quick Look.** Press Space for images, PDFs, text, media, 3D model thumbnails and archive contents.
-- **File operations.** Copy, move, rename, trash, compress and extract, with an undo journal. Several selected names rename in one card. A folder pasted onto a folder of the same name merges into it, and undo takes the merge back.
+- **File operations.** Copy, move, rename, trash, compress and extract, with an undo journal. Rename several files in one card. Pasting a folder onto one with the same name merges them, and undo reverts the merge. Opening a script, a program or an AppImage asks first: Run, Run in terminal or Open as text. Properties counts a folder's size and items.
 - **Tags.** Seven tags in your theme's colours, set with `T` and the keys 1 to 7, listed in the sidebar and found with `tag:red`.
 - **Search.** Ranked results replace the listing as you type. Esc returns to the folder and the cursor; Enter keeps the results.
 - **Network and sharing.** SMB, SFTP, FTPS, WebDAV, NFS, Dropbox and Taildrop.
 - **Devices.** USB drives, phones and cameras over MTP, PTP and AFC, mounted from the rail. An encrypted drive unlocks from its rail row and locks again when you unmount it.
-- **Disk images.** Write an ISO or IMG, plain or compressed, or a zip holding one, to a USB drive; Flea reads every byte back to check it.
+- **Disk images.** Write an ISO or IMG to a USB drive, plain, compressed or inside a zip; Flea reads every byte back to verify it.
 - **Desktop integration.** Default file manager, “Show in folder” and Open/Save dialogs.
 - **Your settings.** Omarchy text sizes, configurable menus and Default, Vim, Mac or Windows keys.
 
-The newest navigation wins. Back, Forward, Up, a tab, the sidebar and the path bar replace a listing that
-is still loading. Tab walks the listing, the sidebar, the chrome bar and the tab strip, and
-Shift+Tab walks back. Muted text is lifted to a 4.5:1 contrast against its background, a menu row that
-cannot act says why in one word beside its label (offline, signed out, no devices), and a long dialog
-keeps its title and buttons in place while its body scrolls. Opening a script, a program or an AppImage
-asks first: Run, Run in terminal or Open as text. Properties on a folder counts its size and items.
+A menu row that cannot act says why beside its label (offline, signed out, no devices), and muted
+text keeps a 4.5:1 contrast against its background.
 
-An iPhone lists once it has been unlocked and trusted on this machine: AFC needs the pairing record
-that leaves behind, not an unlocked screen every time. Pairing also puts the phone on its tethering
-USB configuration, so iOS shows Personal Hotspot as active while it is plugged in, and Flea never
-uses it. If this machine should never route through the phone, tell NetworkManager so with a
-`conf.d` drop-in carrying `unmanaged-devices=driver:ipheth`; that is your call, not the package's.
+An iPhone appears once it has been unlocked and trusted on this machine. AFC then uses the pairing
+record, so the screen does not need unlocking each time.
 
 ## Install
 
@@ -61,8 +54,8 @@ Install Flea and make it your default file manager, file chooser and the app ope
 omarchy pkg aur add flea-bin && flea --default
 ```
 
-`flea-bin` is the tagged release, prebuilt for x86_64 and aarch64, and it reaches you minutes after it
-ships. To let Omarchy's own repository review, build and sign it instead, a day or more behind:
+`flea-bin` is the tagged release, prebuilt for x86_64 and aarch64 and available minutes after each tag.
+Omarchy's own repository reviews, builds and signs `flea`, a day or more later:
 
 ```bash
 omarchy pkg add flea && flea --default
@@ -70,10 +63,9 @@ omarchy pkg add flea && flea --default
 
 Install one of the two, never both.
 
-Run it at a terminal inside your session: `flea --default` restarts xdg-desktop-portal itself there,
-so file dialogs follow at once. To only try Flea, run the install alone and leave your defaults as
-they are; `flea --default off` hands everything back later, and Settings, About can switch it either
-way.
+Run `flea --default` in a terminal inside your session: it restarts xdg-desktop-portal, so file
+dialogs switch at once. To try Flea without changing your defaults, run only the install.
+`flea --default off` undoes it, and Settings, About switches either way.
 
 Update through Omarchy:
 
@@ -81,15 +73,11 @@ Update through Omarchy:
 omarchy update
 ```
 
-Already on `flea` from Omarchy's repository? Switch to `flea-bin` with the interactive command and
-answer `y` when pacman asks to remove `flea`:
+To switch from `flea` to `flea-bin`, run this and answer `y` when pacman asks to remove `flea`:
 
 ```bash
 yay -S flea-bin
 ```
-
-`omarchy pkg aur add flea-bin` cannot make that swap: it passes `--noconfirm`, which takes each prompt's
-default, and pacman's "Remove flea?" defaults to No.
 
 <details>
 <summary>File chooser only, development package and removal</summary>
@@ -124,7 +112,7 @@ If you previously pinned another directory handler, restore that handler explici
 ## Views
 
 **List** for file details. **Grid** for photos and clips. **Columns** for browsing folders with a preview beside them.
-**Two panes** show two folders side by side (`Ctrl+4`). Drag the divider to resize them, double-click it to make them equal, and Flea remembers the split. A setting can remember each folder's own List, Columns or Grid.
+**Two panes** show two folders side by side (`Ctrl+4`). Drag the divider to resize them, double-click it to make them equal, and Flea remembers the split. An optional setting remembers List, Columns or Grid for each folder.
 
 <p align="center">
   <img src="docs/images/grid.png" width="49%" alt="Grid view with image and video thumbnails">
@@ -137,9 +125,9 @@ If you previously pinned another directory handler, restore that handler explici
   <img src="docs/images/pdf.png" alt="PDF preview with page navigation">
 </p>
 
-**The shelf** lives in the Omarchy bar: send files there from any menu, drag them out into any app, pin the ones you keep coming back to. **Phones** are Devices rows over MTP, AFC and PTP.
+**The shelf** sits in the Omarchy bar: send files to it from any menu, drag them out into any app, and pin the ones you reuse. **Phones** are Devices rows over MTP, AFC and PTP.
 
-**Dragging** moves when the source and the destination are on the same device, and copies when they are on different devices. Hold Ctrl to copy anyway. Hold Shift to move anyway. Hold Ctrl with Shift to link instead, through the Paste as links card. Those keys are read when the drag starts; once the drag is up, a key pressed after that cannot change it. A plain drag into another app offers copy alone, as the file addresses and the plain paths. Ctrl at the lift offers copy alone, Shift offers move alone, and Ctrl with Shift offers a link alone, so that app cannot pick another verb. That app moves, copies or links the files itself. Flea does not also delete them, because the acceptance arrives before the other app has finished reading the addresses, and deleting then would put the files in Trash. The copy-only offer is the one a browser uploader takes; offering move is what made Chromium refuse the drag. The target has to be on screen before you lift; a terminal gets the path. Switching workspace mid-drag ends it, because Hyprland releases every mouse button on a workspace change, so bring the target workspace up first. See "A drag does not survive a workspace switch" in `AGENTS.md`.
+**Dragging** moves within one device and copies between devices. Hold Ctrl to copy, Shift to move, or Ctrl with Shift to link through the Paste as links card; Flea reads these keys when the drag starts. A drag into another app offers copy, or move with Shift, or a link with Ctrl and Shift, and that app does the work: Flea deletes nothing afterwards. A terminal gets the path.
 
 <p align="center">
   <img src="docs/images/shelf.png" width="49%" alt="The shelf card open over Flea, with thumbnails, pins and the last three screenshots">
@@ -153,7 +141,7 @@ If you previously pinned another directory handler, restore that handler explici
 background-alpha = 0.34
 ```
 
-Values run from 0 to 1, and the default is 1. The listing, the rail and the bars let the desktop through at exactly that value; text, icons, thumbnails, menus, dialogs and Quick Look stay opaque. With Auto-hide sidebar on, the rail stays opaque, because it opens over the listing. Flea picks up a value set while it is open, except after it opened on an opaque theme, where the value applies the next time it opens.
+Values run from 0 to 1, and the default is 1. The listing, the rail and the bars let the desktop through at that value; text, icons, thumbnails, menus, dialogs and Quick Look stay opaque. With Auto-hide sidebar on, the rail stays opaque, because it opens over the listing.
 
 ## Performance
 
@@ -284,8 +272,7 @@ cargo build --release
 FLEA_UI="$PWD/ui" ./target/release/flea --gui
 ```
 
-Pass a directory to open it, or `--select <path>` to reveal a file. The terminal interface
-is not implemented yet.
+Pass a directory to open it, or `--select <path>` to reveal a file.
 
 ```bash
 ./tests/run-all.sh
