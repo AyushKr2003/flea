@@ -12,6 +12,16 @@ function run(check) {
     }
     for (var i = 0; i < Keymap.PRESETS.length; i++) {
         var preset = Keymap.PRESETS[i]
+        key(preset, "F", "F", shift, "previewPageForward")
+        key(preset, "B", "B", shift, "previewPageBack")
+        key(preset, "F", "f", none, "search")
+        key(preset, "F", "f", none, "copydirpath", "menu")
+        for (var pc = 0; pc < 3; pc++) {
+            key(preset, "F", "F", shift, "", ["preview", "pdf", "media"][pc])
+            key(preset, "B", "B", shift, "", ["preview", "pdf", "media"][pc])
+        }
+        var previewRows = Keymap.bindingRows(preset, "gui").filter(function (r) { return r.text === "F" || r.text === "B" })
+        check(preset + " claims each preview paging letter once", previewRows.length, 2)
         key(preset, "Down", "", none, "cursorDown")
         key(preset, "Up", "", none, "cursorUp")
         key(preset, "Space", " ", none, "preview")

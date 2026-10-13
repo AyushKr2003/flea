@@ -33,7 +33,6 @@ Item {
     property bool loadingHeldOff: false
     property int selectionCount: 0
     property var selectedRows: []
-    // The row's own absolute path, which the PDF page needs and nothing else here does.
     property string path: ""
     property int pdfControlIndex: -1
     property real pdfZoom: PreviewKeys.PDF_ZOOM_MIN
@@ -277,6 +276,7 @@ Item {
                     item.active = Qt.binding(function () { return root.markdownActive })
                     item.truncate = Qt.binding(function () { return root.truncateText })
                     item.compact = true
+                    item.externalScrollBars = true
                 }
             }
             // The PDF's own page, which is the frame's whole content for that state. QtPdf is
@@ -470,15 +470,17 @@ Item {
         }
     }
 
-    // Which page the frame is on, and the turn the chevrons make; both read back over IPC too.
+    Flea.PreviewScroll {
+        id: scrolling
+        column: root
+    }
+
+    function pageBy(direction) { scrolling.pageBy(direction) }
     function pdfPage() { return pdfLoader.item ? pdfLoader.item.page : 0 }
     function turnPage(delta) { if (pdfLoader.item) pdfLoader.item.turn(delta) }
     function zoomBy(steps) { root.pdfZoom = Math.max(PreviewKeys.PDF_ZOOM_MIN, Math.min(PreviewKeys.PDF_ZOOM_MAX, root.pdfZoom + steps * PreviewKeys.PDF_ZOOM_STEP)) }
     function toggleExpand() { root.expandRequested() }
-    function scrollPage(delta) {
-        pdfFlick.contentY = Math.max(0, Math.min(pdfFlick.contentHeight - pdfFlick.height,
-            pdfFlick.contentY + delta * Theme.rowHeight))
-    }
+    function scrollPage(delta) { scrolling.scrollPage(delta, pdfFlick) }
     function pdfChevron(dir) { return dir === "left" ? pagePrev : pageNext }
     // Whether a PdfDocument exists at all, which is what makes the Loader worth having.
     function pdfLoaded() { return pdfLoader.item !== null }
@@ -506,9 +508,7 @@ Item {
         }
         return out.join("\n")
     }
-    // The swap waits on the text that is actually drawn: the rendered document for Markdown.
-    readonly property bool textLoading: root.isMarkdownRow
-        ? (markdown ? markdown.loading : true) : lines.loading
+    readonly property bool textLoading: scrolling.loading
     function archiveNames() { return root.meta && root.meta.names ? root.meta.names.map(function (e) { return e.n }).join("|") : "" }
     function failureText() { return root.failure }
     function toggleFacts() { ViewState.changeKey("previewFacts", ViewState.previewFacts === "compact" ? "full" : "compact") }

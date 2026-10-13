@@ -12,7 +12,11 @@ ShellRoot {
     readonly property string fixture: Quickshell.env("CODECOL_DIR")
     // The second run: the backend cannot find bat, so the same file is drawn plain.
     readonly property bool noBat: Quickshell.env("CODECOL_NOBAT") === "1"
-    readonly property int shownLines: 14
+    function shownLines() {
+        var code = root.column() ? root.column().linesItem.code : null
+        var row = code ? code.viewport.itemAtIndex(0) : null
+        return row ? Math.ceil(code.viewport.height / row.height) : 0
+    }
     readonly property int tickMs: 20
     readonly property int settleMs: 250
     readonly property int giveUpMs: 20000
@@ -96,7 +100,9 @@ ShellRoot {
     // The drawn line texts, top to bottom: the StyledText bodies the view has built.
     function bodies(code) {
         return root.descendants(code).filter(function (n) {
-            return n.visible && n.textFormat === Text.StyledText
+            if (!n.visible || n.textFormat !== Text.StyledText) return false
+            var y = n.mapToItem(code.viewport, 0, 0).y
+            return y >= 0 && y < code.viewport.height
         }).sort(function (a, b) { return a.mapToItem(code, 0, 0).y - b.mapToItem(code, 0, 0).y })
     }
     // What a StyledText string reads as once drawn.
@@ -116,7 +122,7 @@ ShellRoot {
     function drawn(name, answer) {
         var col = root.column(), code = root.codeOf(col)
         return col !== null && code !== null && root.nameShown(col) === name && code.active && code.answer === answer
-            && (answer === "binary" || root.bodies(code).length === Math.min(code.shown, root.shownLines))
+            && (answer === "binary" || root.bodies(code).length === Math.min(code.shown, root.shownLines()))
     }
     function backend() { return root.pane.backend }
 
@@ -137,7 +143,7 @@ ShellRoot {
         var why = ""
         // 01-icons.rs holds fn f1, f2 ..., 02-more.rs holds fn g1, g2 ...
         var letter = root.nameShown(col).indexOf("01-") === 0 ? "f" : "g"
-        if (texts.length !== root.shownLines) why = "draws " + texts.length + " lines"
+        if (texts.length !== root.shownLines()) why = "draws " + texts.length + " lines"
         for (var i = 0; why === "" && i < texts.length; i++) {
             if (texts[i].text.indexOf("<font") < 0) why = "line " + (i + 1) + " is uncoloured"
             else if (root.plainOf(texts[i].text).indexOf("fn " + letter + (i + 1) + "(") !== 0) why = "line " + (i + 1) + " is not the file's own"
@@ -297,9 +303,9 @@ ShellRoot {
         var col = root.column(), code = root.codeOf(col), texts = root.bodies(code), name = op.show
         if (op.coloured || op.plain) {
             var first = texts[0].text
-            root.check(name + " draws its lines", [code.lines.length, root.plainOf(first).indexOf("fn ") === 0], [root.shownLines, true])
+            root.check(name + " draws its lines", [texts.length, root.plainOf(first).indexOf("fn ") === 0], [root.shownLines(), true])
             root.check(name + " asks the backend once per move", root.backend().codeToken - root.askBase <= 1, true)
-            root.check(name + " asks for no more than the frame's lines", root.farthest <= root.shownLines, true)
+            root.check(name + " asks for no more than the frame's lines", root.farthest <= Math.ceil(code.viewport.height / code.rowHeight), true)
             root.check(name + " has a muted number gutter", col.linesItem.numbered, true)
             if (op.coloured) {
                 root.check(name + " the fn keyword draws in the magenta ink", first.indexOf("<font color=\"" + root.ink(5) + "\">fn</font>") >= 0, true)

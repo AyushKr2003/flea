@@ -187,10 +187,10 @@ ShellRoot {
 
     function lineFit() {
         var lines = root.col.linesItem
-        var drawn = root.find(function (it) { return it.numbered === undefined && it.text !== undefined && String(it.text).indexOf("  ") === 0 })
-        var rowH = drawn.height
-        var fits = Math.floor((lines.height - 2 * root.gap) / rowH)
-        var built = root.all(lines, []).filter(function (it) { return it.text !== undefined && String(it.text).indexOf("  ") === 0 }).length
+        var drawn = root.all(lines, []).filter(function (it) { return it.textFormat === Text.StyledText && it.mapToItem(lines.viewport, 0, 0).y >= 0 && it.mapToItem(lines.viewport, 0, 0).y < lines.viewport.height })
+        var rowH = lines.viewport.itemAtIndex(0).height
+        var fits = Math.ceil(lines.viewport.height / rowH)
+        var built = drawn.length
         root.check("code draws as many lines as fit the frame", built, Math.min(132, fits))
         root.check("and builds no more line items than fit", built <= fits, true)
         root.check("and fills the frame past fourteen lines", built > 14, true)
