@@ -116,6 +116,23 @@ function hints(req) {
     return Format.fill(WORDS.hintsEsc, pick)
 }
 
+// The collision review's error line, one template so a placeholder inside the name is never filled in.
+function collisionLine(name) {
+    return "%1 already exists here.".arg(name)
+}
+
+// Where a name's stem ends: at its last dot, and a leading dot belongs to the stem.
+function stemEnd(name) {
+    var dot = String(name).lastIndexOf(".")
+    return dot > 0 ? dot : String(name).length
+}
+
+// Callout 12: Back, Up, the rail, the list, Filename, the filter, Cancel and the answer; a hidden or disabled stop is skipped.
+function tabOrder(stops) {
+    return [].concat(stops.chrome, [stops.rail, stops.view], stops.save, stops.answers)
+        .filter(function(item) { return item.visible && item.enabled && item.activeFocusOnTab })
+}
+
 // The filter menu's rows: the caller's filters, then All files, which is always explicit. No filters is no
 // dropdown at all, because a chooser with one filter is a chooser with nothing to choose between.
 function chips(req) {

@@ -61,21 +61,12 @@ ListView {
         width: Scroll.contentWidth(root.width, Theme.spacing.rowPaddingX)
         height: Theme.rowHeight
 
-        // The board's marked row: the accent wash and the accent bar, under the row's own text. The
-        // window's selected fill is a foreground grey, and SendPicker.html marks in the accent, so
-        // ui/Row.qml is left unselected here and the picker paints its own mark behind it.
+        // The board's marked row: the selection fill under the row's own text, never folded with the cursor rung ui/Row.qml paints.
         Rectangle {
             visible: cell.isMarked
             width: root.width
             height: parent.height
-            color: Style.selectedAccentFill
-        }
-
-        Rectangle {
-            visible: cell.isMarked
-            width: Theme.spacing.hairline * 2
-            height: parent.height
-            color: Theme.color.accent
+            color: Style.selectionFill
         }
 
         Flea.Row {

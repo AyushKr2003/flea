@@ -26,17 +26,14 @@ failures=0
 phases=0
 probe_timeout_seconds=15
 for view in list grid; do
-    for scenario in path collision far probe answers single; do
+    for scenario in path collision replace replace-button return-twice ends cancel far probe tab answers single marked; do
         phase="$test_root/$view-$scenario"
         mkdir -p "$phase"/{home,state/flea,cache,data,runtime,tmp}
         chmod 700 "$phase/runtime"
         mode=open
         multiple=true
         preset=default
-        if [ "$scenario" = collision ] || [ "$scenario" = probe ]; then
-            mode=save
-            multiple=false
-        fi
+        case "$scenario" in collision|replace|replace-button|return-twice|ends|cancel|probe|tab) mode=save; multiple=false ;; esac
         [ "$scenario" = single ] && multiple=false
         # The path leg keeps one favourite, so a typed name shows the Jump dropdown over the listing.
         places=""
@@ -46,7 +43,7 @@ for view in list grid; do
         request=$(python3 - "$mode" "$multiple" "$fixture" "$scenario" <<'PY'
 import json,sys
 request=dict(mode=sys.argv[1],multiple=sys.argv[2]=='true',folder=sys.argv[3],name='new.txt' if sys.argv[4]=='probe' else 'a.txt',title='Picker hunt')
-if sys.argv[4] in ('path','far'):request['filters']=[dict(label='Text',globs=['*.txt'],mimes=[])]
+if sys.argv[4] in ('path','far','collision','replace','replace-button','return-twice','ends','cancel','tab'):request['filters']=[dict(label='Text',globs=['*.txt'],mimes=[])]
 if sys.argv[4]=='single':request.update(title='X \u00b7 Firefox')
 if sys.argv[4]=='answers':request.update(title='All Files',app='org.chromium.Chromium',current='Pictures',filters=[dict(label=name,globs=[glob],mimes=[]) for name,glob in (('Text','*.txt'),('Pictures','*.png'),('Data','*.dat'))])
 print(json.dumps(request))
@@ -71,6 +68,20 @@ PY
                 failures=$((failures+1))
             fi
             if [ "$code" -eq 143 ]; then code=0; fi
+        fi
+        # A save answer is the reply file too: only Replace answers OK over a taken name, a second Return answers nothing, Cancel refuses.
+        case "$scenario" in
+            replace|replace-button) want="{\"response\":0,\"uris\":[\"file://$fixture/a.txt\"],\"filter\":0}" ;;
+            cancel) want='{"response":1}' ;;
+            *) want="" ;;
+        esac
+        if [ "$scenario" = return-twice ] && { [ -e "$phase/reply.json" ] || [ "$(cat "$fixture/a.txt")" != a ]; }; then
+            printf 'FAIL picker phase %s %s a second Return answered or touched a.txt: %s\n' "$view" "$scenario" "$(cat "$phase/reply.json" 2>/dev/null || echo none)"
+            failures=$((failures+1))
+        fi
+        if [ -n "$want" ]; then
+            [ "$(cat "$phase/reply.json" 2>/dev/null)" = "$want" ] || { printf 'FAIL picker phase %s %s reply holds %s\n' "$view" "$scenario" "$(cat "$phase/reply.json" 2>/dev/null || echo none)"; failures=$((failures+1)); }
+            [ "$code" -eq 143 ] && code=0
         fi
         if [ "$code" -ne 0 ]; then
             printf 'FAIL picker phase %s %s %s exit=%s\n' "${preset:-default}" "$view" "$scenario" "$code"

@@ -105,6 +105,10 @@ ShellRoot {
         readonly property string saveKey: JSON.stringify([win.path, win.saveName])
         readonly property bool saveReady: win.saveReview.key === win.saveKey
         readonly property bool saveCollision: win.saveReady && win.saveReview.collision
+        // Return asked once for a name that exists; the review stands until the name, folder or listing changes.
+        property bool reviewAsked: false
+        // The review is the asked review of a name the backend still reports as taken: Replace, its error line and its role read this alone.
+        readonly property bool collisionReview: win.reviewAsked && win.saveCollision
         readonly property bool submitting: win.acceptMarks || win.reviewRequest > 0
         // Submission keeps Cancel reachable and restores its initiating control only on refusal.
         onSubmittingChanged: chrome.submissionChanged()
@@ -216,6 +220,7 @@ ShellRoot {
 
         function invalidateSave() {
             win.saveReview = ({})
+            win.reviewAsked = false
             win.saveError = ""
             if (win.saving) Qt.callLater(win.probeSave)
         }
@@ -290,7 +295,7 @@ ShellRoot {
             win.markRequest = win.check({op: "mark", path: rowPath, directory: false, multiple: win.req.multiple})
         }
 
-        function accept(reviewed) {
+        function accept() {
             if (win.backendUnavailable || win.submitting || win.markRequest) return
             if (win.saving) {
                 if (win.saveName.length === 0) {
@@ -304,8 +309,12 @@ ShellRoot {
                     return
                 }
                 if (!win.saveReady) { win.probeSave(); return }
-                if (win.saveCollision && reviewed !== true) { save.focusCancel(); return }
-                win.reviewRequest = win.check({op: "review", review: win.saveReview.review})
+                // Return, the field and a file row only ask: the review starts on a taken name and stays until Replace answers.
+                if (win.saveCollision) {
+                    if (!win.reviewAsked) { win.reviewAsked = true; save.selectStem() }
+                    return
+                }
+                win.submitSave()
                 return
             }
             // A folder request with nothing checked takes the directory the window is standing in,
@@ -328,6 +337,14 @@ ShellRoot {
             }
             win.validateMarks(true)
         }
+
+        // Replace is the only answer that overwrites; Enter or Space on it, or a click, arrives here and nothing else does.
+        function replace() {
+            if (win.backendUnavailable || win.submitting || win.markRequest || !win.collisionReview) return
+            win.submitSave()
+        }
+
+        function submitSave() { win.reviewRequest = win.check({op: "review", review: win.saveReview.review}) }
 
         function cancel() {
             win.finish(Picker.RESPONSE_CANCELLED, [])
@@ -758,16 +775,14 @@ ShellRoot {
                     marks: win.marks, state: win.listingState, emptyHero: hero.visible, emptyRest: hero.atRest, listingFailed: win.listingFailed, sortBy: backend.sortBy, sortDesc: backend.sortDesc, sortable: win.sortable, filter: win.filterIndex, history: win.history,
                     view: win.viewMode, thumbPending: Object.keys(win.thumbState.file).filter(function(index) { return win.thumbState.file[index] === null || win.thumbState.file[index] === "cache-asked" }).length,
                     marksBusy: win.markRequest > 0, saveBusy: win.saveRequest > 0, submitting: win.submitting, backendUnavailable: win.backendUnavailable,
-                    canAccept: win.canAccept, saveReady: win.saveReady, collision: win.saveCollision,
+                    canAccept: win.canAccept, saveReady: win.saveReady, collision: win.saveCollision, collisionReview: win.collisionReview,
                     saveName: win.saveName, saveError: win.saveError, message: win.message, messageError: win.messageError, hints: statusHints.text,
                     controls: chrome.controls().concat(answers.controls(), header.controls(), save.controls(), places.controls()), headerMark: header.sortBy, listFocus: list.activeFocus, gridFocus: grid.activeFocus,
                     railFocus: places.focusItem.activeFocus, preset: Flea.ViewState.keysPreset,
                     bodySmall: Theme.font.bodySmall, body: Theme.font.body, width: win.width, height: win.height,
                     themeLoaded: Theme.ready, themeForeground: String(Theme.color.foreground),
                     geometry: {chrome: chrome.height, header: header.height, rail: places.width, row: Theme.rowHeight, footer: status.height,
-                        save: save.height, list: list.height, saveViewport: win.bounds(save.scrollItem), saveScroll: save.scrollItem.contentY},
-                    outputUri: {text: save.uri, offset: save.uriItem.contentX,
-                        maximum: Math.max(0, save.uriItem.contentWidth - save.uriItem.width)}, title: win.title, app: win.req.app})
+                        save: save.height, list: list.height, saveViewport: win.bounds(save.scrollItem), saveScroll: save.scrollItem.contentY}, title: win.title, app: win.req.app})
             }
         }
 
@@ -785,8 +800,7 @@ ShellRoot {
             return [point.x, point.y, item.width, item.height]
         }
         function stepFocus(from, back) {
-            var items = chrome.focusItems().concat([places.focusItem, win.viewItem()], save.focusItems(), answers.focusItems())
-                .filter(function(item) { return item.visible && item.enabled && item.activeFocusOnTab })
+            var items = Picker.tabOrder({chrome: chrome.focusItems(), rail: places.focusItem, view: win.viewItem(), save: save.focusItems(), answers: answers.focusItems()})
             if (!items.length) return
             var at = items.indexOf(from)
             // No origin lands on Cancel: a submission or a lost backend disables Filter and Open, and Filter is still enabled when this runs.

@@ -12,7 +12,9 @@ Item {
     readonly property alias cancelItem: cancelButton
     anchors.left: parent.left
     anchors.right: parent.right
-    height: Theme.spacing.hairline + 2 * Theme.spacing.rowPaddingX + cancelButton.height
+    // A save sits in the save column: no rule of its own and one gap under the field; an open keeps its own strip.
+    readonly property real lead: root.picker.saving ? Theme.spacing.gap : Theme.spacing.hairline + Theme.spacing.rowPaddingX
+    height: root.lead + Theme.spacing.rowPaddingX + cancelButton.height
 
     // Every answer is the one body control every dialog draws; the picker owns Tab.
     component Answer: Flea.DialogButton {
@@ -29,6 +31,7 @@ Item {
     }
 
     Rectangle {
+        visible: !root.picker.saving
         anchors.top: parent.top
         width: parent.width
         height: Theme.spacing.hairline
@@ -39,14 +42,14 @@ Item {
         id: filter
         picker: root.picker
         x: Theme.spacing.rowPaddingX
-        y: Theme.spacing.hairline + Theme.spacing.rowPaddingX
+        y: root.lead
         height: cancelButton.height
     }
 
     Row {
         anchors.right: parent.right
         anchors.rightMargin: Theme.spacing.rowPaddingX
-        y: Theme.spacing.hairline + Theme.spacing.rowPaddingX
+        y: root.lead
         spacing: Theme.spacing.gap
 
         Answer {
@@ -57,10 +60,11 @@ Item {
 
         Answer {
             id: acceptButton
-            label: Picker.acceptLabel(root.picker.req, root.picker.marks.length)
-            primary: true
+            label: root.picker.collisionReview ? "Replace" : Picker.acceptLabel(root.picker.req, root.picker.marks.length)
+            primary: !root.picker.collisionReview
+            destructive: root.picker.collisionReview
             available: root.picker.canAccept
-            onActivated: root.picker.accept()
+            onActivated: root.picker.collisionReview ? root.picker.replace() : root.picker.accept()
         }
     }
 

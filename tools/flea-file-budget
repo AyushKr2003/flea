@@ -83,11 +83,11 @@ tests/js/mounts.js 349
 tests/js/menu.js 596
 tests/js/nav.js 478
 tests/js/rail.js 471
-tests/js/picker.js 352
+tests/js/picker.js 377
 tests/picker-grid.qml 465
 tests/picker-hunt.qml 448
 tests/permissions-focus.qml 417
-tests/picker-040.qml 603
+tests/picker-040.qml 804
 tests/js/network.js 307
 tests/js/ops.js 574
 tests/js/slowclick.js 309
@@ -154,7 +154,7 @@ ui/Pane.qml 1230
 ui/PaneMenuActions.qml 523
 ui/PaneWire.qml 602
 ui/PermissionsDialog.qml 658
-ui/PickerWindow.qml 798
+ui/PickerWindow.qml 812
 ui/Preview.qml 919
 ui/PreviewColumn.qml 608
 ui/DeviceMounts.qml 537
@@ -189,7 +189,7 @@ ui/js/Format.js 305
 ui/js/Ops.js 539
 ui/js/Search.js 396
 ui/js/Mounts.js 320
-ui/js/Picker.js 335
+ui/js/Picker.js 352
 ui/js/Settings.js 475
 ui/js/Scroll.js 304
 ui/js/Tabs.js 736
