@@ -37,12 +37,13 @@ case "${1-} ${2-}" in
 esac
 SH
 chmod +x "$test_root/bin/gio" || exit 1
-# One probe run: run_probe LOG BACKEND HANG, where HANG=1 means the backend never answers.
+# One probe run: run_probe LOG BACKEND HANG EARLY, where EARLY exercises cold or in-flight menu demand.
 run_probe() {
     # The shell starts the GVfs trash daemon, so it runs on its own bus, whose daemons log to bus.log and stay out of the engine-warning scan.
     ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u QML_DISABLE_DISK_CACHE \
         HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_CACHE_HOME="$test_root/cache" \
         XDG_RUNTIME_DIR="$test_root/runtime" FLEA_BIN="$2" STARTUP_OBJECTS_HANG="$3" \
+        STARTUP_OBJECTS_MENU_EARLY="${4:-}" \
         FLEA_PATH="$test_root/fixture" STARTUP_OBJECTS_UI="$PWD/ui" STARTUP_OBJECTS_DISK="$power_disk" \
         PATH="$test_root/bin:$PATH" STARTUP_OBJECTS_LEG_TIMEOUT_SECONDS="$leg_timeout_seconds" \
         QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 QML_IMPORT_TRACE=1 \
@@ -99,22 +100,29 @@ pinned=tests/startup-units.txt
 grep -aq 'STARTUP_OBJECTS TOTAL' "$log" || { printf 'FAIL startup-objects: log %s has no STARTUP_OBJECTS TOTAL line to cut the units at\n' "$log"; exit 1; }
 # Sample line: Error loading "file:///home/gm/flea/ui/Row.qml" from disk cache: <reason>, kept only before the TOTAL line since the probe's Quick Look and power-off legs follow it.
 seen=$(sed -n '1,/STARTUP_OBJECTS TOTAL/p' "$log" | grep -aoE 'Error loading "file://[^"]*/ui/[^"]+" from disk cache' | sed -E 's|.*/ui/([^"]+)".*|\1|' | sort -u)
+for cold in CardScroll.qml ContextMenu.qml LocalSendMark.qml MenuEdgeFade.qml MenuRow.qml TailscaleMark.qml js/LockedMenu.js js/MenuFit.js js/MenuRefresh.js; do
+    if printf '%s\n' "$seen" | grep -Fxq "$cold"; then
+        printf 'FAIL startup-objects: menu unit %s loaded before the startup cut\n' "$cold"
+        exit 1
+    fi
+done
+bytes=0
+while IFS= read -r unit; do bytes=$((bytes + $(wc -c < "ui/$unit"))); done <<< "$seen"
+printf 'startup-objects: %s first-frame units, %s bytes\n' "$(printf '%s\n' "$seen" | grep -c .)" "$bytes"
 listed=$(grep -vE '^(#|bytes )' "$pinned" | sort -u)
 if [ "$seen" != "$listed" ]; then
     printf 'FAIL startup-objects: the first-frame units moved; added then dropped against %s:\n' "$pinned"
     comm -13 <(printf '%s\n' "$listed") <(printf '%s\n' "$seen") | sed 's/^/+ /'
     comm -23 <(printf '%s\n' "$listed") <(printf '%s\n' "$seen") | sed 's/^/- /'
+    printf '%s\n' "$seen" | sed 's/^/startup-objects UNIT /'
     exit 1
 fi
-bytes=0
-while IFS= read -r unit; do bytes=$((bytes + $(wc -c < "ui/$unit"))); done <<< "$seen"
 ceiling=$(sed -n 's/^bytes //p' "$pinned")
 [[ "$ceiling" =~ ^[0-9]+$ ]] || { printf 'FAIL startup-objects: %s has no single numeric bytes line, got [%s]\n' "$pinned" "$ceiling"; exit 1; }
 if [ "$bytes" -gt "$ceiling" ]; then
     printf 'FAIL startup-objects: the first-frame units hold %s bytes, over the %s pinned in %s\n' "$bytes" "$ceiling" "$pinned"
     exit 1
 fi
-printf 'startup-objects: %s first-frame units, %s bytes\n' "$(printf '%s\n' "$seen" | grep -c .)" "$bytes"
 # A listing that never answers must still build the IPC seam once the pane turns "waiting".
 printf '#!/bin/sh\nexec cat > /dev/null\n' > "$test_root/bin/flea-silent" && chmod +x "$test_root/bin/flea-silent" || exit 1
 hang_log="$test_root/hang.log"
@@ -131,4 +139,17 @@ if [ "$(grep -ac 'STARTUP_OBJECTS PASS' "$hang_log")" -ne 1 ] || grep -aq 'START
     cat "$hang_log"
     exit 1
 fi
+for early in cold warming; do
+    early_log="$test_root/early-$early.log"
+    run_probe "$early_log" "$PWD/target/debug/flea" 0 "$early"
+    status=$?
+    if { [ "$status" -ne 0 ] && [ "$status" -ne 143 ]; } \
+        || ! grep -aq "STARTUP_OBJECTS PASS early-menu=$early ready=1 retained=1" "$early_log" \
+        || grep -aqE 'STARTUP_OBJECTS FAIL|TypeError|ReferenceError|ERROR' "$early_log"; then
+        printf 'FAIL startup-objects: early menu %s leg (qs exit %s)\n' "$early" "$status"
+        grep -aE 'STARTUP_OBJECTS|TypeError|ReferenceError|ERROR' "$early_log"
+        exit 1
+    fi
+    grep -a 'STARTUP_OBJECTS PASS' "$early_log"
+done
 printf 'startup-objects: 1 passed, 0 failed\n'

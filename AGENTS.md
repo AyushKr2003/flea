@@ -1095,6 +1095,8 @@ the file proves its directory unchanged since it was written (rule 4 above).
 keeps that map early, what decides the first frame's contents, the one accepted cost, and how the
 file chooser, which is off the measured path, keeps its own window whole.
 
+**The context menu waits for the first frame (2026-10-13).** Each pane builds `ui/MenuHost.qml`, which holds the menu's inputs, its closed state and reply validation (`ui/js/MenuContext.js`), and loads `ui/ContextMenu.qml` asynchronously one idle second after the first frame swaps and the listing settles; a menu asked for before then loads it synchronously, so the first right-click or menu key never waits on that timer. The startup gate moves from 628 objects, 175 units and 1,673,140 bytes to 583 objects, 168 units and 1,613,622 bytes: `tests/startup-objects.sh` checks that the nine units only the menu uses and the ContextMenu root are absent at its cut, and `tests/menu-settle.sh` that a warmed menu keeps one root across reopen. Ceilings, each from `wc -l`: `ui/Pane.qml` 1232 and `tests/js/menu.js` 597.
+
 **Qt never caches a Quickshell config.** Quickshell serves its config through its own `qs:@/qs/`
 URL scheme (`src/core/rootwrapper.cpp`, intercepted in `src/core/qsintercept.cpp`) and Qt's QML
 disk cache accepts local files only. Run any launch with

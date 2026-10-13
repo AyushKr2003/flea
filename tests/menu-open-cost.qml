@@ -69,6 +69,10 @@ ShellRoot {
             if (pane.listInFlight || pane.path !== fixture || pane.total < fixtureRows || !pane.visibleItemFor(clickRow + 1)) return
             next("rest")
         } else if (stage === "rest") {
+            if (!pane.menuHost.ready) {
+                if (timedOut) { check("menu warmed before first open", false); finish() }
+                return
+            }
             if (rest++ < restTicks) return
             rest = 0
             path = (sample % 2 === 0) === (firstPath === "key") ? "key" : "click"
@@ -78,6 +82,10 @@ ShellRoot {
             builds = 0
             tFrame = 0
             measuring = true
+            if (sample === 0) {
+                check("first " + path + " menu is compiled before input", pane.menuHost.status === Loader.Ready)
+                log("PREWARM ready=" + pane.menuHost.status)
+            }
             tPlace = Date.now()
             if (path === "key") {
                 driver.keyClickChar("m", Qt.NoModifier, -1)

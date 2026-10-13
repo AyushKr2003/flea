@@ -77,7 +77,7 @@ tests/js/mdstructure.js 655
 tests/js/keymap.js 356
 tests/js/focus.js 843
 tests/js/mounts.js 349
-tests/js/menu.js 596
+tests/js/menu.js 597
 tests/js/nav.js 478
 tests/js/rail.js 471
 tests/js/picker.js 352
@@ -145,7 +145,7 @@ ui/NetworkDialog.qml 435
 ui/NetworkForm.qml 426
 ui/NetworkMounts.qml 913
 ui/OpenWithDialog.qml 613
-ui/Pane.qml 1230
+ui/Pane.qml 1232
 ui/PaneMenuActions.qml 523
 ui/PaneWire.qml 602
 ui/PermissionsDialog.qml 658

@@ -206,7 +206,7 @@ function run(check) {
     var paneSource = Source.source("ui/Pane.qml")
     check("Pane declares reactive watcher failure", paneSource.indexOf("property bool clipboardWatchFailed: false") >= 0, true)
     check("Pane passes its watcher failure to menu", paneSource.indexOf("clipboardWatchFailed: root.clipboardWatchFailed") >= 0, true)
-    check("ContextMenu passes watcher failure to entries", Source.source("ui/ContextMenu.qml").indexOf("clipboardWatchFailed: root.clipboardWatchFailed") >= 0, true)
+    check("menu context passes watcher failure to entries", Source.source("ui/js/MenuContext.js").indexOf("clipboardWatchFailed: root.clipboardWatchFailed") >= 0, true)
     var rowSource = Source.source("ui/MenuRow.qml")
     check("disabled menu rows retain the board's 0.55 dim", rowSource.indexOf("opacity: root.available ? 1 : Theme.disabledOpacity") >= 0, true)
     check("submenu presence controls chevron visibility", rowSource.indexOf("visible: root.isSubmenu") >= 0, true)
