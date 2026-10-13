@@ -124,6 +124,9 @@ scope_case() {
     done
   )
 }
+out=$(scope_case flea-anchor); rc=$?
+check "ONLY=flea-anchor without an anchor tree is refused" 3 "$rc"
+check "the missing anchor keeps its exact refusal message" "refused: ONLY names flea-anchor but ANCHOR_REPO is not a separate tree, so that arm would never launch" "$out"
 out=$(scope_case "flea thunr"); rc=$?
 check "ONLY=flea thunr refuses the whole selection" 3 "$rc"
 check "the ONLY refusal names the unknown word" "refused: ONLY names unknown entrant 'thunr'" "$out"

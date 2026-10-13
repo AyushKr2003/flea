@@ -1033,6 +1033,9 @@ validate_only() {
   done
 }
 # only scope begin
+
+# An ONLY naming the anchor without an anchor tree would silently run nothing of it.
+for one_only in "${ONLY_IDS[@]}"; do [ "$one_only" = flea-anchor ] && [ "$WITH_ANCHOR" = no ] && fail "ONLY names flea-anchor but ANCHOR_REPO is not a separate tree, so that arm would never launch"; done
 validate_only
 # ONLY scopes both the kill list and the startup refusal, so the operator's other windows are never this run's to close.
 if [ ${#ONLY_IDS[@]} -gt 0 ]; then
@@ -1052,8 +1055,6 @@ fi
 
 # Membership reads the split above, so a tab or a glob word scopes the kill and the launch alike.
 only_has() { [ ${#ONLY_IDS[@]} -eq 0 ] && return 0; local o; for o in "${ONLY_IDS[@]}"; do [ "$o" = "$1" ] && return 0; done; return 1; }
-# An ONLY naming the anchor without an anchor tree would silently run nothing of it.
-for one_only in "${ONLY_IDS[@]}"; do [ "$one_only" = flea-anchor ] && [ "$WITH_ANCHOR" = no ] && fail "ONLY names flea-anchor but ANCHOR_REPO is not a separate tree, so that arm would never launch"; done
 
 clean_bench() {
   local row comm token
