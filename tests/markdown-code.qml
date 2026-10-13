@@ -26,6 +26,8 @@ ShellRoot {
     property int plainFrames: 0
     property int fencesSeen: 0
     property var visitedFences: ({})
+    property var missedColours: ({})
+    property bool framePulse: false
     property bool wheelReported: false
     property bool flinging: false
     property int flingFrames: 0
@@ -54,6 +56,7 @@ ShellRoot {
         shell.ticks = 0
         shell.log("phase " + shell.phase + " " + name)
     }
+    // Sample input: '<font color="#ffffff">a &amp; b</font><br>&lt;img&gt;' reads as 'a & b\n<img>'.
     function readBack(markup) {
         return String(markup).replace(/<br>/g, "\n").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&amp;/g, "&")
     }
@@ -80,6 +83,13 @@ ShellRoot {
         return found.length > 0 ? found[0] : null
     }
     function settled(fence) { return fence.token === 0 && fence.next > fence.fenceLines.length }
+    function enginePaint(fence) {
+        var reply = columnAsks.replies[fence.slot]
+        if (!(columnAsks.asks[fence.slot] > 0) || !reply || reply.state !== "styled" || !shell.settled(fence)) return false
+        var colours = reply.lines.some(function (row) { return row.some(function (run, at) { return at % 2 === 0 && run > 0 }) })
+        var expected = reply.lines.map(function (row) { return CodeRuns.styled(row, shell.inks) }).join("<br>")
+        return colours && fence.children[0].textFormat === Text.StyledText && fence.children[0].text === expected
+    }
     // The gutter's number Texts in a host's Source; each sits beside its row's body.
     function gutters(host) {
         return shell.within(host, function (n) { return n.visible && n.textFormat === Text.PlainText && /^[0-9]+$/.test(n.text) })
@@ -121,6 +131,9 @@ ShellRoot {
         // The lines the pane asks for, fences included, so a long file's asks can be counted against its length.
         property int linesAsked: 0
         property var languages: ({})
+        property var slots: ({})
+        property var asks: ({})
+        property var replies: ({})
         property var pending: []
         signal codeResult(var message)
         function askCode(slot, source, first, count) {
@@ -129,7 +142,13 @@ ShellRoot {
             linesAsked += count
             var token = inner.askCode(slot, source, first, count)
             languages[token] = source.lang || ""
+            slots[token] = slot
+            asks[slot] = (asks[slot] || 0) + 1
             return token
+        }
+        function deliver(message) {
+            if (slots[message.token]) replies[slots[message.token]] = message
+            codeResult(message)
         }
         Connections {
             target: inner
@@ -137,7 +156,10 @@ ShellRoot {
                 if (languages[message.token] === "toml") {
                     pending = pending.concat([{ message: message, after: Date.now() + 250 }])
                     shell.log("toml reply " + JSON.stringify(message))
-                } else codeResult(message)
+                } else if (languages[message.token] === "flea-unknown-language") {
+                    pending = pending.concat([{ message: message, after: Date.now() + 1200 }])
+                    shell.log("unknown reply delayed token=" + message.token)
+                } else deliver(message)
             }
         }
         Timer {
@@ -148,7 +170,7 @@ ShellRoot {
                 var now = Date.now()
                 var ready = pending.filter(function (p) { return p.after <= now })
                 pending = pending.filter(function (p) { return p.after > now })
-                for (var i = 0; i < ready.length; i++) codeResult(ready[i].message)
+                for (var i = 0; i < ready.length; i++) deliver(ready[i].message)
             }
         }
     }
@@ -156,6 +178,7 @@ ShellRoot {
     CountingBackend { id: columnAsks; inner: realBackend }
 
     FloatingWindow {
+        id: window
         implicitWidth: 1000
         implicitHeight: 760
         color: "#101315"
@@ -181,6 +204,12 @@ ShellRoot {
             backend: columnAsks
             path: shell.dir + "/" + shell.columnFile
             size: 1
+        }
+
+        Rectangle {
+            width: 1
+            height: 1
+            color: shell.framePulse ? "#101315" : "#111416"
         }
     }
 
@@ -281,6 +310,7 @@ ShellRoot {
             shell.plainFrames = 0
             shell.fencesSeen = 0
             shell.visitedFences = ({})
+            shell.missedColours = ({})
             shell.sampling = true
             shell.next("sweep")
             return
@@ -288,8 +318,10 @@ ShellRoot {
         if (shell.phase === 5) {
             if (shell.sampling || shell.flinging) return
             if (!shell.wheelReported) {
-                shell.check(Object.keys(shell.visitedFences).length === 40 && shell.plainFrames === 0,
-                    "a one-screen wheel scroll down 40 fences shows no fence still owed its colours [" + shell.plainFrames + " of "
+                shell.check(Object.keys(shell.visitedFences).length === 40 && Object.keys(shell.visitedFences).every(function (slot) { return columnAsks.asks[slot] > 0 }),
+                    "all 40 named-language fences in the wheel scroll ask the engine")
+                shell.check(Object.keys(shell.missedColours).length === 0 && shell.plainFrames === 0 && shell.sampledFrames > 0,
+                    "every presented wheel frame draws engine colours [" + shell.plainFrames + " of "
                     + shell.sampledFrames + " frames, " + Object.keys(shell.visitedFences).length + " distinct fences]")
                 shell.wheelReported = true
                 shell.flinging = true
@@ -318,12 +350,13 @@ ShellRoot {
             if (!cdoc || !cdoc.firstScreen || cdoc.rawText.indexOf("<img") < 0) return
             var html = shell.fenceWith(column, "html")
             if (!html || !shell.settled(html)) return
+            var unknown = shell.fenceWith(column, "flea-unknown-language")
+            if (!unknown || (!shell.settled(unknown) && !unknown.refused)) return
             var htext = html.children[0].text
             shell.check(shell.readBack(htext) === html.fenceLines.join("\n"), "a fence holding an img tag draws literally")
-            var unknown = shell.fenceWith(column, "flea-unknown-language")
-            shell.check(unknown !== null && shell.settled(unknown) && unknown.fenceLines.every(function (_, i) {
+            shell.check(unknown.refused || (shell.settled(unknown) && unknown.fenceLines.every(function (_, i) {
                 return unknown.held[i + 1].every(function (value, at) { return at % 2 !== 0 || value === 0 })
-            }), "an unknown fence language falls back to foreground text")
+            })), "an unknown fence language falls back to foreground text after its own reply")
             shell.next("long source")
             shell.quickFile = "long.md"
             return
@@ -377,45 +410,61 @@ ShellRoot {
         }
     }
 
-    // One screen at a time down the column's fences, a frame sampled every 16 ms; a fence in view still awaiting its colours is a plain frame.
+    // frameSwapped samples the just-presented state before scheduling the next scroll.
+    function presentedFrame() {
+        var quickDoc = shell.docOf(quick)
+        if (quickDoc && shell.phase === 2) {
+            var waiting = shell.fencesOf(quick).filter(function (f) { return f.awaiting })
+            if (waiting.length > 0) {
+                shell.waitingFrames += 1
+                if (quickDoc.firstScreen || !quickDoc.loading || quickDoc.status !== "loading") shell.earlyScreens += 1
+                for (var w = 0; w < waiting.length; w++) shell.fenceHeights[waiting[w].slot] = waiting[w].height
+            }
+        }
+        if (!shell.sampling && !shell.flinging) return
+        var body = shell.docOf(column).bodyItem
+        var inView = shell.fencesOf(column).filter(function (f) {
+            var top = f.mapToItem(body, 0, 0).y
+            return top + f.height > 0 && top < body.height
+        })
+        if (shell.flinging) {
+            for (var f = 0; f < inView.length; f++)
+                if (inView[f].awaiting) shell.awaitingFlingFences[inView[f].slot] = true
+            shell.flingFrames += 1
+            if (shell.flingFrames % 3 === 0)
+                Qt.callLater(shell.scrollColumn, 2)
+            if (shell.flingFrames === 60) shell.flinging = false
+            return
+        }
+        shell.sampledFrames += 1
+        shell.fencesSeen = Math.max(shell.fencesSeen, inView.length)
+        for (var f = 0; f < inView.length; f++) shell.visitedFences[inView[f].slot] = true
+        var plain = false
+        for (var k = 0; k < inView.length; k++) {
+            if (inView[k].info !== "" && !shell.enginePaint(inView[k])) {
+                shell.missedColours[inView[k].slot] = true
+                plain = true
+            }
+        }
+        if (plain) shell.plainFrames += 1
+        if (shell.sweepSteps % 12 === 11) Qt.callLater(shell.scrollColumn, 1)
+        shell.sweepSteps += 1
+        if (shell.sweepSteps >= 720) shell.sampling = false
+    }
+    function scrollColumn(pages) {
+        var body = shell.docOf(column).bodyItem
+        body.contentY = Math.min(body.contentY + pages * body.height, body.contentHeight - body.height)
+    }
+    Connections {
+        target: column.Window.window
+        function onFrameSwapped() { shell.presentedFrame() }
+    }
+    // A changing test pixel keeps frames presenting even when the scroller rests; this timer never samples them.
     Timer {
-        id: sweep
         interval: 16
         repeat: true
         running: !shell.done
-        onTriggered: {
-            var quickDoc = shell.docOf(quick)
-            if (quickDoc && shell.phase === 2) {
-                var waiting = shell.fencesOf(quick).filter(function (f) { return f.awaiting })
-                if (waiting.length > 0) {
-                    shell.waitingFrames += 1
-                    if (quickDoc.firstScreen || !quickDoc.loading || quickDoc.status !== "loading") shell.earlyScreens += 1
-                    for (var w = 0; w < waiting.length; w++) shell.fenceHeights[waiting[w].slot] = waiting[w].height
-                }
-            }
-            if (!shell.sampling && !shell.flinging) return
-            var body = shell.docOf(column).bodyItem
-            var inView = shell.fencesOf(column).filter(function (f) {
-                var top = f.mapToItem(body, 0, 0).y
-                return top + f.height > 0 && top < body.height
-            })
-            if (shell.flinging) {
-                for (var f = 0; f < inView.length; f++)
-                    if (inView[f].awaiting) shell.awaitingFlingFences[inView[f].slot] = true
-                shell.flingFrames += 1
-                if (shell.flingFrames % 3 === 0)
-                    body.contentY = Math.min(body.contentY + 2 * body.height, body.contentHeight - body.height)
-                if (shell.flingFrames === 60) shell.flinging = false
-                return
-            }
-            shell.sampledFrames += 1
-            shell.fencesSeen = Math.max(shell.fencesSeen, inView.length)
-            for (var f = 0; f < inView.length; f++) shell.visitedFences[inView[f].slot] = true
-            if (inView.some(function (f) { return f.awaiting })) shell.plainFrames += 1
-            if (shell.sweepSteps % 12 === 11) body.contentY = Math.min(body.contentY + body.height, body.contentHeight - body.height)
-            shell.sweepSteps += 1
-            if (shell.sweepSteps >= 720) shell.sampling = false
-        }
+        onTriggered: shell.framePulse = !shell.framePulse
     }
 
     Timer {

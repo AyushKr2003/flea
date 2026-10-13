@@ -29,18 +29,18 @@ ui/ChromeModes.qml	38	root	Declared QML id; component context access is valid at
 ui/ChromeModes.qml	39	root	Declared QML id; component context access is valid at runtime.
 ui/ChromeModes.qml	37	root	Declared QML id; component context access is valid at runtime.
 ui/ChromeModes.qml	40	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	189	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	190	view	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	191	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	194	root	Declared QML id; component context access is valid at runtime.
 ui/CodeLines.qml	195	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	208	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	208	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	210	metrics	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	211	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	214	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	216	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	218	root	Declared QML id; component context access is valid at runtime.
+ui/CodeLines.qml	190	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	191	view	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	192	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	196	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	209	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	209	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	211	metrics	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	212	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	215	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	217	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	219	root	Declared QML id; Source and fence components read their creation context.
 ui/ColumnPane.qml	248	view	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	249	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	287	root	Declared QML id; component context access is valid at runtime.
@@ -1098,77 +1098,75 @@ ui/MarkdownBlockView.qml	110	view	Declared QML id; component context access is v
 ui/MarkdownBlockView.qml	111	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	187	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	188	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	189	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	190	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	216	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	219	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	220	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	221	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	222	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	223	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	224	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	225	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	226	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	227	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	240	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	241	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	244	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	245	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	246	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	247	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	257	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	258	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	259	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	262	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	263	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	271	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	280	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	281	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	281	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	282	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	304	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	112	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	113	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	114	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	114	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	124	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	180	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	127	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	134	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	143	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	143	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	168	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	173	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	179	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	186	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	195	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	206	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	215	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	218	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	229	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	239	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	239	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	241	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	243	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	245	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	256	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	256	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	261	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	270	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	279	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	280	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	292	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	292	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	292	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	295	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	295	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	295	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	297	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	300	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	300	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	303	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	303	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	303	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	108	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	176	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	181	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	194	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	196	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	197	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	198	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	203	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	214	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	228	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	230	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	231	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	232	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	233	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	234	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	235	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	237	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	247	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	248	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	249	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	249	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	251	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	252	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	253	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	253	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	254	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	255	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	264	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	264	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	265	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	266	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	267	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	269	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	278	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	287	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	288	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	288	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	289	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	289	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	290	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	300	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	305	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	308	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	308	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	311	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	311	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	311	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	312	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlocks.qml	28	root	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlocks.qml	29	root	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlocks.qml	30	root	Declared QML id; component context access is valid at runtime.
@@ -2273,18 +2271,18 @@ ui/ChromeModes.qml	38	root	Declared QML id; component context access is valid at
 ui/ChromeModes.qml	39	root	Declared QML id; component context access is valid at runtime.
 ui/ChromeModes.qml	37	root	Declared QML id; component context access is valid at runtime.
 ui/ChromeModes.qml	40	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	189	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	190	view	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	191	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	194	root	Declared QML id; component context access is valid at runtime.
 ui/CodeLines.qml	195	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	208	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	208	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	210	metrics	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	211	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	214	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	216	root	Declared QML id; component context access is valid at runtime.
-ui/CodeLines.qml	218	root	Declared QML id; component context access is valid at runtime.
+ui/CodeLines.qml	190	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	191	view	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	192	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	196	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	209	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	209	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	211	metrics	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	212	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	215	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	217	root	Declared QML id; Source and fence components read their creation context.
+ui/CodeLines.qml	219	root	Declared QML id; Source and fence components read their creation context.
 ui/ColumnPane.qml	248	view	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	249	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnPane.qml	287	root	Declared QML id; component context access is valid at runtime.
@@ -2753,77 +2751,75 @@ ui/MarkdownBlockView.qml	110	view	Declared QML id; component context access is v
 ui/MarkdownBlockView.qml	111	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	187	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	188	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	189	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	190	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	216	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	219	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	220	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	221	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	222	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	223	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	224	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	225	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	226	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	227	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	240	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	241	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	244	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	245	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	246	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	247	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	257	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	258	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	259	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	262	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	263	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	271	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	280	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	281	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	281	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	282	view	Declared QML id; component context access is valid at runtime.
-ui/MarkdownBlockView.qml	304	view	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlockView.qml	112	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	113	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	114	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	114	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	124	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	180	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	127	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	134	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	143	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	143	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	168	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	173	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	179	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	186	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	195	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	206	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	215	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	218	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	229	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	239	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	239	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	241	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	243	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	245	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	256	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	256	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	261	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	270	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	279	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	280	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	292	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	292	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	292	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	295	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	295	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	295	view	Declared QML id; Source and fence components read their creation context.
-ui/MarkdownBlockView.qml	297	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	300	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	300	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	303	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	303	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlockView.qml	303	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	108	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	176	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	181	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	194	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	196	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	197	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	198	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	203	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	214	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	228	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	230	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	231	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	232	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	233	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	234	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	235	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	237	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	247	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	248	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	249	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	249	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	251	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	252	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	253	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	253	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	254	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	255	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	264	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	264	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	265	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	266	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	267	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	269	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	278	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	287	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	288	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	288	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	289	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	289	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	290	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	300	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	305	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	308	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	308	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	311	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	311	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	311	view	Declared QML id; Source and fence components read their creation context.
+ui/MarkdownBlockView.qml	312	view	Declared QML id; Source and fence components read their creation context.
 ui/MarkdownBlocks.qml	28	root	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlocks.qml	29	root	Declared QML id; component context access is valid at runtime.
 ui/MarkdownBlocks.qml	30	root	Declared QML id; component context access is valid at runtime.

@@ -160,7 +160,7 @@ ui/PickerChrome.qml 441
 ui/DeviceMounts.qml 537
 ui/js/Facts.js 354
 ui/PreviewMarkdown.qml 665
-tests/markdown-code.qml 426
+tests/markdown-code.qml 475
 ui/Row.qml 496
 ui/SettingsPanel.qml 547
 ui/SettingsRow.qml 409

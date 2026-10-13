@@ -81,10 +81,11 @@ Item {
             Qt.callLater(root.ask)
     }
 
-    // Lines of the caller's own text, drawn plain: no backend to colour them, or no bytes to colour.
-    // Sample input: "a\nb" holds lines 1 and 2, as [0, "a"] and [0, "b"].
+    // Sample input: "a\nb\n" holds only lines 1 and 2, as [0, "a"] and [0, "b"], matching the engine's terminal-newline rule.
     function answerPlain() {
         var rows = root.text.length > 0 ? root.text.split("\n") : []
+        if (rows.length > 0 && root.text.endsWith("\n"))
+            rows.pop()
         var held = {}
         for (var i = 0; i < rows.length && (root.limit <= 0 || i < root.limit); i++)
             held[i + 1] = [0, rows[i]]

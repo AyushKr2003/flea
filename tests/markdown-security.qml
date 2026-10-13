@@ -176,8 +176,7 @@ ShellRoot {
         })
     }
 
-    // Sample: the Source view draws one row per line, and walking the list builds each; the lines their markup reads back to are the file.
-    // A line's body is a StyledText, so the check that it is literal is that its markup reads back to the line exactly.
+    // Sample input: Source rows 'a', 'b' reconstruct 'a\nb\n' when rawText ends in a newline, with no extra empty row.
     function sourceWhole() {
         var list = sourceView.sourceItem
         var text = ""
@@ -191,13 +190,16 @@ ShellRoot {
             styled = styled && row.children[1].textFormat === Text.StyledText
             text += (i > 0 ? "\n" : "") + shell.readBack(row.children[1].text)
         }
-        return { text: text, plain: styled }
+        var terminalLF = sourceView.rawText.endsWith("\n")
+        var physicalCount = sourceView.rawText.split("\n").length - (terminalLF ? 1 : 0)
+        if (list.count !== physicalCount) return null
+        return { text: text + (terminalLF ? "\n" : ""), plain: styled }
     }
-    // The text a line's markup shows: tags dropped, entities decoded, so a tag or an entity drawn as markup would not read back.
+    // Sample input: '<font color="#ffffff">&lt;img&gt; &amp;</font>' reads back as '<img> &'.
     function readBack(markup) {
         return String(markup).replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&amp;/g, "&")
     }
-    // Code rows expand tabs to eight-column stops; every other source character must survive unchanged.
+    // Sample input: 'a\tb' draws as 'a       b', with tabs expanded to eight-column stops and other characters unchanged.
     function displayedSource(text) {
         return text.split("\n").map(function (line) {
             var out = ""

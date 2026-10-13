@@ -51,10 +51,13 @@ printf '%s\n' "${notes[@]}" > "$fixture/notes.md"
 for i in $(seq 1 40); do printf '```rust\nfn f%d() {}\n```\n\n' "$i"; done > "$fixture/fences.md"
 for i in $(seq 1 100); do printf 'line %s ' "$i"; printf 'long Markdown text %.0s' $(seq 1 40); printf '\n'; done > "$fixture/long.md"
 # Stale listing sizes in the harness force the code engine itself to refuse these Source files.
-python3 -I -c 'import sys; open(sys.argv[1], "w").write("# Oversized\n" + "x" * 1048577)' "$fixture/over.md" || exit 1
+CODE_WINDOW_MAX_BYTES=1048576
+oversized_bytes=$((CODE_WINDOW_MAX_BYTES + 1))
+python3 -I -c 'import sys; open(sys.argv[1], "w").write("x" * int(sys.argv[2]))' "$fixture/over.md" "$oversized_bytes" || exit 1
 printf '# Unreadable\n' > "$fixture/unreadable.md"
 chmod 000 "$fixture/unreadable.md" || exit 1
 printf '# Binary\ntext\0text\n' > "$fixture/binary.md"
+printf '```rust\nfn rebound() { let n = 240; }\n```\n' > "$fixture/rebind.md"
 
 # Anything that connects to the listener is logged, and a connection made here at the end proves it could have seen one. The lane may not bind port 9, so the listener takes a free port and the markup names it.
 python3 -I -c '
@@ -87,15 +90,22 @@ if [ -z "$port" ]; then
     exit 1
 fi
 # The markup a Source line and a fence hold: a tag, an entity and an img that would fetch the listener.
-printf '%s\n' '```html' '<b>x</b> <img src=x> &amp;' "<img src=\"http://127.0.0.1:$port/x\">" '```' '' '```flea-unknown-language' 'plain unknown fence' '```' > "$fixture/markup.md"
+{
+    printf '%s\n' '```html' '<b>x</b> <img src=x> &amp;' "<img src=\"http://127.0.0.1:$port/x\">" '```' ''
+    for i in $(seq 1 36); do printf 'Spacer paragraph %s.\n\n' "$i"; done
+    printf '%s\n' '```flea-unknown-language' 'plain unknown fence' '```'
+} > "$fixture/markup.md"
 
-log="$test_root/markdown-code.log"
+run_harness() {
 env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     PATH="$PATH" HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_RUNTIME_DIR="$test_root/runtime" \
     XDG_CONFIG_HOME="$test_root/home/.config" XDG_CACHE_HOME="$test_root/home/.cache" \
-    QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_QPA_UPDATE_IDLE_TIME=16 QT_FORCE_STDERR_LOGGING=1 QT_LOGGING_RULES="$(qslog_rules "${QT_LOGGING_RULES:-}")" \
+    QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QSG_RENDER_LOOP=basic QT_QPA_UPDATE_IDLE_TIME=16 QT_FORCE_STDERR_LOGGING=1 QT_LOGGING_RULES="$(qslog_rules "${QT_LOGGING_RULES:-}")" \
     FLEA_BIN="$bin" FLEA_UI="$PWD/ui" MDCODE_DIR="$fixture" \
-    "$timeout_bin" "$RUN_BOUND" "$qs_bin" -p "$test_root/config" > "$log" 2>&1
+    "$timeout_bin" "$RUN_BOUND" "$qs_bin" -p "$test_root/config" > "$1" 2>&1
+}
+log="$test_root/markdown-code.log"
+run_harness "$log"
 status=$?
 # The harness ends by its own SIGTERM, so a clean run exits 143; a receipt line alone proves the checks ran.
 # Sample input, the receipt: "  INFO qml: MARKDOWN_CODE DONE 14 checks, 0 failed".
@@ -111,6 +121,19 @@ if [ "$done_count" -ne 1 ] || grep -aq 'MARKDOWN_CODE FAIL' "$log" || [ "$status
     verdict=1
 else
     grep -a 'MARKDOWN_CODE' "$log"
+fi
+
+cp tests/markdown-code-rebind.qml "$test_root/config/shell.qml" || exit 1
+rebind_log="$test_root/markdown-code-rebind.log"
+run_harness "$rebind_log"
+rebind_status=$?
+grep -a 'MARKDOWN_REBIND' "$rebind_log"
+if [ "$rebind_status" -ne 143 ] || [ "$(grep -ac 'MARKDOWN_REBIND DONE' "$rebind_log")" -ne 1 ] || grep -aqE 'MARKDOWN_REBIND FAIL|TypeError|ReferenceError|Unable to assign|Cannot assign' "$rebind_log"; then
+    printf 'FAIL markdown-code backend handoff: qs exit %s\n' "$rebind_status"
+    verdict=1
+fi
+if [ -n "${FLEA_CI_SUITE_LOGS:-}" ]; then
+    cp "$rebind_log" "$FLEA_CI_SUITE_LOGS/markdown-code-rebind.log" || exit 1
 fi
 
 seen=$(grep -c connection "$test_root/listener.log")

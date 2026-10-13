@@ -4127,6 +4127,8 @@ The Markdown Source and fence colours move four ceilings, each re-derived with `
 
 The mdsrc2 refusal repair moves `ui/PreviewMarkdown.qml` from 661 to 665 lines for Source refusal readiness and reader-state forwarding, and records `tests/markdown-code.qml` at 426 for real oversized, permission-denied and binary Source checks, including visible text bounds. Both ceilings come from `wc -l`. `ui/CodeRefusal.qml` shares Quick Look's existing refusal strings, mark and geometry with Source; `ui/PreviewText.qml` shrinks to 117 lines and `ui/MarkdownSource.qml` is 155.
 
+The pv-mdsrc round-1 fixes move `tests/markdown-code.qml` from 426 to 475 lines, re-derived with `wc -l`, for engine-reply and colour checks on every presented frame, per-slot ask evidence, and the delayed unknown-language reply. `tests/markdown-code-rebind.qml` (155 lines) keeps a live fence across two real backends and records CodeLines' separate handoff hole without fixing it. `ui/MarkdownBlockView.qml` (315) retries a fence when its backend changes; `ui/CodeLines.qml` (223) aligns its plain fallback's terminal-newline count with the engine. The Source roundtrip proves the terminal newline byte and the absence of an extra row.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

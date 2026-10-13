@@ -51,8 +51,7 @@ ShellRoot {
         Qt.callLater(shell.reportSource)
     }
 
-    // The same 560 KiB as Source: a screenful of lines is laid out, and the end of the list shows the file's last line.
-    // Source draws one row per line through CodeLines; a row's second Text is its body, its markup read back to the line it shows.
+    // Sample input: '<font color="#ffffff">a &amp; b</font>' reads back as 'a & b'.
     function decoded(markup) {
         return String(markup).replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&amp;/g, "&")
     }
@@ -71,7 +70,7 @@ ShellRoot {
         }
         shell.log("source chars=" + first + " total=" + md.rawText.length + " endlaid=" + md.sourceChars + " lastline=" + reached)
         // Every row built in turn, read back to its line, is the file exactly.
-        var joined = ""
+        var rows = []
         var numbered = true
         for (var c = 0; c < list.count; c++) {
             var built = list.itemAtIndex(c)
@@ -81,9 +80,15 @@ ShellRoot {
                 built = list.itemAtIndex(c)
             }
             numbered = numbered && built.children[0].text === String(c + 1)
-            joined += (c > 0 ? "\n" : "") + shell.decoded(built.children[1].text)
+            rows.push(shell.decoded(built.children[1].text))
         }
-        shell.log("source roundtrip chunks=" + list.count + " numbered=" + numbered + " same=" + (numbered && joined === md.rawText))
+        // A terminal newline ends the last physical row; it adds no empty row, and reconstruction puts that byte back.
+        var terminalLF = md.rawText.endsWith("\n")
+        var physical = terminalLF ? md.rawText.slice(0, -1).split("\n") : md.rawText.split("\n")
+        var noExtraRow = list.count === physical.length && rows[rows.length - 1] === physical[physical.length - 1] && rows[rows.length - 1] !== ""
+        var joined = rows.join("\n") + (terminalLF ? "\n" : "")
+        shell.log("source roundtrip chunks=" + list.count + " numbered=" + numbered + " terminalLF=" + terminalLF
+            + " noExtraRow=" + noExtraRow + " same=" + (terminalLF && noExtraRow && numbered && joined === md.rawText))
         shell.done = true
         shell.quit()
     }

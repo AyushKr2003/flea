@@ -52,7 +52,7 @@ ShellRoot {
         }
         return null
     }
-    // The text a body's markup shows: tags dropped and entities decoded, so a line drawn as markup would not read back.
+    // Sample input: '<font color="#ffffff">&lt;img&gt; &amp;</font>' reads back as '<img> &'.
     function readBack(markup) {
         return String(markup).replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")
     }

@@ -99,8 +99,7 @@ Item {
         }
     }
 
-    // A fenced block takes the code engine's colours when its info string names a language.
-    // Until its reply lands it lays out the same escaped text in the foreground, preserving its height.
+    // A named fence takes engine colours after its reply; the escaped foreground text before it preserves its height.
     Component {
         id: fenceBlock
         Rectangle {
@@ -110,8 +109,9 @@ Item {
             height: fenceText.implicitHeight + 2 * view.preview.fencePadY
             color: view.preview.codeSurface
             readonly property string info: String(view.block.info || "").trim()
+            readonly property var backend: view.preview.backend
             readonly property bool coloured: fenceBox.info !== "" && view.preview.shownView !== Markdown.SOURCE
-                && view.preview.backend !== null && typeof view.preview.backend.askCode === "function"
+                && fenceBox.backend !== null && typeof fenceBox.backend.askCode === "function"
             // The one slot this fence asks on, handed out by the preview so no two fences share one.
             property string slot: ""
             property int token: 0
@@ -140,8 +140,17 @@ Item {
                 if (fenceBox.slot === "" || !fenceBox.awaiting || fenceBox.token !== 0)
                     return
                 var count = Math.min(fenceBox.lineCap, fenceBox.fenceLines.length - fenceBox.next + 1)
-                fenceBox.token = view.preview.backend.askCode(fenceBox.slot, { text: view.block.text, name: "", lang: fenceBox.info }, fenceBox.next, count)
+                fenceBox.token = fenceBox.backend.askCode(fenceBox.slot, { text: view.block.text, name: "", lang: fenceBox.info }, fenceBox.next, count)
             }
+            function rebind() {
+                fenceBox.token = 0
+                fenceBox.held = {}
+                fenceBox.stamp += 1
+                fenceBox.next = 1
+                fenceBox.refused = false
+                Qt.callLater(fenceBox.ask)
+            }
+            onBackendChanged: fenceBox.rebind()
             function answered(message) {
                 if (fenceBox.token === 0 || message.token !== fenceBox.token)
                     return
@@ -158,8 +167,7 @@ Item {
                 fenceBox.ask()
             }
 
-            // Only a fence intersecting the viewport holds the preview's first screen until its colours land.
-            // Whether this fence holds one of its pane's waits: a fence torn down after its block is gone still releases it.
+            // Only a viewport fence holds the first screen; tearing its block down releases that hold too.
             property bool waiting: false
             function setWaiting(on) {
                 if (on === fenceBox.waiting)
