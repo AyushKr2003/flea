@@ -64,6 +64,8 @@ pub enum Request {
     PdfCopy { id: usize, slot: String, path: String },
     // An office document converted once to a cached PDF by LibreOffice; answered ready, converting or failed.
     OfficePdf { id: usize, path: String },
+    // Quick Look's font page: the facts and three sample images for one font; see src/backend/fontinfo/render.rs.
+    FontLook(super::fontinfo::render::Ask),
     // op is "compress" or "extract"; a compress names paths and a format, an extract names one path.
     // password travels this stdin wire and leaves it only on the tool's own stdin pipe, never in argv.
     Archive { op: String, paths: Vec<String>, path: String, dest: String, format: String, menu_id: usize,
@@ -250,6 +252,7 @@ pub fn parse_request(line: &str) -> Request {
             strip: field_bool(line, "strip"),
         },
         Some("formats") => Request::Formats { id: field_usize(line, "id").unwrap_or(0) },
+        Some("fontlook") => Request::FontLook(super::fontinfo::render::Ask::parse(line)),
         Some("pdfcopy") => Request::PdfCopy {
             id: field_usize(line, "id").unwrap_or(0),
             // Absent is one viewer, so an older client's fetch keeps the shared slot.

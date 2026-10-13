@@ -114,6 +114,8 @@ pub mod mergeapply;
 pub mod fatnames;
 pub mod pasteimage;
 pub mod convert;
+// Quick Look's font page: the facts from the font's tables and the sample job; see src/backend/fontinfo/render.rs.
+pub mod fontinfo;
 pub mod copyfile;
 pub mod copymanifest;
 pub mod manifestdir;
