@@ -86,7 +86,6 @@ tests/js/picker.js 352
 tests/picker-grid.qml 465
 tests/picker-hunt.qml 449
 tests/permissions-focus.qml 417
-tests/js/facts.js 346
 tests/js/network.js 307
 tests/js/ops.js 574
 tests/js/slowclick.js 309
@@ -179,7 +178,6 @@ ui/js/Keymap.js 366
 ui/js/Nav.js 328
 ui/js/Markdown.js 135
 ui/js/MdBlocks.js 437
-ui/js/Facts.js 354
 ui/js/FigureWorker.mjs 619
 ui/js/MdDocument.js 337
 ui/js/MdLeaf.js 309
