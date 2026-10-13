@@ -304,7 +304,7 @@ ShellRoot {
             var first = texts[0].text
             root.check(name + " draws its lines", [texts.length, root.plainOf(first).indexOf("fn ") === 0], [root.drawnLines(code), true])
             root.check(name + " asks the backend once per move", root.backend().codeToken - root.askBase <= 1, true)
-            root.check(name + " asks for no more than the frame's lines", root.farthest <= Math.min(col.linesItem.maxLines, Math.ceil(code.viewport.height / code.rowHeight)), true)
+            root.check(name + " asks for no more than the frame's lines", root.farthest <= Math.ceil(code.viewport.height / code.rowHeight), true)
             root.check(name + " has a muted number gutter", col.linesItem.numbered, true)
             if (op.coloured) {
                 root.check(name + " the fn keyword draws in the magenta ink", first.indexOf("<font color=\"" + root.ink(5) + "\">fn</font>") >= 0, true)

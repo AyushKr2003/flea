@@ -50,6 +50,11 @@ done
 printf 'let long_line = "a long code line that wraps in Quick Look";\n%.0s' $(seq 1 "$overflow_lines") > "$test_root/code.rs"
 magick -size 400x560 xc:white -fill black -font Liberation-Sans -pointsize 30 \
     -annotate +40+80 'LAYOUT' "$test_root/page.pdf" || exit 1
+# Each scenario is a first visit in both hosts; relative Markdown images stay beside their documents.
+for scenario in $(seq 0 5); do
+    mkdir -p "$test_root/scenario-$scenario" || exit 1
+    cp "$test_root/"*.md "$test_root/plain.txt" "$test_root/code.rs" "$test_root/page.pdf" "$test_root/local.svg" "$test_root/scenario-$scenario/" || exit 1
+done
 for theme in dark light; do
     theme_home="$test_root/home-$theme"
     palette_dir="$theme_home/.local/state/omarchy/current/theme"

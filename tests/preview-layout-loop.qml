@@ -145,7 +145,7 @@ ShellRoot {
     }
 
     function show(path, icon) {
-        shell.expectedPath = shell.dir + "/" + path
+        shell.expectedPath = shell.dir + "/scenario-" + shell.scenario + "/" + path
         if (shell.columnHost) {
             column.path = shell.expectedPath
             column.meta = {}
@@ -319,9 +319,10 @@ ShellRoot {
             if (shell.columnHost) {
                 if (column.textLoading || column.linesItem.readFailed) return
                 var lines = shell.find(column, "PreviewLines")
-                // TallPreviews fills the frame (1c96d94d0), bounded by the fixture's 96 lines.
-                if (!lines || lines.lines.length !== Math.min(lines.maxLines, 96)) return
-                if (!shell.check(lines.lines.length > 14, "tall column kept the old fourteen-line cap")) return
+                // K11 leaves the model uncapped (9104ee493); count the rows actually drawn in the tall viewport.
+                if (!lines || !lines.code || !lines.code.firstScreen || lines.lines.length < 96) return
+                var drawn = lines.viewport.contentItem.children.filter(function (item) { return item.index !== undefined && item.y >= lines.viewport.contentY && item.y < lines.viewport.contentY + lines.viewport.height }).length
+                if (!shell.check(drawn > 14, "tall column kept the old fourteen-line cap")) return
                 if (!shell.check(lines.numbered === (kind === 1), "code gutter changed")) return
             } else {
                 var text = shell.find(look, "PreviewText")
