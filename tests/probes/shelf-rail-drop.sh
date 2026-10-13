@@ -113,6 +113,8 @@ $cut_qml
       color: "#404040"
       Drag.mimeData: ({ "text/uri-list": "file://$work/src/dropme.txt" })
       Drag.supportedActions: Qt.CopyAction
+      // An internal drag never leaves its window, so the offer goes out as a system drag the rail can take.
+      Drag.dragType: Drag.Automatic
       MouseArea {
         anchors.fill: parent
         onPressed: handle.Drag.active = true
