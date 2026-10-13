@@ -180,6 +180,9 @@ QtObject {
     // `preview.volume` in src/uischema.rs, 0 to 100: the level ui/MediaSound.qml plays every player at, 100 being full scale.
     readonly property int mediaVolume: root.preview.volume !== undefined ? root.preview.volume : 100
     function setMediaVolume(level) { root.changeLeaf("preview", { volume: level }) }
+    // `preview.width` in src/uischema.rs: the Columns view's last column as a whole percent of the area, 0 for the default share.
+    readonly property int previewWidth: root.preview.width || 0
+    function setPreviewWidth(percent) { root.changeLeaf("preview", { width: percent }) }
     readonly property string density: root.state.density || "compact"
     readonly property string addressBar: root.state.addressBar || "breadcrumb"
     readonly property bool hyprlandIcons: root.display.hyprlandIcons === true

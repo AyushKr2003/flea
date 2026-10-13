@@ -48,7 +48,7 @@ pub const DEFAULTS: &str = r#"{
     "column": true, "loadOn": "automatic",
     "thumbnails": "media", "thumbSize": "medium",
     "thumbNetwork": false, "thumbPhone": false, "thumbUsb": true,
-    "ctrlZoom": true, "volume": 100
+    "ctrlZoom": true, "volume": 100, "width": 0
   },
   "previewFacts": "compact",
   "keys": "default",
@@ -157,6 +157,7 @@ pub const PREVIEW: &[(&str, Rule)] = &[
     ("thumbUsb", Rule::Bool),
     ("ctrlZoom", Rule::Bool),
     ("volume", Rule::Count(0.0, 100.0)),
+    ("width", Rule::Count(0.0, 100.0)),
 ];
 
 // mode is "system" or one stop, so there is nowhere to put a free number; see the handoff's Display row.

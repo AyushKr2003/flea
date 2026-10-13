@@ -64,8 +64,8 @@ src/tui/input.rs 455
 src/tui/model.rs 1268
 src/tui/mod.rs 419
 src/tui/render.rs 913
-src/uischema.rs 566
-src/uistate.rs 810
+src/uischema.rs 567
+src/uistate.rs 840
 src/uistore.rs 551
 src/vulkan.rs 751
 tests/js/columns.js 687
@@ -127,7 +127,7 @@ tests/touchpad.qml 882
 tests/xwsettings-tabs.qml 379
 ui/Backend.qml 578
 ui/ChromeBar.qml 352
-ui/ColumnsArea.qml 547
+ui/ColumnsArea.qml 573
 ui/ColumnPane.qml 450
 ui/ContextMenu.qml 781
 ui/ConvertDialog.qml 456
@@ -167,7 +167,7 @@ ui/StatusBar.qml 477
 ui/Theme.qml 475
 ui/TrashView.qml 492
 ui/UnlockDialog.qml 450
-ui/ViewState.qml 544
+ui/ViewState.qml 547
 ui/WindowBody.qml 816
 ui/js/Anchor.js 379
 ui/js/ColumnsCarry.js 94

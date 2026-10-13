@@ -807,4 +807,34 @@ mod tests {
             assert!(message.contains("volume"), "got {}", message);
         }
     }
+
+    fn width_of(doc: &Json) -> Option<f64> {
+        doc.get("preview").and_then(|p| p.get("width")).and_then(Json::as_f64)
+    }
+
+    // preview.width is the last Columns column's whole percent of the area, and 0 is the default third a file without the key draws.
+    #[test]
+    fn a_preview_width_survives_a_write_and_a_file_without_one_reads_the_default_third() {
+        assert_eq!(width_of(&from_file("{}")), Some(0.0));
+        for percent in ["0", "37", "100"] {
+            let patch = jsondoc::parse(&format!(r#"{{"preview":{{"width":{}}}}}"#, percent)).expect("patch parses");
+            let written = patched(&from_file("{}"), &patch).expect("a whole percent lands");
+            let expected = percent.parse::<f64>().ok();
+            assert_eq!(width_of(&written), expected, "the patched document holds {}", percent);
+            assert_eq!(width_of(&from_file(&text(&written))), expected, "{} reads back after the file is written", percent);
+        }
+    }
+
+    #[test]
+    fn a_preview_width_that_is_not_a_whole_percent_reads_the_default_third_and_a_patch_for_it_is_refused() {
+        for bad in ["101", "-1", "37.5", r#""wide""#] {
+            let stored = format!(r#"{{"preview":{{"width":{},"thumbSize":"large"}}}}"#, bad);
+            let read = from_file(&stored);
+            assert_eq!(width_of(&read), Some(0.0), "{} falls back to the default third", bad);
+            assert_eq!(read.get("preview").and_then(|p| p.get("thumbSize")).and_then(Json::as_str), Some("large"));
+            let patch = jsondoc::parse(&format!(r#"{{"preview":{{"width":{}}}}}"#, bad)).expect("patch parses");
+            let message = patched(&from_file("{}"), &patch).expect_err("a patch from Flea must be whole");
+            assert!(message.contains("width"), "got {}", message);
+        }
+    }
 }

@@ -124,6 +124,7 @@ QuickLookSwap 1.0 QuickLookSwap.qml
 PreviewText 1.0 PreviewText.qml
 Row 1.0 Row.qml
 ResizeHandle 1.0 ResizeHandle.qml
+PreviewEdge 1.0 PreviewEdge.qml
 Pane 1.0 Pane.qml
 PickerBox 1.0 PickerBox.qml
 PickerChrome 1.0 PickerChrome.qml

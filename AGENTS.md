@@ -9151,6 +9151,8 @@ The tall previews line keeps `tests/startup-units.txt` at its 170 units while it
 
 The Trash order unit raises the first-frame `bytes` line in `tests/startup-units.txt` from 1,596,965 to 1,597,470 (+505, no unit added): `ui/TrashView.qml` opens the cursor row's menu under that row (`openMenu`), lands the cursor on the newest row and draws the Deleted title with `Sort.title` in `ui/js/Sort.js`, which `ui/Header.qml` now asks for its own sort mark, and `ui/js/Trash.js` gains `menuTarget`.
 Its review round 1 raises the `src/backend/trashbrowse.rs` ceiling from 834 to 898 (`wc -l`) for `list_with`, `same_items`, `listed_uris` and their five tests; no code or comment was cut.
+
+The preview column width keeps `tests/startup-units.txt` at its 170 units while its `bytes` line moves from 1598076 to 1598360, the sum the probe's tool takes over them with the `preview.width` reader in `ui/ViewState.qml` and the stored-width layout in `ui/ColumnsArea.qml`.
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one
