@@ -84,6 +84,6 @@ judge() {
     printf '%s\n' "$output" | grep -a 'FLOW COUNTS\|FLOW QMLTALLY' | sed 's/^.*FLOW /FLOW '"$label"' /'
 }
 
-out=$(run wide 1200 760); judge "1200x760" "$out" $? 52
-out=$(run narrow 760 560); judge "760x560" "$out" $? 52
+out=$(run wide 1200 760); judge "1200x760" "$out" $? 57
+out=$(run narrow 760 560); judge "760x560" "$out" $? 57
 exit $verdict

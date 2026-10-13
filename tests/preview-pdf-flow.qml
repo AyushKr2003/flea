@@ -302,6 +302,11 @@ ShellRoot {
         root.check("and does not fail the drawn column", root.col.pdfFailed, false)
         root.check("the drawn pane stays on the stack", root.col.previewState, "pdf")
     }
+    function laterUndrawnPage() {
+        root.check("a later page can fail before the first draw", root.slotErrored(1), true)
+        root.check("and does not fail the undrawn column", root.col.pdfFailed, false)
+        root.check("the undrawn pane stays on the stack", root.col.previewState, "pdf")
+    }
     function failedPage() {
         root.check("a first page whose render failed puts the pane in the failure state", root.col.pdfFailed && root.col.previewState === "error", true)
     }
@@ -360,6 +365,13 @@ ShellRoot {
         { row: 3, stay: true, wait: function () { return root.slotErrored(1) }, run: function () { root.laterPage() } },
         { row: 3, stay: true, run: function () { root.breakSlot(0) } },
         { row: 3, stay: true, wait: function () { return root.slotErrored(0) }, run: function () { root.topPage() } },
+        { row: 3, stay: true, run: function () {
+            root.check("the frame's top is on the page before the later failure", root.pdf().pageAt(root.pdf().viewTop), 0)
+            root.pdf().shownPage = -1
+            root.check("the column is put back before its first draw", root.col.pdfDrawn, false)
+            root.breakSlot(1)
+        } },
+        { row: 3, stay: true, wait: function () { return root.slotErrored(1) }, run: function () { root.laterUndrawnPage() } },
         { row: 3, stay: true, run: function () {
             // Recreate the state before the first draw so the repeated render error tests initial failure.
             root.pdf().shownPage = -1
