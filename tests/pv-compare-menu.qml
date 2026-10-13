@@ -9,6 +9,7 @@ ShellRoot {
     readonly property int rowCount: 5002
     readonly property int farIndex: 4800
     readonly property int pollMs: 20
+    readonly property int stablePolls: 5
     readonly property int stepBudgetMs: 20000
     readonly property int typeMask: 0o170000
     readonly property int regularKind: 0o100000
@@ -19,6 +20,9 @@ ShellRoot {
     property int failures: 0
     property double started: Date.now()
     property bool finished: false
+    property string stableIdentity: ""
+    property int identityPolls: 0
+    property string snapshotAskedIdentity: ""
 
     function pane() { return body.item.currentPane }
     function check(label, actual, expected) {
@@ -56,16 +60,30 @@ ShellRoot {
         var p = pane(), menu = p.contextMenu(), look = body.item.quickLook
         switch (step) {
         case -2:
-            if (p.listInFlight || p.listingState !== "ready" || p.total !== rowCount || !p.rowFor(0) || !p.rowFor(1)) return
+            if (p.listInFlight || p.listingState !== "ready" || p.total !== rowCount || !p.rowFor(0) || !p.rowFor(1)) {
+                identityPolls = 0
+                return
+            }
+            var currentIdentity = p.menuSelectionIdentity()
+            identityPolls = currentIdentity === stableIdentity ? identityPolls + 1 : 1
+            stableIdentity = currentIdentity
+            if (identityPolls < stablePolls) return
             p.selectOnly(0)
             p.toggleSelectAt(1)
             openMenu()
+            snapshotAskedIdentity = p.menuActions.identity
             advance()
             return
         case -1:
-            if (!p.menuActions.ready) return
-            // The initial held window can refill after the snapshot; ask again for its current identity.
-            if (p.menuActions.identity !== p.menuSelectionIdentity()) { p.menuActions.snapshot(); return }
+            currentIdentity = p.menuSelectionIdentity()
+            // A refill may retire an in-flight snapshot; retry each changed identity once, only after its reply.
+            if (!p.menuActions.ready || p.menuActions.identity !== currentIdentity) {
+                if ((p.menuActions.ready || p.menuActions.identity === "") && snapshotAskedIdentity !== currentIdentity) {
+                    snapshotAskedIdentity = currentIdentity
+                    p.menuActions.snapshot()
+                }
+                return
+            }
             check("both held rows retain regular modes", [p.rowFor(0).p & root.typeMask, p.rowFor(1).p & root.typeMask], [root.regularKind, root.regularKind])
             p.menuActions.selectedKinds = [root.linkKind, root.linkKind]
             check("the ready matching snapshot inspects two links", [p.menuActions.ready, p.menuActions.identity === p.menuSelectionIdentity(), p.menuActions.selectedKinds], [true, true, [root.linkKind, root.linkKind]])
