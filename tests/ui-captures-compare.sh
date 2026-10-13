@@ -4,6 +4,15 @@
 # One byte past OVER_BYTES in src/backend/compare.rs:13 (1 MiB), so Compare refuses the large pair.
 readonly cap_compare_over_bytes=1048577
 
+# The clipboard helper starts a child process, so allow its ownership change a bounded wait.
+readonly cap_compare_clipboard_wait_s=15
+# Poll at 50 ms to wait for clipboard ownership without spinning.
+readonly cap_compare_clipboard_poll_s=0.05
+# A one-second hold catches clipboard changes a Copy child delivers after the release event.
+readonly cap_compare_clipboard_hold_ms=1000
+# Four attempts bound the native search for the Copy patch Tab stop.
+readonly cap_compare_tab_tries=4
+
 # The twenty-line pair differs only at lines 12 to 17, so diff -u prints the board's one hunk.
 cap_compare_fixture() {
     local dir="$1" pair n
@@ -86,17 +95,30 @@ cap_compare_point() {
 
 # Copy sends the entire patch, including its path headers, without changing the overlay.
 cap_compare_clipboard() {
-    local want="$1" got="" end=$((SECONDS + 15))
+    local want="$1" got="" end=$((SECONDS + cap_compare_clipboard_wait_s))
     while (( SECONDS < end )); do
         got=$(wl-paste --no-newline 2>/dev/null || true)
         [[ "$got" == "$want" ]] && return 0
-        sleep 0.05
+        sleep "$cap_compare_clipboard_poll_s"
     done
     fail "compare: the clipboard never held the complete patch"
 }
 
+# Every poll must keep the sentinel through the whole window, including its final sample.
+cap_compare_clipboard_hold() {
+    # Sample input: date +%s%3N prints "1791913200123", wall-clock milliseconds.
+    local want="$1" got="" now end=$(( $(date +%s%3N) + cap_compare_clipboard_hold_ms ))
+    while :; do
+        now=$(date +%s%3N)
+        got=$(wl-paste --no-newline 2>/dev/null || true)
+        [[ "$got" == "$want" ]] || fail "compare: release off Copy patch changed the clipboard"
+        (( now >= end )) && return 0
+        sleep "$cap_compare_clipboard_poll_s"
+    done
+}
+
 case_cap_compare() {
-    local dir menus_checks=0 patch state diff_rc=0
+    local dir menus_checks=0 patch state diff_rc=0 _attempt
     sandbox_require "$fixture_root/compare"
     dir=$(mktemp -d "$fixture_root/compare.XXXXXXXX") || fail "compare: cannot create the specimen sandbox"
     : > "$dir/$SANDBOX_MARKER"
@@ -118,6 +140,8 @@ case_cap_compare() {
     cap_compare_shot compare-copy-key '.answer == "diff" and all(.controls[]; .pressed | not)'
     cap_compare_point copy
     cap_compare_shot compare-copy-hover '.answer == "diff" and [.controls[] | select(.name == "copy") | [.hovered,.pressed,.focused,.ring]] == [[true,false,false,false]]'
+    printf 'Compare capture clipboard sentinel\n' | wl-copy
+    cap_compare_clipboard 'Compare capture clipboard sentinel'
     trap 'YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || true' EXIT
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x40 >/dev/null 2>&1 || fail "compare: Copy patch press failed"
     cap_compare_shot compare-copy-pressed '.answer == "diff" and [.controls[] | select(.name == "copy") | [.hovered,.pressed]] == [[true,true]]'
@@ -125,10 +149,11 @@ case_cap_compare() {
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || fail "compare: Copy patch release failed"
     trap - EXIT
     menus_expect compareState '.opened and all(.controls[]; .pressed | not)' "release off the button leaves the overlay open"
+    cap_compare_clipboard_hold 'Compare capture clipboard sentinel'
     cap_compare_point close
     cap_compare_shot compare-close-hover '.answer == "diff" and [.controls[] | select(.name == "close") | [.hovered,.pressed,.focused,.ring]] == [[true,false,false,false]]'
     cap_compare_point title
-    for _attempt in 1 2 3 4; do
+    for (( _attempt=0; _attempt<cap_compare_tab_tries; _attempt++ )); do
         key -k Tab >/dev/null
         state=$(ipc compareState)
         jq -e '[.controls[] | select(.name == "copy") | .focused] == [true]' <<< "$state" >/dev/null && break
