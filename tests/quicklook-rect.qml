@@ -190,8 +190,7 @@ ShellRoot {
         var label = root.current.label
         root.check(held.length > 0, label + " held no picture, so the swap did not run")
         root.check(held.every(function (x) { return root.size(x) === root.wantBefore }), label + " resized the card under the held picture: " + root.sizes(held))
-        // Probes taken the turn after each change of the next card's shape, so the hold is seen after show(): the card is still the old rect, the panes already the new.
-        // The PDF target lands inside the turn of its own show(), where no probe can stand under a hold.
+        // Probes are taken a turn after each change of the next shape; a PDF target lands inside its own show(), where no probe stands under a hold.
         var under = root.probes.filter(function (x) { return x.held })
         if (root.current.observed) {
             root.check(under.length > 0, label + " probed no state under the hold: " + JSON.stringify(root.probes))
@@ -200,6 +199,7 @@ ShellRoot {
         }
         root.check(live.length > 0 && root.size(live[0]) === root.wantAfter, label + " first frame after the swap is " + (live.length ? root.size(live[0]) : "none") + ", want " + root.wantAfter)
         root.check(live.every(function (x) { return root.size(x) === root.wantAfter }), label + " resized after the swap: " + root.sizes(live))
+        root.check(p.shape.kind === root.current.toKind && p.shape.known === true, label + " drew the unknown shape: " + JSON.stringify(p.shape))
         root.check(p.swapState().midFrames === root.swapMid, label + " drew " + (p.swapState().midFrames - root.swapMid) + " half-built frame(s)")
         root.log("SWAP " + label + " end=" + p.swapState().last.end + " ms=" + p.swapState().last.ms + " held=" + held.length + " live=" + live.length + " " + root.wantBefore + " to " + root.wantAfter)
     }
@@ -285,8 +285,12 @@ ShellRoot {
         list.push({ label: "small-portrait", name: "e-small.png", want: "984x624" })
         list.push({ label: "zoomed-portrait", name: "d-portrait.png", want: "330x712", after: root.zoomed })
         list.push({ label: "cap", name: "d-portrait.png", want: "984x624", noThumb: true, afterOpen: function (p) { p.imageRow = 9999 }, after: root.late })
-        list.push({ label: "pdf-to-landscape", name: "b-doc.pdf", want: pdfW + "x712", to: "c-land.jpg", toWant: "984x624", move: "cursorDown", observed: true, after: root.swap })
-        list.push({ label: "landscape-to-pdf", name: "c-land.jpg", want: "984x624", to: "b-doc.pdf", toWant: pdfW + "x712", move: "cursorUp", after: root.swap })
+        list.push({ label: "pdf-to-landscape", name: "b-docs.pdf", want: pdfW + "x712", to: "c-land.jpg", toKind: "image", toWant: "984x624", move: "cursorDown", observed: true, after: root.swap })
+        list.push({ label: "landscape-to-pdf", name: "c-land.jpg", want: "984x624", to: "b-docs.pdf", toKind: "pdf", toWant: pdfW + "x712", move: "cursorUp", after: root.swap })
+        // The next file shares the page aspect, then is a portrait whose own size reply must land over the PDF that is going away.
+        list.push({ label: "pdf-to-pdf", name: "b-doc.pdf", want: pdfW + "x712", to: "b-docs.pdf", toKind: "pdf", toWant: pdfW + "x712", move: "cursorDown", after: root.swap })
+        list.push({ label: "pdf-to-portrait", name: "c-tall.pdf", want: pdfW + "x712", to: "d-portrait.png", toKind: "image", toWant: "330x712", move: "cursorDown", after: root.swap })
+        list.push({ label: "small-to-portrait", name: "e-small.png", want: "984x624", to: "d-portrait.png", toKind: "image", toWant: "330x712", move: "cursorUp", after: root.swap })
         return list
     }
 }

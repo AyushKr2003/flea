@@ -19,15 +19,17 @@ ln -s "$(readlink -m ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 ln -s "$test_root/config/flea/boot/fleatab.qml" "$test_root/config/fleatab.qml" || exit 1
 cp -a ui "$test_root/config/flea" || exit 1
 cp tests/quicklook-rect.qml "$test_root/config/shell.qml" || exit 1
-# Code, a 12-page A4 PDF (595 x 842 points), a landscape and a portrait phone screenshot, and a portrait shorter than the tall rect; the names sort in this order.
+# Code, three 12-page A4 PDFs (595 x 842 points), a landscape and a portrait phone screenshot, and a portrait shorter than the tall rect; the names sort in this order.
 printf 'fn main() {\n    println!("tall");\n}\n' > "$test_root/fixture/a-main.rs"
-{
-    printf '%%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 12/Kids['
-    for page in {3..14}; do printf '%d 0 R ' "$page"; done
-    printf ']>>endobj\n'
-    for page in {3..14}; do printf '%d 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\n' "$page"; done
-    printf 'trailer<</Root 1 0 R/Size 15>>\n%%%%EOF\n'
-} > "$test_root/fixture/b-doc.pdf"
+for name in b-doc.pdf b-docs.pdf c-tall.pdf; do
+    {
+        printf '%%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 12/Kids['
+        for page in {3..14}; do printf '%d 0 R ' "$page"; done
+        printf ']>>endobj\n'
+        for page in {3..14}; do printf '%d 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\n' "$page"; done
+        printf 'trailer<</Root 1 0 R/Size 15>>\n%%%%EOF\n'
+    } > "$test_root/fixture/$name"
+done
 for spec in c-land.jpg:1600x1200 d-portrait.png:1170x2532 e-small.png:200x400; do
     ffmpeg -y -f lavfi -i "testsrc=size=${spec#*:}" -frames:v 1 "$test_root/fixture/${spec%%:*}" >/dev/null 2>&1 \
         || { printf 'FAIL quicklook-rect: ffmpeg could not make %s\n' "${spec%%:*}"; exit 1; }

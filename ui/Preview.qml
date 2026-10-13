@@ -91,7 +91,7 @@ Item {
     // The swap's answer: nothing loading, and a PDF with a page on screen or refused.
     // An interim cache thumbnail shown counts as whole, never as a half-built frame.
     readonly property bool lookReady: !root.active || PreviewSwap.lookReady(root.status, root.isPdf,
-        root.pdfItem !== null && root.pdfItem.shownPage >= 0, root.pdfItem !== null && root.pdfItem.failed,
+        root.pdfItem !== null && root.pdfItem.shownPage >= 0 && root.pdfItem.opened === root.path, root.pdfItem !== null && root.pdfItem.failed,
         root.interimShown, root.isMarkdown && markdownLoader.item !== null && markdownLoader.item.firstScreen) && !root.sizeWait
     // The cached thumbnail held at open, drawn under the full decode at the final rect; the stamp retires a stale one.
     property string interimThumb: ""
@@ -112,16 +112,14 @@ Item {
     property int imageRow: -1
     // One meta ask per show; onRowsChanged never re-asks behind it.
     property bool imageAsked: false
-    // The card's inputs, see ui/js/QuickLookRect.js: shapeNext follows the file being shown and its size reply, and shape is what the card draws,
-    // taken once no swap holds a picture, so a held picture is never stretched and a shown card never resizes.
+    // See ui/js/QuickLookRect.js: shapeNext follows the file shown and its size reply, shape is what the card draws, taken once no swap holds a picture.
     property var shapeNext: ({ kind: "", known: false, w: 0, h: 0, orient: 1 })
     property var shape: root.shapeNext
     readonly property var rectTokens: ({ fraction: Theme.preview.fraction, edge: Theme.preview.edge, bar: Theme.chromeHeight })
     readonly property var rect: QuickLookRect.surface(root.shape, root.width, root.height, root.pdfExpanded, root.rectTokens)
     readonly property var nextRect: QuickLookRect.surface(root.shapeNext, root.width, root.height, root.pdfExpanded, root.rectTokens)
     readonly property bool held: root.swap !== null && (root.swap.holding || root.swap.capturing)
-    // The reveal waits for an image's size only while a reply is owed and inside the cap, so a silent backend costs today's frame.
-    // Plain, set by show() and cleared by the reply, an early reveal or the swap's release (a turn later, so the release is done): a binding on those loops.
+    // Plain, as a binding on its own releases loops: set by show(), cleared by the reply, an early reveal or the swap's release a turn later.
     property bool sizeWait: false
     onHeldChanged: {
         root.commitShape()
@@ -445,8 +443,7 @@ Item {
             root.pane.backend.askMeta(root.mediaRow, false, true, false)
     }
 
-    // The original's pixels, which size the interim like the final and the card; once per show,
-    // and never while a held key is still bursting.
+    // The original's pixels, which size the interim and the card; once per show, never while a held key is still bursting.
     function askImage() {
         if (!root.isImage || !root.pane) return
         if (root.imageRow < 0 || root.imageAsked || followSettle.running) return
