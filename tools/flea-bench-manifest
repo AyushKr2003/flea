@@ -20,8 +20,7 @@ UPGRADE_STALE_HOURS=${UPGRADE_STALE_HOURS:-24}
 
 say() { printf '%s\n' "$*" >> "$OUT"; }
 
-# The harness that ran: its sha256, and whether it is the copy the arm's own git tree commits. A copy with
-# no committed twin to compare says so rather than calling itself unpatched.
+# The harness that ran: its sha256 and whether it matches the arm's committed copy.
 harness_marker() {
   local tool=${HARNESS_TOOL:-} sum sha blob
   [ -n "$tool" ] && [ -r "$tool" ] || { printf 'not recorded by the caller'; return; }
@@ -39,11 +38,19 @@ harness_marker() {
   fi
 }
 
-# The anchor arm's tree, sha and tag, or the Flea arm's own tree when no separate anchor ran.
+# The manifest tool that wrote: its absolute path and sha256, so a stale sibling never passes silently.
+manifest_tool_marker() {
+  local tool=${MANIFEST_TOOL:-} sum
+  [ -n "$tool" ] && [ -r "$tool" ] || { printf 'not recorded by the caller'; return; }
+  sum=$(sha256sum "$tool" | cut -d' ' -f1)
+  printf '%s sha256 %s' "$tool" "$sum"
+}
+
+# The anchor arm's tree, sha and tag, or the fact that no anchor arm ran in this run.
 anchor_line() {
   local sha tag
-  if [ -z "${ANCHOR_REPO:-}" ] || [ "$ANCHOR_REPO" = "$FLEA_REPO" ]; then
-    printf 'the same tree as the Flea arm, %s' "$FLEA_REPO"; return
+  if [ -z "${ANCHOR_REPO:-}" ] || [ "${ANCHOR_REPO:-}" = "${FLEA_REPO:-}" ]; then
+    printf 'no anchor arm ran in this run'; return
   fi
   sha=$(git -C "$ANCHOR_REPO" rev-parse --short HEAD 2>/dev/null) || sha=unreadable
   tag=$(git -C "$ANCHOR_REPO" describe --tags --exact-match HEAD 2>/dev/null) || tag=untagged
@@ -256,12 +263,13 @@ say "- fixture payload: $(ls -U "$FIXTURE" | wc -l) visible entries, filesystem 
 say "- TUI terminal: $TUI_TERMINAL $(pkg_version "$TUI_TERMINAL")"
 say "- flea launch line: ${FLEA_LAUNCH_LINE:-not recorded by the caller}"
 say "- harness: $(harness_marker)"
+say "- manifest tool: $(manifest_tool_marker)"
 say "- anchor arm (flea-anchor): $(anchor_line)"
 if [ -x "${STRATA_BIN:-}" ]; then
   say "- strata binary: $STRATA_BIN reports '$("$STRATA_BIN" --version 2>&1 | head -1)', built from ${STRATA_SRC:-an unrecorded source tree}"
 fi
 # Each kind's rows rotate one place a run, so the place an entrant held is recorded beside the numbers.
-say "- launch order: each kind's rows rotate one place a run and reverse every other full cycle; place 1 launched first in its kind"
+say "- launch order: each kind's rows rotate one place a run and reverse every other full cycle; place N is the Nth entrant of its kind that launched in that run, after ONLY and absence"
 if [ -n "${LAUNCH_ORDER:-}" ]; then
   say '```'
   printf '%s\n' "$LAUNCH_ORDER" >> "$OUT"

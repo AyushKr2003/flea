@@ -592,7 +592,6 @@ def search_version(members, ent_name, arms, field_entries, flea_label, jsonl_pat
     return ent["fields"][3]
 
 
-# The whole Performance section body for a run directory of field CSVs.
 def plural(count, noun):
     return "%d %s%s" % (count, noun, "" if count == 1 else "s")
 
@@ -605,6 +604,7 @@ def apps_sentence(gui, tui):
     return text + " on the same machine."
 
 
+# The whole Performance section body for a run directory of field CSVs.
 def section_text(dir_path, search_path=None, search_manifest_path=None, flea_label=None,
                  allow_dirty=False, with_anchor=False, docs_stem=None, cargo_toml=None):
     names = sorted(f for f in os.listdir(dir_path) if f.endswith(".csv"))

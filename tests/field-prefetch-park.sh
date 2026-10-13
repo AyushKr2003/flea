@@ -97,10 +97,13 @@ check "a cache home elsewhere refuses" 3 "$(cache_home "$scratch/elsewhere")"
 
 # The wiring: parked beside the thumbnails and before the warm launch, restored on both exits, and the warm launch must have recorded a list.
 park_line=$(grep -n '^park_prefetch$' "$bench" | cut -d: -f1)
-warm_line=$(grep -n 'warm_qml_cache ) || exit 1$' "$bench" | head -1 | cut -d: -f1)
+warm_line=$(grep -n 'warm_qml_cache &' "$bench" | head -1 | cut -d: -f1)
 check "park_prefetch runs once at setup" 1 "$(printf '%s\n' "$park_line" | grep -c .)"
-check "each Flea build is warmed once, the flea and the anchor" 2 "$(grep -c 'warm_qml_cache ) || exit 1$' "$bench")"
+check "each Flea build is warmed once, the flea and the anchor" 2 "$(grep -c 'wait "$WARM_PID" || exit 1$' "$bench")"
 check "the list is parked before the first warm launch records one" yes "$([ "${park_line:-0}" -gt 0 ] && [ "${park_line:-0}" -lt "${warm_line:-0}" ] && echo yes || echo no)"
+# run_guarded's calls end in ;; and run at launch time, so only the setup calls order against the park.
+first_prefetch_line=$(grep -n 'prefetch_for "\$' "$bench" | grep -v ';;' | head -1 | cut -d: -f1)
+check "the list is parked before the first prefetch_for" yes "$([ "${park_line:-0}" -gt 0 ] && [ "${park_line:-0}" -lt "${first_prefetch_line:-0}" ] && echo yes || echo no)"
 check "restore_prefetch runs at the end" 1 "$(grep -c '^restore_prefetch$' "$bench")"
 check "the EXIT trap restores in a subshell, so a failure there skips no later step" 1 "$(grep -c '^  ( restore_prefetch ) || cleanup_rc=1$' "$bench")"
 check "the warm launch refuses to leave no list" 1 "$(grep -c 'the warm launch recorded no prefetch list' "$bench")"
@@ -130,13 +133,20 @@ eval "$WARM_TEXT"; eval "$SWEEP_TEXT"; eval "$CLEAN_TEXT"; eval "$CLEANUP_TEXT"
 WARM_QUIET_POLLS=600
 trap bench_cleanup EXIT
 trap 'exit 143' TERM
-warm_qml_cache
+ENTRANT_LAUNCHED=yes
+warm_qml_cache & WARM_PID=$!
+wait "$WARM_PID"
 EOS
 W=$warm bash "$warm/run.sh" > "$warm/run.log" 2>&1 &
 harness=$!
 for _ in $(seq 100); do [ -s "$warm/pid" ] && break; sleep 0.1; done
 sleep 0.5
-kill -TERM "$harness"; wait "$harness"
+kill -TERM "$harness"
+term_start=$(date +%s)
+for _ in $(seq 100); do kill -0 "$harness" 2>/dev/null || break; sleep 0.1; done
+term_waited=$(( $(date +%s) - term_start ))
+wait "$harness" 2>/dev/null
+check "a TERM during the warm launch is trapped promptly" yes "$([ "$term_waited" -lt 8 ] && echo yes || echo no)"
 fake=$(cat "$warm/pid" 2>/dev/null)
 # A missing or bare pid would make kill reach this test's own process group, so only a real child pid is probed.
 if [[ "$fake" =~ ^[0-9]+$ ]] && [ "$fake" -gt 1 ]; then

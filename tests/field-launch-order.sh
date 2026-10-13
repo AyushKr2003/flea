@@ -56,15 +56,26 @@ check "eight entrants: each leads twice, each pair leads both ways eight times o
 
 # The kinds rotate on their own: gui places run 1 to 3, tui places run 1 to 3, and every row is listed once.
 ENTRANTS=(
-  "flea|gui|x|x" "flea-anchor|gui|x|x" "nautilus|gui|x|x"
-  "flea-tui|tui|x|x" "yazi|tui|x|x" "mc|tui|x|x"
+  "flea|gui|x|sh" "flea-anchor|gui|x|sh" "nautilus|gui|x|sh"
+  "flea-tui|tui|x|sh" "yazi|tui|x|sh" "mc|tui|x|sh"
 )
+# The run order reads the bench's ONLY split, so each case sets ONLY and re-splits before ordering.
+only_split=$(grep -E '^(set -f|ONLY_IDS=|set \+f)' "$bench")
+only_has_src=$(grep '^only_has() {' "$bench")
+with_only() { ONLY="$1"; eval "$only_split"; eval "$only_has_src"; }
+with_only ""
 run2=$(run_order 2 | while read -r i place; do printf '%s@%s ' "${ENTRANTS[$i]%%|*}" "$place"; done)
 check "run 2 places each kind from 1 and lists every row" "flea-anchor@1 nautilus@2 flea@3 yazi@1 mc@2 flea-tui@3 " "$run2"
 check "run order lists every ENTRANTS row once" 6 "$(run_order 1 | wc -l)"
-# ONLY selects which rows launch; it never moves the place of a row it keeps.
-only_run2=$(ONLY="nautilus yazi" run_order 2 | while read -r i place; do printf '%s@%s ' "${ENTRANTS[$i]%%|*}" "$place"; done)
-check "ONLY does not move the places of the rows it keeps" "$run2" "$only_run2"
+# ONLY runs the real filter: excluded rows take no place and the kept rows are placed from 1.
+with_only "nautilus yazi"
+only_run2=$(run_order 2 | while read -r i place; do printf '%s@%s ' "${ENTRANTS[$i]%%|*}" "$place"; done)
+check "ONLY keeps only the named rows, placed from 1 among the entrants that launch" "nautilus@1 yazi@1 " "$only_run2"
+with_only ""
+# Ghost's comm names no program, pinning that an absent entrant takes no place.
+ENTRANTS+=("ghost|gui|x|definitely-not-a-command")
+ghost_run1=$(run_order 1 | while read -r i place; do printf '%s@%s ' "${ENTRANTS[$i]%%|*}" "$place"; done)
+check "an absent entrant takes no place" "flea@1 flea-anchor@2 nautilus@3 flea-tui@1 yazi@2 mc@3 " "$ghost_run1"
 
 # The CSV: the header ends with launch_pos, and the row format writes one value per header column.
 header=$(grep -m1 '^echo "id,run,' "$bench" | sed 's/^echo "//; s/" >> .*//')

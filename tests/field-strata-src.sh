@@ -68,6 +68,17 @@ make_stub "$scratch/c/target/release/strata" "strata 1.0.10"
 out=$(run_case "$scratch/c/target/release/strata" ""); rc=$?
 check "1.0.10 does not pass for a 1.0.1 tree" 3 "$rc"
 
+# A prerelease suffix is another version, and a local suffix matches only itself.
+make_tree "$scratch/h" 1.0.0
+make_stub "$scratch/h/target/release/strata" "strata 1.0.0-beta.2"
+out=$(run_case "$scratch/h/target/release/strata" ""); rc=$?
+check "1.0.0-beta.2 does not pass for a 1.0.0 tree" 3 "$rc"
+make_tree "$scratch/i" 1.0.0+git
+make_stub "$scratch/i/target/release/strata" "strata 1.0.0+git"
+out=$(run_case "$scratch/i/target/release/strata" ""); rc=$?
+check "1.0.0+git passes for a 1.0.0+git tree" "accepted: $scratch/i" "$out"
+check "the exact suffix case exits zero" 0 "$rc"
+
 # A binary outside any cargo target/release names no tree, so the run requires STRATA_SRC.
 make_stub "$scratch/d/bin/strata" "strata 1.0.0"
 out=$(run_case "$scratch/d/bin/strata" ""); rc=$?
