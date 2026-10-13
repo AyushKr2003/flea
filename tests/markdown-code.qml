@@ -10,6 +10,8 @@ ShellRoot {
     id: shell
 
     readonly property string dir: Quickshell.env("MDCODE_DIR")
+    // Keeps the unknown-language fence waiting long enough to expose a check before its own reply.
+    readonly property int unknownReplyDelayMs: 1200
     property int checks: 0
     property int failures: 0
     property bool done: false
@@ -157,7 +159,7 @@ ShellRoot {
                     pending = pending.concat([{ message: message, after: Date.now() + 250 }])
                     shell.log("toml reply " + JSON.stringify(message))
                 } else if (languages[message.token] === "flea-unknown-language") {
-                    pending = pending.concat([{ message: message, after: Date.now() + 1200 }])
+                    pending = pending.concat([{ message: message, after: Date.now() + shell.unknownReplyDelayMs }])
                     shell.log("unknown reply delayed token=" + message.token)
                 } else deliver(message)
             }

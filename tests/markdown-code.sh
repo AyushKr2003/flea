@@ -128,6 +128,7 @@ rebind_log="$test_root/markdown-code-rebind.log"
 run_harness "$rebind_log"
 rebind_status=$?
 grep -a 'MARKDOWN_REBIND' "$rebind_log"
+# Sample input: " DEBUG qml: MARKDOWN_REBIND DONE 0 failed".
 if [ "$rebind_status" -ne 143 ] || [ "$(grep -ac 'MARKDOWN_REBIND DONE' "$rebind_log")" -ne 1 ] || grep -aqE 'MARKDOWN_REBIND FAIL|TypeError|ReferenceError|Unable to assign|Cannot assign' "$rebind_log"; then
     printf 'FAIL markdown-code backend handoff: qs exit %s\n' "$rebind_status"
     verdict=1
