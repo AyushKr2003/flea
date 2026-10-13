@@ -1813,9 +1813,9 @@ existing `archivedone` terminal line remains unchanged for archive clients.
 
 ### meta
 
-`{"t":"meta","row":<uint>,"w":<uint>,"h":<uint>,"orient":<uint>,"ms":<uint>,"rate":<uint>,"entries":<uint>,"unpacked":<uint>,"afailed":<bool>,"names":[{"n":"<string>","d":<bool>},...],"lines":<uint>,"partial":<bool>,"lfailed":<bool>,"target":"<string>","targetdir":<bool>,"owner":"<string>"}`
+`{"t":"meta","row":<uint>,"w":<uint>,"h":<uint>,"orient":<uint>,"ms":<uint>,"rate":<uint>,"entries":<uint>,"unpacked":<uint>,"afailed":<bool>,"names":[{"n":"<string>","d":<bool>},...],"lines":<uint>,"partial":<bool>,"lfailed":<bool>,"target":"<string>","targetdir":<bool>,"raw":{"file":"<string>","w":<uint>,"h":<uint>,"orient":<uint>}|null,"owner":"<string>"}`
 
-Example: `{"t":"meta","row":4,"w":0,"h":0,"orient":1,"ms":0,"rate":0,"entries":214,"unpacked":3400,"afailed":false,"names":[{"n":"ui","d":true}],"lines":0,"partial":false,"lfailed":false,"target":"","targetdir":false,"owner":"gm"}`
+Example: `{"t":"meta","row":4,"w":0,"h":0,"orient":1,"ms":0,"rate":0,"entries":214,"unpacked":3400,"afailed":false,"names":[{"n":"ui","d":true}],"lines":0,"partial":false,"lfailed":false,"target":"","targetdir":false,"raw":null,"owner":"gm"}`
 
 Every field a row did not ask for is zero, false or empty. `w` and `h` are pixels, read from the
 file's own header, as stored and before any turn. `ms` and `rate` come from the probe. `lines` is a
@@ -1854,6 +1854,19 @@ total. That is a different answer from an archive holding nothing, which sends t
 
 `target` is a symlink's own target and `targetdir` says whether that target is a directory, so the
 column's mark can follow the target the way a listing row's does.
+
+`raw` is an object for a camera RAW whose largest embedded JPEG preview was copied out, and `null` for every
+other file and for a RAW holding none. `file` is the copy under `$XDG_CACHE_HOME/flea/raw/`, named by the md5
+of the RAW's file URI and carrying the RAW's mtime, so a changed RAW is copied again and an unchanged one is
+neither walked nor written twice.
+The directory is held to 4096 copies and 512 MiB, least recently used first (by ctime, since a copy's mtime is its RAW's:
+a cache hit sets the copy's atime to now, which moves the ctime), and sweeps temps a minute old. A copy made or served less
+than a minute ago is never evicted, because the thread that has it is still reading it. Each process scans on its own first
+new copy and then on one in 32 of its own, and the directory is shared, so it can stand over its caps: by the copies of the
+last minute, which stay until the first scan after they age, and by fewer than 32 more per process. `w`, `h` and `orient` read like
+the top-level fields, taken from the copy: stored
+pixels and the EXIF turn, which the copy carries even when the camera put it only in the RAW's IFD0. The top-level
+`w` and `h` stay 0 for a RAW, because they name the file's own pixels and the preview is smaller.
 
 `owner` is the login name of the user who owns the path itself (a symlink reports the link's owner, as
 its row does), resolved from `/etc/passwd` alone and never through `getpwuid`: that call goes through

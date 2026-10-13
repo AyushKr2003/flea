@@ -1,7 +1,7 @@
 use crate::backend::aliases::Aliases;
 use crate::backend::appicon;
 use crate::backend::child::{run_with_timeout, Ran};
-use crate::backend::{sandbox, thumbbind};
+use crate::backend::{rawpreview, sandbox, thumbbind};
 use crate::backend::thumbargv::argv;
 use crate::backend::thumbcache::{uri_for, Cache};
 use crate::backend::thumbspec::Thumbnailers;
@@ -164,6 +164,11 @@ fn worker(inner: Shared, results: Sender<Done>, tables: Arc<Tables>) {
 
 // pub(crate) so the shelf can run one job in its own thread: a bar widget has no listing and no pool.
 pub(crate) fn run_one(tables: &Tables, job: &mut Job) -> Outcome {
+    run_one_in(tables, job, &rawpreview::cache_dir())
+}
+
+// The copies of a camera RAW's embedded JPEG live in raw_dir, which a test points at its sandbox instead of the user's cache.
+pub(crate) fn run_one_in(tables: &Tables, job: &mut Job, raw_dir: &Path) -> Outcome {
     let spec = match tables.specs.for_mime(&job.mime, &tables.aliases) {
         Some(s) => s,
         None => return Outcome::Failed,
@@ -173,6 +178,11 @@ pub(crate) fn run_one(tables: &Tables, job: &mut Job) -> Outcome {
     }
     // The cache key is the URI of the path the user named, because that is the key every other application on the box looks under; see AGENTS.md "Thumbnail cache".
     let key_uri = uri_for(&job.path);
+    // A RAW that holds no preview fails here, unmarked, because the walk is cheap and an unwritable cache may be the cause.
+    let input = match input_for(tables, job, raw_dir) {
+        Some(p) => p,
+        None => return Outcome::Failed,
+    };
     let final_path = tables.cache.large_path(&key_uri);
     let dir = match final_path.parent() {
         Some(d) => d.to_path_buf(),
@@ -186,7 +196,7 @@ pub(crate) fn run_one(tables: &Tables, job: &mut Job) -> Outcome {
         None => return Outcome::Failed,
     };
     // corner: an input that will not canonicalise is not recorded in fail/, because a vanished file is not a broken one; see AGENTS.md "Thumbnail pool".
-    let (abs, inner) = match argv(spec, &job.path, &temp, THUMB_SIZE) {
+    let (abs, inner) = match argv(spec, &input, &temp, THUMB_SIZE) {
         Some(a) => a,
         None => return discard(&temp),
     };
@@ -229,6 +239,14 @@ pub(crate) fn publish(temp: &Path, key_uri: &str, mtime: i64, final_path: PathBu
         return discard(temp);
     }
     Outcome::Ready(final_path)
+}
+
+// What the thumbnailer is handed: a camera RAW's embedded JPEG, copied out once per file version, or the file itself.
+pub(crate) fn input_for(tables: &Tables, job: &Job, raw_dir: &Path) -> Option<PathBuf> {
+    match tables.specs.raw_route(&job.mime, &tables.aliases) {
+        Some(_) => rawpreview::ensure_in(raw_dir, &job.path).map(|copy| copy.file),
+        None => Some(job.path.clone()),
+    }
 }
 
 // A timeout on a non-local file records nothing, so a slow share never stays broken.

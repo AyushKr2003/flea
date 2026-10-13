@@ -4125,6 +4125,8 @@ The code column reload guard records one ceiling, re-derived with `wc -l`: `test
 
 The AppImage icon route, merged from `gm/0310-pv-appi` onto the 0.3.11 stage, moves two ceilings, each re-derived with `wc -l` on the merged tree: `src/backend/thumbs.rs` 495 to 503 for the route dispatch in `run_one`, the `publish` split and the table argument that `record_failure` now takes, and `src/backend/thumbspec.rs` 410 to 426 for the internal AppImage spec, `is_runnable` and the `with_appimage_route` hook. `src/backend/appicon.rs` (373) and `src/backend/appicon_tests.rs` (398) stay under the hard cap.
 
+The RAW eviction race pin moves one ceiling, re-derived with `wc -l`: `src/backend/rawpreview_tests.rs` 394 to 410 (new row) for the test that serves a copy between the scan and its removal.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
@@ -9366,3 +9368,5 @@ The strays and rail-frame join onto the settled stage5 moves five ceilings, each
 The picker's empty-folder shot waits for the empty state to rest: `ui/EmptyState.qml` gains `atRest` (148 to 150 lines, inside its soft budget), true under reduced motion, or once the caption fade has stopped, the hero is fully opaque and either a fixed caption shows or the third beat's mark is drawn whole; the picker's IPC `snapshot()` reports it as `emptyRest` on the existing line, and `tests/picker-native.py` waits on it before any capture of an empty folder, since the mark's 1800 ms draw on each 2800 ms beat kept ten 0.1 s shots from ever matching. The two lines move the `bytes` line of `tests/startup-units.txt` from 1672796 to 1673140.
 
 The rail lit-place test presses the rail through its `PointHandler` instead of setting `pointerFocus`, and releases past the drag threshold so the row never activates; `tests/sidebar-flows.qml` moves 683 to 687 in `tools/flea-file-budget`, re-derived with `wc -l`.
+
+The camera RAW review round 1 moves two ceilings, each re-derived with `wc -l`: `src/backend/metareq.rs` 442 to 446 for `read_in`, which takes the RAW copy directory so a test points it at its sandbox, and `src/backend/thumbs.rs` 480 to 485 for `run_one_in` and the `raw_dir` argument of `input_for`, for the same reason; no code or comment was cut.

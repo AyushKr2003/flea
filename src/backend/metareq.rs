@@ -7,6 +7,8 @@ use crate::backend::linecount::count_lines;
 use crate::backend::mediaprobe;
 use crate::backend::opsreq::OpMsg;
 use crate::backend::owner;
+use crate::backend::rawembed::is_raw_name;
+use crate::backend::rawpreview::{self, Extracted};
 use crate::backend::sandbox;
 use crate::json::escape;
 use std::path::Path;
@@ -43,11 +45,13 @@ pub struct Meta {
     pub target_is_dir: bool,
     // The owning user's login name, or empty when no local account has that uid; see owner.rs.
     pub owner: String,
+    // The copy of a camera RAW's embedded JPEG that Quick Look draws, with its pixels; None for any other file and for a RAW holding none.
+    pub raw: Option<Extracted>,
 }
 
 impl Meta {
     fn empty() -> Meta {
-        Meta { width: 0, height: 0, orientation: 1, frames: 0, duration_ms: 0, sample_rate: 0, entries: 0, unpacked: 0, names: Vec::new(), archive_failed: false, lines: 0, lines_partial: false, lines_failed: false, target: String::new(), target_is_dir: false, owner: String::new() }
+        Meta { width: 0, height: 0, orientation: 1, frames: 0, duration_ms: 0, sample_rate: 0, entries: 0, unpacked: 0, names: Vec::new(), archive_failed: false, lines: 0, lines_partial: false, lines_failed: false, target: String::new(), target_is_dir: false, owner: String::new(), raw: None }
     }
 }
 
@@ -55,6 +59,11 @@ impl Meta {
 // re-classify a row it has already classified once. media costs a subprocess, so it is only ever
 // asked for a row whose kind actually names a duration.
 pub fn read(path: &Path, text: bool, media: bool, archive: Option<&Formats>) -> Meta {
+    read_in(path, text, media, archive, &rawpreview::cache_dir())
+}
+
+// A camera RAW's copy goes in raw_dir, which a test points at its sandbox instead of the user's cache.
+pub(crate) fn read_in(path: &Path, text: bool, media: bool, archive: Option<&Formats>, raw_dir: &Path) -> Meta {
     let mut m = Meta::empty();
     m.owner = owner::of(path);
     if let Ok(link) = std::fs::read_link(path) {
@@ -66,6 +75,9 @@ pub fn read(path: &Path, text: bool, media: bool, archive: Option<&Formats>) -> 
         m.height = image.height;
         m.orientation = image.orientation;
         m.frames = imagesize::gif_frames(path);
+    }
+    if is_raw_name(&path.to_string_lossy()) {
+        m.raw = rawpreview::ensure_in(raw_dir, path);
     }
     if let Some(formats) = archive {
         let listed = list_archive(path, formats);
@@ -171,7 +183,7 @@ fn list_archive(path: &Path, formats: &Formats) -> Contents {
     contents
 }
 
-// Sample output: {"t":"meta","row":4,"w":0,"h":0,"orient":1,"ms":0,"rate":0,"entries":214,"unpacked":3400,"afailed":false,"names":[{"n":"ui","d":true}],"lines":0,"partial":false,"lfailed":false,"frames":0,"target":"","targetdir":false,"owner":"gm"}
+// Sample output: {"t":"meta","row":4,"w":0,"h":0,"orient":1,"ms":0,"rate":0,"entries":214,"unpacked":3400,"afailed":false,"names":[{"n":"ui","d":true}],"lines":0,"partial":false,"lfailed":false,"frames":0,"target":"","targetdir":false,"raw":null,"owner":"gm"}
 pub fn meta_line(row: usize, m: &Meta) -> String {
     let names: Vec<String> = m
         .names
@@ -179,11 +191,19 @@ pub fn meta_line(row: usize, m: &Meta) -> String {
         .map(|e| format!(r#"{{"n":"{}","d":{}}}"#, escape(&e.name), e.is_dir))
         .collect();
     format!(
-        r#"{{"t":"meta","row":{},"w":{},"h":{},"orient":{},"ms":{},"rate":{},"entries":{},"unpacked":{},"afailed":{},"names":[{}],"lines":{},"partial":{},"lfailed":{},"frames":{},"target":"{}","targetdir":{},"owner":"{}"}}"#,
+        r#"{{"t":"meta","row":{},"w":{},"h":{},"orient":{},"ms":{},"rate":{},"entries":{},"unpacked":{},"afailed":{},"names":[{}],"lines":{},"partial":{},"lfailed":{},"frames":{},"target":"{}","targetdir":{},"raw":{},"owner":"{}"}}"#,
         row, m.width, m.height, m.orientation, m.duration_ms, m.sample_rate, m.entries, m.unpacked,
         m.archive_failed, names.join(","), m.lines, m.lines_partial, m.lines_failed, m.frames,
-        escape(&m.target), m.target_is_dir, escape(&m.owner)
+        escape(&m.target), m.target_is_dir, raw_json(&m.raw), escape(&m.owner)
     )
+}
+
+// Sample output: {"file":"/home/gm/.cache/flea/raw/b98fa4.jpg","w":1620,"h":1080,"orient":1}, or null.
+fn raw_json(raw: &Option<Extracted>) -> String {
+    match raw {
+        Some(e) => format!(r#"{{"file":"{}","w":{},"h":{},"orient":{}}}"#, escape(&e.file.to_string_lossy()), e.width, e.height, e.orientation),
+        None => "null".to_string(),
+    }
 }
 
 // The caller token identifies the exact request even when a new listing reuses the row index.
@@ -213,6 +233,16 @@ mod tests {
         assert!(line.ends_with(",\"token\":27}"));
         assert!(crate::jsondoc::parse(&line).is_ok());
     }
+    #[test]
+    fn a_raw_copy_rides_the_meta_line_as_an_object_and_anything_else_as_null() {
+        assert!(meta_line(3, &Meta::empty()).contains(r#""targetdir":false,"raw":null,"owner""#));
+        let mut m = Meta::empty();
+        m.raw = Some(Extracted { file: "/c/a \"b\".jpg".into(), width: 1620, height: 1080, orientation: 6 });
+        let line = meta_line(3, &m);
+        assert!(line.contains(r#""raw":{"file":"/c/a \"b\".jpg","w":1620,"h":1080,"orient":6},"owner""#), "{}", line);
+        assert!(crate::jsondoc::parse(&line).is_ok());
+    }
+
     use crate::backend::fifotest::{mkfifo, peek, FifoWriter, BOUND};
     use crate::backend::linecount::LINE_BUDGET;
     use crate::backend::testdir::TestDir;

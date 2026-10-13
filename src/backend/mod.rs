@@ -239,3 +239,4 @@ pub mod rawnote;
 pub mod rawbmff;
 pub mod rawraf;
 pub mod rawexif;
+pub mod rawpreview;
