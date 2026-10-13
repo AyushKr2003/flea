@@ -1245,6 +1245,29 @@ viewer's copy.
 The copy runs beside the loop, so a dead mount costs the viewer a sentence and
 never the window; a stale reply is dropped by its `id`, the way a superseded listing's result is.
 
+### officepdf
+
+`{"c":"officepdf","id":<uint>,"path":"<string>"}`
+
+Example: `{"c":"officepdf","id":4,"path":"/home/gm/Documents/report.docx"}`
+
+Converts one DOCX, ODT, XLSX, ODS, PPTX or RTF file to a cached PDF with LibreOffice and answers
+`officepdf` lines carrying the request `id`: `{"t":"officepdf","id":4,"state":"ready","path":"<cached pdf>"}`
+when the PDF exists, `{"t":"officepdf","id":4,"state":"converting"}` when a conversion started, and
+`{"t":"officepdf","id":4,"state":"failed","err":"<string>"}` when it cannot be had. A `converting`
+line is always followed by one `ready` or `failed` line for the same `id` once the job ends, so
+a client waits for that second line and treats `converting` as progress only. A request that
+needs no conversion answers `ready` or `failed` at once and sends no follow-up.
+`unavailable` rides on a `failed` line only when this file or this box will never convert:
+`{"t":"officepdf","id":4,"state":"failed","err":"LibreOffice is not installed on this box.","unavailable":true}`.
+A client that reads it keeps its existing preview and does not ask again; a `failed` line without
+it (a converter error, a timeout, a request replaced by a newer one, a mount that is not
+responding) may succeed on a later request, except that a converter error (an exit status or no
+PDF) is remembered for that file until its modification time changes; a timeout is not.
+The path is resolved and its cache entry looked up beside the loop under the mount deadline, so a
+hung mount costs one `failed` line and never the window. One conversion runs at a time and the
+newest request replaces the one queued behind it, whichever request finished its lookup first; a request older than the newest one started, running or already finished, is answered replaced at once and never converts.
+
 ### settags
 
 `{"c":"settags","rows":[<uint>,...],"op":"<string>","tag":"<string>","listing":<uint>}`

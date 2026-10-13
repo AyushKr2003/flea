@@ -611,6 +611,7 @@ fn handle_line(
         Request::PdfCopy { id, slot, path } => {
             super::pdfcopy::spawn(id, slot, PathBuf::from(&path), ops.tx.clone());
         }
+        Request::OfficePdf { id, path } => super::officepdf::serve(out, ops, &tb.mime, &tb.aliases, id, &path),
         // One row, only when a client asked: the same no-sweep rule thumb and dirsize already follow.
         Request::Meta { row, text, media, archive, token } => {
             if row < st.listing.len() {
@@ -723,6 +724,7 @@ fn rows_needed(request: &Request) -> usize {
         | Request::FsInfo
         | Request::Peek { .. }
         | Request::PdfCopy { .. }
+        | Request::OfficePdf { .. }
         | Request::Formats { .. }
         | Request::Permissions { .. }
         | Request::Picker { .. }

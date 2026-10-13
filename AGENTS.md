@@ -4119,6 +4119,8 @@ The join of that Tab ring with the Dual Tab walk keeps one ring in `ui/js/Focus.
 
 The refused-stop wording moves one ceiling, re-derived with `wc -l`: `src/backend/menu_registry.rs` 569 to 570 for the test-only `REFUSED_KILL` errno hook in `terminate`, which lets the wording test drive a refused stop through `Registry::cancel` without sending a signal.
 
+The office preview queue records one ceiling, re-derived with `wc -l`: `src/backend/officepdf.rs` passes the 400-line cap at 404 for the newest started sequence that the end of a job does not clear, which drops a request older than it, running or already finished, instead of converting it after, rather than a body with the comment cut.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
