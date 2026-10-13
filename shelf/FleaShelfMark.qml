@@ -2,8 +2,7 @@ import QtQuick
 import QtQuick.Shapes
 import qs.Commons
 
-// The brand's 2-unit stroke as a filled outline: its bounds are its ink.
-// A bar fitting measured bounds sizes it like a glyph; nothing is ever added to it.
+// Filled outline of the brand's 2-unit stroke, with bounds equal to ink for glyph sizing; nothing is ever added to it.
 Item {
   id: root
 
@@ -32,7 +31,8 @@ Item {
 
     ShapePath {
       fillColor: root.color
-      strokeWidth: 0
+      strokeColor: "transparent"
+      strokeWidth: -1
       PathSvg { path: "M22 22H2V2h20v16H6V6h12v8h-8v-2h6V8H8v8h12V4H4v16h18z" }
     }
   }

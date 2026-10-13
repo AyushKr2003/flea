@@ -32,16 +32,21 @@ output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     timeout 20 qs -p "$test_root/config" 2>&1)
 qs_status=$?
 
+# Sample input: "SHELFMARK PASS 12px bounds equal ink".
 pass_count=$(printf '%s\n' "$output" | grep -c 'SHELFMARK PASS')
+# Sample input: "SHELFMARK FAIL 12px bounds equal ink: 1.5857864376269049,1.5857864376269049,20.82842712474619,20.82842712474619".
 fail_count=$(printf '%s\n' "$output" | grep -c 'SHELFMARK FAIL')
+# Sample input: "SHELFMARK DONE 6 checks, 0 failed".
 done_count=$(printf '%s\n' "$output" | grep -c 'SHELFMARK DONE')
+# Sample input: "SHELFMARK DONE 6 checks, 0 failed".
+exact_done_count=$(printf '%s\n' "$output" | grep -c 'SHELFMARK DONE 6 checks, 0 failed$')
 verdict=0
 if [ "$qs_status" -ne 143 ] || [ "$pass_count" -ne 6 ] || [ "$fail_count" -ne 0 ] \
-    || [ "$done_count" -ne 1 ] || ! printf '%s\n' "$output" | grep -q 'SHELFMARK DONE 6 checks, 0 failed$'; then
+    || [ "$done_count" -ne 1 ] || [ "$exact_done_count" -ne 1 ]; then
     printf 'FAIL shelf-mark.sh: qs_exit=%s passes=%s failures=%s receipts=%s\n' "$qs_status" "$pass_count" "$fail_count" "$done_count"
     verdict=1
 fi
-# Offscreen Qt alone warns that a FloatingWindow cannot set a window mask.
+# Sample input: "SHELFMARK PASS 12px bounds equal ink" has no Qt warning; only offscreen Qt's window-mask warning is allowed.
 warnings=$(printf '%s\n' "$output" | grep -aE 'TypeError|ReferenceError|WARN|ERROR' \
     | grep -vF 'This plugin does not support setting window masks')
 if [ -n "$warnings" ]; then
@@ -56,4 +61,5 @@ if [ -n "${FLEA_CI_SUITE_LOGS:-}" ]; then
     mkdir -p "$FLEA_CI_SUITE_LOGS/shelf-mark-images" || exit 1
     cp "$test_root/mark-12.png" "$test_root/mark-24.png" "$FLEA_CI_SUITE_LOGS/shelf-mark-images/" || exit 1
 fi
+# Sample input: "SHELFMARK PASS 24px painted bounds equal box".
 printf '%s\n' "$output" | grep -o 'SHELFMARK \(PASS\|DONE\).*'
