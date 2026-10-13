@@ -296,6 +296,33 @@ function run(check) {
     check("a queued leg carries its mountpoint from the listing", Devices.powerOffQueue(vols, "/dev/sda")[1].path, "/run/media/u/DATA")
     check("the other disk queues only its own", Devices.powerOffQueue(vols, "/dev/sdb").map(function (q) { return q.device }).join(","), "/dev/sdb")
     check("no listing queues nothing", Devices.powerOffQueue(null, "/dev/sda").length, 0)
+    var railVols = [
+        { kind: "volume", device: "/dev/sda1", path: "/run/media/u/a", mounted: true },
+        { kind: "volume", device: "/dev/sda2", path: "/run/media/u/b", mounted: true },
+        { kind: "volume", device: "/dev/sdb1", path: "/run/media/u/c", mounted: true },
+        { kind: "volume", device: "/dev/sda3", path: "", mounted: false },
+        { kind: "disk", device: "/dev/sda", path: "/", mounted: true } ]
+    var railQueue = JSON.stringify([
+        { device: "/dev/sda1", path: "/run/media/u/a" },
+        { device: "/dev/sda2", path: "/run/media/u/b" } ])
+    check("an unparsable listing falls back to mounted rail volumes on this disk",
+          JSON.stringify(Devices.powerOffQueue("not json", "/dev/sda", railVols)), railQueue)
+    check("a truncated listing keeps the same rail fallback",
+          JSON.stringify(Devices.powerOffQueue(vols.slice(0, -1), "/dev/sda", railVols)), railQueue)
+    check("an empty listing keeps the same rail fallback",
+          JSON.stringify(Devices.powerOffQueue(null, "/dev/sda", railVols)), railQueue)
+    check("a valid listing keeps hidden nodes and its own mountpoints instead of the fallback",
+          Devices.powerOffQueue(vols, "/dev/sda", railVols)[0].path, "/run/media/u/EFI")
+    var shared = { name: "dm-0", path: "/dev/mapper/vg-data", mountpoints: ["/mnt/data"], type: "lvm", uuid: "shared" }
+    var mapped = JSON.stringify({ blockdevices: [
+        { name: "sdc", path: "/dev/sdc", mountpoints: [null], type: "disk", children: [
+            { name: "sdc1", path: "/dev/sdc1", mountpoints: [null], type: "part", children: [shared] },
+            { name: "sdc2", path: "/dev/sdc2", mountpoints: [null], type: "part", children: [shared,
+                { name: "dm-1", path: "/dev/mapper/vg-other", mountpoints: ["/mnt/other"], type: "lvm", uuid: "shared" } ] } ] } ] })
+    check("a dm node repeated under two partitions queues once, distinct device paths both stay",
+          JSON.stringify(Devices.powerOffQueue(mapped, "/dev/sdc")), JSON.stringify([
+              { device: "/dev/mapper/vg-data", path: "/mnt/data" },
+              { device: "/dev/mapper/vg-other", path: "/mnt/other" } ]))
     // The eject chain watches the disk's write counter, so a flushing leg restarts its deadline.
     check("a disk path answers its sysfs block name", Devices.sysBase("/dev/sda"), "sda")
     check("an nvme disk answers whole", Devices.sysBase("/dev/nvme0n1"), "nvme0n1")

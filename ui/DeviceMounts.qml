@@ -289,7 +289,7 @@ Item {
         root.quiesce(e.path)
         root.armEject(e)
         root._powerOffDisk = disk
-        root._powerOffQueue = Devices.powerOffQueue(root._listing, disk)
+        root._powerOffQueue = Devices.powerOffQueue(root._listing, disk, root.entries)
         root._powerSectors = ""
         root.message(Format.fill(Mounts.WORDS.ejecting, e.label), false)
         root.powerOffNext()

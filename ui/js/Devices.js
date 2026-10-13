@@ -297,20 +297,27 @@ function writtenSectors(body) {
 
 // Every mounted node under one disk in the last listing, hidden ones too (an ESP has no rail row, yet a power-off must unmount it); system mounts never queue.
 // Sample input: sda1 (ESP) mounted at /run/media/u/EFI answers [{device: "/dev/sda1", path: "/run/media/u/EFI"}] for "/dev/sda".
-function powerOffQueue(listing, disk) {
+function powerOffQueue(listing, disk, entries) {
     var tree
+    var out = []
     try {
         tree = JSON.parse(String(listing || ""))
     } catch (e) {
-        return []
+        // An unparsable listing keeps the mounted rail volumes queued, as before the hidden-node walk.
+        var rows = entries || []
+        for (var r = 0; r < rows.length; r++) {
+            var row = rows[r]
+            if (row.kind === "volume" && row.mounted && powerOffDisk(row.device) === disk)
+                out.push({ device: row.device, path: row.path })
+        }
+        return dedupeVolumes(out)
     }
-    var out = []
     var nodes = (tree && tree.blockdevices) || []
     for (var i = 0; i < nodes.length; i++) {
         if (nodes[i].name && powerOffDisk(devicePath(nodes[i])) === disk)
             collectMounted(nodes[i], out)
     }
-    return out
+    return dedupeVolumes(out)
 }
 
 function collectMounted(node, out) {
