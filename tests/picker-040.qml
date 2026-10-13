@@ -37,6 +37,7 @@ ShellRoot {
         console.log("PICKER_HUNT DONE " + checks + " checks, " + failures + " failed")
     }
     function finish() {
+        if (root.heldBackend && root.heldBackend.running) root.heldBackend.signal(9)
         root.verdict()
         Qt.exit(failures ? 1 : 0)
     }
@@ -160,7 +161,8 @@ ShellRoot {
         root.check("Cancel sits one gap left of the answer", root.near(root.at(cancel, cancel.width, 0).x + Flea.Theme.spacing.gap, root.at(accept, 0, 0).x), true)
         root.check("the buttons are the 30 px body control", [cancel.height, accept.height], [30, 30])
     }
-    readonly property var focusScenarios: ["fresh-save", "pointer-save", "list-folder", "list-file", "field-cancel", "field-keys"]
+    readonly property var focusScenarios: ["fresh-save", "backend-save", "pointer-save", "list-folder", "list-file", "field-cancel", "field-keys"]
+    property var heldBackend: null
     property string answerFolder: ""
     function focusStep() {
         var field = root.saveForm().fieldItem
@@ -173,7 +175,15 @@ ShellRoot {
             root.check("a fresh save focuses Filename and selects only the stem", [field.activeFocus, field.selectedText, win.viewItem().activeFocus], [true, "report", false])
             root.stage = 40
             root.stamp = Date.now()
-            if (scenario === "pointer-save") {
+            if (scenario === "backend-save") {
+                root.heldBackend = root.logic.backend.resources.filter(function(item) { return typeof item.signal === "function" && item.running })[0]
+                root.check("the save owns a running checks backend", !!root.heldBackend, true)
+                if (!root.heldBackend) { root.finish(); return }
+                root.heldBackend.signal(19)
+                root.press(Qt.Key_Return)
+                root.check("the held save steps focus to Cancel", [win.submitting, root.cancelButton().activeFocus], [true, true])
+                root.stage = 43
+            } else if (scenario === "pointer-save") {
                 var up = root.named("pickerUp")
                 root.answerFolder = root.parentOf(win.path)
                 keys.mouseClick(up, up.width / 2, up.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
@@ -200,7 +210,19 @@ ShellRoot {
             }
             return
         }
-        if (stage === 41) {
+        if (stage === 43) {
+            root.check("the held backend leaves the save pending", [win.submitting, win.backendUnavailable, root.cancelButton().activeFocus], [true, false, true])
+            root.heldBackend.signal(9)
+            root.heldBackend = null
+            root.stage = 44
+            root.stamp = Date.now()
+        } else if (stage === 44) {
+            if (!win.backendUnavailable || Date.now() - root.stamp < root.settleWaitMs) return
+            root.check("backend loss clears the save without answering", [win.submitting, win.answered, root.acceptButton().enabled], [false, false, false])
+            root.check("backend loss preserves the enabled Filename draft", [field.enabled, win.saveName], [true, "report.pdf"])
+            root.check("backend loss during a save keeps Cancel focused", [root.cancelButton().enabled, root.cancelButton().activeFocus, field.activeFocus], [true, true, false])
+            root.finish()
+        } else if (stage === 41) {
             if (win.path !== root.answerFolder || win.listingState === "loading" || !win.saveReady) return
             root.check("pointer Up returns focus to Filename", [field.activeFocus, win.viewItem().activeFocus], [true, false])
             root.listingsBefore = root.listings
