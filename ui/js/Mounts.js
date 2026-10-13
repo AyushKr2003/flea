@@ -210,7 +210,7 @@ function sameEntry(x, y) {
         && x.uri === y.uri && x.device === y.device && x.mounted === y.mounted && x.glyph === y.glyph
         && x.size === y.size && x.editable === y.editable && x.removable === y.removable
         && x.fstype === y.fstype && x.fsver === y.fsver && x.mediaRemovable === y.mediaRemovable && x.readOnly === y.readOnly
-        && (x.locked || false) === (y.locked || false)
+        && (x.locked || false) === (y.locked || false) && x.loop === y.loop
 }
 
 // Sample input: one rail entry as ui/DeviceMounts.qml and ui/NetworkMounts.qml build them,
