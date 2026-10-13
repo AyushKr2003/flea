@@ -163,7 +163,7 @@ Item {
                 y: vector ? Theme.spacing.hairline : Math.round((parent.height - height) / 2)
                 width: vector ? boxWidth : implicitWidth * fit
                 height: vector ? boxHeight : implicitHeight * fit
-                visible: root.thumbShown && !playerLoader.visible
+                visible: root.thumbShown && !playerLoader.visible && !(gifLoader.item && gifLoader.item.ready)
                 // Owned by root.applyDecodeTarget, never bound: a bound url and a bound
                 // ceiling land in separate passes and each pass reloads the standing file.
                 source: ""
@@ -173,6 +173,22 @@ Item {
                 asynchronous: true
                 cache: false
                 Component.onCompleted: root.applyDecodeTarget()
+            }
+
+            // An animated GIF moves only after its still frame is drawn, and not while the column is hidden or covered; the still stays until the first moving frame is ready.
+            Loader {
+                id: gifLoader
+                x: frameThumb.x
+                y: frameThumb.y
+                width: frameThumb.width
+                height: frameThumb.height
+                active: root.previewState === Facts.IMAGE && root.meta !== null && root.meta.frames > 1
+                    && /\.gif$/i.test(root.path) && frameThumb.status === Image.Ready
+                source: "PreviewAnimation.qml"
+                onLoaded: {
+                    item.path = Qt.binding(function () { return root.path })
+                    item.shown = Qt.binding(function () { return root.visible && !root.overlayOpen })
+                }
             }
 
             // The player, in the frame it paints into; built by the first press of play and not before, and by source rather than type, because QtMultimedia costs 20 MB on import alone.

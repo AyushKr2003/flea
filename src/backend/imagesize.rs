@@ -1,7 +1,7 @@
 // Pixel dimensions read from a file header, because the preview column names them and the wire does
 // not carry them. Only the first bytes are read: no image is ever decoded to answer this.
 use crate::backend::regfile::open_regular;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
 // Enough for every header but a JPEG's, whose frame can sit behind tens of kilobytes of EXIF.
@@ -32,7 +32,7 @@ pub fn header(path: &Path) -> Option<Header> {
     if buf.starts_with(&[0xFF, 0xD8]) {
         f.seek(SeekFrom::Start(2)).ok()?;
         // Buffered, because the walk resyncs a byte at a time and a raw File makes that a syscall each.
-        return jpeg_header(&mut std::io::BufReader::new(&mut f));
+        return jpeg_header(&mut BufReader::new(&mut f));
     }
     from_header(&buf).map(|(width, height)| Header { width, height, orientation: NO_TURN })
 }
@@ -208,6 +208,81 @@ fn exif_orientation(tiff: &[u8]) -> Option<u8> {
 // Sample input: "GIF89a" | width(2, little endian) | height(2, little endian)
 fn gif(b: &[u8]) -> Option<(u32, u32)> {
     Some((le16(b, 6)?, le16(b, 8)?))
+}
+
+// The walk never goes past this offset: a GIF that has not ended by then gets no frame count.
+const GIF_WALK: u64 = 16 * 1024 * 1024;
+
+// Frames in a GIF (0 if not a GIF, malformed, truncated or past GIF_WALK), counted by skipping sub-blocks, no pixel decoded.
+pub fn gif_frames(path: &Path) -> u32 {
+    let Some(f) = open_regular(path) else { return 0 };
+    let Ok(size) = f.metadata().map(|m| m.len()) else { return 0 };
+    gif_frame_count(&mut BufReader::new(f), size).unwrap_or(0)
+}
+
+// Skips a run of sub-blocks, each a length byte then that many bytes, ended by a zero length.
+fn gif_sub_blocks<R: Read + Seek>(r: &mut BufReader<R>, pos: &mut u64, size: u64) -> Option<()> {
+    loop {
+        let mut len = [0u8; 1];
+        r.read_exact(&mut len).ok()?;
+        *pos += 1 + len[0] as u64;
+        if *pos > size.min(GIF_WALK) {
+            return None;
+        }
+        if len[0] == 0 {
+            return Some(());
+        }
+        r.seek_relative(len[0] as i64).ok()?;
+    }
+}
+
+// Sample input: "GIF89a" | screen descriptor(7, flags in its fifth byte) | [palette] | blocks: 0x21 label sub-blocks.. | 0x2C descriptor(9) [palette] lzw(1) sub-blocks.. | 0x3B
+fn gif_frame_count<R: Read + Seek>(r: &mut BufReader<R>, size: u64) -> Option<u32> {
+    let mut head = [0u8; 13];
+    r.read_exact(&mut head).ok()?;
+    if &head[..4] != GIF_MAGIC {
+        return None;
+    }
+    let mut pos = 13u64;
+    if head[10] & 0x80 != 0 {
+        let table = 3u64 << ((head[10] & 7) + 1);
+        pos += table;
+        r.seek_relative(table as i64).ok()?;
+    }
+    let mut frames = 0u32;
+    loop {
+        if pos >= size.min(GIF_WALK) {
+            return None;
+        }
+        let mut kind = [0u8; 1];
+        r.read_exact(&mut kind).ok()?;
+        pos += 1;
+        match kind[0] {
+            0x3B => return Some(frames),
+            0x21 => {
+                // The label byte, then the extension's sub-blocks.
+                r.seek_relative(1).ok()?;
+                pos += 1;
+                gif_sub_blocks(r, &mut pos, size)?;
+            }
+            0x2C => {
+                let mut desc = [0u8; 9];
+                r.read_exact(&mut desc).ok()?;
+                pos += 9;
+                if desc[8] & 0x80 != 0 {
+                    let table = 3u64 << ((desc[8] & 7) + 1);
+                    pos += table;
+                    r.seek_relative(table as i64).ok()?;
+                }
+                // The LZW minimum code size, then the pixel data's sub-blocks.
+                r.seek_relative(1).ok()?;
+                pos += 1;
+                gif_sub_blocks(r, &mut pos, size)?;
+                frames += 1;
+            }
+            _ => return None,
+        }
+    }
 }
 
 // Sample input: "BM" ... | width(4, little endian, signed) at 18 | height(4) at 22, height may be negative for a top-down bitmap.
@@ -470,4 +545,15 @@ mod tests {
         assert_eq!(left, GIF_IN_A_PIPE.as_bytes(), "a measurement must never eat a pipe someone else is reading");
         assert!(stopped, "the writer this test started is killed by its own pid");
     }
+
+    #[test]
+    fn a_png_has_no_frame_count() {
+        let d = TestDir::new("imagesizepngframes");
+        std::fs::write(d.join("a.png"), png_header(10, 10)).unwrap();
+        assert_eq!(gif_frames(&d.join("a.png")), 0);
+    }
 }
+
+#[cfg(test)]
+#[path = "imagesize_gif_tests.rs"]
+mod gif_tests;

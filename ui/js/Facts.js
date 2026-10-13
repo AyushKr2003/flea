@@ -102,6 +102,11 @@ function pixels(meta) {
     return meta.w + " × " + meta.h
 }
 
+// An animated GIF's frame count; a still picture, or a GIF whose walk found no count, states none.
+function frames(meta) {
+    return meta && meta.frames > 1 ? String(meta.frames) : ""
+}
+
 // Duration and rate come off the same meta answer as pixels do, so no caller assembles them by hand.
 function mediaExtra(meta) {
     if (!meta) {
@@ -228,7 +233,7 @@ function stateRows(st, row, meta, kindName, extra) {
                 pair("Modified", Format.date(row.m))]
     switch (st) {
     case IMAGE:
-        return head.concat([pair("Pixels", pixels(meta))])
+        return head.concat([pair("Pixels", pixels(meta)), pair("Frames", frames(meta))])
     case VIDEO:
         return head.concat([pair("Duration", e.duration || ""), pair("Pixels", pixels(meta))])
     case AUDIO:

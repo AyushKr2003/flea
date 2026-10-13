@@ -60,6 +60,8 @@ Item {
         if (root.failed) return "This image could not be read."
         return (picture.status === Image.Ready || root.fallbackShown) ? "image" : "loading"
     }
+    // Frames in a GIF, from the same reply; the picture moves only past one.
+    property int frames: 0
     // The original's pixels for the thumbnail fit, from Preview.qml's meta reply; 0 while unknown.
     property real origW: 0
     property real origH: 0
@@ -119,7 +121,7 @@ Item {
         width: root.vector ? root.width * root.zoom : implicitWidth * fit * root.zoom
         height: root.vector ? root.height * root.zoom : implicitHeight * fit * root.zoom
         // The sharper layer takes over once it has a frame, so a transparent picture never shows two.
-        visible: picture.status === Image.Ready && !sharp.drawn
+        visible: picture.status === Image.Ready && !sharp.drawn && !(gif.item && gif.item.ready)
         // Format.fileUri, not a concatenation: a # or a ? in the name would truncate a hand-built URI.
         source: root.path.length > 0 && root.decodable && root.interimSettled ? Format.fileUri(root.path) : ""
         fillMode: root.vector ? Image.PreserveAspectFit : Image.Stretch
@@ -140,6 +142,21 @@ Item {
         base: picture
         active: root.zoomed
         want: root.vector ? Qt.size(Math.max(1, Math.round(root.width * root.zoom)), Math.max(1, Math.round(root.height * root.zoom))) : Qt.size(0, 0)
+    }
+
+    // An animated GIF moves once the still is drawn, in the still's rect at any zoom; it is built for that file alone.
+    Loader {
+        id: gif
+        x: picture.x
+        y: picture.y
+        width: picture.width
+        height: picture.height
+        active: root.frames > 1 && /\.gif$/i.test(root.path) && picture.status === Image.Ready
+        source: "PreviewAnimation.qml"
+        onLoaded: {
+            item.path = Qt.binding(function () { return root.path })
+            item.shown = Qt.binding(function () { return root.visible })
+        }
     }
 
     // The pan: a drag, the wheel and the knobs move contentX and contentY, and the pictures above follow them. At fit it is the whole surface and holds still; zoomed, it is the surface less the band.

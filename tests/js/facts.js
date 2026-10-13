@@ -110,6 +110,17 @@ function run(check) {
     check("and its pixels read as the canvas writes them",
           valueOf(Facts.facts("image", row("image-x-generic", 2100000), { w: 2560, h: 1440 }, "PNG image"), "Pixels"),
           "2560 × 1440")
+    // Animated GIF specimen: Frames follows Pixels in the same cells, and a still picture states none.
+    check("an animated gif adds Frames after Pixels",
+          labels(Facts.facts("image", row("image-x-generic", 1200000), { w: 480, h: 270, frames: 24 }, "GIF image")),
+          "Kind|Size|Modified|Pixels|Frames")
+    check("and its frames read as a bare count",
+          valueOf(Facts.facts("image", row("image-x-generic", 1200000), { w: 480, h: 270, frames: 24 }, "GIF image"), "Frames"),
+          "24")
+    check("a one-frame gif and a png draw no Frames row",
+          labels(Facts.facts("image", row("image-x-generic", 1200000), { w: 480, h: 270, frames: 1 }, "GIF image")) + "|"
+              + labels(Facts.facts("image", row("image-x-generic", 2100000), { w: 2560, h: 1440 }, "PNG image")),
+          "Kind|Size|Modified|Pixels|Kind|Size|Modified|Pixels")
     check("video states Kind, Size, Modified, Duration, Pixels",
           labels(Facts.facts("video", row("video-x-generic", 48000000), { w: 1920, h: 1080 }, "MP4 video", { duration: "1:12" })),
           "Kind|Size|Modified|Duration|Pixels")

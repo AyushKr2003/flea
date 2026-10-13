@@ -24,13 +24,13 @@ src/backend/durable_tests.rs 1396
 src/backend/jump_tests.rs 487
 src/backend/renamecompat.rs 721
 src/backend/gvfslist.rs 513
-src/backend/imagesize.rs 473
+src/backend/imagesize.rs 559
 src/backend/iomount.rs 634
 src/backend/localsend.rs 432
 src/backend/menu_actions.rs 657
 src/backend/menu_registry.rs 569
 src/backend/meta.rs 550
-src/backend/metareq.rs 410
+src/backend/metareq.rs 435
 src/backend/movebatch.rs 477
 src/backend/movebatch_tests.rs 752
 src/backend/opsdispatch.rs 2273
@@ -72,6 +72,7 @@ tests/js/columns.js 687
 tests/js/drag.js 493
 tests/js/dropsflow.js 301
 tests/js/collide.js 319
+tests/js/facts.js 346
 tests/js/devices.js 363
 tests/js/previewswap.js 469
 tests/js/mdstructure.js 655
@@ -85,7 +86,7 @@ tests/js/picker.js 352
 tests/picker-grid.qml 465
 tests/picker-hunt.qml 449
 tests/permissions-focus.qml 417
-tests/js/facts.js 335
+tests/js/facts.js 346
 tests/js/network.js 307
 tests/js/ops.js 574
 tests/js/slowclick.js 309
@@ -152,10 +153,11 @@ ui/PaneMenuActions.qml 523
 ui/PaneWire.qml 602
 ui/PermissionsDialog.qml 658
 ui/PickerWindow.qml 797
-ui/Preview.qml 887
-ui/PreviewColumn.qml 590
+ui/Preview.qml 898
+ui/PreviewColumn.qml 606
 ui/PickerChrome.qml 441
 ui/DeviceMounts.qml 537
+ui/js/Facts.js 354
 ui/PreviewMarkdown.qml 625
 ui/Row.qml 496
 ui/SettingsPanel.qml 547
@@ -176,7 +178,7 @@ ui/js/Keymap.js 366
 ui/js/Nav.js 328
 ui/js/Markdown.js 135
 ui/js/MdBlocks.js 437
-ui/js/Facts.js 349
+ui/js/Facts.js 354
 ui/js/FigureWorker.mjs 619
 ui/js/MdDocument.js 337
 ui/js/MdLeaf.js 309

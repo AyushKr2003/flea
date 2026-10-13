@@ -20,6 +20,8 @@ pub struct Meta {
     pub height: u32,
     // EXIF orientation 1 to 8 from the same header read, 1 for anything that names none; 5 to 8 swap the sides.
     pub orientation: u8,
+    // Image descriptors in a GIF, counted without decoding; 0 for any other file, a malformed GIF or one past the walk.
+    pub frames: u32,
     // Milliseconds, and the sample rate in hertz; both zero for anything that is not media.
     pub duration_ms: u64,
     pub sample_rate: u32,
@@ -45,7 +47,7 @@ pub struct Meta {
 
 impl Meta {
     fn empty() -> Meta {
-        Meta { width: 0, height: 0, orientation: 1, duration_ms: 0, sample_rate: 0, entries: 0, unpacked: 0, names: Vec::new(), archive_failed: false, lines: 0, lines_partial: false, lines_failed: false, target: String::new(), target_is_dir: false, owner: String::new() }
+        Meta { width: 0, height: 0, orientation: 1, frames: 0, duration_ms: 0, sample_rate: 0, entries: 0, unpacked: 0, names: Vec::new(), archive_failed: false, lines: 0, lines_partial: false, lines_failed: false, target: String::new(), target_is_dir: false, owner: String::new() }
     }
 }
 
@@ -63,6 +65,7 @@ pub fn read(path: &Path, text: bool, media: bool, archive: Option<&Formats>) -> 
         m.width = image.width;
         m.height = image.height;
         m.orientation = image.orientation;
+        m.frames = imagesize::gif_frames(path);
     }
     if let Some(formats) = archive {
         let listed = list_archive(path, formats);
@@ -168,7 +171,7 @@ fn list_archive(path: &Path, formats: &Formats) -> Contents {
     contents
 }
 
-// Sample output: {"t":"meta","row":4,"w":0,"h":0,"orient":1,"ms":0,"rate":0,"entries":214,"unpacked":3400,"afailed":false,"names":[{"n":"ui","d":true}],"lines":0,"partial":false,"lfailed":false,"target":"","targetdir":false,"owner":"gm"}
+// Sample output: {"t":"meta","row":4,"w":0,"h":0,"orient":1,"ms":0,"rate":0,"entries":214,"unpacked":3400,"afailed":false,"names":[{"n":"ui","d":true}],"lines":0,"partial":false,"lfailed":false,"frames":0,"target":"","targetdir":false,"owner":"gm"}
 pub fn meta_line(row: usize, m: &Meta) -> String {
     let names: Vec<String> = m
         .names
@@ -176,9 +179,9 @@ pub fn meta_line(row: usize, m: &Meta) -> String {
         .map(|e| format!(r#"{{"n":"{}","d":{}}}"#, escape(&e.name), e.is_dir))
         .collect();
     format!(
-        r#"{{"t":"meta","row":{},"w":{},"h":{},"orient":{},"ms":{},"rate":{},"entries":{},"unpacked":{},"afailed":{},"names":[{}],"lines":{},"partial":{},"lfailed":{},"target":"{}","targetdir":{},"owner":"{}"}}"#,
+        r#"{{"t":"meta","row":{},"w":{},"h":{},"orient":{},"ms":{},"rate":{},"entries":{},"unpacked":{},"afailed":{},"names":[{}],"lines":{},"partial":{},"lfailed":{},"frames":{},"target":"{}","targetdir":{},"owner":"{}"}}"#,
         row, m.width, m.height, m.orientation, m.duration_ms, m.sample_rate, m.entries, m.unpacked,
-        m.archive_failed, names.join(","), m.lines, m.lines_partial, m.lines_failed,
+        m.archive_failed, names.join(","), m.lines, m.lines_partial, m.lines_failed, m.frames,
         escape(&m.target), m.target_is_dir, escape(&m.owner)
     )
 }
@@ -233,6 +236,28 @@ mod tests {
         let m = read(&p, false, false, None);
         assert_eq!((m.width, m.height), (2560, 1440));
         assert_eq!(m.lines, 0, "an image is never counted for lines");
+    }
+
+    #[test]
+    fn a_gif_reports_its_frames_beside_its_pixels_and_a_png_reports_none() {
+        let d = TestDir::new("metagifframes");
+        let mut gif = b"GIF89a".to_vec();
+        gif.extend_from_slice(&[4, 0, 4, 0, 0, 0, 0]);
+        for _ in 0..3 {
+            gif.extend_from_slice(&[0x2C, 0, 0, 0, 0, 4, 0, 4, 0, 0, 2, 1, 7, 0]);
+        }
+        gif.push(0x3B);
+        std::fs::write(d.join("clip.gif"), &gif).unwrap();
+        let m = read(&d.join("clip.gif"), false, false, None);
+        assert_eq!((m.width, m.height, m.frames), (4, 4, 3));
+        assert!(meta_line(0, &m).contains(r#""lfailed":false,"frames":3,"target":"#));
+        let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
+        png.extend_from_slice(&13u32.to_be_bytes());
+        png.extend_from_slice(b"IHDR");
+        png.extend_from_slice(&8u32.to_be_bytes());
+        png.extend_from_slice(&8u32.to_be_bytes());
+        std::fs::write(d.join("shot.png"), png).unwrap();
+        assert_eq!(read(&d.join("shot.png"), false, false, None).frames, 0);
     }
 
     #[test]

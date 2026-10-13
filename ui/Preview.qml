@@ -114,6 +114,7 @@ Item {
     property int imageW: 0
     property int imageH: 0
     property int imageOrient: 1
+    property int imageFrames: 0
     property int imageRow: -1
     // One meta ask per show; onRowsChanged never re-asks behind it.
     property bool imageAsked: false
@@ -355,6 +356,7 @@ Item {
         root.imageW = 0
         root.imageH = 0
         root.imageOrient = 1
+        root.imageFrames = 0
         root.imageRow = -1
         root.imageAsked = false
         root.thumbRow = -1
@@ -435,6 +437,7 @@ Item {
         root.imageW = 0
         root.imageH = 0
         root.imageOrient = 1
+        root.imageFrames = 0
         root.imageAsked = false
         root.thumbAsked = false
         root.thumbRelist = false
@@ -570,6 +573,13 @@ Item {
                 root.imageH = h
                 root.imageOrient = orient
             }
+        }
+    }
+
+    Connections {
+        target: root.pane ? root.pane.backend : null
+        function onMetaResult(message) {
+            if (root.isImage && message.row === root.imageRow && root.imageRowShown()) root.imageFrames = message.frames || 0
         }
     }
 
@@ -737,6 +747,7 @@ Item {
                     item.origW = Qt.binding(function () { return root.imageW })
                     item.origH = Qt.binding(function () { return root.imageH })
                     item.thumbPending = Qt.binding(function () { return root.thumbRow >= 0 })
+                    item.frames = Qt.binding(function () { return root.imageFrames })
                     item.interimThumb = Qt.binding(function () { return root.interimThumb })
                     item.interimVisible = Qt.binding(function () { return root.interimVisible })
                     item.interimX = Qt.binding(function () { return root.interimBox !== null ? root.interimBox.x : 0 })
