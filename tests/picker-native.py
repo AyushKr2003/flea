@@ -986,7 +986,8 @@ def test_path():
     fresh = recent.until("Recent opens with no history", lambda state: state["path"] == "flea:recent" and state["state"] != "loading")
     back = [item for item in fresh["controls"] if item["name"] == "Back"]
     up = [item for item in fresh["controls"] if item["name"].startswith("Parent folder")]
-    check("SP14 fresh Recent leaves Back dead", len(back) == 1 and not back[0]["enabled"], back)
+    # Back returns to the folder the dialog opened on; only Up has nowhere to go in Recent.
+    check("SP14 Recent opened from a folder keeps Back live", len(back) == 1 and back[0]["enabled"], back)
     check("SP14 fresh Recent leaves Up dead", len(up) == 1 and not up[0]["enabled"], up)
     recent.capture("path-recent-fresh")
     recent.cancel()
