@@ -26,6 +26,7 @@ Item {
     readonly property bool tooLarge: root.overSize || (root.sourceView && !!root.sourceCode && root.sourceCode.answer === "large")
     readonly property bool binary: root.sourceView && !!root.sourceCode && root.sourceCode.answer === "binary"
     readonly property int deviceWidth: Math.max(1, Math.round(root.width * Screen.devicePixelRatio))
+    readonly property int deviceHeight: root.slot === "look" ? Math.max(1, Math.ceil(root.height * root.deviceWidth / Math.max(1, root.width))) : 0
     property int token: -1
     property bool pending: false
     property bool readFailed: false
@@ -67,7 +68,7 @@ Item {
         if (!root.backend || typeof root.backend.askHtml !== "function") { root.readFailed = true; return }
         root.readFailed = false
         root.pending = true
-        root.token = root.backend.askHtml(root.slot, root.path, root.deviceWidth, false)
+        root.token = root.backend.askHtml(root.slot, root.path, root.deviceWidth, false, root.deviceHeight)
     }
     function scrollBy(rows) {
         var v = root.viewport
@@ -103,6 +104,7 @@ Item {
     }
     onBackendChanged: root.schedule()
     onDeviceWidthChanged: root.schedule()
+    onDeviceHeightChanged: root.schedule()
     onTooLargeChanged: root.schedule()
     Component.onCompleted: { root.sourceBuilt = root.sourceView; root.schedule() }
     Component.onDestruction: {

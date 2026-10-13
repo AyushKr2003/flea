@@ -128,7 +128,7 @@ tests/search-live.qml 417
 tests/sidebar-flows.qml 687
 tests/touchpad.qml 882
 tests/xwsettings-tabs.qml 379
-ui/Backend.qml 604
+ui/Backend.qml 606
 ui/ChromeBar.qml 352
 ui/ColumnsArea.qml 572
 ui/ColumnPane.qml 450

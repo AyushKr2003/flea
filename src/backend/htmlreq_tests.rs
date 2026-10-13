@@ -9,16 +9,23 @@ fn the_html_request_preserves_identity_and_bounds_width() {
     assert_eq!(Ask::parse(r#"{"width":0}"#).width, 1);
     assert_eq!(Ask::parse(r#"{"width":999999}"#).width, 4096);
     assert!(Ask::parse(r#"{"cancel":true}"#).cancel);
+    assert_eq!(Ask::parse(r#"{"height":900}"#).height, 900);
+    assert_eq!(Ask::parse(r#"{"height":0}"#).height, 1);
+    assert_eq!(Ask::parse(r#"{"height":999999}"#).height, htmlcache::MAX_HEIGHT as usize);
+    let large = Ask::parse(r#"{"width":8192,"height":1250}"#);
+    assert_eq!((large.width, large.height), (htmlcache::MAX_WIDTH, 625));
+    assert_eq!(Ask::parse(r#"{"width":8192}"#).height, htmlcache::DEFAULT_HEIGHT);
 }
 
 #[test]
 fn the_html_jail_keeps_cpu_network_readonly_folder_and_only_one_writable_directory() {
     let inner = vec!["/usr/bin/qml6".into(), "/output/render.qml".into()];
-    let argv = sandbox::wrap_html(&inner, Path::new("/files"), Path::new("/cache/work"));
+    let argv = sandbox::wrap_html(&inner, Path::new("/files/index.html"), Path::new("/cache/work"));
     assert_eq!(&argv[..3], ["prlimit", "--cpu=30", "bwrap"]);
     assert!(!argv.iter().any(|a| a.starts_with("--as=")));
     for flag in ["--unshare-all", "--die-with-parent", "--clearenv"] { assert!(argv.iter().any(|a| a == flag)); }
     assert!(argv.windows(3).any(|w| w == ["--ro-bind", "/files", "/page"]));
+    assert!(argv.windows(3).any(|w| w == ["--ro-bind", "/cache/work/input.html", "/page/index.html"]));
     assert!(argv.windows(3).any(|w| w == ["--bind", "/cache/work", "/output"]));
     assert_eq!(argv.iter().filter(|a| a.as_str() == "--bind").count(), 1);
     assert_eq!(&argv[argv.len() - inner.len()..], inner);
@@ -38,13 +45,15 @@ fn a_newer_html_request_cancels_the_older_ticket_and_drops_its_reply() {
 
 #[test]
 fn html_and_code_slots_do_not_cancel_each_other() {
-    let code = codereq::begin("code:html:test-isolated");
-    let html = codereq::begin("html:test-isolated");
-    assert!(!code.superseded());
-    assert!(!html.superseded());
-    let (tx, _) = mpsc::channel();
-    code.finish("code".into(), &tx);
-    html.finish("html".into(), &tx);
+    for slot in ["test-isolated", "code:test-isolated"] {
+        let code = codereq::begin("code:test-isolated");
+        let (tx, rx) = mpsc::channel();
+        spawn(Ask::parse(&format!(r#"{{"slot":"{slot}","cancel":true}}"#)), tx.clone());
+        assert!(matches!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), OpMsg::Meta { line } if line.contains("cancelled")));
+        assert!(!code.superseded(), "HTML slot {slot} collided with a code ticket");
+        code.finish("code".into(), &tx);
+        assert!(matches!(rx.recv().unwrap(), OpMsg::Meta { line } if line == "code"));
+    }
 }
 
 #[test]
@@ -53,7 +62,25 @@ fn policy_precedes_resources_and_keeps_the_doctype() {
     assert!(text.starts_with("<!doctype html><meta http-equiv=\"Content-Security-Policy\""));
     assert!(text.contains("default-src 'none'"));
     assert!(text.contains("img-src file://*/page/ data:"));
-    assert!(text.find("<base href=\"file:///page/\">").unwrap() < text.find("<html>").unwrap());
+    assert!(!text.contains("<base"));
+}
+
+#[test]
+fn a_bom_whitespace_and_complete_comments_keep_the_doctype_before_the_policy() {
+    for prefix in ["<!-- leading -->", "\u{feff}\n <!-- one -->\t<!-- two -->\r\n", " \n\t"] {
+        let source = format!("{prefix}<!DOCTYPE html><html>");
+        let text = String::from_utf8(confined_html(source.as_bytes())).unwrap();
+        assert!(text.starts_with(&format!("{prefix}<!DOCTYPE html><meta")), "{text}");
+    }
+    let text = String::from_utf8(confined_html(b"<!-- incomplete <!doctype html><html>")).unwrap();
+    assert!(text.starts_with("<meta"));
+}
+
+#[test]
+fn the_doctype_ends_at_the_first_greater_than_even_inside_a_quoted_identifier() {
+    let text = String::from_utf8(confined_html(b"<!doctype html PUBLIC \"a>b\"><html>")).unwrap();
+    assert!(text.starts_with("<!doctype html PUBLIC \"a><meta"));
+    assert!(text.ends_with("b\"><html>"));
 }
 
 #[test]

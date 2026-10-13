@@ -33,7 +33,8 @@ mkdir -p "$test_root/cache #?"
 export HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_CACHE_HOME="$test_root/cache #?"
 export XDG_RUNTIME_DIR="$test_root/runtime" FLEA_BIN="$bin" FLEA_PATH="$test_root/fixture"
 export HTML_UI="$test_root/config/flea" HTML_ROOT="$test_root" FLEA_REDUCED_MOTION=1
-python3 tests/html-engine.py "$bin" "$test_root" || exit 1
+engine_status=0
+python3 tests/html-engine.py "$bin" "$test_root" || engine_status=1
 for harness in html-source-refusals html-auto-render html-preview; do
 cp "tests/$harness.qml" "$test_root/config/shell.qml" || exit 1
 log="$test_root/$harness.log"
@@ -51,4 +52,5 @@ if [ "$status" -ne 0 ] || [ "$(grep -ac 'HTML_PREVIEW DONE' "$log")" -ne 1 ] \
     exit 1
 fi
 done
+[ "$engine_status" -eq 0 ] || { printf 'FAIL html-preview: backend assertions failed\n'; exit 1; }
 printf 'html-preview: backend isolation and Quick Look/column passed\n'

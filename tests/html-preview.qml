@@ -231,6 +231,7 @@ ShellRoot {
         case 21:
             if (!root.calm(d && !d.sourceView && d.contentReady && l.openState().landed)) return
             root.check("the board specimen has the whole-file bar count", l.markdownShown.barGeometry().lines.text, "61 lines")
+            root.check("F9 short HTML page covers the viewport bottom edge", d.viewport.contentHeight >= d.viewport.height - 0.5, true)
             root.shot(l.panesItem, "html-board-quicklook", function () {
                 root.press(Qt.Key_Space)
                 root.next()

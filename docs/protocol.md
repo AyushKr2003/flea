@@ -1253,12 +1253,14 @@ bytes the verdict was made on.
 
 ### html
 
-`{"c":"html","token":<uint>,"slot":"<string>","path":"<absolute path>","width":<uint>,"cancel":<bool>}`
+`{"c":"html","token":<uint>,"slot":"<string>","path":"<absolute path>","width":<uint>,"height":<uint>,"cancel":<bool>}`
 
-Example: `{"c":"html","token":3,"slot":"look","path":"/home/gm/index.html","width":984}`.
+Example: `{"c":"html","token":3,"slot":"look","path":"/home/gm/index.html","width":984,"height":625}`.
 
 Renders the single page a client is previewing, never a listing. Width is the frame's device
-width, clamped to 1 through 4096 pixels. The page must be a readable regular file at most
+width, clamped to 1 through 4096 pixels. Optional height is the viewport's height at that width;
+when width is clamped, height scales with it, rounded up and bounded to 1 through 8000 pixels.
+An omitted height retains the column helper's 600-pixel viewport. The page must be a readable regular file at most
 1,048,576 bytes. A newer request in the same slot cancels the older helper and suppresses its
 reply. `cancel:true` ends that slot without opening a page. HTML and code slots are independent.
 
@@ -1268,8 +1270,13 @@ helper has no address-space limit. Its profile is off the record, JavaScript is 
 navigation to another page is refused. Only the page folder is bound as /page, read-only; a
 content security policy restricts subresources to that folder and embedded data images/fonts.
 The one writable bind is a private helper directory under the thumbnail cache. All helper
-files are created exclusively. The PNG is at most 8000 pixels tall and cached by canonical
-path, size, nanosecond mtime, and width. The companion cache uses the preview-cache bounds
+files are created exclusively. The confined input is bound over the page's own filename and
+loaded from that URL, preserving relative URLs and the document's own base element.
+The PNG is at least the requested viewport height and at most 8000 pixels tall, and cached by canonical
+path, size, nanosecond mtime, inode, device, width and viewport height. A hit also requires every
+engine-recorded local resource to retain its size, nanosecond mtime, inode and device. Records
+hold at most 256 local resources and 64 KiB; an unreadable or incomplete record forces another render.
+The companion cache uses the preview-cache bounds
 of 4096 files and 512 MiB, with a 60-second reader grace and one scan per 32 publications.
 
 ### compare

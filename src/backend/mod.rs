@@ -54,6 +54,7 @@ pub mod sgr;
 pub mod codereq;
 pub mod htmlreq;
 mod htmlcache;
+mod htmldeps;
 mod htmlsandbox;
 pub mod compare;
 pub mod sort;

@@ -354,9 +354,11 @@ Item {
         return root.codeToken
     }
 
-    function askHtml(slot, path, width, cancel) {
+    function askHtml(slot, path, width, cancel, height) {
         root.codeToken += 1
-        root.send({ c: "html", token: root.codeToken, slot: slot, path: path, width: width, cancel: cancel })
+        var message = { c: "html", token: root.codeToken, slot: slot, path: path, width: width, cancel: cancel }
+        if (height > 0) message.height = height
+        root.send(message)
         return root.codeToken
     }
 

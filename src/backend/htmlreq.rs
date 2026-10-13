@@ -1,11 +1,11 @@
-use super::{archivework::Work, codereq, htmlcache, jail, opsreq::OpMsg, regfile, sandbox};
+use super::{archivework::Work, codereq, htmlcache, htmldeps, jail, opsreq::OpMsg, regfile, sandbox, thumbcache};
 use crate::json::{escape, field_bool, field_str, field_usize};
 use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::mpsc::Sender;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 const MAX_BYTES: u64 = 1_048_576;
 const HELPER: &str = include_str!("htmlrender.qml");
@@ -16,14 +16,19 @@ pub struct Ask {
     slot: String,
     path: String,
     width: usize,
+    height: usize,
     cancel: bool,
 }
 
 impl Ask {
-    // Sample input: {"c":"html","token":3,"slot":"look","path":"/home/gm/index.html","width":984}.
+    // Sample input: {"c":"html","token":3,"slot":"look","path":"/home/gm/index.html","width":984,"height":625}.
     pub fn parse(line: &str) -> Self {
+        let requested_width = field_usize(line, "width").unwrap_or(984).max(1);
+        let width = requested_width.min(htmlcache::MAX_WIDTH);
+        let height = field_usize(line, "height").map(|height| height.max(1).saturating_mul(width).div_ceil(requested_width)
+            .clamp(1, htmlcache::MAX_HEIGHT as usize)).unwrap_or(htmlcache::DEFAULT_HEIGHT);
         Self { token: field_usize(line, "token").unwrap_or(0), slot: field_str(line, "slot").unwrap_or_default(),
-            path: field_str(line, "path").unwrap_or_default(), width: field_usize(line, "width").unwrap_or(984).clamp(1, 4096),
+            path: field_str(line, "path").unwrap_or_default(), width, height,
             cancel: field_bool(line, "cancel") }
     }
 }
@@ -45,10 +50,18 @@ fn exclusive(path: &Path, bytes: &[u8]) -> Option<()> {
 
 // The policy is installed before the page parses; runtime files and other URL schemes never become subresources.
 fn confined_html(bytes: &[u8]) -> Vec<u8> {
-    let policy = b"<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src file://*/page/ data:; style-src 'unsafe-inline' file://*/page/; font-src file://*/page/ data:; media-src file://*/page/; form-action 'none'; base-uri file://*/page/\"><base href=\"file:///page/\">";
-    let head = bytes.iter().position(|b| !b.is_ascii_whitespace()).unwrap_or(0);
+    let policy = b"<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src file://*/page/ data:; style-src 'unsafe-inline' file://*/page/; font-src file://*/page/ data:; media-src file://*/page/; form-action 'none'; base-uri file://*/page/\">";
+    let bom = if bytes.starts_with(b"\xef\xbb\xbf") { 3 } else { 0 };
+    let mut head = bom;
+    loop {
+        while bytes.get(head).is_some_and(u8::is_ascii_whitespace) { head += 1; }
+        if !bytes[head..].starts_with(b"<!--") { break }
+        let Some(end) = bytes[head + 4..].windows(3).position(|part| part == b"-->") else { break };
+        head += 4 + end + 3;
+    }
     let doctype = bytes.get(head..head + 9).is_some_and(|prefix| prefix.eq_ignore_ascii_case(b"<!doctype"));
-    let at = if doctype { bytes[head..].iter().position(|b| *b == b'>').map_or(0, |end| head + end + 1) } else { 0 };
+    // WHATWG 13.2.5.58/59/64/65 emits the doctype at the first '>', even inside a quoted identifier.
+    let at = if doctype { bytes[head..].iter().position(|b| *b == b'>').map_or(bom, |end| head + end + 1) } else { bom };
     let mut out = Vec::with_capacity(bytes.len() + policy.len());
     out.extend_from_slice(&bytes[..at]);
     out.extend_from_slice(policy);
@@ -66,8 +79,9 @@ fn render(ask: &Ask, ticket: &codereq::Ticket) -> Option<String> {
     if bytes.len() as u64 > MAX_BYTES || bytes.contains(&0) { return None }
     let total = bytes.iter().filter(|&&b| b == b'\n').count() + usize::from(!bytes.is_empty() && !bytes.ends_with(b"\n"));
     let cache = htmlcache::root();
-    let dest = cache.join(format!("{}.png", htmlcache::key(&path, &meta, ask.width)));
-    if htmlcache::hit(&dest, ask.width) { return Some(reply(ask, "ready", &dest.to_string_lossy(), total, "")) }
+    let dest = cache.join(format!("{}.png", htmlcache::key(&path, &meta, ask.width, ask.height)));
+    let folder = path.parent()?;
+    if htmlcache::hit(&dest, ask.width, ask.height, folder) { return Some(reply(ask, "ready", &dest.to_string_lossy(), total, "")) }
     std::fs::create_dir_all(&cache).ok()?;
     let work = Work::new(&cache, "html").ok()?;
     std::fs::set_permissions(&work.dir, std::fs::Permissions::from_mode(0o700)).ok()?;
@@ -75,9 +89,12 @@ fn render(ask: &Ask, ticket: &codereq::Ticket) -> Option<String> {
     exclusive(&work.dir.join("input.html"), &confined_html(&bytes))?;
     exclusive(&work.dir.join("page.png"), &[])?;
     if ticket.superseded() { return None }
-    let inner = vec!["/usr/bin/qml6".to_string(), "/output/render.qml".to_string(), "--".to_string(), format!("--width={}", ask.width)];
-    let mut argv = sandbox::wrap_html(&inner, path.parent()?, &work.dir);
+    let url = thumbcache::uri_for(&Path::new("/page").join(path.file_name()?));
+    let inner = vec!["/usr/bin/qml6".to_string(), "/output/render.qml".to_string(), "--".to_string(), format!("--width={}", ask.width),
+        format!("--height={}", ask.height), format!("--page={url}"), format!("--max-height={}", htmlcache::MAX_HEIGHT), format!("--max-resources={}", htmldeps::MAX_RESOURCES)];
+    let mut argv = sandbox::wrap_html(&inner, &path, &work.dir);
     sandbox::add_status(&mut argv, inner.len());
+    let started = SystemTime::now();
     let mut jailed = jail::spawn_jailed(&argv, |cmd| {
         cmd.env_clear().env("PATH", std::env::var_os("PATH").unwrap_or_default());
         cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());
@@ -91,10 +108,15 @@ fn render(ask: &Ask, ticket: &codereq::Ticket) -> Option<String> {
     });
     if !ticket.reap_until(Some(Instant::now() + LIMIT))?.ok()?.success() { return None }
     let png = work.dir.join("page.png");
-    if !htmlcache::hit(&png, ask.width) || ticket.superseded() { return None }
+    if !htmlcache::valid_png(&png, ask.width, ask.height) || ticket.superseded() { return None }
     let log = String::from_utf8_lossy(&reader.join().ok()?).into_owned();
+    // Sample input: qml: HTML_META {"title":"Static HTML"}.
     let title = log.lines().find_map(|line| line.split_once("HTML_META ").and_then(|(_, text)| field_str(text, "title"))).unwrap_or_default();
-    std::fs::rename(&png, &dest).ok()?;
+    // Sample input: qml: HTML_RESOURCES {"resources":["file:///page/style.css"],"overflow":false}.
+    let dependencies = log.lines().find_map(|line| line.split_once("HTML_RESOURCES ").and_then(|(_, text)| htmldeps::record(text, folder, started)));
+    let record = work.dir.join("page.deps");
+    exclusive(&record, dependencies.as_deref().unwrap_or(b"null\n"))?;
+    htmlcache::publish(&png, &record, &dest).ok()?;
     htmlcache::evict(&cache);
     Some(reply(ask, "ready", &dest.to_string_lossy(), total, &title))
 }

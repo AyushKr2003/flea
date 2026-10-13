@@ -11,13 +11,32 @@ Window {
             if (args[i].indexOf("--" + name + "=") === 0) return args[i].substring(name.length + 3)
         return fallback
     }
-    readonly property string pageUrl: "file:///output/input.html"
+    readonly property url pageUrl: arg("page", "")
     readonly property string outPath: "/output/page.png"
     readonly property int pageWidth: parseInt(arg("width", "984"))
+    readonly property int pageHeight: parseInt(arg("height", "0"))
+    readonly property int maxHeight: parseInt(arg("max-height", "0"))
+    readonly property int maxResources: parseInt(arg("max-resources", "0"))
+    function resources() {
+        resourceDeadline.start()
+        var socket = "ws://127.0.0.1:9222/devtools/page/" + view.devToolsId
+        var script = "var socket=new WebSocket(" + JSON.stringify(socket) + ");"
+            + "socket.onopen=function(){socket.send(JSON.stringify({id:1,method:'Page.getResourceTree'}));};"
+            + "socket.onerror=function(){console.warn('FLEA_RESOURCES null');};"
+            + "socket.onmessage=function(event){try{var reply=JSON.parse(event.data);if(reply.id!==1)return;"
+            + "if(!reply.result){console.warn('FLEA_RESOURCES null');return;}var urls=[],overflow=false;"
+            + "function collect(tree){(tree.resources||[]).forEach(function(resource){if(resource.failed||resource.canceled)return;"
+            + "var url=new URL(resource.url);if(url.protocol!=='file:'||url.pathname.indexOf('/page/')!==0)return;url.search='';url.hash='';"
+            + "if(urls.length<" + (maxResources + 1) + ")urls.push(url.href);else overflow=true;});"
+            + "(tree.childFrames||[]).forEach(collect);}collect(reply.result.frameTree);"
+            + "console.warn('FLEA_RESOURCES '+JSON.stringify({resources:urls,overflow:overflow}));socket.close();"
+            + "}catch(error){console.warn('FLEA_RESOURCES null');}};"
+        observer.runJavaScript(script, WebEngineScript.ApplicationWorld)
+    }
     visible: true
     color: "#ffffff"
     width: pageWidth
-    height: 600
+    height: pageHeight
 
     WebEngineView {
         id: view
@@ -36,7 +55,7 @@ Window {
         settings.focusOnNavigationEnabled: false
         settings.errorPageEnabled: false
         onNavigationRequested: function (request) {
-            if (request.url.toString() !== win.pageUrl)
+            if (request.url.toString() !== win.pageUrl.toString())
                 request.action = WebEngineNavigationRequest.IgnoreRequest
         }
         onLoadingChanged: function (info) {
@@ -45,11 +64,25 @@ Window {
         }
         onRenderProcessTerminated: Qt.exit(3)
     }
+    WebEngineView {
+        id: observer
+        visible: false
+        url: "about:blank"
+        profile: WebEngineProfile { offTheRecord: true }
+        settings.localStorageEnabled: false
+        settings.pluginsEnabled: false
+        // Only trusted blank-page code queries this sandbox's engine resource tree.
+        onJavaScriptConsoleMessage: function (level, message) {
+            if (message.indexOf("FLEA_RESOURCES ") !== 0) return
+            console.warn("HTML_RESOURCES " + message.substring(15))
+            Qt.exit(0)
+        }
+    }
     Timer {
         id: settle
         interval: 30
         onTriggered: {
-            win.height = Math.max(1, Math.min(Math.ceil(view.contentsSize.height), 8000))
+            win.height = Math.max(win.pageHeight, Math.min(Math.ceil(view.contentsSize.height), win.maxHeight))
             grab.start()
         }
     }
@@ -59,8 +92,16 @@ Window {
         onTriggered: view.grabToImage(function (result) {
             if (!result.saveToFile(win.outPath)) { Qt.exit(4); return }
             console.warn("HTML_META " + JSON.stringify({ title: view.title }))
-            Qt.exit(0)
+            win.resources()
         })
     }
     Timer { interval: 15000; running: true; onTriggered: Qt.exit(5) }
+    Timer {
+        id: resourceDeadline
+        interval: 2000
+        onTriggered: {
+            console.warn("HTML_RESOURCES null")
+            Qt.exit(0)
+        }
+    }
 }

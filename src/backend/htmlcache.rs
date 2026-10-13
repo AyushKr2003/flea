@@ -1,10 +1,11 @@
-use super::{imagesize, md5, regfile, thumbcache};
+use super::{htmldeps, imagesize, md5, regfile, thumbcache};
 use crate::oflags::O_NOFOLLOW;
 use std::fs::{FileTimes, Metadata};
 use std::io::Read;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
 // The companion preview cache uses the same limits as the cached camera previews.
@@ -13,26 +14,52 @@ const MAX_BYTES: u64 = 512 * 1_048_576;
 const SCAN_EVERY: u32 = 32;
 const READER_GRACE: Duration = Duration::from_secs(60);
 static PUBLISHED: AtomicU32 = AtomicU32::new(0);
+static CACHE_LOCK: Mutex<()> = Mutex::new(());
+pub(super) const MAX_WIDTH: usize = 4096;
+pub(super) const MAX_HEIGHT: u32 = 8000;
+pub(super) const DEFAULT_HEIGHT: usize = 600;
+
+#[cfg(test)]
+thread_local! {
+    static AFTER_RECHECK: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = const { std::cell::RefCell::new(None) };
+}
 
 pub fn root() -> PathBuf {
     thumbcache::default_root().join("flea-html")
 }
 
 // Sample key: path /a/index.html, 120 bytes, mtime 9 s and 20 ns, width 984; each dimension invalidates independently.
-pub fn key(path: &Path, meta: &Metadata, width: usize) -> String {
-    md5::hex(format!("html-v1\0{}\0{}\0{}\0{}\0{}", thumbcache::uri_for(path), meta.len(), meta.mtime(), meta.mtime_nsec(), width).as_bytes())
+pub fn key(path: &Path, meta: &Metadata, width: usize, height: usize) -> String {
+    md5::hex(format!("html-v3\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}", thumbcache::uri_for(path), meta.len(), meta.mtime(), meta.mtime_nsec(), meta.ino(), meta.dev(), width, height).as_bytes())
 }
 
-pub fn hit(file: &Path, width: usize) -> bool {
+pub fn hit(file: &Path, width: usize, height: usize, folder: &Path) -> bool {
+    let _guard = CACHE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    htmldeps::unchanged(file, folder) && valid_png(file, width, height)
+}
+
+pub fn valid_png(file: &Path, width: usize, height: usize) -> bool {
+    if width == 0 || width > MAX_WIDTH || height == 0 || height > MAX_HEIGHT as usize { return false }
     let Ok(mut opened) = regfile::open_if_regular(file, O_NOFOLLOW) else { return false };
     let mut header = [0; 24];
     if opened.read_exact(&mut header).is_err() || !header.starts_with(b"\x89PNG\r\n\x1a\n") { return false }
     let Some((w, h)) = imagesize::from_header(&header) else { return false };
-    if w as usize != width || h == 0 || h > 8000 {
+    if w as usize != width || h < height as u32 || h > MAX_HEIGHT {
         return false;
     }
-    let _ = opened.set_times(FileTimes::new().set_accessed(SystemTime::now()));
-    true
+    opened.set_times(FileTimes::new().set_accessed(SystemTime::now())).is_ok()
+}
+
+pub fn publish(png: &Path, dependencies: &Path, dest: &Path) -> std::io::Result<()> {
+    let _guard = CACHE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let record = htmldeps::sidecar(dest);
+    match std::fs::remove_file(&record) {
+        Ok(()) => {},
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+        Err(error) => return Err(error),
+    }
+    std::fs::rename(png, dest)?;
+    std::fs::rename(dependencies, record)
 }
 
 fn used(meta: &Metadata) -> SystemTime {
@@ -74,8 +101,12 @@ fn trim(dir: &Path, files: usize, bytes: u64, now: SystemTime) {
     old.sort();
     for (seen, path, size) in old {
         if count <= files && total <= bytes { break }
+        let _guard = CACHE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let Ok(meta) = path.symlink_metadata() else { continue };
+        #[cfg(test)]
+        AFTER_RECHECK.with(|hook| { if let Some(run) = hook.borrow_mut().take() { run(); } });
         if meta.is_file() && used(&meta) <= seen && std::fs::remove_file(&path).is_ok() {
+            let _ = std::fs::remove_file(htmldeps::sidecar(&path));
             count -= 1;
             total = total.saturating_sub(size);
         }
@@ -95,15 +126,16 @@ mod tests {
         let stamp = SystemTime::UNIX_EPOCH + Duration::new(9, 20);
         for p in [&a, &b] { std::fs::File::open(p).unwrap().set_times(FileTimes::new().set_modified(stamp)).unwrap() }
         let meta = a.metadata().unwrap();
-        let first = key(&a, &meta, 984);
-        assert_eq!(first, key(&a, &meta, 984));
-        assert_ne!(first, key(&b, &b.metadata().unwrap(), 984));
-        assert_ne!(first, key(&a, &meta, 300));
+        let first = key(&a, &meta, 984, DEFAULT_HEIGHT);
+        assert_eq!(first, key(&a, &meta, 984, DEFAULT_HEIGHT));
+        assert_ne!(first, key(&b, &b.metadata().unwrap(), 984, DEFAULT_HEIGHT));
+        assert_ne!(first, key(&a, &meta, 300, DEFAULT_HEIGHT));
+        assert_ne!(first, key(&a, &meta, 984, 625));
         std::fs::File::open(&a).unwrap().set_times(FileTimes::new().set_modified(stamp + Duration::from_nanos(1))).unwrap();
-        assert_ne!(first, key(&a, &a.metadata().unwrap(), 984));
+        assert_ne!(first, key(&a, &a.metadata().unwrap(), 984, DEFAULT_HEIGHT));
         std::fs::write(&a, "longer\n").unwrap();
         std::fs::File::open(&a).unwrap().set_times(FileTimes::new().set_modified(stamp)).unwrap();
-        assert_ne!(first, key(&a, &a.metadata().unwrap(), 984));
+        assert_ne!(first, key(&a, &a.metadata().unwrap(), 984, DEFAULT_HEIGHT));
     }
 
     #[test]
@@ -119,5 +151,43 @@ mod tests {
         d.file("recent.png", "ten bytes!");
         trim(d.path(), 0, 0, SystemTime::now());
         assert!(d.join("recent.png").exists());
+    }
+
+    #[test]
+    fn trim_cannot_unlink_an_entry_served_between_its_recheck_and_unlink() {
+        let d = TestDir::new("html-cache-race");
+        let png = d.join("race.png");
+        let mut header = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+        header.extend_from_slice(&300u32.to_be_bytes());
+        header.extend_from_slice(&600u32.to_be_bytes());
+        std::fs::write(&png, header).unwrap();
+        std::fs::write(htmldeps::sidecar(&png), b"{\"version\":1,\"dependencies\":[]}").unwrap();
+        assert!(hit(&png, 300, DEFAULT_HEIGHT, d.path()));
+        trim(d.path(), 0, 0, SystemTime::now());
+        assert!(png.exists(), "a served entry keeps its reader grace");
+        let answer = std::sync::Arc::new(Mutex::new(None));
+        let held_answer = answer.clone();
+        let requested = png.clone();
+        AFTER_RECHECK.with(|hook| *hook.borrow_mut() = Some(Box::new(move || {
+            let locked = CACHE_LOCK.try_lock().is_err();
+            let folder = requested.parent().unwrap().to_path_buf();
+            let (started, running) = std::sync::mpsc::sync_channel(0);
+            let reader = std::thread::spawn(move || {
+                started.send(()).unwrap();
+                hit(&requested, 300, DEFAULT_HEIGHT, &folder)
+            });
+            running.recv().unwrap();
+            if locked {
+                *held_answer.lock().unwrap() = Some(Err(reader));
+            } else {
+                *held_answer.lock().unwrap() = Some(Ok(reader.join().unwrap()));
+            }
+        })));
+        trim(d.path(), 0, 0, SystemTime::now() + Duration::from_secs(120));
+        let served = match answer.lock().unwrap().take().unwrap() {
+            Ok(served) => served,
+            Err(reader) => reader.join().unwrap(),
+        };
+        assert!(!served || png.exists(), "an entry returned to an Image reader must survive trim");
     }
 }
