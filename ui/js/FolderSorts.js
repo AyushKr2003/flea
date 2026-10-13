@@ -9,17 +9,23 @@ var ORDERS = ["name", "size", "mtime", "kind"]
 // The cap ui.json holds, oldest first; setting past it drops the folders sorted longest ago.
 var MAX = 500
 
-// Resolve only the three XDG roles, using the rail's parser and conventional names for absent roles.
+// Sample input: XDG_DOWNLOAD_DIR="$HOME/Inbox"; absent PICTURES and VIDEOS use their conventional names.
 function newestPaths(body, home) {
     var roles = ["DOWNLOAD", "PICTURES", "VIDEOS"]
     var names = ["Downloads", "Pictures", "Videos"]
     var paths = []
     if (!home) return paths
+    var configured = {}
+    var lines = String(body || "").split("\n")
+    for (var l = 0; l < lines.length; l++) {
+        var entry = UserDirs.parseLine(lines[l], home)
+        if (entry && configured[entry.role] === undefined)
+            configured[entry.role] = entry.path
+    }
     for (var i = 0; i < roles.length; i++) {
-        var line = String(body || "").match(new RegExp('^\\s*XDG_' + roles[i] + '_DIR\\s*=\\s*"[^"\\n]*"', "m"))
-        var entries = UserDirs.userDirs(line ? line[0] : 'XDG_' + roles[i] + '_DIR="$HOME/' + names[i] + '"', home)
-        if (entries.length > 0 && entries[0].path.charAt(0) === "/" && paths.indexOf(entries[0].path) < 0)
-            paths.push(entries[0].path)
+        var path = configured[roles[i]] === undefined ? home + "/" + names[i] : configured[roles[i]]
+        if (path && path !== home && paths.indexOf(path) < 0)
+            paths.push(path)
     }
     return paths
 }

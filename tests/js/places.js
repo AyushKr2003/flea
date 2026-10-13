@@ -1,4 +1,5 @@
 .import "../../ui/js/Places.js" as Places
+.import "userdirsfixture.js" as UserDirsFixture
 
 function run(check) {
     var home = {group: "home", kind: "home", path: "/home/test"}
@@ -56,6 +57,14 @@ function run(check) {
     check("a relative entry expands", got[0].path, "/home/gm/Downloads")
     check("the label is the leaf", got[0].label, "Downloads")
     check("an absolute entry survives", got[2].path, "/srv/projects")
+    for (var i = 0; i < UserDirsFixture.cases.length; i++) {
+        var sample = UserDirsFixture.cases[i]
+        check("rail user dirs: " + sample[0],
+              JSON.stringify(Places.userDirs(UserDirsFixture.body(sample[1]), "/home/test").map(function (entry) { return entry.path })),
+              JSON.stringify(sample[2] === null ? [] : [sample[2]]))
+    }
+    check("an absent rail role creates no conventional entry",
+          Places.userDirs('XDG_PICTURES_DIR="$HOME"\nXDG_VIDEOS_DIR="$HOME"', "/home/test").length, 0)
 
     var marks = 'file:///home/gm/Downloads Downloads\n'
               + 'file:///home/gm/My%20Files\n'

@@ -5,6 +5,7 @@
 .import "../../ui/js/Tabs.js" as Tabs
 .import "tabsfixture.js" as Fixture
 .import "sourcefixture.js" as Source
+.import "userdirsfixture.js" as UserDirsFixture
 
 // Per-folder sorts (issue 179) and Hidden files last (issue 70): map, Settings rows, flyout forget row, tab-kept sorts.
 function sortPane(path, sorts) {
@@ -197,8 +198,9 @@ function run(check) {
 function newestDefaults(check) {
     var paths = ["/home/test/Inbox", "/home/test/Photos", "/home/test/Clips"]
     var fallback = { key: "name", reverse: false }
+    var defaults = {}
     check("fresh Downloads defaults to Modified newest first",
-          JSON.stringify(FolderSorts.orderFor({}, paths[0], fallback, true, paths)),
+          JSON.stringify(FolderSorts.orderFor(defaults, paths[0], fallback, true, paths)),
           JSON.stringify({ key: "mtime", reverse: true }))
     check("Pictures also defaults to Modified newest first",
           JSON.stringify(FolderSorts.orderFor({}, paths[1], fallback, true, paths)),
@@ -217,12 +219,21 @@ function newestDefaults(check) {
     check("a Downloads column peek defaults to Modified newest first",
           JSON.stringify(FolderSorts.peekOrder({}, paths[0], true, paths, paths, fallback)),
           JSON.stringify({ by: "mtime", desc: true }))
-    check("defaults never occupy a folderSorts slot", FolderSorts.count({}), 0)
+    check("defaults never occupy a folderSorts slot", FolderSorts.count(defaults), 0)
+    for (var i = 0; i < UserDirsFixture.cases.length; i++) {
+        var sample = UserDirsFixture.cases[i]
+        check("newest paths: " + sample[0],
+              JSON.stringify(FolderSorts.newestPaths(UserDirsFixture.body(sample[1]), "/home/test")),
+              JSON.stringify(sample[2] === null ? [] : [sample[2]]))
+    }
     check("only the three XDG roles get newest-first defaults",
           FolderSorts.newestPaths('XDG_DOWNLOAD_DIR="$HOME/Inbox"\nXDG_PICTURES_DIR="$HOME/Photos/"\nXDG_VIDEOS_DIR="/media/Clips"\nXDG_DOCUMENTS_DIR="$HOME/Docs"', "/home/test").join("|"),
           "/home/test/Inbox|/home/test/Photos|/media/Clips")
     check("missing XDG roles use conventional names", FolderSorts.newestPaths("", "/home/test").join("|"),
           "/home/test/Downloads|/home/test/Pictures|/home/test/Videos")
+    check("only the absent role uses its conventional name",
+          FolderSorts.newestPaths('XDG_PICTURES_DIR="$HOME/Photos"\nXDG_VIDEOS_DIR="$HOME"', "/home/test").join("|"),
+          "/home/test/Downloads|/home/test/Photos")
     check("disabled roles pointing at Home do not default Home",
           FolderSorts.newestPaths('XDG_DOWNLOAD_DIR="$HOME/"\nXDG_PICTURES_DIR="$HOME"\nXDG_VIDEOS_DIR="$HOME"', "/home/test").length, 0)
     check("localized Downloads does not also default the English folder",
