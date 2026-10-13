@@ -168,8 +168,7 @@ pub fn spawn_jailed(full: &[String], setup: impl FnOnce(&mut std::process::Comma
     Ok(Jailed { child, sandbox_pid: pid })
 }
 
-// SIGKILLs the sandbox init as well as bwrap, then reaps bwrap within a bound; the init is killed while bwrap is alive, since after the reap no parent check can pass.
-// This Jailed is finished after this call: never wait on or signal its child again, because a held reap may finish on another thread.
+// SIGKILLs the sandbox init as well as bwrap, then reaps bwrap within a bound; the init is killed while bwrap is alive, since after the reap no parent check can pass. This Jailed is finished after this call: never wait on or signal its child again, because a held reap may finish on another thread.
 pub fn kill_tree(jailed: &mut Jailed) {
     let bwrap = jailed.child.id() as i32;
     // Ownership is proven before any kill: after the reap the kernel reparents the init, so a later check refuses every time.
