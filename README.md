@@ -157,75 +157,95 @@ Values run from 0 to 1, and the default is 1. The listing, the rail and the bars
 
 ## Performance
 
-Measured on **23 September 2026**, using the **0.3.3** source tree.
-Cold caches, three runs per app, medians below. Seven GUI apps on the same Omarchy machine.
+Measured on **12 October 2026**, using the **0.3.10** source tree.
+Cold caches, 3 runs per app, medians below. 7 GUI apps on the same machine.
 
-Flea's window used 71.9 MiB at 100,000 entries and 83.0 MiB on 2,000 media files;
-Strata's used 107.8 MiB and 74.3 MiB on the same runs.
+### Speed
 
-### 100,000 files
+#### btrfs, 100000 visible entries, filesystem btrfs
 
-Flea's first window now arrives with the listing already drawn;
-0.3.2's arrived empty, at 277 ms.
+| File manager | Version | First window | Settled |
+|---|---|---:|---:|
+| **Flea** | 0.3.10, source 5816ab88 | 505 ms | 1.00 s |
+| Dolphin | 26.08.2-1 | 752 ms | 5.07 s |
+| Nautilus | 51.0.1-2 | 921 ms | 6.59 s |
+| Nemo | 6.6.4-1 | 857 ms | 21.78 s |
+| PCManFM | 1.4.0-2 | 448 ms | 33.54 s |
+| Strata | v1.0.0 | 588 ms | 1.84 s |
+| Thunar | 4.20.10-1 | 518 ms | 19.45 s |
 
-| File manager | Version | First window | Settled | Window PSS | CPU |
-|---|---|---:|---:|---:|---:|
-| **Flea** | 1bd18d9 | 409 ms | 0.92 s | 71.9 MiB | 0.65 s |
-| Strata | v0.19.0 | 588 ms | 3.26 s | 107.8 MiB | 3.13 s |
-| Dolphin | 26.08.0-5 | 735 ms | 5.39 s | 203.0 MiB | 9.26 s |
-| Thunar | 4.20.9-1 | 583 ms | 23.10 s | 347.4 MiB | 22.92 s |
-| Nemo | 6.6.4-1 | 824 ms | 23.30 s | 459.8 MiB | 26.80 s |
-| PCManFM | 1.4.0-2 | 480 ms | 36.54 s | 109.9 MiB | 25.40 s |
-| Nautilus | 50.3.1-1 | 866 ms | 84.03 s | 333.8 MiB | 19.03 s |
+#### btrfs, 1700 visible entries, filesystem btrfs
 
-### 2,000 mixed files
+| File manager | Version | First window | Settled | Thumbnails |
+|---|---|---:|---:|---:|
+| **Flea** | 0.3.10, source 5816ab88 | 541 ms | 1.83 s | 43 |
+| Dolphin | 26.08.2-1 | 733 ms | 13.18 s | 500 |
+| Nautilus | 51.0.1-2 | 876 ms | 18.19 s | 641 |
+| Nemo | 6.6.4-1 | 842 ms | 1.71 s | not measured |
+| PCManFM | 1.4.0-2 | 416 ms | 114.99 s | 700 |
+| Strata | v1.0.0 | 656 ms | 3.26 s | not measured |
+| Thunar | 4.20.10-1 | 507 ms | 0.93 s | not measured |
 
-The apps produced different amounts of thumbnail work, so settled time and CPU are
-**not ranked** across the whole table. Flea and Strata made the same work, 43 and 42
-thumbnails; Flea settled in 1.80 s on 6.02 s of CPU and Strata in 2.88 s on 7.08 s.
+Note: Nemo, Thunar: "unranked: nothing reached the thumbnail cache so its work was not measured".
+Note: Strata: "unranked: its watches saw 0 renders for 86 opened fixture files so neither is a count".
 
-| File manager | Version | First window | Settled | Window PSS | CPU | Thumbnails |
-|---|---|---:|---:|---:|---:|---:|
-| **Flea** | 1bd18d9 | 410 ms | 1.80 s | 83.0 MiB | 6.02 s | 43 |
-| Dolphin | 26.08.0-5 | 761 ms | 13.83 s | 93.1 MiB | 67.87 s | 500 |
-| Nautilus | 50.3.1-1 | 923 ms | 20.36 s | 180.8 MiB | 125.08 s | 641 |
-| Nemo | 6.6.4-1 | 864 ms | 3.60 s | 54.2 MiB | 9.10 s | 60 |
-| PCManFM | 1.4.0-2 | 438 ms | Timed out | 39.6 MiB | 157.27 s | 687 |
-| Strata | v0.19.0 | 553 ms | 2.88 s | 74.3 MiB | 7.08 s | 42 |
-| Thunar | 4.20.9-1 | 568 ms | 13.23 s | 38.8 MiB | 21.03 s | 221 |
+#### btrfs, 2000 visible entries, filesystem btrfs
 
-### 1,700 matched files
+| File manager | Version | First window | Settled | Thumbnails |
+|---|---|---:|---:|---:|
+| **Flea** | 0.3.10, source 5816ab88 | 530 ms | 1.77 s | 43 |
+| Dolphin | 26.08.2-1 | 747 ms | 13.76 s | 642 |
+| Nautilus | 51.0.1-2 | 897 ms | 19.29 s | 641 |
+| Nemo | 6.6.4-1 | 862 ms | 3.40 s | 60 |
+| PCManFM | 1.4.0-2 | 420 ms | Timed out | 690 |
+| Strata | v1.0.0 | 599 ms | 3.45 s | not measured |
+| Thunar | 4.20.10-1 | 513 ms | 1.00 s | not measured |
 
-The same set less HEIC and MKV, the two formats some of these apps decline.
-Work still differs by app, so the same rule holds. Nemo left
-nothing in the thumbnail cache on this set, so its work was not measured and its time is not a
-result. Flea and Strata again made the same work; Flea settled in 1.81 s and Strata in 2.88 s.
+Note: Strata: "unranked: its watches saw 0 renders for 86 opened fixture files so neither is a count".
+Note: Thunar: "unranked: nothing reached the thumbnail cache so its work was not measured".
 
-| File manager | Version | First window | Settled | Window PSS | CPU | Thumbnails |
-|---|---|---:|---:|---:|---:|---:|
-| **Flea** | 1bd18d9 | 410 ms | 1.81 s | 83.4 MiB | 6.40 s | 43 |
-| Dolphin | 26.08.0-5 | 679 ms | 13.49 s | 93.1 MiB | 66.40 s | 500 |
-| Nautilus | 50.3.1-1 | 871 ms | 19.07 s | 179.7 MiB | 117.55 s | 641 |
-| Nemo | 6.6.4-1 | 817 ms | 1.98 s | 46.0 MiB | 1.60 s | not measured |
-| PCManFM | 1.4.0-2 | 442 ms | 115.06 s | 41.6 MiB | 181.72 s | 700 |
-| Strata | v0.19.0 | 557 ms | 2.88 s | 74.1 MiB | 7.14 s | 42 |
-| Thunar | 4.20.9-1 | 538 ms | 12.90 s | 37.9 MiB | 20.79 s | 221 |
+### Memory and CPU
 
-"First window" records compositor registration. "Settled" means 500 ms without process-tree
-CPU activity; neither measures input readiness.
-PSS covers the window process, excluding helpers and GPU memory. Flea's separate backend used a
-median **6.7 MiB** on the large listing and **3.3 MiB** on media. CPU is everything the app
-started, counted from a control group of its own, so sandboxed thumbnailers are in it; a figure
-from before 0.3.2 counted only reaped children and is not comparable. Shared libraries affect PSS.
-PCManFM did not settle in any media run. Results describe this machine and workload.
+#### btrfs, 100000 visible entries, filesystem btrfs
 
-[Method](docs/benchmarks.md) · [Scale CSV](docs/bench/scale-0.3.3-20260923.csv) ·
-[Scale manifest](docs/bench/scale-0.3.3-20260923.manifest.md) ·
-[Media CSV](docs/bench/media-0.3.3-20260923.csv) ·
-[Media manifest](docs/bench/media-0.3.3-20260923.manifest.md) ·
-[Matched CSV](docs/bench/matched-0.3.3-20260923.csv) ·
-[Matched manifest](docs/bench/matched-0.3.3-20260923.manifest.md) ·
-[0.1.6 run and TUI results](docs/bench/results-0.1.6.md)
+| File manager | Version | Window PSS | CPU |
+|---|---|---:|---:|
+| **Flea** | 0.3.10, source 5816ab88 | 80.7 MiB | 0.75 s |
+| Dolphin | 26.08.2-1 | 202.6 MiB | 7.67 s |
+| Nautilus | 51.0.1-2 | 321.4 MiB | 8.27 s |
+| Nemo | 6.6.4-1 | 472.8 MiB | 25.00 s |
+| PCManFM | 1.4.0-2 | 123.0 MiB | 23.05 s |
+| Strata | v1.0.0 | 130.6 MiB | 1.53 s |
+| Thunar | 4.20.10-1 | 358.5 MiB | 19.33 s |
+
+#### btrfs, 1700 visible entries, filesystem btrfs
+
+| File manager | Version | Window PSS | CPU |
+|---|---|---:|---:|
+| **Flea** | 0.3.10, source 5816ab88 | 93.6 MiB | 5.04 s |
+| Dolphin | 26.08.2-1 | 99.3 MiB | 64.30 s |
+| Nautilus | 51.0.1-2 | 176.4 MiB | 114.32 s |
+| Nemo | 6.6.4-1 | 45.1 MiB | 1.66 s |
+| PCManFM | 1.4.0-2 | 42.0 MiB | 171.36 s |
+| Strata | v1.0.0 | 86.3 MiB | 7.61 s |
+| Thunar | 4.20.10-1 | 34.2 MiB | 0.90 s |
+
+#### btrfs, 2000 visible entries, filesystem btrfs
+
+| File manager | Version | Window PSS | CPU |
+|---|---|---:|---:|
+| **Flea** | 0.3.10, source 5816ab88 | 93.5 MiB | 4.82 s |
+| Dolphin | 26.08.2-1 | 102.8 MiB | 68.07 s |
+| Nautilus | 51.0.1-2 | 176.4 MiB | 120.73 s |
+| Nemo | 6.6.4-1 | 54.7 MiB | 9.38 s |
+| PCManFM | 1.4.0-2 | 39.6 MiB | 154.08 s |
+| Strata | v1.0.0 | 87.5 MiB | 7.32 s |
+| Thunar | 4.20.10-1 | 35.2 MiB | 0.95 s |
+
+"First window" records compositor registration. "Settled" means 500 ms without process-tree CPU activity; neither measures input readiness.
+PSS covers the window process, excluding helpers and GPU memory. CPU is everything the app started, counted from a control group of its own, so sandboxed thumbnailers are in it. Shared libraries affect PSS. Results describe this machine and workload.
+
+[Method](docs/benchmarks.md) · [Local CSV](docs/bench/local-0.3.10-20261012.csv) · [Local manifest](docs/bench/local-0.3.10-20261012.manifest.md) · [Matched CSV](docs/bench/matched-0.3.10-20261012.csv) · [Matched manifest](docs/bench/matched-0.3.10-20261012.manifest.md) · [Media CSV](docs/bench/media-0.3.10-20261012.csv) · [Media manifest](docs/bench/media-0.3.10-20261012.manifest.md)
 
 ## Keyboard
 
