@@ -19,7 +19,7 @@ ln -s "$(readlink -m ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 ln -s "$test_root/config/flea/boot/fleatab.qml" "$test_root/config/fleatab.qml" || exit 1
 cp -a ui "$test_root/config/flea" || exit 1
 cp tests/quicklook-rect.qml "$test_root/config/shell.qml" || exit 1
-# Code, three 12-page A4 PDFs (595 x 842 points), a landscape and a portrait phone screenshot, and a portrait shorter than the tall rect; the names sort in this order.
+# Code, two 12-page A4 PDFs (595 x 842 points), a landscape screenshot, a third such PDF, a portrait phone screenshot and a portrait shorter than the tall rect; the names sort in this order.
 printf 'fn main() {\n    println!("tall");\n}\n' > "$test_root/fixture/a-main.rs"
 for name in b-doc.pdf b-docs.pdf c-tall.pdf; do
     {
