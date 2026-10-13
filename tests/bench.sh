@@ -355,9 +355,9 @@ done
 # trap hard rule 7 names first. The second was derived from the class field and quietly resolved to
 # a window class rather than a program, which the manifest would have printed as "absent".
 bench="$repo/tools/flea-field-bench"
-rows=$(sed -n '/^declare -a ENTRANTS=(/,/^)/p' "$bench" | grep '^  "' | tr -d '"')
+rows=$(sed -n '/^  declare -ga ENTRANTS=(/,/^  )/p' "$bench" | grep '^    "' | tr -d '"')
 # -f8-, matching the bench: the command field may hold a pipe and cut -f8 would stop at it.
-flea_cmd=$(printf '%s\n' "$rows" | grep '^  flea|' | cut -d'|' -f8-)
+flea_cmd=$(printf '%s\n' "$rows" | grep '^    flea|' | cut -d'|' -f8-)
 tui_term=$(grep -m1 '^TUI_TERM=' "$bench" | cut -d= -f2)
 # The header and the row are written in two different places, so a column added to one and not the
 # other produces a CSV that parses and is wrong from that column rightward.
@@ -367,7 +367,7 @@ check "the CSV header and the row have the same column count" "$header_fields" "
 
 # tools/flea-bench-capability reads the same entrant table. A row extraction that comes back empty
 # would report every entrant as capable of nothing, which reads as a result.
-cap_gui=$(sed -n '/^declare -a ENTRANTS=(/,/^)/p' "$bench" | grep '^  "' | tr -d '"' | grep -c '|gui|')
+cap_gui=$(sed -n '/^  declare -ga ENTRANTS=(/,/^  )/p' "$bench" | grep '^    "' | tr -d '"' | grep -c '|gui|')
 if [ "$cap_gui" -ge 5 ]; then
   echo "ok   the capability pass can see the GUI entrants: $cap_gui of them"
 else

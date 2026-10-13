@@ -1,6 +1,5 @@
 #!/bin/bash
-# Gates tools/flea-field-bench's strata provenance: STRATA_SRC comes from the cargo target/release that built
-# STRATA_BIN or must be named, and a run is refused when the binary does not report the tree's version.
+# Gates tools/flea-field-bench's explicit or cargo-derived STRATA_SRC and exact binary-to-source version match.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 bench="$PWD/tools/flea-field-bench"
@@ -24,7 +23,8 @@ case $scratch in
   /*/*) ;;
   *) echo "FAIL: mktemp -d gave '$scratch', which is not an absolute path two components deep"; exit 1 ;;
 esac
-trap 'rm -rf "$scratch"' EXIT
+: > "$scratch/.flea-test-sandbox"
+trap 'case $scratch in /?*) [ -f "$scratch/.flea-test-sandbox" ] && rm -rf -- "$scratch" ;; esac' EXIT
 
 # A source tree with a Cargo.toml naming $2, and a strata stub that prints the line $3 for --version.
 make_tree() {
@@ -101,6 +101,35 @@ mkdir -p "$scratch/g"; printf '[package]\nname = "strata"\n' > "$scratch/g/Cargo
 make_stub "$scratch/g/target/release/strata" "strata 1.0.0"
 out=$(run_case "$scratch/g/target/release/strata" ""); rc=$?
 check "a tree with no version is refused" 3 "$rc"
+
+# A sibling without the provenance marker must give way to the tree's current manifest tool.
+export MANIFEST_SELECTION=$(sed -n '/^# manifest selection begin$/,/^# manifest selection end$/p' "$bench")
+mkdir -p "$scratch/sibling"
+select_manifest() { FLEA_REPO=$PWD bash -c 'eval "$MANIFEST_SELECTION"; printf "%s" "$MANIFEST_TOOL"' "$scratch/sibling/flea-field-bench"; }
+printf '#!/bin/bash\nexit 0\n' > "$scratch/sibling/flea-bench-manifest"
+chmod +x "$scratch/sibling/flea-bench-manifest"
+check "an old sibling manifest tool falls back to the tree's tool" "$PWD/tools/flea-bench-manifest" "$(select_manifest)"
+cp tools/flea-bench-manifest "$scratch/sibling/flea-bench-manifest"
+check "a current sibling manifest tool is preferred" "$scratch/sibling/flea-bench-manifest" "$(select_manifest)"
+chmod -x "$scratch/sibling/flea-bench-manifest"
+check "a non-executable sibling manifest tool falls back" "$PWD/tools/flea-bench-manifest" "$(select_manifest)"
+
+# The bench and standalone manifest must compare resolved trees while preserving an empty anchor.
+repo_resolve=$(grep '^FLEA_REPO=$(readlink -f ' "$bench")
+anchor_setup=$(sed -n '/^# anchor setup begin$/,/^# anchor setup end$/p' "$bench")
+anchor_src=$(sed -n '/^anchor_line() {$/,/^}$/p' tools/flea-bench-manifest)
+mkdir -p "$scratch/tree" "$scratch/other"
+ln -s "$scratch/tree" "$scratch/tree-link"
+bench_anchor_case() { ( FLEA_REPO=$1; ANCHOR_REPO=$2; eval "$repo_resolve"; eval "$anchor_setup"; printf '%s|%s|%s' "$WITH_ANCHOR" "$FLEA_REPO" "$ANCHOR_REPO"; ); }
+manifest_anchor_case() { ( FLEA_REPO=$1; ANCHOR_REPO=$2; export GIT_CEILING_DIRECTORIES=$scratch; eval "$anchor_src"; anchor_line; ); }
+check "a trailing slash on the same bench tree creates no anchor" "no|$scratch/tree|$scratch/tree" "$(bench_anchor_case "$scratch/tree" "$scratch/tree/")"
+check "a symlink to the same bench tree creates no anchor" "no|$scratch/tree|$scratch/tree" "$(bench_anchor_case "$scratch/tree-link" "$scratch/tree")"
+check "an empty bench anchor remains empty" "no|$scratch/tree|" "$(bench_anchor_case "$scratch/tree" '')"
+check "a separate bench tree keeps its anchor" "yes|$scratch/tree|$scratch/other" "$(bench_anchor_case "$scratch/tree" "$scratch/other/")"
+check "the manifest treats a trailing slash as the same tree" "no anchor arm ran in this run" "$(manifest_anchor_case "$scratch/tree" "$scratch/tree/")"
+check "the manifest treats a symlink as the same tree" "no anchor arm ran in this run" "$(manifest_anchor_case "$scratch/tree" "$scratch/tree-link")"
+check "the manifest preserves an empty anchor" "no anchor arm ran in this run" "$(manifest_anchor_case "$scratch/tree" '')"
+check "the manifest records a separate resolved tree" "$scratch/other at unreadable untagged" "$(manifest_anchor_case "$scratch/tree" "$scratch/other/")"
 
 [ "$bad" = 0 ] && echo "field-strata-src: all passed" || echo "field-strata-src: failures above"
 exit "$bad"

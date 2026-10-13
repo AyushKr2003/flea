@@ -1,6 +1,5 @@
 #!/bin/bash
-# Gates tools/flea-field-bench's launch order and its CSV column: each kind's rows rotate a place a run and
-# reverse every other full cycle, so every pair leads equally often over 2N runs, and launch_pos is the last column.
+# Gates tools/flea-field-bench's launch rotation, pair balance over 2N runs and final launch_pos CSV column.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 bench="$PWD/tools/flea-field-bench"
@@ -99,6 +98,55 @@ eval "$run_text" > "$scratch/launched-only" 2> "$scratch/skips-only"
 check "ONLY excludes absent entrants without naming or launching them" 0 "$(wc -l < "$scratch/skips-only")"
 check "ONLY still launches the selected entrant in each run" 3 "$(grep -cx 'present@1' "$scratch/launched-only")"
 with_only ""
+
+# Scope the real roster and kill rows, so a valid word cannot hide a typo beside it.
+entrant_src=$(sed -n '/^build_entrants() {$/,/^}$/p' "$bench")
+kill_src=$(sed -n '/^declare -a KILL_TARGETS=(/,/^)/p' "$bench")
+kill_comms_src=$(sed -n '/^kill_comms_for() {$/,/^}$/p' "$bench")
+validate_src=$(sed -n '/^validate_only() {$/,/^}$/p' "$bench")
+scope_src=$(sed -n '/^# only scope begin$/,/^# only scope end$/p' "$bench")
+scope_case() {
+  (
+    fail() { printf 'refused: %s\n' "$*"; exit 3; }
+    FLEA_UI=$scratch/ui; FLEA_BIN=$scratch/flea; FLEA_QMLCACHE=$scratch/qml; FIXTURE=$scratch
+    FLEA_STATE=""; TUI_CONF=""; TUI_CLASS=flea-test-kitty; TUI_TERM=kitty; STRATA_BIN=$scratch/strata; WITH_ANCHOR=no
+    eval "$entrant_src"; build_entrants
+    FLEA_STATE=$scratch/state; TUI_CONF=$scratch/tui
+    build_entrants
+    eval "$kill_src"; eval "$kill_comms_src"; eval "$validate_src"
+    with_only "$1"; eval "$scope_src"
+    selected=""
+    for row in "${ENTRANTS[@]}"; do only_has "${row%%|*}" && selected+="${row%%|*} "; done
+    printf 'targets=%s selected=%s\n' "$(printf '%s\n' "${KILL_TARGETS[@]}" | paste -sd' ')" "${selected% }"
+    [[ "${ENTRANTS[0]}" = *"XDG_STATE_HOME=$FLEA_STATE "* ]] && printf 'fresh state\n'
+    for row in "${ENTRANTS[@]}"; do
+      if [ "${row%%|*}" = flea-tui ] && [[ "$row" = *"XDG_CONFIG_HOME=$TUI_CONF "* ]]; then printf 'fresh config\n'; fi
+    done
+  )
+}
+out=$(scope_case "flea thunr"); rc=$?
+check "ONLY=flea thunr refuses the whole selection" 3 "$rc"
+check "the ONLY refusal names the unknown word" "refused: ONLY names unknown entrant 'thunr'" "$out"
+out=$(scope_case "flea thunar"); rc=$?
+check "ONLY=flea thunar scopes both entrants and thunar's helper" "targets=qs|$scratch/ui flea|--backend thunar| tumblerd| selected=flea thunar
+fresh state
+fresh config" "$out"
+check "a valid multi-word ONLY exits zero" 0 "$rc"
+
+# Run the capability tool's own roster read, so the earlier builder remains visible to its caller.
+cap_src=$(sed -n '/^mapfile -t CAP_ROWS /,/^  | sed /p' tools/flea-bench-capability)
+cap_case() {
+  (
+    FLEA_REPO=$PWD; FLEA_UI=$scratch/ui; FLEA_BIN=$scratch/flea; STRATA_BIN=$scratch/strata; FIXTURE=$scratch; FLEA_STATE=$scratch/state
+    eval "$cap_src"
+    gui=0
+    for row in "${CAP_ROWS[@]}"; do [[ "$row" = *'|gui|'* ]] && gui=$(( gui + 1 )); done
+    printf 'gui=%s' "$gui"
+    [[ "${CAP_ROWS[0]:-}" = *"FLEA_UI=$FLEA_UI "* ]] && printf ' ui expanded'
+    [[ "${CAP_ROWS[0]:-}" = *"XDG_STATE_HOME=$FLEA_STATE "* ]] && printf ' state expanded'
+  )
+}
+check "the capability reader retains every GUI row and expands its paths" "gui=7 ui expanded state expanded" "$(cap_case)"
 
 # The CSV: the header ends with launch_pos, and the row format writes one value per header column.
 header=$(grep -m1 '^echo "id,run,' "$bench" | sed 's/^echo "//; s/" >> .*//')

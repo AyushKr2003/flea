@@ -7,7 +7,8 @@ set -uo pipefail
 # than by $0's. It owns FIXTURE_ROOT and checks every path this script writes or deletes.
 # Exported, and overridable: tools/flea-bench-manifest is a child process that defaults to this
 # same path, so an unexported value left it reporting a different tree than the run measured.
-export FLEA_REPO="${FLEA_REPO:-$HOME/Work/claude/flea}"
+FLEA_REPO=$(readlink -f "${FLEA_REPO:-$HOME/Work/claude/flea}") || { printf 'FAIL: cannot resolve FLEA_REPO\n' >&2; exit 1; }
+export FLEA_REPO
 . "$FLEA_REPO/tools/flea-sandbox-guard"
 
 # The CPU column needs a leaf cgroup, which only a delegated user scope may make; see AGENTS.md "Testing".
@@ -60,18 +61,28 @@ export FLEA_BIN="$FLEA_REPO/target/release/flea"
 # The tested Flea's own QML disk cache, in its build tree: a sandbox arm never grows the user's ~/.cache/quickshell/qmlcache.
 export FLEA_QMLCACHE="$FLEA_REPO/target/qmlcache"
 # The anchor entrant runs only against a separate tree, so a default run never benches one build twice.
+
+# anchor setup begin
 export ANCHOR_REPO="${ANCHOR_REPO:-}"
+if [ -n "$ANCHOR_REPO" ]; then
+  ANCHOR_REPO=$(readlink -f "$ANCHOR_REPO") || { printf 'FAIL: cannot resolve ANCHOR_REPO\n' >&2; exit 1; }
+fi
 WITH_ANCHOR=no
 if [ -n "$ANCHOR_REPO" ] && [ "$ANCHOR_REPO" != "$FLEA_REPO" ]; then WITH_ANCHOR=yes; fi
 export ANCHOR_BIN="$ANCHOR_REPO/target/release/flea"
 export ANCHOR_UI="$ANCHOR_REPO/ui"
 export ANCHOR_QMLCACHE="$ANCHOR_REPO/target/qmlcache"
-# A manifest tool beside this bench wins, otherwise the tree's own tool runs.
+# anchor setup end
+
+# manifest selection begin
+
+# A sibling manifest tool wins only when it carries the tree tool's provenance marker.
 MANIFEST_TOOL=$(dirname "$0")/flea-bench-manifest
-[ -x "$MANIFEST_TOOL" ] || MANIFEST_TOOL=$FLEA_REPO/tools/flea-bench-manifest
+[ -x "$MANIFEST_TOOL" ] && grep -q '^manifest_tool_marker() {' "$MANIFEST_TOOL" || MANIFEST_TOOL="$FLEA_REPO/tools/flea-bench-manifest"
 MANIFEST_TOOL=$(readlink -f "$MANIFEST_TOOL")
-# Strata is built from source rather than packaged, so its path is a variable and not a PATH lookup.
-# STRATA_SRC is the tree that built STRATA_BIN; strata_provenance refuses a run where the two disagree.
+# manifest selection end
+
+# Strata's binary path is explicit because it is built from source; STRATA_SRC names its build tree, checked by strata_provenance.
 STRATA_BIN=${STRATA_BIN:-$HOME/Work/strata/target/release/strata}
 STRATA_SRC=${STRATA_SRC:-}
 # The harness's own file, so the manifest can record its sha256 and whether a copy was patched.
@@ -918,6 +929,36 @@ kill_entrant() {
   [ ${#PIDS[@]} -eq 0 ] || fail "$comm would not die"
 }
 
+# The same roster scopes ONLY before setup and builds launch commands again once the temporary paths exist.
+build_entrants() {
+  # Fields: id|kind|class|comm|token|helper_comm|helper_token|command; the command holds any later pipe, and its \$TUI_DUMP_FLAG is read by each launch's eval.
+  declare -ga ENTRANTS=(
+    # Flea's real launcher sets prctl before exec; FLEA_UI avoids an installed shell overriding the checkout, and rows name any helper doing their work, Flea's backend or thunar's D-Bus activated tumblerd.
+    "flea|gui|com.thisisgm.flea|qs|$FLEA_UI|flea|--backend|FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI QML_DISK_CACHE_PATH=$FLEA_QMLCACHE XDG_STATE_HOME=$FLEA_STATE setsid nohup $FLEA_BIN --gui $FIXTURE"
+    "nautilus|gui|org.gnome.Nautilus|nautilus||||setsid nohup nautilus --new-window $FIXTURE"
+    "thunar|gui|thunar|thunar||tumblerd||setsid nohup thunar $FIXTURE"
+    "pcmanfm|gui|pcmanfm|pcmanfm||||setsid nohup pcmanfm $FIXTURE"
+    "nemo|gui|nemo|nemo||||setsid nohup nemo $FIXTURE"
+    "dolphin|gui|org.kde.dolphin|dolphin||||setsid nohup dolphin $FIXTURE"
+    # Built from source at ~/Work/strata, not packaged: the row is skipped when that binary is absent.
+    "strata|gui|io.github.lgse.Strata|strata||||setsid nohup $STRATA_BIN $FIXTURE"
+    # Every previewing entrant prefers Kitty's protocol to foot's sixel, which caused the old zero across all eight; flea-tui uses the same terminal and the bench's own XDG_CONFIG_HOME.
+    "flea-tui|tui|$TUI_CLASS|flea||||XDG_CONFIG_HOME=$TUI_CONF XDG_STATE_HOME=$FLEA_STATE setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG $FLEA_BIN --tui $FIXTURE"
+    "yazi|tui|$TUI_CLASS|yazi||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG yazi $FIXTURE"
+    "mc|tui|$TUI_CLASS|mc||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG mc $FIXTURE"
+    "broot|tui|$TUI_CLASS|broot||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG broot $FIXTURE"
+    # preview-tui's shipped header requires -a to create NNN_FIFO and -P p to load the preview plugin at startup.
+    "nnn|tui|$TUI_CLASS|nnn||||XDG_CONFIG_HOME=$TUI_CONF NNN_PLUG=p:preview-tui setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG nnn -a -P p $FIXTURE"
+    "lf|tui|$TUI_CLASS|lf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG lf $FIXTURE"
+    "ranger|tui|$TUI_CLASS|ranger||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG ranger $FIXTURE"
+    "xplr|tui|$TUI_CLASS|xplr||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG xplr $FIXTURE"
+    "superfile|tui|$TUI_CLASS|spf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG spf $FIXTURE"
+  )
+  # The anchor entrant is the flea row with the anchor tree in place of the Flea tree, interleaved for the rank.
+  if [ "$WITH_ANCHOR" = yes ]; then ENTRANTS=("${ENTRANTS[0]}" "flea-anchor|gui|com.thisisgm.flea|qs|$ANCHOR_UI|flea|--backend|FLEA_BIN=$ANCHOR_BIN FLEA_UI=$ANCHOR_UI QML_DISK_CACHE_PATH=$ANCHOR_QMLCACHE XDG_STATE_HOME=$ANCHOR_STATE setsid nohup $ANCHOR_BIN --gui $FIXTURE" "${ENTRANTS[@]:1}"); fi
+}
+build_entrants
+
 # Fields: comm|token, in kill order, so clean_bench and the start-up refusal read one list and cannot drift apart.
 declare -a KILL_TARGETS=(
   "qs|$FLEA_UI"
@@ -979,9 +1020,21 @@ kill_comms_for() {
 set -f
 ONLY_IDS=(${ONLY:-})
 set +f
-# One entrant, re-measured on a box in use. The full list closes every file manager on it by name,
-# and the operator's own windows are not this run's to close, so ONLY scopes both the kill and the
-# refusal to the entrant named. A row that names nothing is a typo and takes the run down with it.
+
+# Reject every unknown word against the same rows the launch loop reads, before any kill target is scoped.
+validate_only() {
+  local id row known
+  for id in "${ONLY_IDS[@]}"; do
+    known=no
+    for row in "${ENTRANTS[@]}"; do
+      if [ "${row%%|*}" = "$id" ]; then known=yes; break; fi
+    done
+    [ "$known" = yes ] || fail "ONLY names unknown entrant '$id'"
+  done
+}
+# only scope begin
+validate_only
+# ONLY scopes both the kill list and the startup refusal, so the operator's other windows are never this run's to close.
 if [ ${#ONLY_IDS[@]} -gt 0 ]; then
   declare -a scoped_targets=()
   for one_only in "${ONLY_IDS[@]}"; do
@@ -995,6 +1048,8 @@ if [ ${#ONLY_IDS[@]} -gt 0 ]; then
     || fail "ONLY=$ONLY names no process in the kill list, so this run could not clean up after itself"
   KILL_TARGETS=("${scoped_targets[@]}")
 fi
+# only scope end
+
 # Membership reads the split above, so a tab or a glob word scopes the kill and the launch alike.
 only_has() { [ ${#ONLY_IDS[@]} -eq 0 ] && return 0; local o; for o in "${ONLY_IDS[@]}"; do [ "$o" = "$1" ] && return 0; done; return 1; }
 # An ONLY naming the anchor without an anchor tree would silently run nothing of it.
@@ -1606,41 +1661,8 @@ mkdir -p "$(dirname "$OUT")"
 : > "$OUT"
 echo "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun,first_rows_ms,launch_pos" >> "$OUT"
 
-# Fields: id|kind|class|comm|token|helper_comm|helper_token|command; the command holds any later pipe, and its \$TUI_DUMP_FLAG is read by each launch's eval.
-declare -a ENTRANTS=(
-  # Launch the real binary, not qs: every other entrant is launched by its own launcher and flea's sets prctl before exec.
-  # An entrant whose work runs in a second process names it as its helper: Flea's backend, and thunar's D-Bus activated tumblerd.
-  # FLEA_UI is passed as well as FLEA_BIN, and it is not decoration. paths.rs resolves the shell as
-  # FLEA_UI, then /usr/share/flea/ui, then a walk up from the binary. With nothing installed the
-  # walk-up lands on this checkout, so the bench has been measuring the right UI by fallback rather
-  # than by instruction; the moment a package installs /usr/share/flea/ui that branch is checked
-  # second and wins, and the run would launch this tree's binary against the installed shell.
-  "flea|gui|com.thisisgm.flea|qs|$FLEA_UI|flea|--backend|FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI QML_DISK_CACHE_PATH=$FLEA_QMLCACHE XDG_STATE_HOME=$FLEA_STATE setsid nohup $FLEA_BIN --gui $FIXTURE"
-  "nautilus|gui|org.gnome.Nautilus|nautilus||||setsid nohup nautilus --new-window $FIXTURE"
-  "thunar|gui|thunar|thunar||tumblerd||setsid nohup thunar $FIXTURE"
-  "pcmanfm|gui|pcmanfm|pcmanfm||||setsid nohup pcmanfm $FIXTURE"
-  "nemo|gui|nemo|nemo||||setsid nohup nemo $FIXTURE"
-  "dolphin|gui|org.kde.dolphin|dolphin||||setsid nohup dolphin $FIXTURE"
-  # Built from source at ~/Work/strata, not packaged: the row is skipped when that binary is absent.
-  "strata|gui|io.github.lgse.Strata|strata||||setsid nohup $STRATA_BIN $FIXTURE"
-  # The group runs in kitty, not foot: foot is sixel only and every entrant here that previews at
-  # all prefers the Kitty protocol, so the old group's 0 across all eight was the harness's
-  # terminal choice rather than a result about the entrants. XDG_CONFIG_HOME is the bench's own.
-  # flea-tui is the Flea TUI front end in that same terminal and config dir, so ONLY=flea-tui works.
-  "flea-tui|tui|$TUI_CLASS|flea||||XDG_CONFIG_HOME=$TUI_CONF XDG_STATE_HOME=$FLEA_STATE setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG $FLEA_BIN --tui $FIXTURE"
-  "yazi|tui|$TUI_CLASS|yazi||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG yazi $FIXTURE"
-  "mc|tui|$TUI_CLASS|mc||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG mc $FIXTURE"
-  "broot|tui|$TUI_CLASS|broot||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG broot $FIXTURE"
-  # -a auto-creates the NNN_FIFO its preview plugin needs and -P p loads that plugin at start, both
-  # of which are how /usr/share/nnn/plugins/preview-tui's own header says to wire it.
-  "nnn|tui|$TUI_CLASS|nnn||||XDG_CONFIG_HOME=$TUI_CONF NNN_PLUG=p:preview-tui setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG nnn -a -P p $FIXTURE"
-  "lf|tui|$TUI_CLASS|lf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG lf $FIXTURE"
-  "ranger|tui|$TUI_CLASS|ranger||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG ranger $FIXTURE"
-  "xplr|tui|$TUI_CLASS|xplr||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG xplr $FIXTURE"
-  "superfile|tui|$TUI_CLASS|spf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG spf $FIXTURE"
-)
-# The anchor entrant is the flea row with the anchor tree in place of the Flea tree, interleaved for the rank.
-if [ "$WITH_ANCHOR" = yes ]; then ENTRANTS=("${ENTRANTS[0]}" "flea-anchor|gui|com.thisisgm.flea|qs|$ANCHOR_UI|flea|--backend|FLEA_BIN=$ANCHOR_BIN FLEA_UI=$ANCHOR_UI QML_DISK_CACHE_PATH=$ANCHOR_QMLCACHE XDG_STATE_HOME=$ANCHOR_STATE setsid nohup $ANCHOR_BIN --gui $FIXTURE" "${ENTRANTS[@]:1}"); fi
+# Build commands with the marked temporary paths while retaining the roster already used for ONLY.
+build_entrants
 
 # launch order begin
 # Run r starts at place (r - 1) mod N and every other cycle reverses, so each pair leads once per order per 2N runs.

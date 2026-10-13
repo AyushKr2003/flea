@@ -160,6 +160,8 @@ eval "$WARM_TEXT"; eval "$SWEEP_TEXT"; eval "$CLEAN_TEXT"; eval "$CLEANUP_TEXT"
 warm_stop() { :; }
 eval "$(declare -f warm_qml_cache | sed '1s/warm_qml_cache/warm_qml_cache_body/')"
 warm_qml_cache() { printf '%s\n' "$BASHPID" > "$W/warm-pid"; warm_qml_cache_body; }
+eval "$(declare -f stop_warm_job | sed '1s/stop_warm_job/stop_warm_job_body/')"
+stop_warm_job() { printf '%s\n' "${WARM_PID:-empty}" > "$W/pid-at-cleanup"; stop_warm_job_body; }
 if [ "$MODE" != mapped ]; then cp() { bash "$W/copy.sh"; }; fi
 WARM_QUIET_POLLS=600
 trap bench_cleanup EXIT
@@ -208,7 +210,12 @@ with root.joinpath('run.log').open('w') as log:
 PYDRIVER
   # Sample input: the Python driver's status file is "143 412", the exit status followed by elapsed milliseconds.
   read -r rc elapsed < "$warm/status" || true
-  case $mode in fork|anchor-fork) check "$signal during $mode lands before WARM_PID assignment" empty "$(cat "$warm/pid-at-signal" 2>/dev/null)" ;; esac
+  case $mode in
+    fork|anchor-fork)
+      check "$signal during $mode is sent from the fork window before WARM_PID assignment" empty "$(cat "$warm/pid-at-signal" 2>/dev/null)"
+      check "$signal during $mode reaches EXIT cleanup with WARM_PID empty" empty "$(cat "$warm/pid-at-cleanup" 2>/dev/null)"
+      ;;
+  esac
   check "$signal during $mode reached the warm job" yes "$(cat "$warm/ready")"
   check "$signal during $mode exits with its signal status" "$expected" "$rc"
   check "$signal during $mode is trapped promptly" yes "$([ "${elapsed:-8000}" -lt 8000 ] && echo yes || echo no)"
