@@ -1,5 +1,6 @@
 .pragma library
 
+.import "Lists.js" as Lists
 .import "Archive.js" as Archive
 .import "ExtThumbs.js" as ExtThumbs
 .import "Format.js" as Format
@@ -333,7 +334,7 @@ function canMakeExecutable(mode, count, hasShebang, cursorIsTarget) {
 // Exactly two marked regular files; kinds holds each item's own type bits, so links stay links.
 // Sample input: [0o100000, 0o100000] is true; [0o100000, 0o040000], [0o100000] and a link left at 0o120000 are false.
 function canCompare(kinds) {
-    if (!Array.isArray(kinds) || kinds.length !== 2) return false
+    if (!Lists.isList(kinds) || kinds.length !== 2) return false
     return kinds.every(function (kind) { return ((Number(kind) || 0) & Format.S_IFMT) === Format.S_IFREG })
 }
 

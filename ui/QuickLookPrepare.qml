@@ -1,4 +1,5 @@
 import QtQuick
+import "js/Lists.js" as Lists
 import Quickshell.Io
 import "js/Markdown.js" as Markdown
 import "js/MarkdownMaths.js" as Maths
@@ -281,7 +282,7 @@ Item {
         for (var i = 0; i < list.length; i++) {
             var b = list[i]
             // A list's parts hold one array of blocks per item.
-            if (b && (b.type === "table" || (Array.isArray(b) && root.holdsTable(b)) || (b.parts !== undefined && root.holdsTable(b.parts))))
+            if (b && (b.type === "table" || (Lists.isList(b) && root.holdsTable(b)) || (b.parts !== undefined && root.holdsTable(b.parts))))
                 return true
         }
         return false
