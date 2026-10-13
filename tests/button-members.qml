@@ -85,7 +85,7 @@ ShellRoot {
         ]
     }
 
-    // A is one ladder (hover 8% and press 14% inside the frame, press scales, disabled dims); focus is the control's own frame, no control holds a ring, and focus moves nothing. A picker answer keeps the control height and body size, its frame inside the ask strip's insets.
+    // A is one ladder (hover 8% and press 14% inside the frame, press scales, disabled dims); focus is the control's own frame, no control holds a ring, and focus moves nothing. A picker answer keeps the control height and body size, its frame inside the answer row's insets.
     function ladder(key, ink, frame, focusFrame, sizes) {
         var r = shell.readings[key]
         var wantSizes = sizes || [shell.rulingHeight, shell.rulingHeight, Flea.Theme.font.body]
@@ -140,8 +140,11 @@ ShellRoot {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 picker: picker
-                onCancelRequested: shell.cancels += 1
-                onAcceptRequested: shell.accepts += 1
+            }
+            Flea.PickerAnswers {
+                id: answerRow
+                anchors.top: chrome.bottom
+                picker: picker
             }
         }
 
@@ -180,7 +183,7 @@ ShellRoot {
         TestEvent { id: driver }
     }
 
-    // The picker's own face as PickerChrome reads it; a Tab reports through stepFocus and moves nothing.
+    // The picker's own face as PickerChrome and PickerAnswers read it; a Tab reports through stepFocus and moves nothing.
     QtObject {
         id: picker
         property var req: ({ mode: "open", title: "Choose file", app: "", accept: "", multiple: false, filters: [{ label: "Images" }] })
@@ -199,6 +202,8 @@ ShellRoot {
         property int filterIndex: 0
         property string viewMode: "list"
         function stepFocus(from, back) { shell.stepped.push([from.name, back]) }
+        function cancel() { shell.cancels += 1 }
+        function accept() { shell.accepts += 1 }
         function control(name, item, available) { return { name: name } }
     }
 
@@ -213,8 +218,6 @@ ShellRoot {
         shell.quiet = same ? shell.quiet + 1 : 0
         return shell.quiet >= shell.settleTicks
     }
-    // The strip the answers sit in is the Row's parent's parent: Row, then the title strip.
-    function askOf(button) { return button.parent.parent }
 
     // The set: five members 30 tall at body 14, 4 apart, the current one framed and inked in foreground.
     function members() {
@@ -325,20 +328,20 @@ ShellRoot {
     }
     // The picker's answers are A's control; its marks wear no frame.
     function answers() {
-        var cancel = chrome.focusItems()[0]
-        var accept = chrome.focusItems()[1]
-        var ask = shell.askOf(accept)
+        var cancel = answerRow.focusItems()[1]
+        var accept = answerRow.focusItems()[2]
         var accentFrame = Probe.rgba(Flea.Theme.color.accentFrame)
         var muted = Probe.rgba(Flea.Theme.color.muted)
         var mutedFrame = Probe.rgba(Flea.Theme.color.mutedFrame)
         var foreground = Probe.rgba(Flea.Theme.color.foreground)
         shell.check("Cancel and Open are the one control", [cancel.label, accept.label, cancel.primary, accept.primary], ["Cancel", "Open", false, true])
-        shell.check("the answers sit inside the title strip", [cancel.height <= ask.height, accept.height <= ask.height], [true, true])
+        shell.check("the answers sit inside the answer row", [cancel.height <= answerRow.height, accept.height <= answerRow.height], [true, true])
+        shell.check("the answer row is a hairline, the row padding twice and the 30 px control", answerRow.height, Flea.Theme.spacing.hairline + 2 * Flea.Theme.spacing.rowPaddingX + shell.rulingHeight)
         var focused = shell.readings.accept.focus
         var frame = Probe.find(accept, "buttonFrame")
-        var box = frame ? frame.mapToItem(ask, 0, 0) : null
-        if (box) shell.log("info title strip " + ask.height + " tall, frame from " + box.y + " to " + (box.y + frame.height) + ", the strip's rule at " + (ask.height - Flea.Theme.spacing.hairline))
-        shell.check("the focus frame stays inside the title strip", box !== null && box.y >= 0 && box.y + frame.height <= ask.height, true)
+        var box = frame ? frame.mapToItem(answerRow, 0, 0) : null
+        if (box) shell.log("info answer row " + answerRow.height + " tall, frame from " + box.y + " to " + (box.y + frame.height) + ", the row's rule above " + Flea.Theme.spacing.hairline)
+        shell.check("the focus frame stays inside the answer row, under its rule", box !== null && box.y >= Flea.Theme.spacing.hairline && box.y + frame.height <= answerRow.height, true)
         shell.check("the enabled primary is the accent frame, the secondary the muted one", [shell.readings.accept.rest.frameColor, shell.readings.cancel.rest.frameColor], [accentFrame, mutedFrame])
         var off = shell.readings.accept.disabled
         shell.check("a disabled Open is the muted frame and label at 0.55, with no wash", [off.frameColor, off.ink, off.opacity, off.frameFill], [mutedFrame, muted, shell.rulingDisabled, 0])
@@ -360,9 +363,9 @@ ShellRoot {
         if (!all.every(function (m) { return !!m })) return
         shell.check("Back, Up and both view marks draw no frame", all.map(Probe.shownBordered), all.map(function () { return 0 }))
         shell.check("a mark's hit box is the strip's height and never under 24", all.map(function (m) { return m.height >= Flea.Theme.hitMin && m.height === Flea.Theme.chromeHeight }), all.map(function () { return true }))
-        var back = chrome.focusItems()[2]
+        var back = chrome.focusItems()[0]
         var dim = all[3]
-        shell.check("Back and Up rest in the foreground and name themselves", [shell.markInk(back), back.name, chrome.focusItems()[3].name], [foreground, "Back", "Parent folder"])
+        shell.check("Back and Up rest in the foreground and name themselves", [shell.markInk(back), back.name, chrome.focusItems()[1].name], [foreground, "Back", "Parent folder"])
         shell.check("the unlit view mark rests muted before the keyboard reaches it", shell.markInk(dim), muted)
         dim.forceActiveFocus()
         shell.check("the keyboard lifts a muted mark to the foreground and frames it in the foreground", [shell.markInk(dim), Probe.shownBordered(dim), dim.ringItem.visible, dim.ringItem.border.width, Probe.rgba(dim.ringItem.border.color)], [foreground, 1, true, Flea.Theme.spacing.hairline, Probe.rgba(Flea.Theme.color.foreground)])
@@ -374,7 +377,8 @@ ShellRoot {
         var grid = all[3]
         shell.check("the shown view's mark is lit in the foreground and the other muted", [shell.markInk(list), shell.markInk(grid)], [foreground, muted])
         shell.check("the view marks stay out of the Tab walk", [list.activeFocusOnTab, grid.activeFocusOnTab], [false, false])
-        shell.check("a filter chip is left as it was: 24 tall in its own frame", [chrome.focusItems()[4].height, Probe.bordered(chrome.focusItems()[4]) > 0], [Flea.Theme.hitMin, true])
+        var filter = answerRow.focusItems()[0]
+        shell.check("the filter trigger is as tall as the answers, in its own frame", [filter.height, Probe.bordered(filter) > 0], [shell.rulingHeight, true])
     }
     // Back, Up, List view, Grid view.
     function markItems() {
@@ -455,8 +459,8 @@ ShellRoot {
         var chip = form.chipFor("SFTP")
         var steps = []
         steps = steps.concat(shell.seriesFor("member", chip, function (on) { if (chip.available !== undefined) chip.available = on }, function () { return form.protocol === "SMB" ? 0 : 1 }))
-        var cancel = chrome.focusItems()[0]
-        var accept = chrome.focusItems()[1]
+        var cancel = answerRow.focusItems()[1]
+        var accept = answerRow.focusItems()[2]
         steps = steps.concat(shell.seriesFor("cancel", cancel, function (on) { if (cancel.available !== undefined) cancel.available = on }, function () { return shell.cancels }))
         steps = steps.concat(shell.seriesFor("accept", accept, function (on) { picker.canAccept = on }, function () { return shell.accepts }))
         steps = steps.concat(shell.seriesFor("plain", plain, function (on) { plain.available = on }, function () { return shell.plains }))
@@ -465,11 +469,10 @@ ShellRoot {
             shell.check("the harness runs with motion on, so the press scale is drawn", Flea.Theme.reducedMotion, false)
             var muted = Probe.rgba(Flea.Theme.color.muted)
             var mutedFrame = Probe.rgba(Flea.Theme.color.mutedFrame)
-            var answerSizes = [shell.rulingHeight, shell.askOf(accept).height - Flea.Theme.spacing.hairline - 2 * Flea.Theme.chromeControlInset, Flea.Theme.font.body]
             shell.ladder("member", muted, mutedFrame, Probe.rgba(Flea.Theme.color.accent))
-            shell.ladder("cancel", Probe.rgba(Flea.Theme.color.foreground), mutedFrame, Probe.rgba(Flea.Theme.color.foreground), answerSizes)
+            shell.ladder("cancel", Probe.rgba(Flea.Theme.color.foreground), mutedFrame, Probe.rgba(Flea.Theme.color.foreground))
             shell.ladder("plain", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground))
-            shell.ladder("accept", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground), answerSizes)
+            shell.ladder("accept", Probe.rgba(Flea.Theme.color.foreground), Probe.rgba(Flea.Theme.color.accentFrame), Probe.rgba(Flea.Theme.color.foreground))
             shell.members()
             shell.passwordHint()
             shell.trailingWalk()

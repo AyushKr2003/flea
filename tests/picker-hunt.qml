@@ -73,9 +73,9 @@ ShellRoot {
         if (!viewButton) return
         var views = sceneRect(viewButton.parent)
         var controls = viewButton.parent.parent.focusItems()
-        var pathStrip = sceneRect(controls[2].parent.parent)
-        var openButton = sceneRect(controls[1])
-        var titleStrip = sceneRect(controls[1].parent.parent)
+        var pathStrip = sceneRect(controls[0].parent.parent)
+        var openButton = sceneRect(root.answerOpen())
+        var titleStrip = sceneRect(descendants(win.contentItem).filter(function(item) { return item.objectName === "pickerAsk" })[0])
         console.log("PICKER_HUNT GEOMETRY views=" + JSON.stringify(views) + " path=" + JSON.stringify(pathStrip))
         check("view marks stay inside path strip", views.x >= pathStrip.x && views.x + views.width <= pathStrip.x + pathStrip.width
             && views.y >= pathStrip.y && views.y + views.height <= pathStrip.y + pathStrip.height, true)
@@ -83,11 +83,14 @@ ShellRoot {
         check("view marks do not intersect title strip", intersects(views, titleStrip), false)
         check("view marks do not intersect Open button", intersects(views, openButton), false)
     }
+    // The primary answer inside the answer row only; the save area's collision card has a primary button of its own.
+    function answerOpen() {
+        var bar = descendants(win.contentItem).filter(function(item) { return item.objectName === "pickerAnswers" })[0]
+        return descendants(bar).filter(function(item) { return item.primary === true && item.tabHandle === true })[0]
+    }
     function pressOpen() {
-        var button = descendants(win.contentItem).filter(function(item) {
-            return item.primary === true && item.name.indexOf("Open") === 0
-        })[0]
-        check("real Open button exists", !!button, true)
+        var button = root.answerOpen()
+        check("real Open button exists", !!button && button.name.indexOf("Open") === 0, true)
         if (!button) return
         check("real Open button available", button.available, true)
         keys.mouseClick(button, button.width / 2, button.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
@@ -188,15 +191,11 @@ ShellRoot {
                 check("refuse-validate request takes several files", win.req.multiple, true)
                 check("Space marked the cursor file", win.marks.map(function(mark) { return mark.path }), [win.path + "/a.txt"])
             }
-            var types = descendants(win.contentItem).filter(function(item) { return typeof item.reveal === "function" && item.flickableDirection === Flickable.HorizontalFlick })[0]
-            var viewButton = descendants(win.contentItem).filter(function(item) { return item.name === "List view" })[0]
-            check("filter strip keeps gap before view controls", Math.round(viewButton.mapToItem(win.contentItem, 0, 0).x - types.mapToItem(win.contentItem, types.width, 0).x), Flea.Theme.spacing.gap)
             if (win.saving) {
                 var form = descendants(win.contentItem).filter(function(item) { return item.fieldItem !== undefined && item.askedName !== undefined })[0]
                 form.fieldItem.forceActiveFocus()
             } else if (scenario === "refuse-button") {
-                var open = descendants(win.contentItem).filter(function(item) { return item.primary === true && item.name === "Open" })[0]
-                open.forceActiveFocus()
+                root.answerOpen().forceActiveFocus()
             }
             initiatingFocus = win.contentItem.Window.window.activeFocusItem
             press(Qt.Key_Return)

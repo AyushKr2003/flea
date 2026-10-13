@@ -36,10 +36,12 @@ function run(check) {
     // A host application has no portal identity, and nothing else may be shown as one.
     check("no app id draws no requester line", Picker.subtitle(req), "")
     check("an app id is named", Picker.subtitle(Picker.request('{"app":"org.gnome.gedit"}')), "Requested by org.gnome.gedit")
+    check("the requester is one template with the caller's text kept whole", Picker.subtitle(Picker.request('{"app":"a%1b"}')), "Requested by a%1b")
 
     check("the accept label carries the count", Picker.acceptLabel(req, 3), "Send 3")
     check("and groups a four-figure one", Picker.acceptLabel(req, 1204), "Send 1,204")
     check("one file does not carry a count", Picker.acceptLabel(req, 1), "Send")
+    check("a caller's label is substituted once and never re-scanned", Picker.acceptLabel(Picker.request('{"accept":"Se%2nd","multiple":true}'), 3), "Se%2nd 3")
     check("no accept label falls back to Open", Picker.acceptLabel(Picker.request("{}"), 0), "Open")
     check("a folder request falls back to Choose folder", Picker.acceptLabel(Picker.request('{"directory":true}'), 0), "Choose folder")
 
@@ -177,11 +179,9 @@ function run(check) {
     check("a second tap on another path is a single tap", Picker.sameTap("/a/b.txt", "/a/c.txt"), false)
     check("a second tap with no first tap is a single tap", Picker.sameTap("", "/a/b.txt"), false)
     check("a second tap with no path is a single tap", Picker.sameTap("/a/b.txt", ""), false)
-    // Issue #224: the chips take room first and the path gives way, keeping its minimum.
-    check("a strip that fits takes it all", Picker.chipStripWidth(300, 100, 96), 100)
-    check("chips take room first and the path keeps its minimum", Picker.chipStripWidth(300, 400, 96), 204)
-    check("a strip wider than the free width still scrolls", Picker.chipStripWidth(200, 400, 96), 104)
-    check("no free width leaves the path whole", Picker.chipStripWidth(50, 400, 96), 0)
+    // The chip row is gone, so its width helper and the path minimum it kept leave with it.
+    check("the chip strip width helper is gone", typeof Picker.chipStripWidth, "undefined")
+    check("the chip path minimum is gone", typeof Picker.CHIP_PATH_MIN, "undefined")
 
     // Issue #225: the Mac preset's Return/Enter looks up as rename yet still activates.
     var none = Qt.NoModifier

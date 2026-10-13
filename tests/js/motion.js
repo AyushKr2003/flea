@@ -36,9 +36,9 @@ function runStructural(check) {
 
 // Every Flea transition runs on OutCubic, so a press scale or a caption fade on another curve is a product change.
 function runCurve(check) {
-    var press = ["ui/ChromeButton.qml", "ui/DialogButton.qml", "ui/PickerChrome.qml"]
+    var press = ["ui/ChromeButton.qml", "ui/DialogButton.qml"]
     var fades = [{ file: "ui/EmptyState.qml", durations: ["close", "open"] }, { file: "ui/FleaMark.qml", durations: ["close"] }]
-    var files = press.concat(fades.map(function(fade) { return fade.file }))
+    var files = ["ui/PickerChrome.qml"].concat(press, fades.map(function(fade) { return fade.file }))
     for (var i = 0; i < files.length; i++) {
         var src = Source.source(files[i])
         check(files[i] + " carries no OutQuad", src.indexOf("Easing.OutQuad") < 0, true)

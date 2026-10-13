@@ -8,7 +8,7 @@ verdict=0
 fail() { printf 'FAIL %s\n' "$1"; verdict=1; }
 
 # The sweep table (ButtonSystem040 A, DESIGN-040 "buttons"): each file is the one control, a ruled set member, a mark, or deferred by name.
-control_files="ConvertDialog MenuActionDialog CollideConfirm TrashConfirm OpenWithDialog NetworkDialog PickerSave PermissionsDialog TransferCard TrashView ProtocolChip PickerChrome"
+control_files="ConvertDialog MenuActionDialog CollideConfirm TrashConfirm OpenWithDialog NetworkDialog PickerSave PermissionsDialog TransferCard TrashView ProtocolChip PickerAnswers"
 for name in $control_files; do
     grep -q 'Flea\.DialogButton {' "ui/$name.qml" || fail "ui/$name.qml no longer instantiates the one control, Flea.DialogButton"
 done
@@ -29,8 +29,8 @@ grep -q 'readonly property color frame: root.focusShown && root.focusFrame === "
 ring_named=$(grep -rlE 'buttonRing|focusLine' ui --include='*.qml' --include='*.js' || true)
 [ -z "$ring_named" ] || fail "a ring item or focus line is still named in: $ring_named"
 grep -q 'setMember: true' ui/ProtocolChip.qml || fail 'ui/ProtocolChip.qml is no longer a set member of the one control'
-# The picker's answers are the one control and its marks are Tier A chrome marks; only the filter chips keep Framed.
-grep -q 'component Answer: Flea.DialogButton' ui/PickerChrome.qml || fail 'ui/PickerChrome.qml: the answers are no longer the one control'
+# The picker's answers are the one control and its marks are Tier A chrome marks.
+grep -q 'component Answer: Flea.DialogButton' ui/PickerAnswers.qml || fail 'ui/PickerAnswers.qml: the answers are no longer the one control'
 grep -q 'component Mark: Flea.ChromeButton' ui/PickerChrome.qml || fail 'ui/PickerChrome.qml: the marks are no longer chrome marks'
 # The QML handback test drives the ipc's own body: a focus scope forced alone returns to its last child, so the button is released first.
 grep -q 'view\.emptyItem\.focus = false; view\.forceActiveFocus()' ui/Ipc.qml || fail 'ui/Ipc.qml: trashFocusListing no longer releases the strip button before forcing the view'
@@ -45,12 +45,10 @@ while IFS= read -r open_tok; do
     esac
 done <<< "$open_seq"
 [ "$open_forces" -gt 0 ] && [ "$open_ok" -eq 1 ] || fail 'ui/TrashView.qml: open() forces the scope without releasing emptyAction first'
-# Deferred by name (AGENTS.md): PickerChrome.Framed, now the filter chips alone, waits for Picker040 (v0.3.10), and NetworkForm's TLS box has no board.
-grep -q 'component Framed: Item' ui/PickerChrome.qml || fail 'ui/PickerChrome.qml: Framed moved, update this table'
-# Completeness: a ui/ file declaring the Button accessible role and drawing a border.width (ChromeButton's is its keyboard frame, SidebarRow's the rail row's cursor, TabBar's the New tab mark's keyboard frame) is in this list or it is a new hand-built button.
-known="ChromeButton DialogButton DialogField MediaStrip PickerChrome SettingsPanel SettingsSegment SidebarRow TabBar"
+# Completeness: a ui/ file declaring the Button or ComboBox accessible role and drawing a border.width (ChromeButton's is its keyboard frame, SidebarRow's the rail row's cursor, TabBar's the New tab mark's keyboard frame, PickerFilter's the filter trigger's) is in this list or it is a new hand-built button.
+known="ChromeButton DialogButton DialogField MediaStrip PickerFilter SettingsPanel SettingsSegment SidebarRow TabBar"
 found=""
-for path in $(grep -rlE 'Accessible\.role[[:space:]]*:[[:space:]]*Accessible\.(Push)?Button' ui --include='*.qml'); do
+for path in $(grep -rlE 'Accessible\.role[[:space:]]*:[[:space:]]*Accessible\.((Push)?Button|ComboBox)' ui --include='*.qml'); do
     grep -q 'border\.width' "$path" && found="$found $(basename "$path" .qml)"
 done
 found=$(printf '%s\n' $found | sort | tr '\n' ' ')
@@ -85,7 +83,7 @@ chmod 700 "$test_root/runtime" || exit 1
 # The outer cap, passed to the harness as BUTTONSYS_TIMEOUT_S so its own cap, half of it, lands first.
 run_timeout_s=60
 # Each harness runs in its own config dir with the same pinned roots: "<qml file>:<report tag>:<checks a full green run makes>".
-harnesses="button-system.qml:BUTTONSYS:101 button-members.qml:MEMBERS:160 button-hueless.qml:HUELESS:20 button-keys.qml:KEYS:21 button-heldmask.qml:HELDMASK:4"
+harnesses="button-system.qml:BUTTONSYS:101 button-members.qml:MEMBERS:161 button-hueless.qml:HUELESS:20 button-keys.qml:KEYS:21 button-heldmask.qml:HELDMASK:4"
 total=0
 verdict_output=""
 for spec in $harnesses; do

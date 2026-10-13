@@ -20,7 +20,7 @@ ShellRoot {
     readonly property real lineBoxRatio: 1.8
     // Every stop the Display section offers, from the smallest strip to the largest.
     readonly property var stops: [9, 10, 11, 12, 14, 16, 20]
-    // The ask strip answers and the strip marks are measured after a settle tick, since Row and text relayout lag the size switch.
+    // The answer row and the strip marks are measured after a settle tick, since Row and text relayout lag the size switch.
     readonly property var stripSizes: [9, 10, 11, 12, 14, 16, 20]
     // Each stop's glyph row inside its strip: the mark is centred in the strip above its rule, on Qt's whole pixel.
     readonly property var glyphRows: ({ 9: 2, 10: 3, 11: 4, 12: 4, 14: 5, 16: 5, 20: 6 })
@@ -58,7 +58,7 @@ ShellRoot {
             spacing: 12
             Flea.ChromeButton { id: rest; glyph: "x" }
             Flea.ChromeButton { id: hot; glyph: "x"; keyboardFocused: true }
-            // The picker's answer in its strip: a strip DialogButton keeps the inset.
+            // A strip DialogButton keeps the inset.
             Flea.DialogButton { id: answer; label: "Answer"; inStrip: true }
             Flea.ChromeButton { id: off; glyph: "x"; keyboardFocused: true; enabled: false }
             Flea.ChromeButton { id: muted; glyph: "x"; keyboardFocused: true; restingColor: Flea.Theme.color.mutedFrame }
@@ -111,7 +111,7 @@ ShellRoot {
             Flea.TrashView { id: trash; opened: true; total: 0 }
         }
 
-        // The real picker ask strip with its answers, whose frames must clear the strip rule.
+        // The real picker chrome and the answer row under it, whose focused frames must stay inside the row.
         Item {
             id: pickerHost
             y: 140
@@ -124,6 +124,7 @@ ShellRoot {
                 anchors.top: parent.top
                 picker: mockPicker
             }
+            Flea.PickerAnswers { id: panswers; anchors.top: pchrome.bottom; picker: mockPicker }
         }
     }
 
@@ -237,7 +238,7 @@ ShellRoot {
         pickerTimer.running = true
     }
 
-    // One size per two ticks: switch, then read the settled ask strip.
+    // One size per two ticks: switch, then read the settled answer row.
     function pickerStep() {
         if (root.stripIdx >= root.stripSizes.length) {
             pickerTimer.running = false
@@ -256,18 +257,17 @@ ShellRoot {
         root.pickerChecks(size)
     }
 
-    // Each ask answer frame ends at least the control inset above the drawn strip rule.
+    // Each answer frame lies inside the answer row, below its rule.
     function pickerChecks(size) {
         var items = pchrome.focusItems()
-        var cancel = items.filter(function (item) { return item.label === "Cancel" })[0]
-        var buttons = cancel ? cancel.parent : null
-        var accept = buttons ? Array.prototype.filter.call(buttons.children, function (item) { return item.primary === true })[0] : null
-        check("stop " + size + " the picker ask strip holds the Cancel and primary answers", !!cancel && !!accept, true)
+        var answerItems = panswers.focusItems()
+        var cancel = answerItems.filter(function (item) { return item.label === "Cancel" })[0]
+        var accept = cancel ? Array.prototype.filter.call(cancel.parent.children, function (item) { return item.primary === true })[0] : null
+        check("stop " + size + " the picker answer row holds the Cancel and primary answers", !!cancel && !!accept, true)
         if (!cancel || !accept)
             return
-        var ask = buttons.parent
-        var rule = Array.prototype.filter.call(ask.children, function (c) { return c.height === Flea.Theme.spacing.hairline && c.width === ask.width })[0]
-        check("stop " + size + " the picker ask strip draws its rule", !!rule, true)
+        var rule = Array.prototype.filter.call(panswers.children, function (c) { return c.height === Flea.Theme.spacing.hairline && c.width === panswers.width })[0]
+        check("stop " + size + " the picker answer row draws its rule", !!rule, true)
         if (!rule)
             return
         var answers = [["cancel", cancel], ["accept", accept]]
@@ -277,9 +277,9 @@ ShellRoot {
             var label = Probe.find(ans, "buttonLabel")
             check(tag + "label is the body size the board draws", label ? label.font.pixelSize : "no label", Flea.Theme.font.body)
             check(tag + "hit box is the board's control height", ans.height, Flea.Theme.rowHeight - Flea.Theme.spacing.rowPaddingY)
-            var at = ans.mapToItem(ask, 0, 0)
-            check(tag + "hit box lies inside the ask strip and above its rule", [at.y >= 0, at.y + ans.height <= rule.y].join(" "), "true true")
-            check(tag + "focused frame keeps the inset from the strip top and from its rule", root.focusedFrame(ans, ask, rule.y), "true true true")
+            var at = ans.mapToItem(panswers, 0, 0)
+            check(tag + "hit box lies inside the answer row and below its rule", [at.y >= rule.y + rule.height, at.y + ans.height <= panswers.height].join(" "), "true true")
+            check(tag + "focused frame lies inside the answer row and below its rule", root.focusedFrame(ans, panswers, rule.y + rule.height), "true true true")
         }
         var back = items.filter(function (item) { return item.glyph === "arrow-left" })[0]
         root.glyphChecks(size, "the picker path strip", back, back ? back.parent.parent : null)
@@ -289,12 +289,12 @@ ShellRoot {
         root.glyphChecks(size, "the Trash strip", trash.backItem, trash.backItem.parent.parent)
     }
 
-    // The answer's frame read with the keyboard on it: drawn, at least the inset below the strip top and above the rule.
-    function focusedFrame(answer, strip, ruleY) {
+    // The answer's frame read with the keyboard on it: drawn, below the row's rule and above its bottom.
+    function focusedFrame(answer, row, ruleBottom) {
         answer.focused = true
         var frame = Probe.find(answer, "buttonFrame")
-        var box = frame.mapToItem(strip, 0, 0, frame.width, frame.height)
-        var read = [answer.focusShown, box.y >= Flea.Theme.chromeControlInset, ruleY - box.y - box.height >= Flea.Theme.chromeControlInset].join(" ")
+        var box = frame.mapToItem(row, 0, 0, frame.width, frame.height)
+        var read = [answer.focusShown, box.y >= ruleBottom, box.y + box.height <= row.height].join(" ")
         answer.focused = Qt.binding(function () { return answer.activeFocus })
         return read
     }

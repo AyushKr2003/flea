@@ -228,15 +228,15 @@ LOCATE
         if not ok:
             print(result.stderr.strip())
 
-# Sample input: ui/PickerChrome.qml:72 `opacity: available ? 1 : 0.55` names no token for the dim.
+# Sample input: ui/PickerFilter.qml `opacity: root.enabled ? 1 : 0.55` names no token for the dim.
 bare = []
 for path in sorted((REPO / "ui").glob("Picker*.qml")):
     for number, line in enumerate(path.read_text().splitlines(), 1):
         if re.search(r"\bopacity:.*\d*\.\d", line):
             bare.append(path.name + ":" + str(number))
-chrome = (REPO / "ui/PickerChrome.qml").read_text()
+filter_trigger = (REPO / "ui/PickerFilter.qml").read_text()
 checks += 1
-ok = not bare and "opacity: available ? 1 : Theme.disabledOpacity" in chrome
+ok = not bare and "opacity: root.enabled ? 1 : Theme.disabledOpacity" in filter_trigger
 failures += not ok
 print(("PASS " if ok else "FAIL ") + "F39 picker dims an unavailable control through Theme.disabledOpacity"
       + (": bare opacity literal at " + ", ".join(bare) if bare else ""))

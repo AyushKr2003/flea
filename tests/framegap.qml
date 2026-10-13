@@ -20,10 +20,8 @@ ShellRoot {
     readonly property int sideHostWidth: 600
     // One copy in flight, as the transfer card and the Flash step read it.
     readonly property var inFlight: ({ id: 1, moving: false, n: 2, index: 1, name: "a.txt", running: true, done: 0, bytes: 1024, total: 4096, moved: 0, writing: false, drive: "" })
-    // The picker's path strip with two chips, one chosen: every stop the Display section offers.
+    // The picker's filter trigger in the answer row, at every stop the Display section offers.
     readonly property var chipStops: [9, 10, 11, 12, 14, 16, 20]
-    // Cancel, Accept, Back and Up, which PickerChrome.focusItems() lists before its chips.
-    readonly property int pickerPlainItems: 4
     property int chipChecks: 0
     property int chipFailed: 0
     property int chipWant: -1
@@ -91,17 +89,16 @@ ShellRoot {
         }
     }
 
-    // The chips are the focus items after the plain controls.
-    function pickerChips() { return pickerChrome.focusItems().slice(root.pickerPlainItems) }
+    // The filter trigger is the one chip; it sits in the answer row under the listing.
+    function pickerChips() { return pickerAnswers.filterItem.visible ? [pickerAnswers.filterItem] : [] }
 
     // Each picker chip frame against the path strip top and its rule, one row per side.
     function chipMeasure(state, stop) {
         var chips = root.pickerChips()
-        var strip = Probe.find(pickerChrome, "pickerWhere")
-        if (chips.length === 0 || chips.length !== pickerChrome.chips.length || !strip) {
+        if (chips.length !== 1) {
             root.chipChecks += 1
             root.chipFailed += 1
-            root.log("FAIL PickerChips " + chips.length + " items for " + pickerChrome.chips.length + " chips, or no strip built at stop " + stop)
+            root.log("FAIL PickerChips " + chips.length + " items for one filter trigger at stop " + stop)
             return
         }
         // An offscreen window is never active, so the focus a chip takes shows as focus and not activeFocus; a pass without the asked chip would re-measure another state.
@@ -110,18 +107,19 @@ ShellRoot {
             root.chipFailed += 1
             root.log("FAIL PickerChips chip " + root.chipWant + " does not hold the focus at stop " + stop)
         }
-        var stripTop = strip.mapToItem(pickerChrome, 0, 0).y
-        var ruleTop = stripTop + strip.height - Flea.Theme.spacing.hairline
+        // The answer row's rule is its top hairline; its bottom edge is the far rule the trigger keeps clear of.
+        var stripTop = Flea.Theme.spacing.hairline
+        var ruleTop = pickerAnswers.height - Flea.Theme.spacing.hairline
         chips.forEach(function (chip) {
             var frame = Gap.chipFind(chip, "frame")
             if (!frame) {
                 root.chipChecks += 1
                 root.chipFailed += 1
-                root.log("FAIL PickerChips no frame under " + chip.label + " at stop " + stop)
+                root.log("FAIL PickerChips no frame under " + chip.name + " at stop " + stop)
                 return
             }
-            var box = frame.mapToItem(pickerChrome, 0, 0, frame.width, frame.height)
-            Gap.chipRows("PickerChips", chip.label, box, stripTop, ruleTop, Flea.Theme.spacing.hairline, Flea.Theme.chromeControlInset, state, stop, chip.focus).forEach(function (r) {
+            var box = frame.mapToItem(pickerAnswers, 0, 0, frame.width, frame.height)
+            Gap.chipRows("PickerChips", chip.name, box, stripTop, ruleTop, Flea.Theme.spacing.hairline, Flea.Theme.chromeControlInset, state, stop, chip.focus).forEach(function (r) {
                 var line = [r.host, r.name, r.state, r.stop, r.side, r.rule, r.edge, r.inset, r.focused].join("\t")
                 root.chipChecks += 1
                 root.log("CHIPROW " + line)
@@ -235,8 +233,6 @@ ShellRoot {
             plan.push(function () { root.chipRest(); root.chipMeasure("rest", stop) })
             plan.push(function () { root.chipFocus(0) })
             plan.push(function () { root.chipMeasure("focus", stop) })
-            plan.push(function () { root.chipFocus(1) })
-            plan.push(function () { root.chipMeasure("focus", stop) })
         })
         root.plan = plan
     }
@@ -287,6 +283,7 @@ ShellRoot {
             Flea.MediaStrip { id: framedStrip; width: parent.width; duration: 60000 }
             Flea.MediaStrip { id: bareStrip; width: parent.width; duration: 60000; framed: false }
             Flea.PickerChrome { id: pickerChrome; width: parent.width; picker: mockPicker }
+            Flea.PickerAnswers { id: pickerAnswers; width: parent.width; picker: mockPicker }
         }
 
         // The holders the dialogs read: a source, a list area, a backend that answers nothing, and the sheet's pane.
@@ -316,7 +313,7 @@ ShellRoot {
             function message(text, sticky) {}
             function contextMenu() { return { listingContext: function () { return sheetHolder.context } } }
         }
-        // The picker's own face as PickerChrome reads it, two chips with one chosen.
+        // The picker's own face as PickerChrome and PickerAnswers read it: one filter with its chips, one chosen.
         QtObject {
             id: mockPicker
             property var req: ({ mode: "open", title: "Choose file", app: "", accept: "", multiple: false, filters: [{ label: "Images" }] })
