@@ -9042,6 +9042,7 @@ r35-asks moves two ceilings, re-derived with `wc -l`: `ui/ColumnsArea.qml` 491 t
 The waiting up arrow moves two ceilings, each re-derived with `wc -l`: `ui/js/Nav.js` 309 to 313 for `climbsFromListing`, the one test the Up key and `ui/Pane.qml` `canGoUp` share, so the chrome's up arrow is live wherever the key climbs from a waited folder; `tests/js/nav.js` 436 to 445 for running `canGoUp` as written on a first listing past the wait and once it ends.
 
 b4fix records three ceilings, each re-derived with `wc -l`: `ui/PaneMenuActions.qml` 461 to 475 for the shelf add queue (the `pendingAdds` wait, `startAdd` and the failure line drain), `ui/Theme.qml` 433 to 435 for the `clipMarkSize` token, and `ui/js/MdBlocks.js` 444 to 437 for the removed lines; the probe is the new `tests/shelf-add-queue.qml` at 131 with `tests/shelf-add-queue.sh` at 120 carrying the offscreen gate, both inside their budgets and registered in `tests/run-all.sh` headless.
+The shelf mark is drawn as a filled outline so its bounds are its ink; `tests/shelf-mark.sh` checks its measured, transformed and painted bounds at two sizes.
 
 The cursor step cost cut records one ceiling, re-derived with `wc -l`: `ui/Pane.qml` 1043 to 1045 for `rowsIdentity`, the held rows serialized only when they change, so `menuSelectionIdentity` no longer serializes the whole held window on every cursor step (`tests/navcost.sh` counts the serializations). The int 12d1af88 merge re-derives it to 1052 with `wc -l`: those two lines on top of int's background-opacity 1050.
 
