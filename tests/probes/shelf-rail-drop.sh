@@ -38,10 +38,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$work/src" "$work/state/flea" "$work/cfg/qs"
+mkdir -p "$work/src" "$work/state/flea" "$work/cfg"
 printf '{"shelf":{"enabled":true,"bar":false,"rail":"%s","screenshots":false,"recordings":false,"recent":0}}' "$edge" > "$work/state/flea/ui.json"
 echo "drop me" > "$work/src/dropme.txt"
-ln -s /usr/share/omarchy/shell/Commons "$work/cfg/qs/Commons" || refuse "cannot link shell Commons"
+# Quickshell resolves `import qs.Commons` from the config root, the directory holding harness.qml.
+ln -s /usr/share/omarchy/shell/Commons "$work/cfg/Commons" || refuse "cannot link shell Commons"
 ln -s "$repo/shelf" "$work/cfg/shelf" || refuse "cannot link shelf tree"
 
 panel_qml="$repo/shelf/Panel.qml"
@@ -112,6 +113,8 @@ $cut_qml
       color: "#404040"
       Drag.mimeData: ({ "text/uri-list": "file://$work/src/dropme.txt" })
       Drag.supportedActions: Qt.CopyAction
+      // An internal drag never leaves its window, so the offer goes out as a system drag the rail can take.
+      Drag.dragType: Drag.Automatic
       MouseArea {
         anchors.fill: parent
         onPressed: handle.Drag.active = true
@@ -158,19 +161,31 @@ done
 [ -n "$up" ] || refuse "probe rail surface never mapped (see $work/qs.log)"
 # The rail and the source must share one scale-1 monitor, or the pointer math is unsound.
 mon_geom() {
-  hyprctl monitors -j 2>/dev/null | jq -er --arg name "$1" '[.[] | select(.name == $name)] | if length == 1 then .[0] | "\(.x) \(.y) \(.scale)" else empty end'
+  hyprctl monitors -j 2>/dev/null | jq -er --arg name "$1" '[.[] | select(.name == $name)] | if length == 1 then .[0] | "\(.x) \(.y) \(.scale) \(.width) \(.height)" else empty end'
 }
-rail_geom=$(layer_geom flea-shelf-rail) || refuse "probe rail vanished"
-read -r rail_mon rail_x rail_y rail_w rail_h <<< "$rail_geom"
+# Hyprland lists a layer before its first arrange, so trust only two equal reads whose centre lies on the monitor.
+rail_geom="" prev=""
+for _ in $(seq 1 40); do
+  cur=$(layer_geom flea-shelf-rail) || refuse "probe rail vanished"
+  read -r rail_mon rail_x rail_y rail_w rail_h <<< "$cur"
+  mon_line=$(mon_geom "$rail_mon") || refuse "no geometry for monitor $rail_mon"
+  read -r mon_x mon_y mon_scale mon_w mon_h <<< "$mon_line"
+  cx=$((rail_x + rail_w / 2)); cy=$((rail_y + rail_h / 2))
+  if [ "$cur" = "$prev" ] && (( cx >= 0 && cx < mon_w && cy >= 0 && cy < mon_h )); then
+    rail_geom=$cur; break
+  fi
+  prev=$cur
+  sleep 0.25
+done
+[ -n "$rail_geom" ] || refuse "rail geometry never settled on its monitor (last $cur on $mon_line)"
+out "rail $rail_geom on monitor $mon_line"
 src_geom=$(layer_geom flea-shelfrail-probe-source) || refuse "probe source never mapped"
 read -r src_mon src_x src_y _ _ <<< "$src_geom"
 [ "$rail_mon" = "$src_mon" ] || refuse "rail on $rail_mon but source on $src_mon, one monitor per run"
-mon_line=$(mon_geom "$rail_mon") || refuse "no geometry for monitor $rail_mon"
-read -r mon_x mon_y mon_scale <<< "$mon_line"
 [ "$mon_scale" = "1.0" ] || [ "$mon_scale" = "1" ] || refuse "monitor $rail_mon is at scale $mon_scale, this probe needs 1"
 # Handle centre and rail strip centre, in global pointer coordinates.
 hx=$((mon_x + src_x + 160)); hy=$((mon_y + src_y + 130))
-dx=$((mon_x + rail_x + rail_w / 2)); dy=$((mon_y + rail_y + rail_h / 2))
+dx=$((mon_x + cx)); dy=$((mon_y + cy))
 pointer_glide "$hx" "$hy" || refuse "pointer did not reach the handle at $hx,$hy"
 ydotool click 0x40 >/dev/null 2>&1 || refuse "pointer press failed"
 sleep 0.3
