@@ -13,11 +13,13 @@ import sys
 import check
 import generate
 
+FFMPEG_TIMEOUT_S = 20
 STUB = '''#!/usr/bin/env python3
 import json
 from pathlib import Path
 import sys
 config = json.loads(Path(__file__).with_name("reply.json").read_text())
+# Sample input, one request per line: {"c":"meta","row":0}
 for line in sys.stdin:
     request = json.loads(line)
     if request["c"] == "list":
@@ -73,7 +75,7 @@ def main():
             source.write_bytes(seed)
             subprocess.run(["ffmpeg", "-v", "error", "-i", str(source), "-vf", "scale=1:1",
                             "-pix_fmt", "yuvj444p", "-c:v", "mjpeg", "-threads", "1", str(cached)],
-                           check=True, timeout=20)
+                           check=True, timeout=FFMPEG_TIMEOUT_S)
         else:
             cached.write_bytes(seed if name == "seed" else seed[:len(seed) // 2])
         stub = case / "backend"
