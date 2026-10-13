@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# A Grid whose columns change still draws every tile's row, offscreen with the real backend, for a narrowing while scrolled, a narrowing with no scroll and a widen.
+# A resized Grid still draws every tile's row, offscreen with the real backend, after width or height changes.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
 command -v qs >/dev/null || { echo 'FAIL gridresize: qs is missing'; exit 1; }
 failed=0
-for case_name in narrow-far narrow-still widen-mid; do
+for case_name in narrow-far narrow-still widen-mid height-mid; do
 root=$(mktemp -d "$FIXTURE_ROOT/gridresize-XXXXXXXX") || exit 1
 sandbox_require "$root" || exit 1
 : > "$root/$SANDBOX_MARKER" || exit 1
@@ -36,4 +36,4 @@ errors=$(grep -aE 'TypeError|ReferenceError|Binding loop' "$root/probe.log" | he
 sandbox_remove "$root"
 done
 [ "$failed" -eq 0 ] || exit 1
-echo 'gridresize: a Grid narrowed while scrolled, narrowed with no scroll, or widened draws the row of every tile it shows'
+echo 'gridresize: a Grid narrowed while scrolled, narrowed with no scroll, widened, or grown in height draws the row of every tile it shows'

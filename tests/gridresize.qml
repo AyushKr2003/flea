@@ -4,9 +4,7 @@ import QtTest
 import Quickshell
 import "flea" as Flea
 
-// A Grid whose columns change keeps every drawn tile's row: a narrowing while scrolled moves originY, and the scroll after it must read it; a widen or a narrowing with no scroll must ask for the window its re-flowed tiles draw.
-// Cases: narrow-far (narrow at middle, scroll far), narrow-still (narrow at middle, no scroll), widen-mid (one column at middle, widen, no scroll).
-// Sample output: "GRIDRESIZE CHECK widen: the Grid re-flowed cols 1 -> 7 originY=84940".
+// A Grid resized while scrolled keeps every drawn tile's row, after a width reflow or a height grow.
 ShellRoot {
     id: root
     readonly property string fixture: Quickshell.env("FLEA_GV_DIR") || ""
@@ -31,6 +29,7 @@ ShellRoot {
     property int wrongCount: 0
     property int firstDrawn: -1
     property int startColumns: 0
+    property var heightStart: null
 
     function log(line) { console.log("GRIDRESIZE " + line) }
     function fail(text) { failures += 1; log("FAIL " + text) }
@@ -75,7 +74,8 @@ ShellRoot {
         var d = drawn()
         drawnCount = d.drawn; blankCount = d.blank; wrongCount = d.wrong; firstDrawn = d.first
         log(label + " drawn=" + d.drawn + " blank=" + d.blank + " wrong=" + d.wrong + " range=" + d.first + ".." + d.last
-            + " cols=" + grid().columns + " originY=" + grid().originY + " contentY=" + grid().contentY + " held=" + pane.held + " len=" + pane.rows.length)
+            + " cols=" + grid().columns + " height=" + grid().height + " visibleRows=" + grid().visibleTileRows
+            + " originY=" + grid().originY + " contentY=" + grid().contentY + " held=" + pane.held + " len=" + pane.rows.length)
     }
     // A click on the icon of the first drawn tile that has its row and whose icon centre is on screen.
     function clickFirstWithRow() {
@@ -160,7 +160,29 @@ ShellRoot {
                 checkDrawnRows("widen-mid")
             }
         ]
-        var cases = { "narrow-far": narrowFar, "narrow-still": narrowStill, "widen-mid": widenMid }
+        var heightMid = [
+            function () { grid().positionViewAtIndex(root.scrollMid, GridView.Beginning); waitFor = allDrawnHaveRows; waitUntil = Date.now() + 4000 },
+            function () {
+                scanTo("short-middle")
+                heightStart = { width: pane.width, rows: grid().visibleTileRows, y: grid().contentY,
+                    origin: grid().originY, heldEnd: pane.held + pane.rows.length }
+                pane.height = 6000
+                waitUntil = Date.now() + 1500
+            },
+            function () {
+                var g = grid(), range = g.visibleRange()
+                check("height-mid: only height changed", pane.width === heightStart.width && g.columns === startColumns
+                    && g.visibleTileRows > heightStart.rows && g.contentY === heightStart.y && g.originY === heightStart.origin,
+                    "cols " + startColumns + " -> " + g.columns + " rows " + heightStart.rows + " -> " + g.visibleTileRows
+                    + " contentY " + heightStart.y + " -> " + g.contentY + " originY " + heightStart.origin + " -> " + g.originY)
+                check("height-mid: the grow needs rows past the old window", range.last >= heightStart.heldEnd,
+                    "visible=" + range.first + ".." + range.last + " oldEnd=" + heightStart.heldEnd)
+                check("height-mid: the held window covers the visible range", range.first >= pane.held && range.last < pane.held + pane.rows.length,
+                    "visible=" + range.first + ".." + range.last + " held=" + pane.held + ".." + (pane.held + pane.rows.length - 1))
+                checkDrawnRows("height-mid")
+            }
+        ]
+        var cases = { "narrow-far": narrowFar, "narrow-still": narrowStill, "widen-mid": widenMid, "height-mid": heightMid }
         var body = cases[root.caseName]
         if (body === undefined) { fail("unknown FLEA_GR_CASE " + root.caseName); finish(); return }
         steps = open.concat(body)
