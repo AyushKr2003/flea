@@ -15,7 +15,7 @@ ShellRoot {
     function shownLines() {
         var code = root.column() ? root.column().linesItem.code : null
         var row = code ? code.viewport.itemAtIndex(0) : null
-        return row ? Math.ceil(code.viewport.height / row.height) : 0
+        return row ? Math.ceil(code.viewport.height / row.height) : -1 // An unbuilt first row must fail the drawn-line checks.
     }
     readonly property int tickMs: 20
     readonly property int settleMs: 250
