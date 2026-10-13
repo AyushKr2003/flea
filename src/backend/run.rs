@@ -522,7 +522,7 @@ fn handle_line(
                 }
             } else {
                 for row in &rows {
-                    cancel_row(st, pool, *row);
+                    cancel_row(out, st, pool, *row);
                 }
             }
         }

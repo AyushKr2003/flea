@@ -132,6 +132,8 @@ fn queue_row(
     if st.asked.iter().any(|(p, _)| *p == path) {
         return;
     }
+    // Workers may have freed room since the last report, so pump before refusing a row at the deferred cap.
+    super::thumbdefer::pump(out, st, pool);
     // corner: past MAX_DEFERRED nothing waits any longer, so the row is answered empty at once; see AGENTS.md "Thumbnail requests".
     if st.deferred.full() {
         writeln!(out, "{}", thumbed_line(row, "", 0.0)).ok();
@@ -139,11 +141,12 @@ fn queue_row(
     }
     st.asked.push((path.clone(), row));
     st.outstanding += 1;
-    st.deferred.enqueue(pool, Job { path, mtime, mime, trace: trace(row) });
+    st.deferred.enqueue(Job { path, mtime, mime, trace: trace(row) });
+    super::thumbdefer::pump(out, st, pool);
 }
 
 // A job already inside a worker cannot be cancelled, so its row stays mapped until it reports.
-pub(crate) fn cancel_row(st: &mut State, pool: &Pool, row: usize) {
+pub(crate) fn cancel_row(out: &mut impl Write, st: &mut State, pool: &Pool, row: usize) {
     let at = match st.asked.iter().position(|(_, r)| *r == row) {
         Some(i) => i,
         None => return,
@@ -159,14 +162,14 @@ pub(crate) fn cancel_row(st: &mut State, pool: &Pool, row: usize) {
     st.outstanding = st.outstanding.saturating_sub(dropped.len());
     st.asked.remove(at);
     // The room a cancel frees goes to the next waiting row now, not at the next report.
-    st.deferred.pump(pool);
+    super::thumbdefer::pump(out, st, pool);
 }
 
 // A result whose path is no longer mapped belongs to a superseded listing and is dropped, never reported against the current one.
 pub(crate) fn report_done(out: &mut impl Write, st: &mut State, pool: &Pool, done: Done) {
     st.outstanding = st.outstanding.saturating_sub(1);
     // Workers have taken jobs off the pool since the last pump, so the oldest waiting rows go in now.
-    st.deferred.pump(pool);
+    super::thumbdefer::pump(out, st, pool);
     let row = match st.asked.iter().position(|(p, _)| *p == done.path) {
         Some(i) => st.asked.remove(i).1,
         None => return,

@@ -2684,8 +2684,10 @@ catcher outcome decision using the existing insertion math. Geometry query plumb
 lives in `ui/TabDragGeometry.qml`, below the soft budget; no global limit changes.
 
 The deferred-row queue moves one ceiling: `src/backend/thumbreq.rs` 448 to 454 for the `queue_row`, `cancel_row` and
-`report_done` bookkeeping that hands a row to `src/backend/thumbdefer.rs` (46 lines, the `Deferred` queue; its tests are
-`src/backend/thumbdefer_tests.rs`, 186). The `State` field and the `run.rs` call sites are net-zero lines.
+`report_done` bookkeeping, then to 457 for pumping before the cap check and passing the wire to the shared pump.
+`src/backend/thumbdefer.rs` is 93 lines for the FIFO, returned-job accounting and its forced stale-room regression;
+`src/backend/thumbdefer_tests.rs` is 215 for the request, cancellation and freed-room regressions. The `State` field
+adds 2 lines to `src/backend/state.rs`; the `run.rs` call sites are net-zero lines. All counts are re-derived with `wc -l`.
 The Quick Look volume track moves four ceilings, each re-derived with `wc -l`: `src/uischema.rs` 502 to 503 for the
 `preview.volume` default and its `Count(0, 100)` rule, `src/uistate.rs` 674 to 704 for the two tests that pin a stored level
 and a refused patch for anything but a whole level, `ui/ViewState.qml` 536 to 539 for `mediaVolume` and `setMediaVolume`,
@@ -5831,7 +5833,7 @@ than only counting them; see "Thumbnail requests".
 
 `MAX_QUEUE` is 70, two viewports of about 35 rows, and `submit` drops from the FRONT when it
 is full. The request path never fills it past that bound: a row that finds the queue full waits in
-`thumbdefer.rs`'s `Deferred`, in request order, and `Deferred::pump` submits it as workers take jobs
+`thumbdefer.rs`'s `Deferred`, in request order, and `thumbdefer::pump` submits it as workers take jobs
 off the pool. The drop was the wrong answer for a row the client still wants. The client cancels each pending row
 once it leaves the viewport, the preview row aside, so what is left to evict is still wanted. A request
 wider than 70 uncached rows evicted its own first rows and answered them empty, and `Thumbs.plan` keeps any
@@ -6221,20 +6223,21 @@ jobs. A single request for 80 rows against the 70-job queue and four workers ans
 and stranded the first six, four of which finished inside a worker and had their results discarded
 because `report_done` found no mapping, which breaks the contract that a client never waits forever
 for a row that will not arrive. `submit` therefore returns the `Job`s it dropped rather than a
-count, and `queue_row` unmaps each one and answers its row with an empty `file` on the spot.
-The request path does not drop at all now (see "Thumbnail pool"): an 80-row request answers none of its
+count. `queue_row` maps an uncached row and puts its job at the tail of `Deferred`, then pumps into the pool's room;
+it also pumps before checking the deferred cap, so newly free pool room prevents an unnecessary empty answer.
+The pump unmaps every job `submit` returns, answers its row with an empty `file` and releases its outstanding count
+in release builds too. Normal requests do not drop (see "Thumbnail pool"): an 80-row request answers none of its
 rows early and waits for its jobs, and `tests/thumbs.sh` still asserts one `thumbed` line per row.
 
 **The map is also the dedupe.** A path already in it has a job queued or running for this
 listing, so `queue_row` returns without submitting a second one. Without that, `rows:[0,0,0]`
 queues three identical decodes, because all three iterations run before the first job finishes
-and so all three see `Hit::Miss`. The wire stays correct either way, since `report_done` removes
-the mapping and the duplicate results are dropped on arrival, but three of a four worker pool
-spend tens to hundreds of milliseconds each on work already in flight, which is the exact
+and so all three see `Hit::Miss`. Each duplicate also gets a mapping, so all three results are answered,
+and three of a four worker pool spend tens to hundreds of milliseconds each on work already in flight, which is the exact
 resource `MAX_QUEUE` and the worker count exist to ration. `tests/thumbs.sh` proves it without
 timing anything: it saturates the four workers, queues a victim row, then floods one row with 75
-repeats. Without the dedupe the flood queues 75 decodes ahead of the victim, so the victim waits
-behind them rather than being evicted; the dedupe keeps the queue to the five distinct rows.
+repeats. The FIFO queues the victim first; without the dedupe the repeated row is answered 75 times,
+which the second check catches. The first check guards against eviction, and the dedupe keeps the request to six distinct rows.
 
 **A cancelled row leaves the map with its job.** `thumbcancel` with an explicit `rows` unmaps each
 row whose queued job it actually dropped, and `thumbcancel` with an empty or malformed `rows`

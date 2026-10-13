@@ -134,7 +134,7 @@ fn a_cancelled_row_still_waiting_for_room_is_taken_back() {
     let rows: Vec<usize> = (0..count).collect();
     let mut out = Vec::new();
     thumb_rows(&mut out, &rows, &mut st, &tb, &pool, &cache, false);
-    cancel_row(&mut st, &pool, MAX_QUEUE + 5);
+    cancel_row(&mut out, &mut st, &pool, MAX_QUEUE + 5);
     assert!(out.is_empty(), "a cancel answers nothing: {}", String::from_utf8_lossy(&out));
     assert_eq!(st.outstanding, count - 1, "the cancelled row is no longer in flight");
     assert!(st.asked.iter().all(|(_, r)| *r != MAX_QUEUE + 5), "and its mapping is gone");
@@ -157,6 +157,35 @@ fn a_row_past_the_deferred_cap_is_answered_empty_at_once() {
     assert_eq!(text.lines().count(), 5, "exactly the five rows past the bound are answered: {}", text);
     assert!(text.contains(&format!("\"row\":{},", MAX_QUEUE + MAX_DEFERRED)), "the first refused row is answered");
     assert_eq!(st.outstanding, MAX_QUEUE + MAX_DEFERRED, "every row inside the bound is still in flight");
+}
+
+#[test]
+fn a_full_deferred_queue_uses_freed_pool_room_before_refusing_a_new_row() {
+    let d = TestDir::new("thumbdeferfreed");
+    let tb = tables();
+    let (mut st, pool, cache) = harness(&d);
+    let count = MAX_QUEUE + MAX_DEFERRED;
+    listed(&d, &mut st, count + 1);
+    let rows: Vec<usize> = (0..count).collect();
+    let mut out = Vec::new();
+    thumb_rows(&mut out, &rows, &mut st, &tb, &pool, &cache, false);
+    assert!(out.is_empty(), "every row inside the bound waits");
+    assert!(st.deferred.full(), "the deferred queue reached its cap");
+    // Workers take jobs before their completions reach the loop, leaving pool room while the deferred queue is full.
+    let running = pool.cancel_all();
+    assert_eq!(running.len(), MAX_QUEUE);
+    thumb_rows(&mut out, &[count], &mut st, &tb, &pool, &cache, false);
+    assert!(out.is_empty(), "newly free room admits the new row instead of answering it empty: {}", String::from_utf8_lossy(&out));
+    assert_eq!(st.outstanding, count + 1, "the new row joins the jobs still in flight");
+    assert!(st.asked.iter().any(|(_, row)| *row == count), "the new row remains mapped");
+    let waiting = pool.cancel_all();
+    assert_eq!(waiting.len(), MAX_QUEUE, "waiting rows fill the newly freed pool room");
+    for (row, job) in waiting.iter().enumerate() {
+        assert_eq!(job.path, d.join(&format!("img-{:03}.jpg", MAX_QUEUE + row)), "the oldest waiting rows enter the pool first");
+    }
+    let deferred = st.deferred.take_all();
+    assert_eq!(deferred.len(), MAX_DEFERRED - MAX_QUEUE + 1);
+    assert_eq!(deferred.last().unwrap().path, d.join(&format!("img-{count:03}.jpg")), "the new row waits at the FIFO tail");
 }
 
 // A listing change renumbers rows, so a job still running for a path answers that path's row by its own mapping only.
