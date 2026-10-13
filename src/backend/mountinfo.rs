@@ -10,27 +10,35 @@ pub(crate) fn mount_type_in(path: &Path, body: &str) -> Option<String> {
 
 // FAT and NTFS report fixed modes; CIFS and SMB3 keep file modes only with POSIX or unix extensions in their super options.
 pub(crate) fn modes_are_real(path: &Path, body: &str) -> bool {
+    #[cfg(test)]
+    LEXICAL_LOOKUPS.with(|lookups| lookups.set(lookups.get() + 1));
     if let Some(real) = super::gvfsroot::gvfs_modes_are_real(path) {
         return real;
     }
-    match mount_type_in(path, body).as_deref() {
-        Some("cifs" | "smb3") => mount_options_in(path, body)
-            // Sample input: "rw,vers=3.1.1,cache=strict,posix,serverino" (CIFS super options).
-            .is_some_and(|options| options.split(',').any(|option| matches!(option, "posix" | "unix"))),
-        Some("vfat" | "exfat" | "msdos" | "fat" | "fat12" | "fat16" | "fat32" | "ntfs" | "ntfs3" | "fuseblk" | "smbfs") => false,
-        _ => true,
-    }
+    mount_type_in(path, body).map_or(true, |fstype| modes_for_mount(&fstype, &mount_options_in(path, body).unwrap_or_default()))
 }
 
-// Decide gvfs paths from their spelling; resolve other owning paths once, keeping the original spelling when resolution fails.
-pub(crate) fn resolved_modes_are_real(path: &Path, body: &str) -> bool {
-    if let Some(real) = super::gvfsroot::gvfs_modes_are_real(path) {
-        return real;
-    }
+// Sample input: dev 0x811 finds a "8:17 ... - cifs ... rw,posix" entry and answers Some(true), with no path syscall.
+pub(crate) fn modes_are_real_for_dev(dev: u64, body: &str) -> Option<bool> {
     #[cfg(test)]
-    RESOLVES.with(|resolves| resolves.set(resolves.get() + 1));
-    let resolved = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    modes_are_real(&resolved, body)
+    DEV_LOOKUPS.with(|lookups| lookups.set(lookups.get() + 1));
+    if dev == 0 {
+        return None;
+    }
+    let want = dev_majmin(dev);
+    body.lines().find_map(|line| {
+        let (_, fstype, majmin, _) = parse_line(line)?;
+        (majmin == want).then(|| modes_for_mount(&fstype, &super_options(line)))
+    })
+}
+
+// Sample input: cifs with "rw,posix" keeps modes, while cifs with "rw,posix=0" does not.
+fn modes_for_mount(fstype: &str, options: &str) -> bool {
+    match fstype {
+        "cifs" | "smb3" => options.split(',').any(|option| matches!(option, "posix" | "unix")),
+        "vfat" | "exfat" | "msdos" | "fat" | "fat12" | "fat16" | "fat32" | "ntfs" | "ntfs3" | "fuseblk" | "smbfs" => false,
+        _ => true,
+    }
 }
 
 // Sample dev: makedev(8,17) is 0x811 and answers "8:17"; the glibc major/minor packing, see sys/sysmacros.h.
@@ -171,14 +179,16 @@ pub(crate) fn read_body() -> String {
 #[cfg(test)]
 thread_local! {
     static READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-    static RESOLVES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static DEV_LOOKUPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    pub(crate) static LEXICAL_LOOKUPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 // Counted reads since the last reset, so a session walk asserts at most one over a known walk.
 #[cfg(test)]
 pub(crate) fn test_reset() {
     READS.with(|reads| reads.set(0));
-    RESOLVES.with(|resolves| resolves.set(0));
+    DEV_LOOKUPS.with(|lookups| lookups.set(0));
+    LEXICAL_LOOKUPS.with(|lookups| lookups.set(0));
 }
 
 // The counted reads since the last reset.
@@ -187,10 +197,10 @@ pub(crate) fn test_reads() -> usize {
     READS.with(|reads| reads.get())
 }
 
-// Resolution calls on this thread, so a window proves it resolves bases and distinct parents rather than every row.
+// Device lookups on this thread, so a window proves it decides each distinct device only once.
 #[cfg(test)]
-pub(crate) fn test_resolutions() -> usize {
-    RESOLVES.with(|resolves| resolves.get())
+pub(crate) fn test_device_lookups() -> usize {
+    DEV_LOOKUPS.with(|lookups| lookups.get())
 }
 
 // Sample line as above: mount point, fstype, major:minor and source, or None for a line with no "-" or too few fields.

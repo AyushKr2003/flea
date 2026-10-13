@@ -78,7 +78,7 @@ pub fn gvfs_class(path: &Path) -> Option<&'static str> {
     }
 }
 
-// SFTP carries unix::mode; these backends have DOS attributes or synthesized permissions, and unknown backends keep their reported bits.
+// Sample input: /run/user/1000/gvfs/smb-share:server=n,share=x/dir gives backend smb-share, so false; SFTP and unknown backends keep their bits.
 pub(crate) fn gvfs_modes_are_real(path: &Path) -> Option<bool> {
     let (_, share) = mounted(path)?;
     let backend = share.split(':').next().unwrap_or_default().to_ascii_lowercase();

@@ -161,9 +161,11 @@ fn rename_rows(paths: &[String], body: &str, mime: &super::mime::Db, icons: &sup
         if !needs_rename(leaf) {
             continue;
         }
-        let (dir, mode) = std::fs::symlink_metadata(raw).map(|m| (m.is_dir(), m.mode())).unwrap_or((false, 0));
+        let (dir, mode, dev) = std::fs::symlink_metadata(raw).map(|m| (m.is_dir(), m.mode(), m.dev())).unwrap_or((false, 0, 0));
         // The mode is the source's own stat, so its execute bits count only where the source's mount keeps modes.
-        let real_modes = super::mountinfo::resolved_modes_are_real(Path::new(raw), body);
+        let real_modes = super::gvfsroot::gvfs_modes_are_real(Path::new(raw))
+            .or_else(|| super::mountinfo::modes_are_real_for_dev(dev, body))
+            .unwrap_or_else(|| super::mountinfo::modes_are_real(Path::new(raw), body));
         let mode = if real_modes { mode } else { mode & !super::icons::ANY_EXECUTE_BIT };
         let new = sanitize(leaf);
         shown.push(format!(r#"{{"old":"{}","new":"{}","d":{},"i":"{}"}}"#,
@@ -299,7 +301,8 @@ mod tests {
         let bad = usb.join("clip: launcher");
         std::fs::write(&bad, "x").unwrap();
         std::fs::set_permissions(&bad, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let table = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n40 1 8:17 / {} rw - exfat /dev/sdb1 rw\n41 1 8:33 / {} rw - vfat /dev/sdc1 rw\n", dest.display(), usb.display());
+        let dev = super::super::mountinfo::dev_majmin(std::fs::metadata(&bad).unwrap().dev());
+        let table = format!("1 0 0:0 / / rw - ext4 /dev/a rw\n40 1 0:0 / {} rw - exfat /dev/sdb1 rw\n41 1 {dev} / {} rw - vfat /dev/sdc1 rw\n", dest.display(), usb.display());
         let (db, icons) = (crate::backend::mime::Db::load(), crate::backend::icons::Names::load());
         let line = answer_in(&table, 7, &[bad.to_string_lossy().into()], &dest.to_string_lossy(), &db, &icons).expect("asked");
         assert!(line.contains(r#""i":"text-x-generic""#), "{}", line);
@@ -314,7 +317,8 @@ mod tests {
         let bad = d.join("clip: launcher");
         std::fs::write(&bad, "x").unwrap();
         std::fs::set_permissions(&bad, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let table = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n40 1 8:17 / {} rw - exfat /dev/sdb1 rw\n", dest.display());
+        let dev = super::super::mountinfo::dev_majmin(std::fs::metadata(&bad).unwrap().dev());
+        let table = format!("1 0 {dev} / / rw - ext4 /dev/a rw\n40 1 0:0 / {} rw - exfat /dev/sdb1 rw\n", dest.display());
         let (db, icons) = (crate::backend::mime::Db::load(), crate::backend::icons::Names::load());
         let line = answer_in(&table, 7, &[bad.to_string_lossy().into()], &dest.to_string_lossy(), &db, &icons).expect("asked");
         assert!(line.contains(r#""i":"application-x-executable""#), "{}", line);
@@ -329,11 +333,12 @@ mod tests {
         let bad = usb.join("clip: launcher");
         std::fs::write(&bad, "x").unwrap();
         std::fs::set_permissions(&bad, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let dev = super::super::mountinfo::dev_majmin(std::fs::metadata(&bad).unwrap().dev());
         let link = d.join("linked-usb");
         std::os::unix::fs::symlink(&usb, &link).unwrap();
         let (db, icons) = (crate::backend::mime::Db::load(), crate::backend::icons::Names::load());
         for fstype in ["vfat", "exfat", "ext4"] {
-            let table = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n40 1 8:17 / {} rw - exfat /dev/b rw\n41 1 8:33 / {} rw - {fstype} /dev/c rw\n", dest.display(), usb.display());
+            let table = format!("1 0 0:0 / / rw - ext4 /dev/a rw\n40 1 0:0 / {} rw - exfat /dev/b rw\n41 1 {dev} / {} rw - {fstype} /dev/c rw\n", dest.display(), usb.display());
             let line = answer_in(&table, 7, &[link.join("clip: launcher").to_string_lossy().into()], &dest.to_string_lossy(), &db, &icons).expect("asked");
             let icon = if fstype == "ext4" { "application-x-executable" } else { "text-x-generic" };
             assert!(line.contains(&format!(r#""i":"{icon}""#)), "{fstype}: {line}");
