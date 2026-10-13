@@ -685,7 +685,31 @@ def names(state):
     return [row["n"] for row in state["rows"]]
 
 
+# None while the window has not written ui.json yet, or while the write is half done.
+def ui_json():
+    try:
+        return json.loads(state_file.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+# SCHEMA's top-level keys as src/uischema.rs spells them; a parse that finds no entries or an unknown constant raises.
+# Sample input: 'pub const SCHEMA: &[(&str, Rule)] = &[', then '    ("view", Rule::Word(&["list", "columns", "grid", "dual"])),' and '    (STATE_VERSION, Rule::Version),', with 'pub const STATE_VERSION: &str = "stateVersion";'
+def schema_top_keys(source=REPO / "src/uischema.rs"):
+    text = source.read_text()
+    block = re.search(r"pub const SCHEMA: &\[\(&str, Rule\)\] = &\[\n(.*?)\n\];", text, re.S)
+    if block is None:
+        raise AssertionError(f"SCHEMA block not found in {source}")
+    body = block.group(1)
+    constants = dict(re.findall(r'pub const (\w+): &str = "([^"]*)";', text))
+    entries = re.findall(r'^    \((?:"([^"]+)"|([A-Z_]+)),', body, re.M)
+    if not entries or len(entries) != len(re.findall(r"^    \(", body, re.M)):
+        raise AssertionError(f"SCHEMA entry not parsed in {source}")
+    return {literal or constants[name] for literal, name in entries}
+
+
 def test_sorting():
+    schema_keys = schema_top_keys()
     # The fixture's name, size, modified and kind orders all differ, so a marked order over other rows is caught by names.
     ordered = guard(root / "ordered")
     for directory in [ordered, ordered / "folder", ordered / "refused"]:
@@ -700,7 +724,8 @@ def test_sorting():
     by_modified = ["folder", "refused", "photo.png", "bravo.txt", "charlie.txt", "alpha.txt"]
     by_modified_shown = by_modified + [".dot.txt"]
     by_kind = ["folder", "refused", "photo.png", "alpha.txt", "bravo.txt", "charlie.txt"]
-    saved = json.dumps({"sort": {"key": "kind", "reverse": False}})
+    # updates.autoCheck is seeded off, a nested value the picker never writes, so the first write must keep it.
+    saved = json.dumps({"sort": {"key": "kind", "reverse": False}, "updates": {"autoCheck": False}})
     write(state_file, saved)
     # Recent's newest-first order matches none of the fixture's sort orders, so a Recent that sorts is caught.
     recent_order = ["bravo.txt", "alpha.txt", "photo.png", "charlie.txt"]
@@ -718,6 +743,19 @@ def test_sorting():
     reverse_kind = ["refused", "folder", "charlie.txt", "bravo.txt", "alpha.txt", "photo.png"]
     sorting.until("S reverses an inherited kind order", lambda state: state["sortBy"] == "kind" and state["sortDesc"]
                   and state["state"] == "ready" and names(state) == reverse_kind)
+    # The first sort fills every shipped default into ui.json (src/uistate.rs patched), so the expectation starts from that whole file.
+    def first_sort_written():
+        saved_file = ui_json()
+        if saved_file is not None and saved_file.get("sort") == {"key": "kind", "reverse": True} and "folderSorts" in saved_file:
+            return saved_file
+        return None
+    first_write = wait("SP11 the first sort lands in ui.json", first_sort_written)
+    # Wrong default values are pinned by src/uistate.rs unit tests on patched, so this checks the seeded value and the key set.
+    check("SP11 the first write keeps the seeded nested value", first_write.get("updates", {}).get("autoCheck") is False, first_write)
+    check("SP11 the first write's sort is kind, descending", first_write.get("sort") == {"key": "kind", "reverse": True}, first_write)
+    check("SP11 the first write's folderSorts is exactly this folder's kind order",
+          first_write.get("folderSorts") == {str(ordered): {"key": "kind", "reverse": True}}, first_write)
+    check("SP11 the first write holds exactly SCHEMA's top-level keys", set(first_write) == schema_keys, first_write)
     sorting.key("s")
     sorting.until("s leaves kind for name", lambda state: state["sortBy"] == "name" and not state["sortDesc"] and names(state) == by_name)
     sorting.key("s")
@@ -781,9 +819,11 @@ def test_sorting():
     sorting.capture("recent")
     sorting.click("Back")
     sorting.until("leaving Recent restores the chosen order", lambda state: state["path"] == str(ordered) and names(state) == by_modified)
-    check("SP11 ui.json is byte for byte what the window saved", state_file.read_text() == saved, state_file.read_text())
+    # a3c7508f6: every sort writes the sort leaf and its folder's entry over the first write's whole file, and nothing else.
+    expected = {**first_write, "sort": {"key": "date", "reverse": False}, "folderSorts": {str(ordered): {"key": "date", "reverse": False}}}
+    check("SP11 ui.json holds the last sort and the folder's remembered order, nothing else", json.loads(state_file.read_text()) == expected, state_file.read_text())
     guard(root / "data/recently-used.xbel").unlink()
-    # The two requests below start from name, the order a box with nothing saved opens in.
+    # SP12 below starts from name, the order a box with nothing saved opens in.
     guard(state_file).unlink()
     sorting.row("alpha.txt")
     sorting.key("-k", "Return")
@@ -809,9 +849,11 @@ def test_sorting():
 
     write(ordered / "report.txt", "taken")
     saving = Request("SP13-sorting-save", method="SaveFile", folder=ordered, current_name=GLib.Variant("s", "report.txt")).opened()
-    saving.until("the collision is reviewed", lambda state: state["saveReady"] and state["collision"])
+    # a3c7508f6: SP12's last sort is the default now, so the save opens on size descending and s steps to modified.
+    saving.until("the collision is reviewed", lambda state: state["saveReady"] and state["collision"] and state["state"] == "ready"
+                 and state["sortBy"] == "size" and state["sortDesc"])
     saving.key("s")
-    saving.until("a sort keeps the filename and its collision answer", lambda state: state["sortBy"] == "size"
+    saving.until("a sort keeps the filename and its collision answer", lambda state: state["sortBy"] == "mtime" and not state["sortDesc"]
                  and state["state"] == "ready" and state["saveName"] == "report.txt" and state["saveReady"] and state["collision"])
     saving.focus_control("Filename")
     saving.key("-k", "End")
@@ -819,15 +861,17 @@ def test_sorting():
     saving.key("s")
     saving.key("S")
     typed = saving.until("s and S typed into Filename are text", lambda state: state["saveName"] == "report.txtsS")
-    check("SP13 typing in Filename sorts nothing", typed["sortBy"] == "size" and not typed["sortDesc"], typed)
+    check("SP13 typing in Filename sorts nothing", typed["sortBy"] == "mtime" and not typed["sortDesc"], typed)
     saving.cancel()
     guard(ordered / "report.txt").unlink()
+    # The groups after this one start from nothing saved, as they did before a picker sort was remembered.
+    guard(state_file).unlink(missing_ok=True)
 
 
 # Sample input: var MISSING_SENTENCE = "%1 does not exist or cannot be reached."
 def pathbar_sentence(constant):
     text = (REPO / "ui/js/PathBar.js").read_text()
-    found = re.search(r'^var ' + constant + r' = "(.*)";$', text, re.M)
+    found = re.search(r'^var ' + constant + r' = "(.*)";?$', text, re.M)
     if not found:
         raise AssertionError(f"pathbar constant {constant} missing")
     return found.group(1)
