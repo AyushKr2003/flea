@@ -50,7 +50,7 @@ fn indistinct(selecting: bool) -> Refusal {
     Refusal::new(Outcome::Indistinct(selecting), "The Trash provider did not report a stable item identity.").logged()
 }
 fn unchecked(op: Op) -> Refusal {
-    Refusal::new(Outcome::Unchecked(op), "Trash backing identity is unavailable.").logged()
+    Refusal::new(Outcome::Unchecked(op), "The backing identity for the Trash item is unavailable.").logged()
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -135,14 +135,14 @@ fn gio(args: &[&str]) -> Result<String, Refusal> {
         .output())
 }
 fn answer(output: std::io::Result<std::process::Output>) -> Result<String, Refusal> {
-    let output = output.map_err(|e| unreadable(format!("Could not run the Trash helper: {}", e)))?;
+    let output = output.map_err(|e| unreadable(format!("Could not start the Trash helper: {}", e)))?;
     if !output.status.success() {
         if matches!(output.status.code(), Some(124 | 137)) {
-            return Err(Refusal::new(Outcome::TookTooLong, "The GIO Trash request timed out.").logged());
+            return Err(Refusal::new(Outcome::TookTooLong, "The Trash helper exceeded its deadline.").logged());
         }
-        return Err(unreadable(String::from_utf8_lossy(&output.stderr).lines().last().unwrap_or("gio failed")));
+        return Err(unreadable(String::from_utf8_lossy(&output.stderr).lines().last().unwrap_or("The gio Trash helper failed.")));
     }
-    String::from_utf8(output.stdout).map_err(|_| unreadable("GIO returned invalid text."))
+    String::from_utf8(output.stdout).map_err(|_| unreadable("The Trash helper returned invalid text."))
 }
 
 // Sample input: "trash:///a.txt\t/home/gm/a.txt\n"; malformed framing must not silently lose an item.
@@ -151,12 +151,12 @@ fn parse_list(text: &str) -> Result<Vec<Item>, Refusal> {
     for line in text.lines() {
         let (uri, original) = line
             .split_once('\t')
-            .ok_or_else(|| unreadable("GIO returned an unreadable Trash listing."))?;
+            .ok_or_else(|| unreadable("The Trash helper returned an unreadable listing."))?;
         if !uri.starts_with("trash:///")
             || uri.len() <= "trash:///".len()
             || !original.starts_with('/')
         {
-            return Err(unreadable("GIO returned an invalid Trash identity."));
+            return Err(unreadable("The Trash helper returned an invalid item identity."));
         }
         items.push(Item {
             uri: uri.into(),
@@ -165,7 +165,7 @@ fn parse_list(text: &str) -> Result<Vec<Item>, Refusal> {
     }
     items.sort_by(|a, b| a.uri.cmp(&b.uri));
     if items.windows(2).any(|pair| pair[0].uri == pair[1].uri) {
-        return Err(unreadable("GIO returned duplicate Trash identities."));
+        return Err(unreadable("The Trash helper returned duplicate item identities."));
     }
     Ok(items)
 }
@@ -224,7 +224,7 @@ fn detail(item: &Item) -> Result<Detail, Refusal> {
     let text = gio(&["info", "--nofollow-symlinks", "--attributes=standard::size,standard::type,trash::deletion-date,id::file,id::filesystem,standard::icon,standard::target-uri", &item.uri])?;
     let size = attribute(&text, "standard::size")
         .and_then(|s| s.parse().ok())
-        .ok_or_else(|| unreadable("GIO did not report Trash item size."))?;
+        .ok_or_else(|| unreadable("The Trash helper did not report the item's size."))?;
     let identity = match (
         attribute(&text, "id::filesystem"),
         attribute(&text, "id::file"),
@@ -331,7 +331,7 @@ fn unread_many(count: usize) -> String {
     if count == 1 { return unread(None); }
     failure(&Item { uri: String::new(), original: String::new() }, "", &format!("{count} Trash records could not be read, so those items were left in place."))
 }
-// Item `reached` is target `reached` (prepare writes both in one loop); past a damaged frame the targets are read from the end back and the stretch between is counted.
+// Prepare appends one item per target in target order and fails whole on any error, so item `reached` is target `reached`; past a damaged frame targets are read backward and the stretch between is counted.
 fn left_unread(confirmation: &Confirmation, reached: usize) -> (Vec<String>, usize) {
     let left = confirmation.count.saturating_sub(reached).max(1);
     let (mut rows, mut unnamed, mut offset) = (Vec::new(), 0, 0);
@@ -570,7 +570,7 @@ impl Session {
         let identities = field_str_array(line, "identities");
         let all = field_bool(line, "all");
         if !all && uris.len() != identities.len() {
-            return Err(selection_changed("Trash selection has no reviewed identity.").into());
+            return Err(selection_changed("The reviewed identity for the Trash selection is missing.").into());
         }
         let mut explicit: HashMap<_, _> = uris.iter().zip(&identities).collect();
         let exclusions: HashSet<_> = field_str_array(line, "exclude").into_iter().collect();
@@ -583,7 +583,7 @@ impl Session {
             }
         } else if token > 0 {
             let selection = self.selection.as_ref().filter(|selection| selection.token == token)
-                .ok_or_else(|| selection_changed("Trash selection expired."))?;
+                .ok_or_else(|| selection_changed("The saved Trash selection is no longer current."))?;
             let mut offset = 0;
             while let Some(bytes) = selection.items.records().next(&mut offset)? {
                 self.cancellation.check()?;
@@ -598,8 +598,8 @@ impl Session {
             for uri in &uris {
                 let Some(expected) = explicit.remove(uri) else { continue; };
                 let item = self.items.iter().find(|item| &item.uri == uri)
-                    .ok_or_else(|| selection_changed("Trash selection expired."))?;
-                if expected.is_empty() { return Err(selection_changed("Trash selection has no reviewed identity.").into()); }
+                    .ok_or_else(|| selection_changed("The saved Trash selection is no longer current."))?;
+                if expected.is_empty() { return Err(selection_changed("The reviewed identity for the Trash selection is missing.").into()); }
                 targets.append(format!(r#"{{"uri":"{}","original":"{}","identity":"{}"}}"#,
                     escape(uri), escape(&item.original), escape(expected)).as_bytes())?;
             }

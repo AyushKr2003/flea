@@ -482,7 +482,7 @@ impl Reviewed {
             }
             let destination = original_path(&metadata, self.path.parent().and_then(Path::parent).changed("Missing Trash root.")?)?;
             if destination != original || Identity::of(&metadata.metadata().changed("Claimed Trash metadata unreadable")?) != self.metadata {
-                return Err(Refusal::new(Outcome::OriginalChanged, "Trash original location changed; refresh the selection."));
+                return Err(Refusal::new(Outcome::OriginalChanged, "The Trash item's original location changed; refresh the selection."));
             }
             let destination_parent = destination.parent().changed("Original parent is missing.")?.canonicalize()
                 .map_err(|e| Refusal::os(Outcome::Blocked, &format!("Could not open original location {}", destination.display()), &e))?;

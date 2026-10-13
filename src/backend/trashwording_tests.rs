@@ -1,7 +1,20 @@
 // The typed Trash outcomes pin visible copy while diagnostics remain available to the log.
 use super::super::trashmanifest::{Op, Outcome, Refusal};
 
+fn live(source: &'static str) -> &'static str {
+    source.rsplit_once("\n#[cfg(test)]\n").map_or(source, |(code, _)| code)
+}
+
 fn assert_shown(cases: &[(Outcome, &str)], retired: &[&str]) {
+    for (file, source) in [
+        ("trashbrowse.rs", live(include_str!("trashbrowse.rs"))),
+        ("trashdelete.rs", live(include_str!("trashdelete.rs"))),
+        ("trashdelete/recovery.rs", live(include_str!("trashdelete/recovery.rs"))),
+    ] {
+        for old in retired {
+            assert!(!source.contains(old), "retired wording came back in {file}: {old}");
+        }
+    }
     for (outcome, plain) in cases {
         let shown = Refusal::new(outcome.clone(), "provider diagnostic").because("permission denied").shown();
         assert_eq!(&shown, plain);

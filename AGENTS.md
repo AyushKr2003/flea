@@ -6627,6 +6627,13 @@ through `menuaction` and journals `MadeFile` (`opsdispatch.rs` `do_newfile`), an
 `convert` write below. Two helpers write on command loops of their own and journal nothing: the trash
 browser's `restore` and `delete` (`trashbrowse.rs`, `trashdelete.rs`) and the permissions dialog's
 `apply` (`permissions.rs`).
+Trash recovery reports a completed replay whose recovery folder cannot be reopened for sync as
+`RecordLeft(None)`: its failure sentence says both that the operation was recovered and that record
+cleanup failed, even when that record was already unlinked.
+The completion refusal tests delete the claimed payload or restore it with the production no-overwrite
+rename, then assert its absence from quarantine or its original content at the restored path beside the sentence.
+A recovery directory entry read error is logged in `RecoveryReport.failures` and ends the walk while
+preserving the recovered count, so an earlier completed replay is never reported as nothing moved.
 `docs/protocol.md` carries the wire; this is the part a reader of the code needs that the wire does not
 say.
 

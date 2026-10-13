@@ -376,25 +376,5 @@ fn recovery_preserves_an_unmarked_record_when_the_quarantine_is_missing() {
     assert!(moved.join("metadata").exists());
 }
 
-#[test]
-fn recovery_finishes_marked_cleanup_before_and_after_quarantine_removal() {
-    for removed in [false, true] {
-        let d = TestDir::new("recovery-missing-completed");
-        let (reviewed, quarantine, mut journal) = fixture(&d, None, None);
-        claim(&d, &reviewed, &quarantine, true);
-        remove_file(&d, &quarantine.join("payload"));
-        remove_file(&d, &quarantine.join("metadata"));
-        guard(&d, &quarantine);
-        if removed {
-            journal.remove_empty(&quarantine, &open_dir(&quarantine).unwrap(), &open_dir(&d.join("files")).unwrap()).unwrap();
-        } else {
-            journal.record.append(FINISHED).unwrap();
-            journal.record.sync().unwrap();
-        }
-        let record = journal.path.clone();
-        drop(journal);
-        clean(&d, &quarantine, &record);
-        assert!(!reviewed.path.exists());
-        assert!(!reviewed.info.exists());
-    }
-}
+#[path = "recovery_report_tests.rs"]
+mod report;

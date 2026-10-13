@@ -21,20 +21,20 @@ fn a_gio_that_fails_says_the_trash_could_not_be_read_and_logs_what_gio_said() {
     assert_logged(seen, "gio: trash:///: Operation not supported");
     let seen = logged().len();
     assert_eq!(answer(reply(1, b"", "")).unwrap_err().shown(), "The Trash could not be read.");
-    assert_logged(seen, "gio failed");
+    assert_logged(seen, "The gio Trash helper failed.");
     let seen = logged().len();
     assert_eq!(answer(reply(0, &[0xff, 0xfe], "")).unwrap_err().shown(), "The Trash could not be read.");
-    assert_logged(seen, "GIO returned invalid text.");
+    assert_logged(seen, "The Trash helper returned invalid text.");
     let seen = logged().len();
     let missing = answer(Err(std::io::Error::from(std::io::ErrorKind::NotFound))).unwrap_err();
     assert_eq!(missing.shown(), "The Trash could not be read.");
-    assert_logged(seen, "Could not run the Trash helper");
+    assert_logged(seen, "Could not start the Trash helper");
 }
 
 #[test]
 fn a_listing_gio_garbled_says_the_trash_could_not_be_read_and_logs_which_line() {
-    for (text, detail) in [("bad", "GIO returned an unreadable Trash listing."), ("file:///x\t/x", "GIO returned an invalid Trash identity."),
-        ("trash:///a\t/a\ntrash:///a\t/a", "GIO returned duplicate Trash identities.")] {
+    for (text, detail) in [("bad", "The Trash helper returned an unreadable listing."), ("file:///x\t/x", "The Trash helper returned an invalid item identity."),
+        ("trash:///a\t/a\ntrash:///a\t/a", "The Trash helper returned duplicate item identities.")] {
         let seen = logged().len();
         assert_eq!(parse_list(text).unwrap_err().shown(), "The Trash could not be read.");
         assert_logged(seen, detail);
@@ -47,7 +47,7 @@ fn a_gio_that_hit_its_deadline_says_the_trash_took_too_long() {
         let seen = logged().len();
         let refused = answer(reply(code, b"", "")).unwrap_err();
         assert_eq!(refused.shown(), "The Trash took too long to answer.");
-        assert_logged(seen, "The GIO Trash request timed out.");
+        assert_logged(seen, "The Trash helper exceeded its deadline.");
     }
 }
 
@@ -60,8 +60,8 @@ fn every_selection_that_no_longer_holds_says_the_selection_changed_and_logs_why(
     assert_eq!(session.targets(r#"{"uris":["trash:///a"],"identities":[""]}"#).unwrap_err(), sentence);
     assert_eq!(session.targets(r#"{"uris":["trash:///a"],"identities":["saved"],"selectionToken":4}"#).unwrap_err(), sentence);
     assert_eq!(session.targets(r#"{"uris":["trash:///gone"],"identities":["saved"]}"#).unwrap_err(), sentence);
-    assert_logged(seen, "Trash selection has no reviewed identity.");
-    assert_logged(seen, "Trash selection expired.");
+    assert_logged(seen, "The reviewed identity for the Trash selection is missing.");
+    assert_logged(seen, "The saved Trash selection is no longer current.");
     session.items.clear();
     let item = Detail { item: Item { uri: "trash:///a".into(), original: "/tmp/a".into() }, size: 1, deleted: String::new(),
         identity: "id".into(), directory: false, icon: String::new(), backing: None };
@@ -96,7 +96,7 @@ fn a_trash_that_cannot_be_checked_names_what_nothing_could_do() {
         (Op::Restore, "This Trash cannot be checked, so nothing can be restored from it.")] {
         let seen = logged().len();
         assert_eq!(unchecked(op).shown(), shown);
-        assert_logged(seen, "Trash backing identity is unavailable.");
+        assert_logged(seen, "The backing identity for the Trash item is unavailable.");
     }
 }
 

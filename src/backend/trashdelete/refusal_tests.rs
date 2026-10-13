@@ -117,7 +117,7 @@ fn a_restore_to_another_place_says_the_original_folder_changed() {
     let seen = logged().len();
     let refused = reviewed.restore(&wrong, d.path()).unwrap_err();
     assert_eq!(refused.shown(), "The item's original folder changed; select it again.");
-    assert_logged(seen, "Trash original location changed; refresh the selection.");
+    assert_logged(seen, "The Trash item's original location changed; refresh the selection.");
     assert!(!wrong.exists());
     assert_eq!(std::fs::read_to_string(path).unwrap(), "payload");
 }
@@ -261,40 +261,6 @@ fn a_quarantine_that_still_holds_items_names_where_they_are_kept() {
 }
 
 #[test]
-fn a_metadata_file_that_will_not_go_is_named_after_the_item_was_deleted() {
-    let d = TestDir::new("refusal-info-left");
-    let (path, reviewed) = fixture(&d, &d.join("restored"));
-    let seen = logged().len();
-    let refused = reviewed.with_claimed(Op::Delete, d.path(), None, || {}, |quarantine| {
-        std::fs::set_permissions(fd_path(quarantine, OsStr::new(".")), std::fs::Permissions::from_mode(0o500)).unwrap();
-        Ok(())
-    }).unwrap_err();
-    let shown = refused.shown();
-    assert!(shown.starts_with("The item was deleted, but a Trash record at "), "{shown}");
-    assert!(shown.ends_with(" could not be removed: permission denied."), "{shown}");
-    assert_logged(seen, "Trash metadata cleanup after completion");
-    assert!(!path.exists());
-}
-
-#[test]
-fn a_temporary_folder_that_will_not_go_is_named_after_the_step_finished() {
-    let d = TestDir::new("refusal-folder-left");
-    let (_, reviewed) = fixture(&d, &d.join("restored"));
-    let seen = logged().len();
-    let restored = reviewed.with_claimed(Op::Restore, d.path(), None, || {}, |quarantine| {
-        std::fs::write(fd_path(quarantine, OsStr::new("stray")), "x").unwrap();
-        Ok(())
-    }).unwrap_err();
-    assert_eq!(restored.shown(), "The item was restored, but Flea could not remove its temporary folder: it still holds items.");
-    assert_logged(seen, "no cleanup was recorded");
-    let path = d.file("selected", "reviewed");
-    let (review, _) = PathReview::prepare(path.clone(), &mut Manifest::new(d.path()).unwrap(), d.path(), &Cancellation::default()).unwrap();
-    let deleted = review.delete_after(d.path(), || std::fs::write(quarantine_in(d.path()).join("stray"), "x").unwrap()).unwrap_err();
-    assert_eq!(deleted.shown(), "The item was deleted, but Flea could not remove its temporary folder: it still holds items.");
-    assert!(!path.exists());
-}
-
-#[test]
 fn a_recovery_record_that_changed_is_named_after_the_item_was_deleted() {
     let d = TestDir::new("refusal-record-left");
     let (path, reviewed) = fixture(&d, &d.join("restored"));
@@ -387,3 +353,6 @@ fn the_outcomes_a_fixture_cannot_reach_still_say_one_sentence_and_log_their_deta
         assert_logged(seen, refusal.detail());
     }
 }
+
+#[path = "completion_refusal_tests.rs"]
+mod completion;

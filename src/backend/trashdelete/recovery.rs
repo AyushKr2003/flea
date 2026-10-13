@@ -73,7 +73,8 @@ impl Recovery {
         }
         std::fs::remove_file(&self.path)
             .map_err(|e| Refusal::os(Outcome::RecordLeft(None), &format!("Could not finish recovery record {}", self.path.display()), &e))?;
-        open_dir(self.path.parent().refuse(Outcome::RecordLeft(None), "Missing recovery folder.")?)?.sync_all()
+        open_dir(self.path.parent().refuse(Outcome::RecordLeft(None), "Missing recovery folder.")?)
+            .map_err(|refusal| refusal.wrap(Outcome::RecordLeft(None)))?.sync_all()
             .map_err(|e| Refusal::os(Outcome::RecordLeft(None), "Could not sync completed recovery record", &e))
     }
     pub(super) fn remove_empty(&mut self, path: &Path, quarantine: &File, parent: &File) -> Result<(), Refusal> {
@@ -279,9 +280,19 @@ pub fn recover(root: &Path) -> Result<RecoveryReport, Refusal> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(RecoveryReport::default()),
         Err(error) => return Err(Refusal::os(Outcome::NothingMoved, &format!("Could not read recovery folder {}", root.display()), &error).logged()),
     };
+    recover_entries(root, entries)
+}
+fn recover_entries(root: &Path, entries: impl IntoIterator<Item = std::io::Result<std::fs::DirEntry>>) -> Result<RecoveryReport, Refusal> {
     let mut result = RecoveryReport::default();
     for entry in entries {
-        let entry = entry.refuse(Outcome::NothingMoved, "Could not read the recovery folder").map_err(Refusal::logged)?;
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                result.failures.push(format!("{}: {}", root.display(),
+                    Refusal::os(Outcome::Unreadable, "Could not read the recovery folder", &error).logged()));
+                break;
+            }
+        };
         let name = entry.file_name();
         if !name.to_str().map(|name| name.starts_with(".flea-delete-") && name.ends_with(".review")).unwrap_or(false) { continue; }
         let path = entry.path();
