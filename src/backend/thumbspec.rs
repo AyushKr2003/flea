@@ -1,4 +1,5 @@
 use crate::backend::aliases::Aliases;
+use crate::backend::appicon;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -40,7 +41,17 @@ impl Thumbnailers {
             // Sorting one directory at a time, rather than the whole list, keeps the search path's own precedence intact.
             entries.append(&mut sorted_by_path(in_dir));
         }
-        Thumbnailers::from_entries(&entries, aliases)
+        Thumbnailers::from_entries(&entries, aliases).with_appimage_route(aliases, appicon::available())
+    }
+
+    // An internal spec so rows.rs sets t for an AppImage; a thumbnailer file that declares the type keeps it, and without 7z there is no route.
+    pub(crate) fn with_appimage_route(mut self, aliases: &Aliases, tool: bool) -> Thumbnailers {
+        if tool {
+            for mime in appicon::MIMES {
+                self.by_mime.entry(aliases.canonical(mime).to_string()).or_insert_with(appicon::route_spec);
+            }
+        }
+        self
     }
 
     pub fn from_entries(entries: &[(String, String)], aliases: &Aliases) -> Thumbnailers {
@@ -202,6 +213,11 @@ fn resolve_in(program: &str, path: &str) -> Option<String> {
         .into_iter()
         .find(|c| std::fs::metadata(c).is_ok_and(|m| m.is_file() && m.permissions().mode() & ANY_EXECUTE_BIT != 0))
         .map(|c| c.to_string_lossy().to_string())
+}
+
+// The AppImage route asks only whether a tool runs, under the same search-path rule as every thumbnailer.
+pub(crate) fn is_runnable(program: &str) -> bool {
+    resolve(program).is_some()
 }
 
 #[cfg(test)]

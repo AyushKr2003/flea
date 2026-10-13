@@ -1554,7 +1554,7 @@ A first listing and a navigation carry no `changed`, and a client reads a missin
 
 ### rows
 
-`{"t":"rows","start":<uint>,"rows":[{"n":<string>,"d":<bool>,"s":<uint>,"m":<int>,"p":<uint>,"i":<string>,"t":<bool>,"k":<uint>[,"l":<string>][,"v":<uint>][,"tg":[<string>,...]]},...],"kinds":[<string>,...],"ms":<float>,"listing":<uint>}`
+`{"t":"rows","start":<uint>,"rows":[{"n":<string>,"d":<bool>,"s":<uint>,"m":<int>,"p":<uint>,"i":<string>,"t":<bool>,"k":<uint>[,"l":<string>][,"v":<uint>][,"tg":[<string>,...]][,"a":true]},...],"kinds":[<string>,...],"ms":<float>,"listing":<uint>}`
 
 Example:
 `{"t":"rows","start":0,"rows":[{"n":"say \"hi\".txt","d":false,"s":12,"m":1787790423,"p":33188,"i":"text-x-generic","t":false,"k":0},{"n":"photos","d":true,"s":4096,"m":1787790424,"p":16877,"i":"folder","t":false,"k":1,"v":56}],"kinds":["Plain text document","Folder"],"ms":1.250,"listing":1}`
@@ -1588,6 +1588,10 @@ row draws its swatches with no call per row; an untagged row carries no `tg` at 
 foreign word stays untouched and shows in Properties instead. One `getxattr` per emitted row
 reads it, which is exactly the rows a window stats and never a sweep; on a network or phone
 mount no row carries it, because each read there would be a round trip.
+
+**`a` marks a thumbnailable AppImage, and only that row carries it.** Its own icon is its identity, so
+the Images thumbnail mode draws it while a row with any other executable icon, such as a Windows
+installer a third-party thumbnailer handles, stays a mark; every other row carries no `a` at all.
 
 **`v` is the row's filesystem id, and only a directory row carries it.** A drop destination is
 always a directory, so a file row's device would never be read, and the scale fixture is 100,000
