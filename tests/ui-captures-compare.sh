@@ -1,6 +1,9 @@
 # Compare board captures, sourced by ui.sh and run only by name on the native display.
 . "$repo/tests/lib/pointer-glide.sh"
 
+# One byte past OVER_BYTES in src/backend/compare.rs:13 (1 MiB), so Compare refuses the large pair.
+readonly cap_compare_over_bytes=1048577
+
 # The twenty-line pair differs only at lines 12 to 17, so diff -u prints the board's one hunk.
 cap_compare_fixture() {
     local dir="$1" pair n
@@ -30,7 +33,7 @@ TEXT
         printf 'Only the visible lines are asked for.\nA newer request cancels an older one.\nThe frame runs to the column bottom.\n' >> "$dir/diff/notes-$pair.md"
         cp "$dir/diff/notes-a.md" "$dir/identical/notes-$pair.md"
         printf '\211PNG\r\n\032\n\0image %s\n' "$pair" > "$dir/binary/shot-$pair.png"
-        head -c 1048577 /dev/zero | tr '\0' 'a' > "$dir/large/dump-$pair.log"
+        head -c "$cap_compare_over_bytes" /dev/zero | tr '\0' 'a' > "$dir/large/dump-$pair.log"
     done
 }
 
@@ -72,8 +75,10 @@ cap_compare_point() {
         centre=$(ipc compareState | jq -er --arg name "$name" '.controls[] | select(.name == $name and .visible) | .centre') \
             || fail "compare: no visible $name control"
     fi
+    # Sample input: "640 360", the control centre in window pixels from compareState.
     read -r cx cy <<< "$centre"
     [[ "$cx $cy" =~ ^[0-9]+\ [0-9]+$ ]] || fail "compare: invalid centre for $name: [$centre]"
+    # Sample input: "120 80 1100 700", the window's layout x, y, width and height from window_box.
     read -r wx wy ww wh < <(window_box) || fail "compare: native window coordinates unavailable"
     pointer_glide "$((wx + cx))" "$((wy + cy))" || fail "compare: pointer never reached $name"
     settle
@@ -106,6 +111,8 @@ case_cap_compare() {
     cap_compare_shot compare-diff '.answer == "diff" and all(.controls[]; .visible and .enabled and (.hovered or .pressed or .focused or .ring | not))'
     cap_compare_shot compare-copy-rest '.answer == "diff" and [.controls[] | select(.name == "copy") | [.hovered,.pressed,.focused,.ring]] == [[false,false,false,false]]'
     cap_compare_shot compare-close-rest '.answer == "diff" and [.controls[] | select(.name == "close") | [.hovered,.pressed,.focused,.ring]] == [[false,false,false,false]]'
+    printf 'Compare capture clipboard sentinel\n' | wl-copy
+    cap_compare_clipboard 'Compare capture clipboard sentinel'
     key y >/dev/null
     cap_compare_clipboard "$patch"
     cap_compare_shot compare-copy-key '.answer == "diff" and all(.controls[]; .pressed | not)'
