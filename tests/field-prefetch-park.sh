@@ -3,6 +3,9 @@
 set -u
 cd "$(dirname "$0")/.." || exit 1
 bench="$PWD/tools/flea-field-bench"
+export TEST_READY_POLLS=200
+export TEST_READY_POLL_S=0.01
+export TEST_CHILD_SLEEP_S=300
 
 # The fixture root is a mktemp -d of its own, and its one delete is checked absolute and two deep before the trap exists.
 scratch=$(mktemp -d /tmp/flea-prefetch-park.XXXXXX) || exit 1
@@ -128,7 +131,7 @@ group_running() {
 signal_case() {
   local mode=$1 signal=$2 expected=$3 warm="$scratch/warm-$1-$2" warm_pid fake copy_pid rc elapsed alive group_alive
   mkdir -p "$warm/cg" "$warm/qml" "$warm/state/flea"
-  printf '#!/bin/bash\necho $$ > "$FAKE_PIDFILE"\n: > "$QML_DISK_CACHE_PATH/unit"\necho list > "$FAKE_PREFETCH"\nexec sleep 300\n' > "$warm/flea"; chmod +x "$warm/flea"
+  printf '#!/bin/bash\necho $$ > "$FAKE_PIDFILE"\n: > "$QML_DISK_CACHE_PATH/unit"\necho list > "$FAKE_PREFETCH"\nexec sleep "$TEST_CHILD_SLEEP_S"\n' > "$warm/flea"; chmod +x "$warm/flea"
   printf '#!/bin/bash\ntrap "" TERM\necho $$ > "$W/copy-pid"\nwhile :; do sleep 1; done\n' > "$warm/copy.sh"
   cat > "$warm/run.sh" <<'EOS'
 set -uo pipefail
@@ -166,7 +169,7 @@ trap 'exit 143' TERM
 fork_signal() {
   [ "$BASH_COMMAND" = 'WARM_PID=$!' ] || return 0
   local polls=0
-  while [ ! -f "$W/copy-pid" ] && [ "$polls" -lt 200 ]; do sleep 0.01; polls=$(( polls + 1 )); done
+  while [ ! -f "$W/copy-pid" ] && [ "$polls" -lt "$TEST_READY_POLLS" ]; do sleep "$TEST_READY_POLL_S"; polls=$(( polls + 1 )); done
   printf '%s\n' "${WARM_PID:-empty}" > "$W/pid-at-signal"
   kill -s "$SIGNAL" "$$"
 }
@@ -247,12 +250,12 @@ set -uo pipefail
 eval "$WARM_TEXT"
 WARM_PID=""; WARM_STARTING=yes; WARM_PREVIOUS_PID=""
 set -m
-if [ "$MODE" = previous ]; then ( set +m; sleep 300; : ) & else sleep 300 & fi
+if [ "$MODE" = previous ]; then ( set +m; sleep "$TEST_CHILD_SLEEP_S"; : ) & else sleep "$TEST_CHILD_SLEEP_S" & fi
 pid=$!
 set +m
 if [ "$MODE" = previous ]; then WARM_PREVIOUS_PID=$pid; fi
 polls=0
-while [ "$MODE" = command ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" != sleep ] && [ "$polls" -lt 200 ]; do sleep 0.01; polls=$(( polls + 1 )); done
+while [ "$MODE" = command ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" != sleep ] && [ "$polls" -lt "$TEST_READY_POLLS" ]; do sleep "$TEST_READY_POLL_S"; polls=$(( polls + 1 )); done
 stop_warm_job
 kill -0 "$pid" 2>/dev/null && printf 'kept\n' || printf 'killed\n'
 [[ "$pid" =~ ^[0-9]+$ ]] && [ "$pid" -gt 1 ] && kill -KILL -- "-$pid" 2>/dev/null
