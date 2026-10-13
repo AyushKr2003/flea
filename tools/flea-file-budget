@@ -30,7 +30,7 @@ src/backend/localsend.rs 432
 src/backend/menu_actions.rs 657
 src/backend/menu_registry.rs 569
 src/backend/meta.rs 550
-src/backend/metareq.rs 435
+src/backend/metareq.rs 465
 src/backend/movebatch.rs 477
 src/backend/movebatch_tests.rs 752
 src/backend/opsdispatch.rs 2273
@@ -41,8 +41,8 @@ src/backend/run.rs 1114
 src/backend/officepdf.rs 404
 src/backend/run_session_tests.rs 525
 src/backend/ops.rs 440
-src/backend/thumbs.rs 495
-src/backend/thumbspec.rs 410
+src/backend/thumbs.rs 513
+src/backend/thumbspec.rs 463
 src/backend/dirsizeworker.rs 573
 src/backend/watch.rs 550
 src/backend/thumbreq.rs 448
@@ -54,6 +54,7 @@ src/backend/collide_replace_tests.rs 492
 src/backend/proto.rs 468
 src/backend/thumbworker.rs 961
 src/backend/trashbrowse.rs 900
+src/backend/rawpreview_tests.rs 427
 src/backend/trashdelete.rs 938
 src/clip/watch_end_tests.rs 405
 src/gvfsprefetch_tests.rs 398
@@ -86,7 +87,6 @@ tests/js/picker.js 352
 tests/picker-grid.qml 465
 tests/picker-hunt.qml 449
 tests/permissions-focus.qml 417
-tests/js/facts.js 346
 tests/js/network.js 307
 tests/js/ops.js 574
 tests/js/slowclick.js 309
@@ -154,7 +154,7 @@ ui/PaneMenuActions.qml 523
 ui/PaneWire.qml 602
 ui/PermissionsDialog.qml 658
 ui/PickerWindow.qml 797
-ui/Preview.qml 898
+ui/Preview.qml 919
 ui/PreviewColumn.qml 608
 ui/PickerChrome.qml 441
 ui/DeviceMounts.qml 537
@@ -179,7 +179,6 @@ ui/js/Keymap.js 366
 ui/js/Nav.js 328
 ui/js/Markdown.js 135
 ui/js/MdBlocks.js 437
-ui/js/Facts.js 354
 ui/js/FigureWorker.mjs 619
 ui/js/MdDocument.js 337
 ui/js/MdLeaf.js 309

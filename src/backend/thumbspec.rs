@@ -18,6 +18,12 @@ const DEFAULT_DATA_DIRS: &str = "/usr/local/share:/usr/share";
 const THUMBNAILERS_SUBDIR: &str = "thumbnailers";
 // The one group whose keys are honoured, because a key outside it names a program nothing may run.
 const ENTRY_GROUP: &str = "[Thumbnailer Entry]";
+const JPEG_MIME: &str = "image/jpeg";
+// The camera RAW types whose embedded JPEG is thumbnailed, by canonical name; the shared-mime-info alias image/x-panasonic-raw2 canonicalises to the RW2 entry.
+const RAW_MIMES: [&str; 11] = [
+    "image/x-canon-cr2", "image/x-canon-cr3", "image/x-nikon-nef", "image/x-nikon-nrw", "image/x-sony-arw", "image/x-sony-sr2",
+    "image/x-adobe-dng", "image/x-fuji-raf", "image/x-olympus-orf", "image/x-panasonic-rw2", "image/x-pentax-pef",
+];
 
 impl Thumbnailers {
     pub fn load(aliases: &Aliases) -> Thumbnailers {
@@ -77,7 +83,13 @@ impl Thumbnailers {
 
     // Both sides are canonicalised, because a thumbnailer may declare either one; see AGENTS.md "MIME aliases".
     pub fn for_mime(&self, mime: &str, aliases: &Aliases) -> Option<&Spec> {
-        self.by_mime.get(aliases.canonical(mime))
+        self.by_mime.get(aliases.canonical(mime)).or_else(|| self.raw_route(mime, aliases))
+    }
+
+    // A camera RAW no thumbnailer declares is thumbnailed by the image/jpeg spec on the JPEG it embeds; none when the type is not a RAW, a thumbnailer declares it, or no image/jpeg thumbnailer is installed.
+    pub fn raw_route(&self, mime: &str, aliases: &Aliases) -> Option<&Spec> {
+        let canonical = aliases.canonical(mime);
+        if RAW_MIMES.contains(&canonical) && !self.by_mime.contains_key(canonical) { self.by_mime.get(JPEG_MIME) } else { None }
     }
 }
 
@@ -224,6 +236,47 @@ mod tests {
         assert!(t.for_mime("video/mp4", &a).is_some());
         assert!(t.for_mime("video/webm", &a).is_some());
         assert!(t.for_mime("image/jpeg", &a).is_none());
+    }
+
+    // The eleven camera RAW types as the mime database names them, spelled out so the table in the code is not its own witness.
+    const ELEVEN: [&str; 11] = [
+        "image/x-canon-cr2", "image/x-canon-cr3", "image/x-nikon-nef", "image/x-nikon-nrw", "image/x-sony-arw", "image/x-sony-sr2",
+        "image/x-adobe-dng", "image/x-fuji-raf", "image/x-olympus-orf", "image/x-panasonic-rw2", "image/x-pentax-pef",
+    ];
+
+    #[test]
+    fn each_camera_raw_type_takes_the_jpeg_spec_and_only_when_one_is_installed() {
+        let a = Aliases::from_str("image/x-panasonic-raw2 image/x-panasonic-rw2\n");
+        let jpeg = one("[Thumbnailer Entry]\nTryExec=/bin/sh\nExec=/bin/sh -j %i %o\nMimeType=image/jpeg;\n");
+        for m in ELEVEN.iter().chain(&["image/x-panasonic-raw2"]) {
+            assert_eq!(jpeg.raw_route(m, &a).map(|s| s.exec[1].as_str()), Some("-j"), "{m}");
+            assert!(jpeg.for_mime(m, &a).is_some(), "{m}");
+        }
+        // Not a RAW type: the PNG, the Sony SRF the walker reads but this route does not list, and an unknown name.
+        for m in ["image/png", "image/x-sony-srf", "nonsense/nothing"] {
+            assert!(jpeg.raw_route(m, &a).is_none() && jpeg.for_mime(m, &a).is_none(), "{m}");
+        }
+        // Without an image/jpeg thumbnailer a RAW has none, as before.
+        let video = one("[Thumbnailer Entry]\nTryExec=/bin/sh\nExec=/bin/sh %i %o\nMimeType=video/mp4;\n");
+        assert!(ELEVEN.iter().all(|m| video.for_mime(m, &a).is_none()));
+        // A thumbnailer that declares the RAW itself still serves it when no image/jpeg one exists, and the route stays off.
+        let own = one("[Thumbnailer Entry]\nTryExec=/bin/sh\nExec=/bin/sh -r %i %o\nMimeType=image/x-canon-cr2;\n");
+        assert_eq!(own.for_mime("image/x-canon-cr2", &a).map(|s| s.exec[1].as_str()), Some("-r"));
+        assert!(own.raw_route("image/x-canon-cr2", &a).is_none());
+    }
+
+    #[test]
+    fn a_thumbnailer_that_declares_a_raw_keeps_it_when_an_image_jpeg_one_is_installed_too() {
+        let a = Aliases::from_str("");
+        let jpeg = ("jpeg.thumbnailer".to_string(), "[Thumbnailer Entry]\nTryExec=/bin/sh\nExec=/bin/sh -j %i %o\nMimeType=image/jpeg;\n".to_string());
+        let cr2 = ("cr2.thumbnailer".to_string(), "[Thumbnailer Entry]\nTryExec=/bin/sh\nExec=/bin/sh -r %i %o\nMimeType=image/x-canon-cr2;\n".to_string());
+        let t = Thumbnailers::from_entries(&[jpeg, cr2], &a);
+        // The declared CR2 is served by its own thumbnailer on the file itself, and the route stays off for it.
+        assert_eq!(t.for_mime("image/x-canon-cr2", &a).map(|s| s.exec[1].as_str()), Some("-r"));
+        assert!(t.raw_route("image/x-canon-cr2", &a).is_none(), "the route must stay off for a declared RAW");
+        // A RAW nothing declares still takes the JPEG route.
+        assert_eq!(t.for_mime("image/x-nikon-nef", &a).map(|s| s.exec[1].as_str()), Some("-j"));
+        assert_eq!(t.raw_route("image/x-nikon-nef", &a).map(|s| s.exec[1].as_str()), Some("-j"));
     }
 
     #[test]
