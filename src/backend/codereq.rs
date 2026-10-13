@@ -14,6 +14,9 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 
+#[path = "csvrange.rs"]
+mod csvrange;
+
 // Past this many bytes a file is too large to colour.
 const LARGE_BYTES: usize = 1_048_576;
 // A NUL among the first bytes makes the file binary.
@@ -32,6 +35,7 @@ pub struct Ask {
     first: usize,
     count: usize,
     raw: bool,
+    csv: Option<u8>,
 }
 
 enum Source {
@@ -61,6 +65,7 @@ impl Ask {
             // Absent is the whole text, which the cap then clamps.
             count: field_usize(line, "count").unwrap_or(MAX_COUNT).clamp(1, MAX_COUNT),
             raw: field_bool(line, "raw"),
+            csv: csvrange::delimiter(line),
         }
     }
 
@@ -247,7 +252,8 @@ fn is_json(path: &str) -> bool {
 }
 
 fn plain(ask: &Ask, data: &[u8]) -> String {
-    reply(ask, "plain", line_count(data), &plain_lines(data, ask.first, ask.count))
+    let (first, count) = ask.csv.map_or((ask.first, ask.count), |delim| csvrange::align(data, ask.first, ask.count, delim));
+    reply_at(ask, "plain", first, line_count(data), &plain_lines(data, first, count))
 }
 
 // The asked lines as they are, one foreground run each; a blank line has no run.
@@ -354,12 +360,16 @@ fn json_argv(bat: &str, range: &str) -> Vec<String> {
 
 // Sample output: {"t":"code","token":4,"slot":"look","state":"styled","first":1,"total":2,"lines":[[5,"fn",0," main"],[]]}
 fn reply(ask: &Ask, state: &str, total: usize, lines: &[Line]) -> String {
+    reply_at(ask, state, ask.first, total, lines)
+}
+
+fn reply_at(ask: &Ask, state: &str, first: usize, total: usize, lines: &[Line]) -> String {
     let mut out = format!(
         r#"{{"t":"code","token":{},"slot":"{}","state":"{}","first":{},"total":{},"lines":["#,
         ask.token,
         escape(&ask.slot),
         state,
-        ask.first,
+        first,
         total
     );
     for (i, line) in lines.iter().enumerate() {

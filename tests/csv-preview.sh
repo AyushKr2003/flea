@@ -23,19 +23,88 @@ cp -a ui "$test_root/config/flea" || exit 1
 cp tests/csv-preview.qml "$test_root/config/shell.qml" || exit 1
 printf '{}\n' > "$test_root/state/flea/ui.json"
 
-# bench.csv is the board's 24-row table; long.csv has a long first cell; big.csv has 49,999 rows with long names at rows 60 to 64.
+# Fixtures preserve the board's 24 rows and put later long names beyond big.csv's first screen.
 fixture="$test_root/fixture"
-awk 'BEGIN { print "fixture,files,folders,depth"; split("photos music code mixed nested flat", names); split("3 4 9 6 12 1", depths); split("1k 10k 100k 1m", suffixes); for (g = 1; g <= 6; g++) { files = 1000; for (s = 1; s <= 4; s++) { printf "%s-%s,%d,%d,%d\n", names[g], suffixes[s], files, files / 50, depths[g]; files *= 10 } } }' > "$fixture/bench.csv"
-awk 'BEGIN { print "name,size,kind,modified"; for (i = 1; i <= 24; i++) { n = (i == 1) ? "a-first-name-long-enough-to-stretch-the-first-column-well-past-its-header-and-keep-going-on-and-on" : sprintf("file-%02d.txt", i); printf "%s,%d,%s,2026-09-%02d\n", n, i * 1234 % 99991, (i % 3 ? "text" : "image"), i } }' > "$fixture/long.csv"
-awk 'BEGIN { for (c = 1; c <= 12; c++) printf "%sc%02d", (c > 1 ? "," : ""), c; print ""; for (r = 1; r <= 3; r++) { for (c = 1; c <= 12; c++) printf "%svalue-%d-%02d-xxxxxx", (c > 1 ? "," : ""), r, c; print "" } }' > "$fixture/wide.csv"
-awk 'BEGIN { print "id,name,size"; for (i = 1; i <= 49999; i++) { n = (i >= 60 && i <= 64) ? sprintf("%0120d", i) : sprintf("f%05d", i); printf "%d,%s,%d\n", i, n, i * 7 } }' > "$fixture/big.csv"
-[ "$(stat -c %s "$fixture/big.csv")" -le 1048576 ] || { printf 'FAIL csv-preview: big.csv must stay under 1 MiB\n'; exit 1; }
+preview_bytes=$((1024 * 1024))
+setup_start=$EPOCHREALTIME
+{
+    printf 'fixture,files,folders,depth\n'
+    names=(photos music code mixed nested flat)
+    depths=(3 4 9 6 12 1)
+    suffixes=(1k 10k 100k 1m)
+    for ((g = 0; g < ${#names[@]}; g++)); do
+        files=1000
+        for suffix in "${suffixes[@]}"; do
+            printf '%s-%s,%d,%d,%d\n' "${names[g]}" "$suffix" "$files" "$((files / 50))" "${depths[g]}"
+            files=$((files * 10))
+        done
+    done
+} > "$fixture/bench.csv"
+{
+    printf 'name,size,kind,modified\n'
+    for ((i = 1; i <= 24; i++)); do
+        printf -v name 'file-%02d.txt' "$i"
+        [ "$i" -ne 1 ] || name=a-first-name-long-enough-to-stretch-the-first-column-well-past-its-header-and-keep-going-on-and-on
+        kind=text
+        [ "$((i % 3))" -ne 0 ] || kind=image
+        printf '%s,%d,%s,2026-09-%02d\n' "$name" "$((i * 1234 % 99991))" "$kind" "$i"
+    done
+} > "$fixture/long.csv"
+{
+    sep=
+    for ((c = 1; c <= 12; c++)); do printf '%sc%02d' "$sep" "$c"; sep=,; done
+    printf '\n'
+    for ((r = 1; r <= 3; r++)); do
+        sep=
+        for ((c = 1; c <= 12; c++)); do printf '%svalue-%d-%02d-xxxxxx' "$sep" "$r" "$c"; sep=,; done
+        printf '\n'
+    done
+} > "$fixture/wide.csv"
+{
+    printf 'id,name,size\n'
+    for ((i = 1; i <= 49999; i++)); do
+        if [ "$i" -ge 60 ] && [ "$i" -le 64 ]; then
+            printf -v name '%0120d' "$i"
+        else
+            printf -v name 'f%05d' "$i"
+        fi
+        printf '%d,%s,%d\n' "$i" "$name" "$((i * 7))"
+    done
+} > "$fixture/big.csv"
+[ "$(stat -c %s "$fixture/big.csv")" -le "$preview_bytes" ] || { printf 'FAIL csv-preview: big.csv must stay under 1 MiB\n'; exit 1; }
 printf 'id,note\n1,"two\nlines",3\n2,plain\n' > "$fixture/quoted.csv"
 printf 'a\tb\tc\n1\tx,y\t3\n4\t5\t6\n' > "$fixture/fixture.tsv"
 printf 'a,b\0c\n1,2\n' > "$fixture/nul.csv"
-yes 'a,b,c' | head -c 1048577 > "$fixture/over.csv"
+yes 'a,b,c' | head -c "$((preview_bytes + 1))" > "$fixture/over.csv"
 : > "$fixture/empty.csv"
 printf 'plain text\n' > "$fixture/plain.txt"
+{
+    printf 'id,note\n'
+    for ((i = 1; i < 400; i++)); do printf '%d,row%d\n' "$i" "$i"; done
+    printf '400,"jump head\n'
+    for ((i = 402; i <= 701; i++)); do printf 'jump continuation\n'; done
+    printf 'jump tail",9\n'
+    for ((i = 702; i < 900; i++)); do printf '%d,row%d\n' "$i" "$i"; done
+} > "$fixture/jump.csv"
+{
+    printf 'id,note\n1,"open head\n'
+    for ((i = 3; i <= 70; i++)); do printf 'open continuation\n'; done
+    printf 'open tail",9\n2,last\n'
+} > "$fixture/open.csv"
+
+{
+    opening=$'id,note\n1,"open\n'
+    printf '%s' "$opening"
+    remaining=$((preview_bytes - ${#opening}))
+    continuation='malformed continuation with a quote that never closes anywhere'
+    while [ "$remaining" -gt "${#continuation}" ]; do
+        printf '%s\n' "$continuation"
+        remaining=$((remaining - ${#continuation} - 1))
+    done
+    printf '%s' "${continuation:0:remaining}"
+} > "$fixture/malformed.csv"
+setup_end=$EPOCHREALTIME
+printf 'csv-preview: fixture setup_ms=%d\n' "$(( (${setup_end/./} - ${setup_start/./}) / 1000 ))"
 
 failures=0
 log="$test_root/csv-preview.log"
@@ -47,7 +116,7 @@ log="$test_root/csv-preview.log"
     dbus-run-session -- bash -c 'timeout 240 qs -p "$1" > "$2" 2>&1' _ "$test_root/config" "$log" 2> "$test_root/bus.log" ) 2>/dev/null
 status=$?
 [ -z "${FLEA_CI_SUITE_LOGS:-}" ] || cp "$log" "$FLEA_CI_SUITE_LOGS/csv-preview.log" 2>/dev/null
-grep -a 'CSVPREV \(PASS\|FAIL\|DONE\)' "$log" | sed 's/^/csv-preview: /'
+grep -a 'CSVPREV \(PASS\|FAIL\|DONE\|MEASURE\)' "$log" | sed 's/^/csv-preview: /'
 loops=$(grep -ac 'Binding loop detected' "$log")
 if [ "$loops" -ne 0 ]; then
     printf 'FAIL csv-preview: %s binding loop(s)\n' "$loops"

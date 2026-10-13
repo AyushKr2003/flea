@@ -1231,7 +1231,7 @@ or that cannot be read, answers `hasShebang` false rather than an error, so the 
 
 ### code
 
-`{"c":"code","token":<uint>,"slot":"<string>","path":"<string>"|"text":"<string>","name":"<string>","lang":"<string>","first":<uint>,"count":<uint>,"raw":<bool>}`
+`{"c":"code","token":<uint>,"slot":"<string>","path":"<string>"|"text":"<string>","name":"<string>","lang":"<string>","first":<uint>,"count":<uint>,"raw":<bool>,"csv":"<delimiter>"}`
 
 Example: `{"c":"code","token":4,"slot":"look","path":"/home/gm/a.rs","first":40,"count":20}` and
 `{"c":"code","token":5,"slot":"fence:2","text":"fn main() {}","name":"x.rs","lang":"","first":1,"count":10}`
@@ -1246,6 +1246,15 @@ thread. A newer request on the same `slot` ends the older job and the older repl
 so a client matches the `token` of what it last sent and drops any other. At most 1,048,576 bytes
 of a file are ever read, and `bat` runs in the same read-only jail as the other helpers, on the
 bytes the verdict was made on.
+
+A raw table request may carry `csv`: `","` for CSV or `"\t"` for TSV. The backend scans
+the already loaded bytes as RFC 4180 records, with quotes opening only at a field start,
+`""` escaping a quote inside quotes and quotes in unquoted fields staying literal. It moves
+`first` back to the start of the record containing the asked first line, and extends the
+asked end through its record's last line, or EOF for an unterminated quote. Thus the reply
+contains whole records and can exceed the 400-line request cap, bounded by the 1 MiB size
+gate. No second file read or additional stat is made. An absent or invalid `csv`, or one
+without `raw: true`, keeps the ordinary line window.
 
 ### pdfcopy
 
@@ -1874,13 +1883,16 @@ window is closed again, the same rule `meta` follows.
 
 Example: `{"t":"code","token":4,"slot":"look","state":"styled","first":1,"total":2,"lines":[[5,"fn",0," main"],[]]}`
 
-The answer to one `code` request, echoing its `token`, `slot` and `first`. `state` is `styled`
+The answer to one `code` request, echoing its `token` and `slot`. `first` is the actual first
+line returned: normally the asked line, or the record start for a raw `csv` table request.
+`state` is `styled`
 (`bat` coloured the lines), `plain` (the lines are the file's own text, every role 0: a line over
 5,000 bytes, or no `bat` on the host), `binary` (a NUL in the first 1,024 bytes), `large` (over
 1,048,576 bytes) or `failed` (unreadable, or `bat` refused it); the last three carry no lines.
 `total` is the line count of the whole text. Each entry of `lines` is one line as a flat run list,
 a role from 0 to 6 then the run's text, in order, an empty line being an empty list; the lines
-returned are those asked for that exist. The roles are the foreground (0) and bat's ANSI colours
+returned are those asked for that exist, extended to whole records for a raw `csv` table
+request. `total` remains the physical-line count in either case. The roles are the foreground (0) and bat's ANSI colours
 31 to 36 in order: red, green, yellow, blue, magenta, cyan. A one-line `.json` file is formatted
 with `jq` first, so its `total` and lines are those of the formatted text.
 

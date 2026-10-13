@@ -6,8 +6,7 @@
 var ROW_ONE = "1 row"
 var ROW_MANY = "%1 rows"
 
-// The field separator for a table by extension, in any case; "" for any other name.
-// Sample input: "/home/gm/bench.csv" gives ",", "/home/gm/DATA.Tsv" gives a tab, "notes.txt" gives "".
+// The field separator for a table by extension, in any case; "" for any other name. Sample input: "/home/gm/bench.csv" gives ",", "/home/gm/DATA.Tsv" gives a tab, "notes.txt" gives "".
 function delimiter(path) {
     var name = String(path)
     var dot = name.lastIndexOf(".")
@@ -29,8 +28,7 @@ function records(lines, delim) {
     return out
 }
 
-// One record from lines[at]. A quoted field may run on into the next line, its line end kept as a newline.
-// Sample input: ["1,\"two", "lines\",3"] gives cells ["1", "two\nlines", "3"] over span 2, and open true when the quote never closes.
+// One record from lines[at]. A quoted field may run on into the next line, its line end kept as a newline. Sample input: ["1,\"two", "lines\",3"] gives cells ["1", "two\nlines", "3"] over span 2, and open true when the quote never closes.
 function record(lines, at, delim) {
     var cells = []
     var field = ""
@@ -72,8 +70,7 @@ function record(lines, at, delim) {
     }
 }
 
-// The row padded with empty cells to the table's width; a longer row keeps every cell.
-// Sample input: padded(["c"], 3) gives ["c", "", ""].
+// The row padded with empty cells to the table's width; a longer row keeps every cell. Sample input: padded(["c"], 3) gives ["c", "", ""].
 function padded(cells, width) {
     var out = cells.slice()
     while (out.length < width)
@@ -95,8 +92,7 @@ function isNumber(text) {
     return value !== "" && isFinite(Number(value))
 }
 
-// Whether each column is right-aligned: every non-empty body cell in it is a number. Rows[0] is the header and is not read.
-// Sample input: [["a", "n"], ["x", "1"], ["y", ""]] with 2 columns gives [false, true].
+// Whether each column is right-aligned: every non-empty body cell in it is a number. Rows[0] is the header and is not read. Sample input: [["a", "n"], ["x", "1"], ["y", ""]] with 2 columns gives [false, true].
 function numericColumns(rows, columns) {
     var out = []
     for (var c = 0; c < columns; c++) {
@@ -114,14 +110,13 @@ function numericColumns(rows, columns) {
     return out
 }
 
-// The table the held lines make: the header is line 1, and the body rows follow it, keyed by their first line in byLine.
-// A block of held lines is parsed alone, and its open record is left out unless the block ends the file.
-// Sample input: held {1: {t: "a,b"}, 2: {t: "1,2"}} with total 2 gives header ["a", "b"] and one row at line 2.
+// Each held block is a whole-record raw reply; held {1:{t:"h"},5:{t:"5"}} keeps the independently aligned row at 5.
 function table(held, total, delim) {
     var last = 0
     for (var k in held)
         last = Math.max(last, Number(k))
     var all = []
+    var open = []
     var i = 1
     while (i <= last) {
         if (!held[i]) {
@@ -135,31 +130,43 @@ function table(held, total, delim) {
         var at = start
         var recs = records(lines, delim)
         for (var r = 0; r < recs.length; r++) {
-            if (recs[r].open && start + lines.length - 1 < total)
+            if (recs[r].open && start + lines.length - 1 < total) {
+                open.push({ line: at, to: start + lines.length - 1 })
                 break
+            }
             all.push({ line: at, cells: recs[r].cells })
             at += recs[r].span
         }
     }
     if (all.length === 0 || all[0].line !== 1)
-        return { header: null, rows: [], byLine: {}, cols: 0 }
+        return { header: null, rows: [], byLine: {}, cols: 0, open: open }
     var cols = columnCount(all.map(function (rec) { return rec.cells }))
     var rows = all.slice(1).map(function (rec) { return { line: rec.line, cells: padded(rec.cells, cols) } })
     var byLine = {}
     for (var j = 0; j < rows.length; j++)
         byLine[rows[j].line] = rows[j]
-    return { header: padded(all[0].cells, cols), rows: rows, byLine: byLine, cols: cols }
+    return { header: padded(all[0].cells, cols), rows: rows, byLine: byLine, cols: cols, open: open }
 }
 
-// A cell drawn on one line: a quoted newline shows as a space, so the row keeps its height.
-// Sample input: oneLine("two\nlines") gives "two lines".
+// First-screen readiness rejects any unfinished record that overlaps its lines; whole aligned replies leave open empty.
+function ready(t, to) {
+    return t.open.every(function (rec) { return rec.line > to })
+}
+
+// Match the backend's raw lines: "a,b\n1,2\n" has two lines, and a trailing CR is removed from each.
+function plainLines(text) {
+    var lines = text.length > 0 ? text.split("\n") : []
+    if (lines.length > 0 && lines[lines.length - 1] === "")
+        lines.pop()
+    return lines.map(function (line) { return line.endsWith("\r") ? line.slice(0, -1) : line })
+}
+
+// A cell drawn on one line: a quoted newline shows as a space, so the row keeps its height. Sample input: oneLine("two\nlines") gives "two lines".
 function oneLine(text) {
     return String(text).split("\n").join(" ")
 }
 
-// The column's drawn boxes, each {x, w, right}: the first flexes to fill the frame, or to its header when the columns do not fit,
-// and a column past the frame's right edge is not drawn while the last drawn one elides.
-// Sample input: widths [40, 30], heads [20, 10], rights [false, true], gap 6, avail 100 gives x 0 w 64, then x 70 w 30.
+// The column's drawn boxes, each {x, w, right}: the first flexes to fill the frame, or to its header when the columns do not fit, and a column past the frame's right edge is not drawn while the last drawn one elides. Sample input: widths [40, 30], heads [20, 10], rights [false, true], gap 6, avail 100 gives x 0 w 64, then x 70 w 30.
 function fit(widths, heads, rights, gap, avail) {
     var n = widths.length
     var out = []
@@ -176,8 +183,7 @@ function fit(widths, heads, rights, gap, avail) {
     return out
 }
 
-// Quick Look's boxes: each column is its widest cell plus the padding on both sides, after the row numbers.
-// Sample input: grid([40], [false], 42, 14) gives [{x: 42, w: 68, right: false}].
+// Quick Look's boxes: each column is its widest cell plus the padding on both sides, after the row numbers. Sample input: grid([40], [false], 42, 14) gives [{x: 42, w: 68, right: false}].
 function grid(widths, rights, numberWidth, pad) {
     var out = []
     var x = numberWidth
@@ -189,8 +195,7 @@ function grid(widths, rights, numberWidth, pad) {
     return out
 }
 
-// The lines after the header line, which is what the count line and the row numbers both use.
-// Sample input: dataRows(25) gives 24, and dataRows(0) gives 0.
+// The lines after the header line, which is what the count line and the row numbers both use. Sample input: dataRows(25) gives 24, and dataRows(0) gives 0.
 function dataRows(total) {
     return Math.max(0, total - 1)
 }

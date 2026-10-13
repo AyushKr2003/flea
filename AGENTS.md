@@ -2698,6 +2698,9 @@ and adjacent-item geometry checks, with the details beside the md3 paragraph bel
 `tests/rename-cost.qml` is recorded at 482 lines: its per-key census (frames, replies, selection bumps, delegates
 built, destroyed and rebound, row field reads) runs for each rename end in all four views and cannot split from the one
 real WindowBody it drives.
+`tests/csv-preview.qml` is recorded at 516 lines: one real-backend harness drives every CSV and TSV case (record-aligned
+jumps, first-screen continuation, capped replies, plain line counts and the drawn Quick Look elision) over one fixture
+set, and splitting it would start a second backend per file.
 The budget is a smell detector, not a target, and **it is not a reason to refactor a
 stable file**. Three files cross the hard cap purely as arithmetic of a clean merge for 0.1.4, with
 no conflict and no new code: `ui/ChromeBar.qml`, `ui/Sidebar.qml` and `ui/Row.qml`, the last by a

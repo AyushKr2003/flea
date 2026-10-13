@@ -5,8 +5,7 @@ import qs.Commons
 import "js/Csv.js" as Csv
 import "." as Flea
 
-// A CSV or TSV file as a table: the header sticky, the first screen of rows drawn whole, and Quick Look's grid scrolling both ways.
-// Lines are asked through the backend as plain text, a screen and a margin at a time; ui/js/Csv.js reads and lays them out.
+// CSV or TSV as a sticky table, with raw line windows aligned to whole records by the backend.
 Item {
     id: root
 
@@ -57,11 +56,10 @@ Item {
     property int stamp: 0
     // The token of the ask in flight, 0 when none: an answer for any other token is dropped.
     property int token: 0
-    property var asking: null
     // The last line of the first ask, so the first screen is known whole before the table is drawn.
     property int firstTo: 0
     // The table as held: the header cells, the body rows and the column count.
-    property var table: ({ header: null, rows: [], byLine: ({}), cols: 0 })
+    property var table: ({ header: null, rows: [], byLine: ({}), cols: 0, open: [] })
     // Widths and alignments are measured on the first screen and only extended after it, so no column moves under the reader.
     property bool frozen: false
     property var heads: []
@@ -71,6 +69,8 @@ Item {
     readonly property bool settled: root.answer === "styled" || root.answer === "plain"
     readonly property int shown: root.limit > 0 ? Math.min(root.total, root.limit) : root.total
     readonly property bool firstScreen: root.settled && root.covered(1, Math.min(root.shown, root.firstTo))
+        && Csv.ready(root.table, Math.min(root.shown, root.firstTo))
+    visible: root.firstScreen
     // The scroll view the wheel, the bars and the Quick Look reader read.
     readonly property var list: view
     // One row per body line, so the grid's height and scroll position are the file's, not what is held.
@@ -122,9 +122,10 @@ Item {
     function refresh() {
         var t = Csv.table(root.held, root.total, root.delim)
         root.table = t
-        if (t.header === null)
+        if (t.header === null || (root.frozen && root.widths.length >= t.cols))
             return
-        var grid = [t.header].concat(t.rows.map(function (rec) { return rec.cells }))
+        var measured = root.frozen ? t.rows : t.rows.filter(function (rec) { return rec.line <= root.firstTo })
+        var grid = [t.header].concat(measured.map(function (rec) { return rec.cells }))
         var align = Csv.numericColumns(grid, t.cols)
         var heads = root.frozen ? root.heads.slice() : []
         var widths = root.frozen ? root.widths.slice() : []
@@ -134,7 +135,7 @@ Item {
             widths.push(root.naturalWidth(grid, c))
             rights.push(align[c])
         }
-        if (!root.frozen && root.covered(1, Math.min(root.shown, root.firstTo)))
+        if (!root.frozen && root.covered(1, Math.min(root.shown, root.firstTo)) && Csv.ready(t, Math.min(root.shown, root.firstTo)))
             root.frozen = true
         root.heads = heads
         root.widths = widths
@@ -144,8 +145,8 @@ Item {
     // The lines the view needs held: those in it plus the margin, never past the file or the limit. Line 1 is the header, held first.
     function needed() {
         var rows = Math.max(1, Math.ceil(view.height / Math.max(1, root.rowHeight)))
-        // Rows share one height, so the top line follows from the scroll position, not from the delegates built so far.
-        var top = Math.max(0, Math.floor((view.contentY + 1) / Math.max(1, root.rowHeight))) + 2
+        // ListView rounds fractional row heights, so its delegate index is the physical line offset even on a far jump.
+        var top = view.contentHeight > 0 ? Math.max(0, view.indexAt(0, view.contentY + 1)) + 2 : 2
         var to = top + rows * (1 + root.margin) - 1
         if (root.limit > 0)
             to = Math.min(to, root.limit)
@@ -172,13 +173,12 @@ Item {
         root.total = 0
         root.answer = ""
         root.token = 0
-        root.asking = null
         root.firstTo = 0
         root.frozen = false
         root.heads = []
         root.widths = []
         root.rights = []
-        root.table = { header: null, rows: [], byLine: ({}), cols: 0 }
+        root.table = { header: null, rows: [], byLine: ({}), cols: 0, open: [] }
     }
 
     // Starts a view of a new file or text; the first ask waits for the end of the turn so one change of several properties asks once.
@@ -194,13 +194,14 @@ Item {
 
     // Lines of the caller's own text, drawn plain when no backend can ask for them.
     function answerPlain() {
-        var rows = root.text.length > 0 ? root.text.split("\n") : []
+        var rows = Csv.plainLines(root.text)
         var held = {}
-        for (var i = 0; i < rows.length && (root.limit <= 0 || i < root.limit); i++)
+        for (var i = 0; i < rows.length; i++)
             held[i + 1] = { t: rows[i] }
         root.held = held
         root.total = rows.length
         root.answer = "plain"
+        root.firstTo = root.needed().to
         root.refresh()
         root.stamp += 1
     }
@@ -218,18 +219,18 @@ Item {
         }
         if (!root.fromText && root.path.length === 0)
             return
+        if (root.token !== 0)
+            return
         var want = root.needed()
         if (want.to < want.from || (root.settled && root.covered(want.from, want.to)))
             return
-        if (root.token !== 0 && root.asking.from === want.from && root.asking.to === want.to)
-            return
-        root.asking = want
+        var from = want.from
+        while (from <= want.to && root.rowAt(from))
+            from += 1
         if (root.firstTo === 0)
             root.firstTo = want.to
-        var from = want.from
-        while (from < want.to && root.rowAt(from)) from++
         // raw sends the lines plain: a table is never coloured as code.
-        var source = root.fromText ? { text: root.text, name: root.path.split("/").pop(), lang: "", raw: true } : { path: root.path, raw: true }
+        var source = root.fromText ? { text: root.text, name: root.path.split("/").pop(), lang: "", raw: true, csv: root.delim } : { path: root.path, raw: true, csv: root.delim }
         root.token = root.backend.askCode(root.slot, source, from, Math.min(root.lineCap, want.to - from + 1))
     }
 

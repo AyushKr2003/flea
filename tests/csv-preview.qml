@@ -11,6 +11,7 @@ ShellRoot {
     readonly property string fixture: Quickshell.env("CSVPREV_DIR")
     readonly property int tickMs: 20
     readonly property int giveUpMs: 15000
+    readonly property int jumpGiveUpMs: 60000
     // big.csv's first 120-character name is line 61 (row 60), past the first screen, so it arrives on a short scroll.
     readonly property int longLine: 61
     property int checks: 0
@@ -19,12 +20,20 @@ ShellRoot {
     property var awaiting: null
     property string awaitLabel: ""
     property double waitStart: 0
+    property int awaitTimeout: root.giveUpMs
     property bool finished: false
     // Every ask the tables sent, as the spy saw it, and the widths the Quick Look grid had on its first screen.
     property var asks: []
     property var widthsAtFirst: []
     property int tableFrames: 0
     property int partialFrames: 0
+    property int plainToken: 0
+    property var plainAnswer: null
+    property double measureStart: 0
+    property int measureAsks: 0
+    property bool wheelSample: false
+    property int wheelEmptyFrames: 0
+    property int prematureReady: 0
 
     function log(line) { console.log("CSVPREV " + line) }
     function check(label, actual, expected) {
@@ -39,16 +48,17 @@ ShellRoot {
         root.log("DONE " + root.checks + " checks, " + root.failures + " failed")
         quitter.start()
     }
-    function wait(label, test) {
+    function wait(label, test, timeoutMs) {
         root.awaitLabel = label
         root.awaiting = test
         root.waitStart = Date.now()
+        root.awaitTimeout = timeoutMs === undefined ? root.giveUpMs : timeoutMs
     }
     function tick() {
         if (root.finished) return
         if (root.awaiting !== null) {
             if (!root.awaiting()) {
-                if (Date.now() - root.waitStart < root.giveUpMs) return
+                if (Date.now() - root.waitStart < root.awaitTimeout) return
                 root.check(root.awaitLabel + " came in time", false, true)
             }
             root.awaiting = null
@@ -84,6 +94,12 @@ ShellRoot {
             return at.y >= 0 && at.y < t.list.height && at.x < t.list.width && at.x + n.width > 0
         })
     }
+    function inView(t, label) {
+        return root.drawn(t, label).some(function (n) {
+            var point = n.mapToItem(t.list, 0, 0)
+            return point.y >= 0 && point.y < t.list.height
+        })
+    }
 
     // A frame that draws the header must already hold the whole first screen.
     function sample() {
@@ -93,6 +109,14 @@ ShellRoot {
             if (t === null || !t.active || !t.visible || !t.table || t.table.header === null) continue
             root.tableFrames += 1
             if (!t.firstScreen) root.partialFrames += 1
+        }
+        if (root.wheelSample) {
+            var q = root.qlTable()
+            if (root.descendants(q.list).some(function (n) {
+                if (n.rec !== null || n.index === undefined) return false
+                var point = n.mapToItem(q.list, 0, 0)
+                return point.y >= 0 && point.y < q.list.height
+            })) root.wheelEmptyFrames += 1
         }
     }
 
@@ -106,14 +130,23 @@ ShellRoot {
         function askCode(slot, source, first, count) {
             var t = slot === "column" ? root.colTable() : root.qlTable()
             var rows = Math.max(1, Math.ceil(t.list.height / t.rowHeight))
-            var top = Math.max(0, Math.floor((t.list.contentY + 1) / t.rowHeight)) + 2
+            var top = t.list.contentHeight > 0 ? Math.max(0, t.list.indexAt(0, t.list.contentY + 1)) + 2 : 2
             root.asks.push({ slot: slot, source: source, first: first, count: count, rows: rows, top: top })
             return realBackend.askCode(slot, source, first, count)
         }
     }
     Connections {
         target: realBackend
-        function onCodeResult(message) { spy.codeResult(message) }
+        function onCodeResult(message) {
+            spy.codeResult(message)
+            var tables = [root.colTable(), root.qlTable()]
+            for (var i = 0; i < tables.length; i++) {
+                var t = tables[i]
+                if (t === null || !t.table || !t.firstScreen) continue
+                var last = Math.min(t.shown, t.firstTo)
+                if (last > 0 && t.held[last] === undefined) root.prematureReady += 1
+            }
+        }
     }
 
     readonly property var steps: [
@@ -238,8 +271,9 @@ ShellRoot {
             root.widthsAtFirst = t.widths.slice()
             root.check("big: the bar reads 49,999 rows", quick.countText(), "49,999 rows")
             root.check("big: the first screen froze the widths", t.frozen, true)
+            root.wheelSample = true
             // A short scroll, the way a wheel moves, so the grid builds the rows it lands on.
-            t.list.contentY = 20 * t.rowHeight
+            t.list.contentY = Math.floor(t.list.height / t.rowHeight) * t.rowHeight
             root.wait("big: line " + root.longLine + " held", function () { return t.covered(root.longLine, root.longLine + 1) })
         },
         function () {
@@ -253,8 +287,58 @@ ShellRoot {
             root.check("big: the long name is held", t.table.byLine[root.longLine].cells[1].length, 120)
             root.check("big: the long name is drawn", root.longDrawn(t), true)
             root.check("big: the widths did not move on scroll", JSON.stringify(t.widths), JSON.stringify(root.widthsAtFirst))
-            root.check("big: the long name is elided at the frozen width", t.widths[1] < 200, true)
+            root.check("big: the drawn long cell is truncated", root.drawn(t, t.table.byLine[root.longLine].cells[1]).some(function (n) {
+                var point = n.mapToItem(t.list, 0, 0)
+                return n.truncated && point.y >= 0 && point.y < t.list.height
+            }), true)
+            root.wheelSample = false
+            root.check("big: a one-screen wheel scroll never drew an empty row", root.wheelEmptyFrames, 0)
             t.list.contentY = 0
+            t.fresh()
+            root.wait("big: a fresh top screen for the jump measurement", function () {
+                return t.firstScreen && t.list.count === t.bodyRows && root.inView(t, "f00001")
+            })
+        },
+        function () {
+            var t = root.qlTable()
+            root.measureStart = Date.now()
+            root.measureAsks = root.asks.length
+            t.list.positionViewAtIndex(t.bodyRows - 1, ListView.End)
+            root.wait("big: the last screen draws", function () { return root.inView(t, "f49999") }, root.jumpGiveUpMs)
+        },
+        function () {
+            var t = root.qlTable()
+            root.log("MEASURE big.csv top-to-last asks=" + (root.asks.length - root.measureAsks) + " wall_ms=" + (Date.now() - root.measureStart))
+            root.check("big: one request draws the last screen", root.asks.length - root.measureAsks, 1)
+            root.check("big: the last row draws in the wanted screen", root.inView(t, "f49999"), true)
+            root.check("big: a far jump preserves the widths", t.widths, root.widthsAtFirst)
+            quick.height = 12000
+            root.measureAsks = root.asks.length
+            t.fresh()
+            root.wait("big: the first screen larger than lineCap", function () {
+                return t.firstScreen && t.held[Math.min(t.shown, t.firstTo)] !== undefined
+            })
+        },
+        function () {
+            root.check("big: a tall first screen uses multiple capped replies", root.asks.length - root.measureAsks > 1, true)
+            root.check("big: no reply reports ready before its first screen is held", root.prematureReady, 0)
+            quick.height = 680
+            quick.path = root.fixture + "/malformed.csv"
+            root.measureStart = Date.now()
+            root.measureAsks = root.asks.length
+            root.wait("malformed: the first screen draws", function () {
+                var q = root.qlTable()
+                var rec = q.table.byLine[2]
+                return q.firstScreen && rec !== undefined && root.inView(q, rec.cells[1].split("\n").join(" "))
+            })
+        },
+        function () {
+            var t = root.qlTable()
+            root.log("MEASURE malformed.csv bytes=1MiB asks=" + (root.asks.length - root.measureAsks) + " first_screen_ms=" + (Date.now() - root.measureStart))
+            root.check("malformed: one request draws the first screen", root.asks.length - root.measureAsks, 1)
+            root.check("malformed: one aligned reply retains the record through EOF", t.covered(1, t.total), true)
+            var rec = t.table.byLine[2]
+            root.check("malformed: the open quote at EOF is drawn", rec !== undefined && root.inView(t, rec.cells[1].split("\n").join(" ")), true)
         },
         // Quick Look with quoted newlines: the cell keeps its newline and draws it as a space on its line.
         function () {
@@ -266,6 +350,48 @@ ShellRoot {
             root.check("quoted: the cell keeps its newline", t.table.byLine[2].cells[1], "two\nlines")
             root.check("quoted: the newline draws as a space", root.drawn(t, "two lines").length > 0, true)
             root.check("quoted: the continuation line starts no row", t.table.byLine[3], undefined)
+        },
+        function () {
+            quick.path = root.fixture + "/jump.csv"
+            root.wait("jump: first screen", function () { return root.firstScreenOf(root.qlTable()) })
+        },
+        function () {
+            root.qlTable().list.positionViewAtIndex(678, ListView.Beginning)
+            root.wait("jump: the wanted window held", function () { return root.qlTable().held[703] !== undefined })
+        },
+        function () {
+            var t = root.qlTable()
+            root.check("jump: a quoted continuation draws no fabricated row", t.table.byLine[680], undefined)
+            root.check("jump: the record start before the window is known", t.table.byLine[401] !== undefined, true)
+            root.check("jump: the first complete row after the quote is drawn", root.inView(t, "row702"), true)
+            quick.path = root.fixture + "/open.csv"
+            root.wait("open: the first-screen record drawn", function () {
+                var q = root.qlTable()
+                return q.firstScreen && q.table.byLine[2] !== undefined && root.drawn(q, "1").length > 0
+            })
+        },
+        function () {
+            var t = root.qlTable()
+            root.check("open: the first screen fetched the closing quote", t.held[71] !== undefined, true)
+            root.check("open: the complete record is drawn", t.table.byLine[2] !== undefined && root.drawn(t, t.table.byLine[2].cells[1].split("\n").join(" ")).length > 0, true)
+            column.path = root.fixture + "/open.csv"
+            root.wait("open: the column's complete first-screen record", function () { return root.colTable().table.byLine[2] !== undefined })
+        },
+        function () {
+            root.check("open: the column fetched beyond its frame to close the record", root.colTable().held[71] !== undefined, true)
+            plainCsv.active = true
+            plainCode.active = true
+            root.plainToken = realBackend.askCode("plain-count", { text: "a,b\n1,2\n", name: "plain.csv", raw: true }, 1, 400)
+            root.wait("plain: backend total", function () { return root.plainAnswer !== null })
+        },
+        function () {
+            root.check("plain: backend counts two lines for a terminal newline", root.plainAnswer.total, 2)
+            root.check("plain: CSV matches the backend total", plainCsv.total, root.plainAnswer.total)
+            root.check("plain: CodeLines matches the backend total", plainCode.total, root.plainAnswer.total)
+            root.check("plain: one CSV body row", plainCsv.bodyRows, 1)
+            root.check("plain: no phantom row is drawn", plainCsv.table.byLine[3], undefined)
+            plainCsv.active = false
+            plainCode.active = false
         },
         // Binary: the NUL file is not a table, and its frame is the binary one.
         function () {
@@ -294,13 +420,13 @@ ShellRoot {
         },
         // Every ask the tables sent in the run carried the raw flag.
         function () {
-            root.check("every ask in the run was raw", root.asks.length > 0 && root.asks.every(function (a) { return a.source.raw === true }), true)
+            root.check("every ask in the run was raw with its table delimiter", root.asks.length > 0 && root.asks.every(function (a) { return a.source.raw === true && (a.source.csv === "," || a.source.csv === "\t") }), true)
             var columns = root.asks.filter(function (a) { return a.slot === "column" })
-            root.check("column: one ask per file", columns.length, 4)
+            root.check("column: one ask per file", columns.length, 5)
             root.check("column: asks stay inside its screen", columns.every(function (a) { return a.first === 1 && a.count <= a.rows + 1 }), true)
             var look = root.asks.filter(function (a) { return a.slot === "look" })
             root.check("quicklook: asks stay in view plus one screen on each side", look.every(function (a) {
-                return a.first >= Math.max(1, a.top - a.rows) && a.first + a.count - 1 <= a.top + 2 * a.rows - 1
+                return a.first >= Math.max(1, a.top - a.rows) && a.first + a.count - 1 <= a.top + 2 * a.rows - 1 && a.count <= 400
             }), true)
             root.check("frames: a table was sampled", root.tableFrames > 0, true)
             root.check("frames: no partial first screen was drawn", root.partialFrames, 0)
@@ -313,6 +439,28 @@ ShellRoot {
         running: !root.finished
         repeat: true
         onTriggered: root.tick()
+    }
+
+    Flea.CsvTable {
+        id: plainCsv
+        width: 400
+        height: 600
+        fromText: true
+        text: "a,b\n1,2\n"
+        path: "plain.csv"
+    }
+    Flea.CodeLines {
+        id: plainCode
+        width: 400
+        height: 600
+        fromText: true
+        text: plainCsv.text
+    }
+    Connections {
+        target: realBackend
+        function onCodeResult(message) {
+            if (message.token === root.plainToken) root.plainAnswer = message
+        }
     }
     // A run that never reaches its end fails, rather than hanging the suite.
     Timer {

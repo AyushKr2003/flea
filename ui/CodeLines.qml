@@ -83,9 +83,11 @@ Item {
     // Sample input: "a\nb" holds lines 1 and 2, as [0, "a"] and [0, "b"].
     function answerPlain() {
         var rows = root.text.length > 0 ? root.text.split("\n") : []
+        if (rows.length > 0 && rows[rows.length - 1] === "")
+            rows.pop()
         var held = {}
         for (var i = 0; i < rows.length && (root.limit <= 0 || i < root.limit); i++)
-            held[i + 1] = [0, rows[i]]
+            held[i + 1] = [0, rows[i].endsWith("\r") ? rows[i].slice(0, -1) : rows[i]]
         root.held = held
         root.stamp += 1
         root.total = rows.length
