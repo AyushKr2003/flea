@@ -52,6 +52,8 @@ pub enum Request {
     Meta { row: usize, text: bool, media: bool, archive: bool, token: usize },
     // The cursor row's two-byte shebang probe for the Make executable row; see docs/protocol.md "shebang".
     Shebang { path: String, id: usize },
+    // The code preview's coloured lines for a file or a text the client holds; the wire lives in codereq.rs.
+    Code(super::codereq::Ask),
     // One tag change across rows of the listing in force: add, remove, toggle or clear.
     SetTags { rows: Vec<usize>, op: String, tag: String },
     // Which of Flea's seven tags those rows all carry or some carry, read only; see docs/protocol.md "tagstates".
@@ -289,6 +291,7 @@ pub fn parse_request(line: &str) -> Request {
             path: field_str(line, "path").unwrap_or_default(),
             id: field_usize(line, "id").unwrap_or(0),
         },
+        Some("code") => Request::Code(super::codereq::Ask::parse(line)),
         Some("settags") => Request::SetTags {
             rows: field_usize_array(line, "rows"),
             op: field_str(line, "op").unwrap_or_default(),
