@@ -35,8 +35,7 @@ ShellRoot {
     property var seen: []
     property var unitsAtKey: null
     property double keyAt: 0
-    // The first-open cost census: what the Space maps and builds, for the first open and for a reopen of the same file.
-    // Opens judged so far on this leg, and the first open's cap stamp: the first open builds the kind, the second finds it built.
+    // First-open cost census: what Space maps and builds on a first open and a reopen, plus the opens judged so far on this leg and the first open's cap stamp (the second open finds the kind built).
     property int opened: 0
     property int firstCapSeq: -1
     property bool cardExpected: false

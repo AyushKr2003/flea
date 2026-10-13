@@ -629,8 +629,13 @@ check "a name already taken is refused with a sentence" "{\"t\":\"error\",\"wher
 mkdir_refusal() {
   printf '{"c":"mkdir","path":"%s","name":"%s"}\n{"c":"quit"}\n' "$MK" "$1" | $BIN --backend | grep -oE '"msg":"[^"]+"' | cut -d'"' -f4
 }
+# One clause per fault, as src/backend/opsname.rs names it: a separator and a dot name are different faults.
 for bad in 'a/b' '.' '..'; do
-  check "a name of $bad is refused before any syscall" "a name cannot be . or .., or contain /" "$(mkdir_refusal "$bad")"
+  case $bad in
+    a/b) want="a name cannot contain /" ;;
+    *) want="a name cannot be a single dot or a double dot" ;;
+  esac
+  check "a name of $bad is refused before any syscall" "$want" "$(mkdir_refusal "$bad")"
 done
 long=$(head -c 256 /dev/zero | tr '\0' a)
 check "a name past NAME_MAX names the cause in words" "that name is too long" "$(mkdir_refusal "$long")"

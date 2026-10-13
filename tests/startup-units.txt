@@ -111,9 +111,9 @@ js/FolderSorts.js
 js/FolderViews.js
 js/Format.js
 js/Grid.js
-js/GvfsBridge.js
 js/Icons.js
 js/Input.js
+js/KeyName.js
 js/Keymap.js
 js/Kinds.js
 js/LocalSend.js
@@ -174,4 +174,4 @@ js/Trash.js
 js/TrashDates.js
 js/UiState.js
 js/Update.js
-bytes 1665087
+bytes 1671896

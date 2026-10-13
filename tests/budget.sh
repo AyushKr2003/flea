@@ -45,7 +45,7 @@ check "oversized file fails" 1 $?
 
 # The duplicate-ceiling gate reads a hardcoded list, so a scratch-root copy of the tool names one file twice and runs there.
 rm -f "$scratch/src/oversized.rs"
-sed 's|^known_over_cap="shelf/Model.js 683$|&\nshelf/Model.js 683|' "$repo/tools/flea-file-budget" > "$scratch/dup-budget"
+sed 's|^known_over_cap="shelf/Model.js 701$|&\nshelf/Model.js 701|' "$repo/tools/flea-file-budget" > "$scratch/dup-budget"
 if cmp -s "$repo/tools/flea-file-budget" "$scratch/dup-budget"; then
   echo "FAIL duplicate fixture: the sed did not duplicate a known_over_cap entry"
   fail=1

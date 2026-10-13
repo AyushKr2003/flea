@@ -79,7 +79,7 @@ ShellRoot {
         }],
         // Past one 2800 ms interval plus the 140 ms fade-out, so exactly one beat has landed.
         [3500, function () {
-            root.check("one beat in before the mid-rotation hide", empty.messageIndex, 7)
+            root.check("one beat in before the mid-rotation hide", empty.messageIndex, 7 % empty.messages.length)
             root.hiddenIndex = empty.messageIndex
             host.visible = false
             root.anchor = Date.now()

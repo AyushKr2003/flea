@@ -31,7 +31,7 @@ Item {
         root.check("view holds one shared handler", root.countOf(area, "HoverHandler"), 1)
         root.check("view names the shared probe", area.indexOf("id: hoverProbe") >= 0, true)
         root.check("view holds one hover index", area.indexOf("property int hoveredIndex") >= 0, true)
-        root.check("probe resolves by position", area.indexOf("root.indexAt(x + root.contentX, y + root.contentY)") >= 0, true)
+        root.check("probe resolves by position", area.indexOf("root.tileAt(x + root.contentX, y + root.contentY)") >= 0, true)
         root.check("probe clears on leave", area.indexOf("if (!hovered) root.hoveredIndex = -1") >= 0, true)
         root.check("tile reads the shared index", area.indexOf("hovered: cell.live && root.hoveredIndex === cell.index") >= 0, true)
         root.check("a point change feeds the index", area.indexOf("onPointChanged: if (hovered) root.hoverAt(point.position.x, point.position.y)") >= 0, true)
