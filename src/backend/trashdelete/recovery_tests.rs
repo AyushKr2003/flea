@@ -1,8 +1,12 @@
 use super::*;
 use super::super::Reviewed;
 use crate::backend::testdir::TestDir;
-use crate::backend::trashmanifest::Cancellation;
+use crate::backend::trashmanifest::{logged, Cancellation};
 use std::os::unix::fs::MetadataExt;
+
+fn logged_after(seen: usize, detail: &str) -> bool {
+    logged()[seen..].iter().any(|line| line.contains(detail))
+}
 
 fn guard(d: &TestDir, path: &Path) {
     assert!(path.is_absolute() && !path.as_os_str().is_empty()
@@ -134,9 +138,10 @@ fn recovery_never_overwrites_an_original_name_collision() {
     d.file("files/item", "later arrival");
     let record = journal.path.clone();
     drop(journal);
+    let seen = logged().len();
     let report = replay(&d);
     assert_eq!(report.recovered, 0);
-    assert!(report.failures.len() == 1 && report.failures[0].contains("Flea found an interrupted Trash operation; its items are kept at ") && crate::backend::trashmanifest::logged().iter().any(|line| line.contains("without overwriting")));
+    assert!(report.failures.len() == 1 && report.failures[0].contains("Flea found an interrupted Trash operation; its items are kept at ") && logged_after(seen, "without overwriting"));
     assert_eq!(std::fs::read_to_string(&reviewed.path).unwrap(), "later arrival");
     assert_eq!(std::fs::read_to_string(quarantine.join("payload")).unwrap(), "payload");
     assert!(quarantine.join("metadata").exists());
@@ -367,10 +372,11 @@ fn recovery_preserves_an_unmarked_record_when_the_quarantine_is_missing() {
     move_path(&d, &quarantine, &moved);
     let record = journal.path.clone();
     drop(journal);
+    let seen = logged().len();
     let report = replay(&d);
     assert_eq!(report.recovered, 0);
     assert_eq!(report.failures.len(), 1);
-    assert!(report.failures[0].ends_with("Flea found an interrupted Trash operation; nothing was moved.") && crate::backend::trashmanifest::logged().iter().any(|line| line.contains("without a completion record")));
+    assert!(report.failures[0].ends_with("Flea found an interrupted Trash operation; nothing was moved.") && logged_after(seen, "without a completion record"));
     assert!(record.exists());
     assert_eq!(std::fs::read_to_string(moved.join("payload")).unwrap(), "payload");
     assert!(moved.join("metadata").exists());

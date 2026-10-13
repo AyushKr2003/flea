@@ -18,8 +18,8 @@ fn recovery_reports_restored_items_when_its_folder_cannot_be_reopened_for_sync()
     std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
     let report = report.unwrap();
     assert_eq!(report.recovered, 0);
-    assert_eq!(report.failures, [format!("{}: The interrupted operation was recovered, but Flea could not remove its recovery record: permission denied.", record.display())]);
-    assert!(logged()[seen..].iter().any(|line| line.contains("RecordLeft(None)") && line.contains("Could not open Trash folder") && line.contains("Permission denied")));
+    assert_eq!(report.failures, [format!("{}: The interrupted operation was recovered, but after removing its recovery record, Flea could not confirm the removal on disk: permission denied.", record.display())]);
+    assert!(logged()[seen..].iter().any(|line| line.contains("RecordUnconfirmed(None)") && line.contains("Could not open Trash folder") && line.contains("Permission denied")));
     assert_eq!(std::fs::read_to_string(&reviewed.path).unwrap(), "payload");
     assert_eq!(identity(&reviewed.info).unwrap(), reviewed.metadata);
     assert!(!quarantine.exists());
@@ -39,14 +39,27 @@ fn recovery_keeps_completed_records_in_its_report_after_an_entry_read_error() {
     let seen = logged().len();
     let entries = [Ok(entry), Err(std::io::Error::from_raw_os_error(5))].into_iter()
         .chain(std::iter::once_with(|| panic!("recovery must stop after an entry read error")));
+    let unread = d.file("recovery/.flea-delete-unvisited.review", "unvisited record");
     let report = recover_entries(&root, entries).unwrap();
     assert_eq!(report.recovered, 1);
-    assert_eq!(report.failures, [format!("{}: Flea found an interrupted Trash operation; its items are kept at {}.", root.display(), root.display())]);
-    assert!(logged()[seen..].iter().any(|line| line.contains("Held(") && line.contains("Could not read the recovery folder") && line.contains("Input/output error")));
+    assert_eq!(report.failures, [format!("{}: Flea could not read the recovery folder at {}: the drive could not read or write the data; records not yet read were left in place.", root.display(), root.display())]);
+    assert!(logged()[seen..].iter().any(|line| line.contains("RecoveryUnreadable(") && line.contains("Could not read the recovery folder") && line.contains("Input/output error")));
     assert_eq!(std::fs::read_to_string(&reviewed.path).unwrap(), "payload");
     assert_eq!(identity(&reviewed.info).unwrap(), reviewed.metadata);
     assert!(!quarantine.exists());
     assert!(!record.exists());
+    assert_eq!(std::fs::read_to_string(unread).unwrap(), "unvisited record");
+}
+
+#[test]
+fn recovery_log_checks_exclude_lines_from_before_the_operation() {
+    for detail in ["without overwriting", "without a completion record"] {
+        crate::backend::trashmanifest::log(detail);
+        let seen = logged().len();
+        crate::backend::trashmanifest::log("the current operation failed elsewhere");
+        assert!(!logged_after(seen, detail), "a stale line satisfied the current operation's log check");
+        assert!(logged_after(seen, "the current operation failed elsewhere"));
+    }
 }
 
 #[test]

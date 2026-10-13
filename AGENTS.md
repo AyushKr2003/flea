@@ -2658,6 +2658,7 @@ record clears when the edit leaves that row or the tile is reused, so a pooled t
 
 COPY-TRASH on the 0.3.11 stage moves the `src/backend/trashbrowse.rs` ceiling from 900 to 1025 (`wc -l`) for the approved typed refusals, per-item damaged-record failures and backward target naming, retaining the stage's newest-first listing and membership checks.
 The same port moves `src/backend/trashdelete.rs` from 938 to 965 (`wc -l`) for the approved outcome wrappers and cleanup logging, with the failed child put-back logging credited once to this port.
+Copytrash5 raises `src/backend/trashdelete.rs` from 965 to 984 (`wc -l`) for truthful record completion outcomes, preserving the first claim refusal after rollback and logging cleanup failures, plus stable temporary-folder paths.
 
 xw6 adversarial fixes retain the tab handoff detail and exact payload paths. Each lift
 captures a stable tab identity and its source pane until acknowledgment or the existing
@@ -6627,13 +6628,18 @@ through `menuaction` and journals `MadeFile` (`opsdispatch.rs` `do_newfile`), an
 `convert` write below. Two helpers write on command loops of their own and journal nothing: the trash
 browser's `restore` and `delete` (`trashbrowse.rs`, `trashdelete.rs`) and the permissions dialog's
 `apply` (`permissions.rs`).
-Trash recovery reports a completed replay whose recovery folder cannot be reopened for sync as
-`RecordLeft(None)`: its failure sentence says both that the operation was recovered and that record
-cleanup failed, even when that record was already unlinked.
+Trash recovery uses `RecordLeft` before its record is removed and `RecordUnconfirmed` after unlink
+when the recovery folder cannot be reopened or synced: the latter says the record was removed but
+Flea could not confirm that removal on disk, with the cause and the completed delete, restore or recovery state.
 The completion refusal tests delete the claimed payload or restore it with the production no-overwrite
 rename, then assert its absence from quarantine or its original content at the restored path beside the sentence.
-A recovery directory entry read error is logged in `RecoveryReport.failures` and ends the walk while
-preserving the recovered count, so an earlier completed replay is never reported as nothing moved.
+A recovery folder entry read error uses `RecoveryUnreadable(root)`, is logged in `RecoveryReport.failures`
+and ends the walk while preserving the recovered count; its sentence names the folder and the unread
+records left there, while payloads stay in the quarantines their records name.
+Recovery runs on a fresh Trash open or an explicit `list` with `recover:true`; ordinary refresh does not retry it.
+Rollback keeps the first claim refusal and its cause visible, with any record cleanup failure logged separately.
+Completed steps name their temporary folder through its stable path, never an expired descriptor alias.
+Recovery log assertions inspect only lines after a `seen` offset captured before the operation.
 `docs/protocol.md` carries the wire; this is the part a reader of the code needs that the wire does not
 say.
 

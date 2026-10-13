@@ -48,9 +48,16 @@ fn the_trash_deletion_path_says_folder_and_confirm_again() {
         (Outcome::ConfirmAgain, "The Trash changed, so nothing was done; confirm again."),
         (Outcome::OriginalChanged, "The item's original folder changed; select it again."),
         (Outcome::Prepare(Op::Delete), "Could not prepare the deletion, so nothing was deleted: permission denied."),
+        (Outcome::Prepare(Op::Restore), "Could not prepare the restore, so nothing was restored: permission denied."),
         (Outcome::NoRecord(Op::Delete), "Flea could not keep a record of this deletion, so nothing was deleted: permission denied."),
         (Outcome::NoRecord(Op::Restore), "Flea could not keep a record of this restore, so nothing was restored: permission denied."),
         (Outcome::NothingMoved, "Flea found an interrupted Trash operation; nothing was moved."),
+        (Outcome::RecordUnconfirmed(Some(Op::Delete)), "The item was deleted, but after removing its recovery record, Flea could not confirm the removal on disk: permission denied."),
+        (Outcome::RecordUnconfirmed(Some(Op::Restore)), "The item was restored, but after removing its recovery record, Flea could not confirm the removal on disk: permission denied."),
+        (Outcome::RecordUnconfirmed(None), "The interrupted operation was recovered, but after removing its recovery record, Flea could not confirm the removal on disk: permission denied."),
+        (Outcome::RecoveryUnreadable("/recovery".into()), "Flea could not read the recovery folder at /recovery: permission denied; records not yet read were left in place."),
+        (Outcome::FolderLeft(Op::Delete, Some("/temporary".into())), "The item was deleted, but Flea could not remove its temporary folder at /temporary: permission denied."),
+        (Outcome::FolderLeft(Op::Restore, Some("/temporary".into())), "The item was restored, but Flea could not remove its temporary folder at /temporary: permission denied."),
     ], &[
         "review a fresh confirmation", "Could not open Trash directory", "Trash original location changed", "recovery directory",
     ]);

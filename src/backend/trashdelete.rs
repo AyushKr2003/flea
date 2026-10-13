@@ -342,11 +342,18 @@ fn original_path(metadata: &File, trash_root: &Path) -> Result<PathBuf, Refusal>
     original.refuse(Outcome::Damaged, "Trash metadata has no original path.")
 }
 
-// The record is removed whole after a finished step, or it is the one thing the step still owes the user.
+// Completed steps distinguish a record still held from a removal whose durability could not be confirmed.
 fn finish(journal: Recovery, op: Op, done: bool) -> Result<(), Refusal> {
-    journal.complete().map_err(|refusal| refusal.wrap(if done { Outcome::RecordLeft(Some(op)) } else { Outcome::NoRecord(op) }))
+    journal.complete().map_err(|refusal| {
+        let effect = done.then_some(op);
+        let outcome = match refusal.outcome() {
+            Outcome::RecordUnconfirmed(_) => Outcome::RecordUnconfirmed(effect),
+            _ => Outcome::RecordLeft(effect),
+        };
+        refusal.wrap(outcome)
+    })
 }
-// After a failed removal its own sentence stands, so a record that will not clear is logged and the next start removes it.
+// After rollback the original refusal stands; only the record cleanup failure is logged here.
 fn settle(journal: Recovery, op: Op) {
     if let Err(left) = finish(journal, op, false) { left.logged(); }
 }
@@ -531,7 +538,10 @@ impl Reviewed {
         };
         before_claim();
         if let Err(error) = rename(&files, name, &quarantine, OsStr::new("payload")) {
-            if journal.remove_empty(&quarantine_path, &quarantine, &files).is_ok() { finish(journal, op, false)?; }
+            match journal.remove_empty(&quarantine_path, &quarantine, &files) {
+                Ok(()) => settle(journal, op),
+                Err(left) => { left.logged(); }
+            }
             return Err(Refusal::new(Outcome::Prepare(op), format!("Could not claim Trash item: {}", error)).because(error));
         }
         let info_claim = rename(&infos, info_name, &quarantine, OsStr::new("metadata"));
@@ -539,6 +549,10 @@ impl Reviewed {
             && info_claim.is_ok()
             && identity(&fd_path(&quarantine, OsStr::new("metadata"))).ok().as_ref() == Some(&self.metadata);
         if !checked {
+            let refused = match &info_claim {
+                Err(reason) => Refusal::new(Outcome::Prepare(op), format!("Could not claim Trash metadata: {reason}")).because(reason.clone()),
+                Ok(()) => Refusal::new(Outcome::ConfirmAgain, "Trash changed; no operation attempted. Confirm again."),
+            };
             let payload_back = rename(&quarantine, OsStr::new("payload"), &files, name);
             let info_back = if info_claim.is_ok() {
                 rename(&quarantine, OsStr::new("metadata"), &infos, info_name)
@@ -546,11 +560,13 @@ impl Reviewed {
                 Ok(())
             };
             if payload_back.is_err() || info_back.is_err() {
-                return Err(Refusal::new(Outcome::Kept(recovery.clone()),
-                    format!("Trash changed; no operation attempted. Recover preserved items from {}.", recovery.display())));
+                return Err(refused.wrap(Outcome::Kept(recovery.clone())));
             }
-            if journal.remove_empty(&quarantine_path, &quarantine, &files).is_ok() { finish(journal, op, false)?; }
-            return Err(Refusal::new(Outcome::ConfirmAgain, "Trash changed; no operation attempted. Confirm again."));
+            match journal.remove_empty(&quarantine_path, &quarantine, &files) {
+                Ok(()) => settle(journal, op),
+                Err(left) => { left.logged(); }
+            }
+            return Err(refused);
         }
         let removal = perform(&quarantine);
         if let Err(error) = removal {
@@ -575,7 +591,7 @@ impl Reviewed {
         std::fs::remove_file(fd_path(&quarantine, OsStr::new("metadata")))
             .map_err(|e| Refusal::os(Outcome::InfoLeft(op, recovery.clone()), "Trash metadata cleanup after completion", &e))?;
         journal.remove_empty(&quarantine_path, &quarantine, &files)
-            .map_err(|e| e.wrap(Outcome::FolderLeft(op)))?;
+            .map_err(|e| e.wrap(Outcome::FolderLeft(op, Some(recovery.clone()))))?;
         finish(journal, op, true)
     }
 }
@@ -630,7 +646,10 @@ impl PathReview {
         };
         before_claim();
         if let Err(error) = rename(&parent, name, &quarantine, OsStr::new("payload")) {
-            if journal.remove_empty(&quarantine_path, &quarantine, &parent).is_ok() { finish(journal, op, false)?; }
+            match journal.remove_empty(&quarantine_path, &quarantine, &parent) {
+                Ok(()) => settle(journal, op),
+                Err(left) => { left.logged(); }
+            }
             return Err(Refusal::new(Outcome::Prepare(op), format!("Could not claim item for deletion: {}", error)).because(error));
         }
         let removal = remove_tree(&self.tree, &quarantine, Refusal::new(Outcome::ItemChanged, "Item changed after confirmation; no deletion attempted."));
@@ -644,7 +663,7 @@ impl PathReview {
             settle(journal, op);
             return Err(if error.outcome() == &Outcome::ItemChanged { error } else { error.wrap(Outcome::PartialAtOriginal) });
         }
-        journal.remove_empty(&quarantine_path, &quarantine, &parent).map_err(|e| e.wrap(Outcome::FolderLeft(op)))?;
+        journal.remove_empty(&quarantine_path, &quarantine, &parent).map_err(|e| e.wrap(Outcome::FolderLeft(op, Some(recovery.clone()))))?;
         finish(journal, op, true)
     }
 }

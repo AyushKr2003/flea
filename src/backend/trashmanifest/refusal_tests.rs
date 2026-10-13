@@ -60,9 +60,9 @@ refusal!(infoleft_delete_at, Outcome::InfoLeft(Delete, PathBuf::from("/kept")),
     "The item was deleted, but a Trash record at /kept could not be removed: permission denied.");
 refusal!(infoleft_restore_at, Outcome::InfoLeft(Restore, PathBuf::from("/kept")),
     "The item was restored, but a Trash record at /kept could not be removed: permission denied.");
-refusal!(folderleft_delete, Outcome::FolderLeft(Delete),
+refusal!(folderleft_delete, Outcome::FolderLeft(Delete, None),
     "The item was deleted, but Flea could not remove its temporary folder: permission denied.");
-refusal!(folderleft_restore, Outcome::FolderLeft(Restore),
+refusal!(folderleft_restore, Outcome::FolderLeft(Restore, None),
     "The item was restored, but Flea could not remove its temporary folder: permission denied.");
 refusal!(recordleft_some_delete, Outcome::RecordLeft(Some(Delete)),
     "The item was deleted, but Flea could not remove its recovery record: permission denied.");
