@@ -38,7 +38,7 @@ run() {
   fi
   printf '%s' "$out" | grep -qE "checks, 0 failed" || exit 1
   if [ -z "${2:-}" ] || [ "$2" = devices ]; then
-    # awk pairs begin and end markers and counts lines per call; grep loses those boundaries and a plain loop needs the same state.
+    # Each call pairs its begin and end markers across lines and counts the intervening lines; grep cannot carry that pairing, while awk does it in one pass and a while-read loop needs the same three state variables (active, expected, warnings) plus more code.
     printf '%s\n' "$out" | awk '
       /^qml: power-off warning begin: / {
         if (active) bad = 1
