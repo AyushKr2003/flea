@@ -99,6 +99,8 @@ LAUNCH_POS=-
 ENTRANT_LAUNCHED=""
 # Only this invocation assigns the warm job pid, never the caller's environment.
 WARM_PID=""
+WARM_STARTING=""
+WARM_PREVIOUS_PID=""
 # The group's terminal, named once. foot is sixel only and every entrant here that previews at all
 # prefers the Kitty protocol, so the old group's zero across all eight was this choice and not a
 # result about the entrants.
@@ -1073,19 +1075,29 @@ warm_stop() {
 
 # Stop the warm shell and its setup children before restoring caches, even if no Flea launched yet.
 stop_warm_job() {
-  local pid=${WARM_PID:-} polls=0
+  local pid=${WARM_PID:-} polls=0 pgid parent
+  # A signal can arrive after the fork but before WARM_PID is assigned; the previous job is never this launch.
+  if [ -z "$pid" ] && [ "${WARM_STARTING:-}" = yes ]; then
+    pid=${!:-}
+    [ -n "$pid" ] && [ "$pid" != "${WARM_PREVIOUS_PID:-}" ] || return 0
+    # Sample input: ps -o pgid=,ppid= -p 4242 prints "4242 4100" for the warm group leader and its bench parent.
+    read -r pgid parent < <(ps -o pgid=,ppid= -p "$pid") || return 0
+    [ "$pgid" = "$pid" ] && [ "$parent" = "$$" ] \
+      && cmp -s "/proc/$pid/cmdline" "/proc/$$/cmdline" || return 0
+  fi
   [ -n "$pid" ] || return 0
   kill -TERM -- "-$pid" 2>/dev/null || true
-  while kill -0 -- "-$pid" 2>/dev/null && [ "$polls" -lt 20 ]; do sleep 0.1; polls=$(( polls + 1 )); done
+  while kill -0 -- "-$pid" 2>/dev/null && [ "$polls" -lt "$SWEEP_TERM_POLLS" ]; do sleep "$WARM_POLL_S"; polls=$(( polls + 1 )); done
   kill -KILL -- "-$pid" 2>/dev/null || true
   polls=0
-  while kill -0 -- "-$pid" 2>/dev/null && [ "$polls" -lt 20 ]; do sleep 0.1; polls=$(( polls + 1 )); done
+  while kill -0 -- "-$pid" 2>/dev/null && [ "$polls" -lt "$SWEEP_KILL_POLLS" ]; do sleep "$WARM_POLL_S"; polls=$(( polls + 1 )); done
   if kill -0 -- "-$pid" 2>/dev/null; then
     printf 'WARNING: warm job process group %s outlived SIGKILL\n' "$pid" >&2
     return 1
   fi
   wait "$pid" 2>/dev/null || true
   WARM_PID=""
+  WARM_STARTING=""
 }
 # warm launch end
 
@@ -1755,7 +1767,11 @@ if only_has flea; then
   prefetch_for "$FLEA_PREFETCH_SLOT"
   ENTRANT_LAUNCHED=yes
   set -m
-  ( set +m; warm_qml_cache ) & WARM_PID=$!
+  WARM_PREVIOUS_PID=${!:-}
+  WARM_STARTING=yes
+  ( set +m; warm_qml_cache ) &
+  WARM_PID=$!
+  WARM_STARTING=""
   set +m
   wait "$WARM_PID" || exit 1
   WARM_PID=""
@@ -1764,7 +1780,11 @@ if [ "$WITH_ANCHOR" = yes ] && only_has flea-anchor; then
   prefetch_for "$ANCHOR_PREFETCH_SLOT"
   ENTRANT_LAUNCHED=yes
   set -m
-  ( set +m; FLEA_BIN=$ANCHOR_BIN FLEA_UI=$ANCHOR_UI FLEA_QMLCACHE=$ANCHOR_QMLCACHE FLEA_STATE=$ANCHOR_STATE warm_qml_cache ) & WARM_PID=$!
+  WARM_PREVIOUS_PID=${!:-}
+  WARM_STARTING=yes
+  ( set +m; FLEA_BIN=$ANCHOR_BIN FLEA_UI=$ANCHOR_UI FLEA_QMLCACHE=$ANCHOR_QMLCACHE FLEA_STATE=$ANCHOR_STATE warm_qml_cache ) &
+  WARM_PID=$!
+  WARM_STARTING=""
   set +m
   wait "$WARM_PID" || exit 1
   WARM_PID=""

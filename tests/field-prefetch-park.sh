@@ -143,25 +143,37 @@ restore_thumbs() { :; }
 restore_prefetch() { printf 'operator list\n' > "$PREFETCH"; }
 prefetch_keep() { :; }
 prefetch_for() { :; }
-only_has() { [ "$1" = flea ]; }
+only_has() { if [ "$MODE" = anchor-fork ]; then [ "$1" = flea-anchor ]; else [ "$1" = flea ]; fi; }
 KILL_TARGETS=(); SWEEP_TERM_POLLS=20; SWEEP_KILL_POLLS=20; TUI_CONF=""
 BENCH_TOKEN="warm-test-$$-$RANDOM"; BENCH_CG=$W/cg; FLEA_QMLCACHE=$W/qml; FLEA_STATE=$W/state
-FLEA_BIN=$W/flea; FLEA_UI=$W/ui; FIXTURE=$W; PREFETCH=$W/prefetch; ENTRANT_LAUNCHED=""; ROWS_PID=""; WARM_PID=""
+FLEA_BIN=$W/flea; FLEA_UI=$W/ui; FIXTURE=$W; PREFETCH=$W/prefetch; ENTRANT_LAUNCHED=""; ROWS_PID=""; WARM_PID=""; WARM_STARTING=""; WARM_PREVIOUS_PID=""
 FLEA_PREFETCH_SLOT=""; WITH_ANCHOR=no
+if [ "$MODE" = anchor-fork ]; then
+  WITH_ANCHOR=yes; ANCHOR_BIN=$FLEA_BIN; ANCHOR_UI=$FLEA_UI; ANCHOR_QMLCACHE=$FLEA_QMLCACHE; ANCHOR_STATE=$FLEA_STATE; ANCHOR_PREFETCH_SLOT=""
+fi
 export FAKE_PIDFILE=$W/pid FAKE_PREFETCH=$W/prefetch
 eval "$WARM_TEXT"; eval "$SWEEP_TEXT"; eval "$CLEAN_TEXT"; eval "$CLEANUP_TEXT"
 # The fake cgroup is ordinary files; the real token sweep still ends the independently sessioned Flea.
 warm_stop() { :; }
 eval "$(declare -f warm_qml_cache | sed '1s/warm_qml_cache/warm_qml_cache_body/')"
 warm_qml_cache() { printf '%s\n' "$BASHPID" > "$W/warm-pid"; warm_qml_cache_body; }
-if [ "$MODE" = setup ]; then cp() { bash "$W/copy.sh"; }; fi
+if [ "$MODE" != mapped ]; then cp() { bash "$W/copy.sh"; }; fi
 WARM_QUIET_POLLS=600
 trap bench_cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+# DEBUG fires immediately before WARM_PID=$!, after the real background fork, without adding a production test hook.
+fork_signal() {
+  [ "$BASH_COMMAND" = 'WARM_PID=$!' ] || return 0
+  local polls=0
+  while [ ! -f "$W/copy-pid" ] && [ "$polls" -lt 200 ]; do sleep 0.01; polls=$(( polls + 1 )); done
+  printf '%s\n' "${WARM_PID:-empty}" > "$W/pid-at-signal"
+  kill -s "$SIGNAL" "$$"
+}
+case $MODE in fork|anchor-fork) trap fork_signal DEBUG ;; esac
 eval "$WARM_START_TEXT"
 EOS
-  W=$warm MODE=$mode python3 - "$signal" <<'PYDRIVER'
+  W=$warm MODE=$mode SIGNAL=$signal python3 - "$signal" <<'PYDRIVER'
 import os
 from pathlib import Path
 import signal
@@ -174,14 +186,14 @@ with root.joinpath('run.log').open('w') as log:
     child = subprocess.Popen(['bash', str(root / 'run.sh')], stdout=log, stderr=log,
                              preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))
     root.joinpath('harness-pid').write_text(str(child.pid))
-    ready = root / ('copy-pid' if os.environ['MODE'] == 'setup' else 'pid')
+    ready = root / ('pid' if os.environ['MODE'] == 'mapped' else 'copy-pid')
     deadline = time.monotonic() + 10
     while not ready.exists() and child.poll() is None and time.monotonic() < deadline:
         time.sleep(0.05)
     root.joinpath('ready').write_text('yes' if ready.exists() else 'no')
     time.sleep(0.2)
     started = time.monotonic()
-    if child.poll() is None:
+    if child.poll() is None and os.environ['MODE'] not in ('fork', 'anchor-fork'):
         child.send_signal(signum)
     try:
         rc = child.wait(timeout=8)
@@ -191,7 +203,9 @@ with root.joinpath('run.log').open('w') as log:
         rc = 124
     root.joinpath('status').write_text(f'{rc} {int((time.monotonic() - started) * 1000)}')
 PYDRIVER
+  # Sample input: the Python driver's status file is "143 412", the exit status followed by elapsed milliseconds.
   read -r rc elapsed < "$warm/status" || true
+  case $mode in fork|anchor-fork) check "$signal during $mode lands before WARM_PID assignment" empty "$(cat "$warm/pid-at-signal" 2>/dev/null)" ;; esac
   check "$signal during $mode reached the warm job" yes "$(cat "$warm/ready")"
   check "$signal during $mode exits with its signal status" "$expected" "$rc"
   check "$signal during $mode is trapped promptly" yes "$([ "${elapsed:-8000}" -lt 8000 ] && echo yes || echo no)"
@@ -222,6 +236,30 @@ PYDRIVER
 signal_case mapped TERM 143
 signal_case setup TERM 143
 signal_case setup INT 130
+signal_case fork TERM 143
+signal_case fork INT 130
+signal_case anchor-fork TERM 143
+signal_case anchor-fork INT 130
+
+# A launch mark before the fork must leave a stale job alone, and a fallback must reject a different command.
+cat > "$scratch/fallback-guard.sh" <<'EOS'
+set -uo pipefail
+eval "$WARM_TEXT"
+WARM_PID=""; WARM_STARTING=yes; WARM_PREVIOUS_PID=""
+set -m
+if [ "$MODE" = previous ]; then ( set +m; sleep 300; : ) & else sleep 300 & fi
+pid=$!
+set +m
+if [ "$MODE" = previous ]; then WARM_PREVIOUS_PID=$pid; fi
+polls=0
+while [ "$MODE" = command ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" != sleep ] && [ "$polls" -lt 200 ]; do sleep 0.01; polls=$(( polls + 1 )); done
+stop_warm_job
+kill -0 "$pid" 2>/dev/null && printf 'kept\n' || printf 'killed\n'
+[[ "$pid" =~ ^[0-9]+$ ]] && [ "$pid" -gt 1 ] && kill -KILL -- "-$pid" 2>/dev/null
+wait "$pid" 2>/dev/null || true
+EOS
+check "a stale background pid before the warm fork is kept" kept "$(MODE=previous bash "$scratch/fallback-guard.sh" 2>"$scratch/previous.log")"
+check "a fallback pid with a different command is kept" kept "$(MODE=command bash "$scratch/fallback-guard.sh" 2>"$scratch/command.log")"
 
 [ "$fail" = 0 ] && echo "field-prefetch-park: all passed" || echo "field-prefetch-park: failures above"
 exit "$fail"
