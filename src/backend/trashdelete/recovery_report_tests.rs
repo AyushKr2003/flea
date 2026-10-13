@@ -41,8 +41,8 @@ fn recovery_keeps_completed_records_in_its_report_after_an_entry_read_error() {
         .chain(std::iter::once_with(|| panic!("recovery must stop after an entry read error")));
     let report = recover_entries(&root, entries).unwrap();
     assert_eq!(report.recovered, 1);
-    assert_eq!(report.failures, [format!("{}: The Trash could not be read.", root.display())]);
-    assert!(logged()[seen..].iter().any(|line| line.contains("Unreadable") && line.contains("Could not read the recovery folder") && line.contains("Input/output error")));
+    assert_eq!(report.failures, [format!("{}: Flea found an interrupted Trash operation; its items are kept at {}.", root.display(), root.display())]);
+    assert!(logged()[seen..].iter().any(|line| line.contains("Held(") && line.contains("Could not read the recovery folder") && line.contains("Input/output error")));
     assert_eq!(std::fs::read_to_string(&reviewed.path).unwrap(), "payload");
     assert_eq!(identity(&reviewed.info).unwrap(), reviewed.metadata);
     assert!(!quarantine.exists());

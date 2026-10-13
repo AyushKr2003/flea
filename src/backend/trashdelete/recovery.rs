@@ -289,7 +289,7 @@ fn recover_entries(root: &Path, entries: impl IntoIterator<Item = std::io::Resul
             Ok(entry) => entry,
             Err(error) => {
                 result.failures.push(format!("{}: {}", root.display(),
-                    Refusal::os(Outcome::Unreadable, "Could not read the recovery folder", &error).logged()));
+                    Refusal::os(Outcome::Held(root.to_path_buf()), "Could not read the recovery folder", &error).logged()));
                 break;
             }
         };
