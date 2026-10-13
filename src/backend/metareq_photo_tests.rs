@@ -35,8 +35,7 @@ fn camera_tiff() -> Vec<u8> {
     t.b
 }
 
-// FF D8 | APP0 | filler segments | APP1 "Exif" TIFF | SOF0, with `pad` payload bytes of APP2 segments before the Exif segment.
-// Every segment carries its true length, so the walk reaches the Exif segment only by reading as far as it lies.
+// FF D8 | APP0 | `pad` bytes of true-length APP2 segments | APP1 "Exif" TIFF | SOF0, so the walk reads every segment to reach Exif.
 fn jpeg_with_exif(tiff: &[u8], pad: usize) -> Vec<u8> {
     let mut v = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x08, 1, 2, 3, 4, 5, 6];
     let mut left = pad;
