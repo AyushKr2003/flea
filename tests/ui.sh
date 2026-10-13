@@ -5136,9 +5136,7 @@ case_columns() {
     settle
     (( $(ipc pdfState false | jq '.scrollY | floor') > 0 )) \
         || fail "columns: l left the pdf at its top, scrolled to $(ipc pdfState false | jq .scrollY)"
-    # PdfPageImage renders asynchronously, so the scroll lands before the pixels do. Page two counts as
-    # drawn only once its own image has landed: a pixel count alone also moves when the scroll shows the
-    # gap or a slot still waiting for its render.
+    # PdfPageImage renders async, and a pixel count also moves on the gap, so page two counts only once its own image lands.
     for i in $(seq 1 20); do
         [[ "$(ipc pdfState false | jq '.landed | index(1) != null')" == "true" ]] && break
         sleep 0.2

@@ -2,6 +2,7 @@
 
 import QtQuick
 import QtTest
+import QtQuick.Pdf
 import Quickshell
 import "flea" as Flea
 
@@ -279,9 +280,30 @@ ShellRoot {
         root.check("a tall single page taller than the frame has the knob", f.contentHeight > f.height && b.overflow, true)
     }
 
+    // A document that does not open is handed to one slot's own image, whose render then fails and reports through onStatusChanged.
+    PdfDocument { id: brokenDoc; source: "file://" + root.dir + "/broken.pdf" }
+    function breakSlot(no) {
+        var image = root.images(root.pdf().pageSlot(no))[0]
+        image.document = brokenDoc
+        image.sourceSize = Qt.size(image.sourceSize.width + 1, 0)
+    }
+    function slotErrored(no) {
+        var slot = root.pdf() ? root.pdf().pageSlot(no) : null
+        return slot !== null && slot.errored
+    }
+    function laterPage() {
+        root.check("a later page whose render failed is left in its own slot", root.slotErrored(1), true)
+        root.check("and does not fail the column", root.col.pdfFailed, false)
+        root.check("the pane stays on the stack", root.col.previewState, "pdf")
+        root.check("and the page before it still draws", root.landed(root.pdf().pageSlot(0)), true)
+    }
+    function topPage() {
+        root.check("the page under the frame's top can fail after the first draw", root.slotErrored(0), true)
+        root.check("and does not fail the drawn column", root.col.pdfFailed, false)
+        root.check("the drawn pane stays on the stack", root.col.previewState, "pdf")
+    }
     function failedPage() {
-        root.pdf().pageSlot(0).imageStatus(Image.Error)
-        root.check("a page whose render failed puts the pane in the failure state", root.col.pdfFailed && root.col.previewState === "error", true)
+        root.check("a first page whose render failed puts the pane in the failure state", root.col.pdfFailed && root.col.previewState === "error", true)
     }
 
     // A 500-page document: the slots and images stay with the frame, and the page sizes are read once per document, never per width.
@@ -334,7 +356,16 @@ ShellRoot {
         { row: 2, run: function () { root.slip() } },
         { row: 3, run: function () { root.big() } },
         { row: 3, stay: true, narrowed: true, run: function () { root.bigNarrow() } },
-        { row: 3, stay: true, run: function () { root.failedPage() } },
+        { row: 3, stay: true, run: function () { root.breakSlot(1) } },
+        { row: 3, stay: true, wait: function () { return root.slotErrored(1) }, run: function () { root.laterPage() } },
+        { row: 3, stay: true, run: function () { root.breakSlot(0) } },
+        { row: 3, stay: true, wait: function () { return root.slotErrored(0) }, run: function () { root.topPage() } },
+        { row: 3, stay: true, run: function () {
+            // Recreate the state before the first draw so the repeated render error tests initial failure.
+            root.pdf().shownPage = -1
+            root.breakSlot(0)
+        } },
+        { row: 3, stay: true, wait: function () { return root.slotErrored(0) }, run: function () { root.failedPage() } },
         { row: 0, run: function () { root.back() } },
         { row: 0, look: true, run: function () { root.quickLookChecks() } }
     ]
@@ -360,7 +391,9 @@ ShellRoot {
             if (Date.now() - root.since > 25000) { root.check("deadline in stage " + root.stage + " step " + root.stepAt, false, true); root.stop(); return }
             var step = root.stepAt >= 0 ? root.plan[root.stepAt] : null
             if (root.stage === "boot") { if (root.col.frameItem) root.advance() }
-            else if (root.stage === "wait") {
+            else if (root.stage === "wait" && step.wait) {
+                if (step.wait()) { step.run(); root.advance() }
+            } else if (root.stage === "wait") {
                 if (step.look) {
                     if (!look.visible) root.quickLook()
                     if (look.pageCount <= 0 || look.shownPage < 0) return

@@ -50,6 +50,8 @@ def pdf(name, sizes):
         out += ('%010d 00000 n \n' % off).encode()
     out += ('trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n' % (len(objs) + 1, xref)).encode()
     open(dest + '/' + name, 'wb').write(out)
+# A file that is not a PDF, handed to a slot's image by the test.
+open(dest + '/broken.pdf', 'wb').write(b'not a pdf\n')
 pdf('report.pdf', [(612, 792)] * 12)
 pdf('receipt.pdf', [(226, 640)])
 pdf('slip.pdf', [(612, 300)])
@@ -70,7 +72,8 @@ judge() {
     local label=$1 output=$2 status=$3 want=$4 passed noisy
     # Sample input: "  INFO qml: FLOW QMLTALLY passed=41 failed=0".
     passed=$(printf '%s\n' "$output" | sed -n 's/.*FLOW QMLTALLY passed=\([0-9]*\) failed=0$/\1/p')
-    noisy=$(printf '%s\n' "$output" | grep -av 'does not support setting window masks\|Detected function' | grep -aiE 'WARN|ERROR|Binding loop|failed to load|Unable to assign|Cannot assign|TypeError|ReferenceError|is not a function|is not defined|in conflict')
+    # The two injected warnings name broken.pdf, the document the failure checks hand to a slot's image; no other warning passes.
+    noisy=$(printf '%s\n' "$output" | grep -av 'does not support setting window masks\|Detected function' | grep -avE 'PdfPageImage at @flea/PreviewPdf\.qml\[[0-9]+:[0-9]+\]: (document and source properties in conflict: preferring document source QUrl\("[^"]*/fixture/broken\.pdf"\)|Error decoding: [^ ]*/fixture/broken\.pdf: Unsupported image format)' | grep -aiE 'WARN|ERROR|Binding loop|failed to load|Unable to assign|Cannot assign|TypeError|ReferenceError|is not a function|is not defined|in conflict')
     if [ "$status" -ne "$self_kill_exit" ] || [ "$passed" != "$want" ] || printf '%s\n' "$output" | grep -aq 'FLOW FAIL' || [ -n "$noisy" ]; then
         printf 'FAIL %s: qs exit %s, checks passed %s of %s\n' "$label" "$status" "${passed:-none}" "$want"
         printf '%s\n' "$output" | grep -a 'FLOW FAIL\|FLOW COUNTS\|QMLTALLY'
@@ -81,6 +84,6 @@ judge() {
     printf '%s\n' "$output" | grep -a 'FLOW COUNTS\|FLOW QMLTALLY' | sed 's/^.*FLOW /FLOW '"$label"' /'
 }
 
-out=$(run wide 1200 760); judge "1200x760" "$out" $? 45
-out=$(run narrow 760 560); judge "760x560" "$out" $? 45
+out=$(run wide 1200 760); judge "1200x760" "$out" $? 52
+out=$(run narrow 760 560); judge "760x560" "$out" $? 52
 exit $verdict

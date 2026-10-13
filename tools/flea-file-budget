@@ -100,6 +100,7 @@ tests/markdown-tables.qml 401
 tests/quicklook-firstframe.js 214
 tests/preview-settle-live.qml 532
 tests/preview-decode.qml 649
+tests/preview-pdf-flow.qml 427
 tests/js/status.js 354
 tests/rename-grid-bottom.qml 438
 tests/rename-grid-bottom.js 344
@@ -136,7 +137,7 @@ ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 797
 ui/Preview.qml 739
 ui/PreviewColumn.qml 522
-ui/PreviewPdf.qml 449
+ui/PreviewPdf.qml 450
 ui/PickerChrome.qml 426
 ui/DeviceMounts.qml 528
 ui/PreviewMarkdown.qml 625

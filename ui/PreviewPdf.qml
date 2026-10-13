@@ -42,7 +42,7 @@ Item {
 
     // What the facts table shows as Pages; 0 until the document is ready, or if it never becomes so.
     readonly property int pageCount: doc.status === PdfDocument.Ready ? doc.pageCount : 0
-    // A page of the stack whose render failed fails the document for the column, the way a document that did not load does.
+    // A render error fails the column only before its first draw and on the page under the frame's top; every other page error leaves only its own slot empty.
     property bool pageFailed: false
     readonly property bool failed: doc.status === PdfDocument.Error || root.copyError.length > 0 || root.pageFailed
 
@@ -406,9 +406,10 @@ Item {
             onRenderingChanged: if (!slot.rendering) Qt.callLater(root.syncWindow)
 
             function imageStatus(status) {
+                var drawn = root.shownPage >= 0
                 slot.rendering = status === Image.Loading
                 slot.errored = status === Image.Error
-                if (slot.errored)
+                if (slot.errored && !drawn && slot.pageNo === root.pageAt(root.viewTop))
                     root.pageFailed = true
             }
 
