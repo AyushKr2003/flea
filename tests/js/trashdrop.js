@@ -12,6 +12,7 @@ function pane(sent, rows, held) {
     }
 }
 
+// Exercises owned and refused drops, lift-time numbering and cursor landing through the real decisions.
 function run(check) {
     var rows = [{ n: "omarchy", d: true }, { n: "a.txt", d: false }, { n: "b.txt", d: false }, { n: "c.txt", d: false }]
 
@@ -50,13 +51,26 @@ function run(check) {
     check("a refused drag says nothing", TrashDrop.line("", ["file:///d/a.txt"], "/d"), "")
 
     // A selection too wide to carry paths trashes by index, in the numbering it was lifted in.
-    var wide = Drag.markerPayload([0, 2, 3], false, "/d", 42, true, false, 7)
+    var wide = Drag.markerPayload([3, 0, 2], false, "/d", 42, true, false, 7)
     var byIndex = []
     var widePane = pane(byIndex, rows, 8)
     check("a wide drag on its own listing is taken", TrashDrop.drop(widePane, wide, []), true)
     check("as rows named in the numbering of the lift, not the one held now", JSON.stringify(byIndex),
-          JSON.stringify([{ c: "trash", rows: [0, 2, 3], listing: 7 }]))
+          JSON.stringify([{ c: "trash", rows: [3, 0, 2], listing: 7 }]))
     check("the bar counts the rows the marker carries", TrashDrop.line(wide, [], "/d"), "Move 3 items to Trash")
+    check("the cursor lands on the minimum inside an unsorted selection", widePane.trashedFirst, 0)
+
+    // Select All is uncapped; reversed rows put the minimum last and exceed QV4's apply capacity.
+    var all = []
+    for (var i = 1000000; i > 0; i--) all.push(i + 16)
+    var allSent = []
+    var allPane = pane(allSent, rows, 8)
+    check("an uncapped selection reaches the backend", TrashDrop.drop(allPane, Drag.markerPayload(all, false, "/d", 42, true, false, 7), []), true)
+    var whole = allSent.length === 1 && allSent[0].c === "trash" && allSent[0].listing === 7
+            && allSent[0].rows.length === all.length
+    for (var j = 0; whole && j < all.length; j++) whole = allSent[0].rows[j] === all[j]
+    check("every selected row keeps its lift-time numbering", whole, true)
+    check("the cursor lands on the minimum even when it is last", allPane.trashedFirst, 17)
     var away = pane([], rows, 7)
     away.path = "/e"
     check("a wide drag over another listing cannot name its rows", TrashDrop.drop(away, wide, []), false)

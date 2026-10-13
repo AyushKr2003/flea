@@ -44,6 +44,7 @@ function request(marker, urls, path) {
     return Swap.named({ c: "trash", rows: rows }, listing)
 }
 
+// Whether the drag can trash its carried files here, used by the hover check and status line.
 function accepts(marker, urls, path) {
     return request(marker, urls, path) !== null
 }
@@ -56,7 +57,10 @@ function drop(pane, marker, urls) {
     if (!sent) return false
     // Where the cursor lands once the rows are gone, as dd sets it; only a drag from this listing has one.
     var rows = Drag.sameListing(marker, pane.path) ? markerRows(marker) : []
-    pane.trashedFirst = rows.length > 0 ? Math.min.apply(null, rows) : -1
+    var first = rows.length > 0 ? rows[0] : -1
+    for (var i = 1; i < rows.length; i++)
+        if (rows[i] < first) first = rows[i]
+    pane.trashedFirst = first
     pane.backend.send(sent)
     return true
 }
