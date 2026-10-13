@@ -58,7 +58,7 @@ Known issues
 - The memory growth and crash in #151 have not been reproduced; the report stays open.
 - A new window maps about 28 ms later than 0.3.9 on a folder whose first row is a video: 530 ms against 502 ms on 2,000 mixed files and 541 against 513 on 1,700, medians of 3 runs. On 100,000 text files it is unchanged, 505 against 510. The cause is being confirmed.
 - PCManFM's window appears first on all three folders (448, 420 and 416 ms), and Thunar's also appears before Flea's on the two media folders (513 and 507 ms).
-- On the two media folders Flea's window uses 93.5 MiB, fifth for window PSS after Thunar, PCManFM, Nemo and Strata (34.2 to 87.5 MiB). On 100,000 files it uses the least, 80.7 MiB.
+- On the two media folders Flea's window uses 93.5 and 93.6 MiB, fifth for window PSS after Thunar, PCManFM, Nemo and Strata (34.2 to 87.5 MiB). On 100,000 files it uses the least, 80.7 MiB.
 - On the media folders Thunar, and on 1,700 files Nemo, settle sooner and use less CPU than Flea, but the bench measured no thumbnail work from either, so those columns are not ranked.
 
 Thanks to @dedeanth, @nate8199, @muellan, @akitaonrails, @t1nk333r, @mfilm77, @itsmunzir, @bthome, @aholbreich, @GreyforgeLabs, @MiguelDebruyne, @citizen-why, @dyedfox, @karacas, @liri2006, @nerdislb, @matirossi93, @kevinbsr, @fishandsheep, @jotapesse, @protoavatar, @kosmicus, @demostenex, @joebaus, @KelpyShades, @carldx, @pedrosatin, @erikrjohansson, @AyushKr2003, @fsrodrig, @iccodes and @maeandrew.

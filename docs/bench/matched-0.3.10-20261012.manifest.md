@@ -1,6 +1,7 @@
 # Field bench manifest
 
-Written by tools/flea-bench-manifest. Every line below is read off the installed artefact.
+Written by tools/flea-bench-manifest. Every line below is read off the installed artefact, except the two
+entrant corrections listed under "Merged run" at the end.
 
 ## Run
 
@@ -256,10 +257,15 @@ safe direction, and it is not a reason to leave the number out.
 
 ## Merged run
 
-- phase A (flea, flea-anchor, flea-tui, strata): a
-- phase B (dolphin, thunar, nemo, pcmanfm, nautilus): b
+- phase A (flea, flea-anchor, flea-tui, strata): run root field039.BrghYUKo on the bench host
+- phase B (dolphin, thunar, nemo, pcmanfm, nautilus): run root field039.tX4cAYd4 on the bench host
 - this manifest is phase A's; strata ran the v1.0.0 build at /home/flea-sandbox/strata-100 and its row
   above names that tag (the generator had read the v0.19.0 checkout at ~/Work/strata)
-- flea ran from f9c48884, the pre-reword id of release commit 5816ab88 (same tree); the entrant
-  lines above name the release id, and the launch line keeps the build path as it ran
+- flea ran from f9c48884, the pre-reword id of 5816ab88 (same tree), the 0.3.10 version commit; the
+  entrant lines above name 5816ab88, and the launch line keeps the build path as it ran. The v0.3.10 tag
+  adds only lint fixes with no runtime change, tests and docs after it
 - flea-tui ran with no terminal rival in this run, so its rows are left out of these CSVs
+- flea-anchor is v0.3.9: tag v0.3.9 points at 1de9d979; the bench host's clone carries no tags, so the line
+  says untagged
+- DIRTY on flea and flea-anchor is the bench harness's marker patch (18 console.log timing lines and one
+  objectName, in 13 UI files, applied identically to every Flea arm); the code is otherwise the named commit

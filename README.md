@@ -244,6 +244,7 @@ Note: Thunar: "unranked: nothing reached the thumbnail cache so its work was not
 
 "First window" records compositor registration. "Settled" means 500 ms without process-tree CPU activity; neither measures input readiness.
 PSS covers the window process, excluding helpers and GPU memory. CPU is everything the app started, counted from a control group of its own, so sandboxed thumbnailers are in it. Shared libraries affect PSS. Results describe this machine and workload.
+Settled time and CPU are not ranked against an app whose thumbnail work was not measured; the notes under each speed table name those apps.
 
 [Method](docs/benchmarks.md) · [Local CSV](docs/bench/local-0.3.10-20261012.csv) · [Local manifest](docs/bench/local-0.3.10-20261012.manifest.md) · [Matched CSV](docs/bench/matched-0.3.10-20261012.csv) · [Matched manifest](docs/bench/matched-0.3.10-20261012.manifest.md) · [Media CSV](docs/bench/media-0.3.10-20261012.csv) · [Media manifest](docs/bench/media-0.3.10-20261012.manifest.md)
 
