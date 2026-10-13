@@ -263,6 +263,9 @@ ShellRoot {
                 "bar name or status wrong: " + JSON.stringify(one.after) + " ready=" + look.lookReady)
             shell.check(shell.images(shell.fontPane()).every(function (image) { return String(image.source).indexOf("file://" + shell.dir + "/r0-") === 0 }),
                 "the samples are not the answer's three files")
+            // The Column lays its parts out on a later polish, several ticks on: its height is their sum and gaps once it has run.
+            var col = shell.page(shell.fontPane()), parts = shell.images(shell.fontPane()).concat([shell.factsText(shell.fontPane())])
+            if (col.height !== parts.reduce(function (a, p) { return a + p.height }, 0) + col.spacing * (parts.length - 1)) return
             shell.checkGeometry("the first page")
             shell.step("the bar, three ready samples and the facts line land in the answer's own turn, laid out to the recipe")
             shell.next(); break

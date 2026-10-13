@@ -185,15 +185,15 @@ ShellRoot {
         root.check(label + " the name keeps one place across kinds", nameTop, root.nameY.base)
     }
 
+    // The code lines are CodeLines' rows, each a StyledText body in its own delegate, one row per line.
     function lineFit() {
         var lines = root.col.linesItem
-        var drawn = root.find(function (it) { return it.numbered === undefined && it.text !== undefined && String(it.text).indexOf("  ") === 0 })
-        var rowH = drawn.height
+        var bodies = root.all(lines, []).filter(function (it) { return it.textFormat === Text.StyledText && it.visible })
+        var rowH = bodies.length > 0 ? bodies[0].parent.height : 1
         var fits = Math.floor((lines.height - 2 * root.gap) / rowH)
-        var built = root.all(lines, []).filter(function (it) { return it.text !== undefined && String(it.text).indexOf("  ") === 0 }).length
-        root.check("code draws as many lines as fit the frame", built, Math.min(132, fits))
-        root.check("and builds no more line items than fit", built <= fits, true)
-        root.check("and fills the frame past fourteen lines", built > 14, true)
+        root.check("code draws as many lines as fit the frame", bodies.length, Math.min(132, fits))
+        root.check("and builds no more line items than fit", bodies.length <= fits, true)
+        root.check("and fills the frame past fourteen lines", bodies.length > 14, true)
     }
 
     // Narrow: the Kind elides alone and the tail is whole; wide: nothing elides.
