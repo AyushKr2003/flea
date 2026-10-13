@@ -82,7 +82,7 @@ def build():
         short(0x011C, 1), long(0x014A, preview_ifd), short(0x828D, 2, 2),
         (0x828E, 1, 4, bytes((0, 1, 1, 2))), long(0x8769, exif_ifd),
         (0xC612, 1, 4, bytes((1, 4, 0, 0))), (0xC613, 1, 4, bytes((1, 1, 0, 0))),
-        text(0xC614, "Canon EOS R6"), short(0xC616, 1), short(0xC619, 1, 1),
+        text(0xC614, "Canon EOS R6"), (0xC616, 1, 3, bytes((0, 1, 2))), short(0xC619, 1, 1),
         rational(0xC61A, (0, 1)), long(0xC61D, 4095),
         rational(0xC61E, (1, 1), (1, 1)), short(0xC61F, 0, 0),
         long(0xC620, WIDTH, HEIGHT),

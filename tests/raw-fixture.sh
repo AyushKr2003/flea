@@ -12,5 +12,6 @@ mkdir -p "$test_root"/{raw,cache,state,home,undo}
 : > "$test_root/raw/$SANDBOX_MARKER"
 python3 -B "$repo/tests/fixtures/raw/generate.py" "$test_root/raw"
 (cd "$test_root/raw" && sha256sum --check "$repo/tests/fixtures/raw/SHA256SUMS")
+python3 -B "$repo/tests/fixtures/raw/check_tests.py" "$test_root"
 timeout 90 python3 -B "$repo/tests/fixtures/raw/check.py" "${FLEA_BIN:-$repo/target/debug/flea}" "$test_root"
 printf 'raw-fixture: real DNG, preview decode and photo facts passed\n'

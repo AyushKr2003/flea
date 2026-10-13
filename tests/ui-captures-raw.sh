@@ -1,5 +1,4 @@
 # Raw.html and Properties040 captures, sourced by ui.sh and run only by name on the native display.
-# ui:cap_raw_grid, ui:cap_raw_columns, ui:cap_raw_quicklook and ui:cap_raw_properties need native screenshots.
 
 readonly cap_raw_name=L1000921.DNG
 readonly cap_raw_photo='{"make":"Canon","model":"Canon EOS R6","lens":"RF35mm F1.8 MACRO IS STM","exp":[1,250],"fnum":[28,10],"iso":400,"focal":[35,1],"taken":"2026:09:12 18:31:00","w":6000,"h":4000}'
