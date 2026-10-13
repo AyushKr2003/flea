@@ -228,7 +228,7 @@ Item {
                 if (argv[suiteIndex] === "--") {
                     suiteIndex += 1
                 }
-                if (suiteIndex < argv.length) {
+                if (suiteIndex < argv.length && argv[suiteIndex].indexOf("--qt-version=") !== 0) {
                     only = argv[suiteIndex]
                     hasOnly = true
                 }
