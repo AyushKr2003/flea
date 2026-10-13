@@ -34,7 +34,7 @@ Item {
         Qt.callLater(function() {
             if (!pending || root.submissionFocus !== pending) return
             root.submissionFocus = null
-            if (root.picker.answered || root.picker.submitting) return
+            if (root.picker.answered || root.picker.submitting || root.picker.backendUnavailable) return
             var before = pending.before
             if (before && before.visible && before.enabled && pending.stepped && pending.stepped.activeFocus)
                 before.forceActiveFocus()

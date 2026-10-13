@@ -306,7 +306,8 @@ function run(check) {
     var factory = new Function("win", "backend", "ViewState", "listing", "return (" + sortSlice + ")")
     var remembered = [], leafChanges = []
     var winMock = { sortable: true, recent: false, path: "/home/gm/Downloads", windowSize: 100, pendingListings: 0,
-                    clearListing: function() {}, focusView: function() {} }
+                    clearListing: function() {}, actionFocus: function() {},
+                    restoreActionFocus: function() {} }
     var backendMock = { sortBy: "name", sortDesc: false,
                         rememberFolderSort: function(path, key, desc) { remembered.push({ path: path, key: key, desc: desc }) } }
     var viewMock = { state: { foldersFirst: true, groupByKind: false },
@@ -325,7 +326,8 @@ function run(check) {
     var backendOff = { sortBy: "name", sortDesc: false,
                        rememberFolderSort: function(path, key, desc) { rememberedOff.push(path) } }
     var runOff = factory({ sortable: true, recent: false, path: "/home/gm/Downloads", windowSize: 100, pendingListings: 0,
-                           clearListing: function() {}, focusView: function() {} }, backendOff, viewOff, listMock)
+                           clearListing: function() {}, actionFocus: function() {},
+                           restoreActionFocus: function() {} }, backendOff, viewOff, listMock)
     runOff({ key: "size", desc: false })
     check("picker sort with remembering off writes no folder entry", JSON.stringify(rememberedOff), "[]")
     check("picker sort with remembering off still writes default leaf", JSON.stringify(leafOff),
@@ -337,7 +339,8 @@ function run(check) {
                         rememberFolderSort: function(p, k, d) { remembered.push({ path: p, key: k, desc: d }) } }
         var view = { state: { foldersFirst: true, groupByKind: false }, changeLeaf: function() {} }
         var win = { sortable: true, recent: recent, path: path, windowSize: 100, pendingListings: 0,
-                    clearListing: function() {}, focusView: function() {} }
+                    clearListing: function() {}, actionFocus: function() {},
+                    restoreActionFocus: function() {} }
         return { backend: backend, remembered: remembered, run: factory(win, backend, view, listMock) }
     }
     // Recent has no folder to remember, but the window sort still changes.

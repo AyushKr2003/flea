@@ -7,6 +7,9 @@ import "js/Picker.js" as Picker
 Item {
     id: root
     required property var picker
+    property Item keyTarget: null
+    // Only keys left unhandled by Filename reach the listing, after editing and the field's Tab walk.
+    Keys.forwardTo: root.keyTarget ? [root.keyTarget] : []
     signal nameEdited(string text)
     signal accepted()
     readonly property alias fieldItem: field
@@ -66,6 +69,9 @@ Item {
                     Accessible.name: "Filename"
                     onTextEdited: root.nameEdited(text)
                     onAccepted: root.accepted()
+                    // Enter remains the field's save action when it opens a collision review.
+                    Keys.onReturnPressed: root.accepted()
+                    Keys.onEnterPressed: root.accepted()
                     Keys.onTabPressed: function(event) { root.picker.stepFocus(field, (event.modifiers & Qt.ShiftModifier) !== 0) }
                     Keys.onBacktabPressed: root.picker.stepFocus(field, true)
                 }

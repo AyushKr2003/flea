@@ -61,8 +61,9 @@ ShellRoot {
         // The view the listing draws in; a launch reads pickerView and only setView writes it.
         property string viewMode: "list"
         function setView(mode) {
+            var before = win.actionFocus()
             var next = Picker.viewSwitch(win.viewMode, mode)
-            if (!next) { win.focusView(); return }
+            if (!next) { win.restoreActionFocus(before); return }
             win.viewMode = next
             // The user's own switch, and only that, is what the next launch reopens: a launch
             // reads, and cursor moves never owe the file anything.
@@ -71,10 +72,33 @@ ShellRoot {
             var at = Math.max(0, Math.min(win.cursorIndex, win.total - 1))
             if (next === "grid") grid.reshow(at)
             else list.reshow(at)
-            win.focusView()
+            win.restoreActionFocus(before)
         }
         function viewItem() { return win.viewMode === "grid" ? grid : list }
         function focusView() { win.viewItem().forceActiveFocus() }
+        function actionFocus() {
+            var view = win.viewItem()
+            if (view.activeFocus) return view
+            var field = save.fieldItem
+            return field.activeFocus ? { field: field, cursor: field.cursorPosition,
+                anchor: field.cursorPosition === field.selectionStart ? field.selectionEnd : field.selectionStart } : null
+        }
+        function restoreActionFocus(before) {
+            if (before === list || before === grid) win.focusView()
+            else if (before) {
+                var field = before.field
+                if (!field.activeFocus) {
+                    field.forceActiveFocus()
+                    field.select(before.anchor, before.cursor)
+                }
+            }
+            else win.focusDefault()
+        }
+        // Automatic returns keep a save on Filename; Tab and row clicks can still focus the listing.
+        function focusDefault() {
+            if (win.saving) save.selectStem()
+            else win.focusView()
+        }
         // Whether the listing shows the directory's dotfiles. The worker never sends what a
         // request did not ask for, so the window re-reads the standing directory when this flips.
         property bool showHidden: false
@@ -189,6 +213,7 @@ ShellRoot {
 
         // Sort reorders the worker's listing, marks stay; remembers folder sort and default sort in ui.json.
         function requestSort(order) {
+            var before = win.actionFocus()
             if (!order || !win.sortable || (backend.sortBy === order.key && backend.sortDesc === order.desc))
                 return
             backend.sortBy = order.key
@@ -202,7 +227,7 @@ ShellRoot {
             listing.sort(order.key, order.desc, ViewState.state.foldersFirst !== false, ViewState.state.groupByKind === true, ViewState.state.hiddenLast === true)
             // sort answers a listed line and no rows of its own, so the reordered window is asked for.
             listing.window(0, win.windowSize)
-            win.focusView()
+            win.restoreActionFocus(before)
         }
 
         function filterRequest() {
@@ -528,8 +553,8 @@ ShellRoot {
                 picker: win
                 listing: listing
                 backend: backend
-                onBackRequested: { win.focusView(); win.goBack() }
-                onUpRequested: { win.focusView(); win.goUp() }
+                onBackRequested: { win.focusDefault(); win.goBack() }
+                onUpRequested: { win.focusDefault(); win.goUp() }
                 onViewChosen: function (mode) { win.setView(mode) }
             }
 
@@ -543,7 +568,7 @@ ShellRoot {
                 current: win.path
                 edge: win.edge
                 offerRecent: !win.saving
-                onChosen: function (path) { win.open(path); win.focusView() }
+                onChosen: function (path) { win.open(path); win.focusDefault() }
                 onNetworkCompleted: function(requestId, uri, success, reason, connectFailed) {
                     if (networkDialog.item) networkDialog.item.mountFinished(requestId, uri, success, reason, connectFailed)
                 }
@@ -632,13 +657,14 @@ ShellRoot {
                 }
                 Connections {
                     target: shares.item
-                    function onClosed() { win.focusView() }
+                    function onClosed() { win.focusDefault() }
                     function onActivated(uri, label) { places.openChild(uri, label) }
                 }
             }
 
             Flea.PickerSave {
                 id: save
+                keyTarget: win.viewItem()
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: answers.top
@@ -709,7 +735,7 @@ ShellRoot {
                 active: false
                 sourceComponent: Component {
                     Flea.NetworkDialog {
-                        onClosed: win.focusView()
+                        onClosed: win.focusDefault()
                         onMountRequested: function(requestId, uri, label, password) { places.retry(requestId, uri, label, password) }
                         onCancelRequested: function(requestId) { places.cancelNetwork(requestId) }
                     }
@@ -735,9 +761,8 @@ ShellRoot {
             // A one-time seed of a filename only: a binding would read first inside saveReady, and flea-portal passes current_name verbatim.
             win.saveName = Picker.validName(win.req.name) ? win.req.name : ""
             win.openWithoutHistory(start)
-            // Measured on the box: without this the window has the keyboard but the list does not,
-            // so Escape reached the surface below and every other key was dropped.
-            win.focusView()
+            // Seed focus explicitly: saves start on Filename, other requests on the listing.
+            win.focusDefault()
         }
 
         // The seam tests/picker.sh drives, the same read-only shape ui/Ipc.qml has for the window.

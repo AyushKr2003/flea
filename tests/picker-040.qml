@@ -37,6 +37,7 @@ ShellRoot {
         console.log("PICKER_HUNT DONE " + checks + " checks, " + failures + " failed")
     }
     function finish() {
+        if (root.heldBackend && root.heldBackend.running) root.heldBackend.signal(9)
         root.verdict()
         Qt.exit(failures ? 1 : 0)
     }
@@ -160,6 +161,149 @@ ShellRoot {
         root.check("Cancel sits one gap left of the answer", root.near(root.at(cancel, cancel.width, 0).x + Flea.Theme.spacing.gap, root.at(accept, 0, 0).x), true)
         root.check("the buttons are the 30 px body control", [cancel.height, accept.height], [30, 30])
     }
+    readonly property var focusScenarios: ["fresh-save", "backend-save", "pointer-save", "list-folder", "list-file", "field-cancel", "field-keys"]
+    property var heldBackend: null
+    property string answerFolder: ""
+    function focusStep() {
+        var field = root.saveForm().fieldItem
+        if (stage === 0) {
+            if (!win.saveReady) return
+            root.logic = root.pickerLogic()
+            root.answerFolder = win.path
+            root.listingsBefore = root.listings
+            root.check("a fresh save starts with a folder row", win.rowFor(0).n, "big")
+            root.check("a fresh save focuses Filename and selects only the stem", [field.activeFocus, field.selectedText, win.viewItem().activeFocus], [true, "report", false])
+            root.stage = 40
+            root.stamp = Date.now()
+            if (scenario === "backend-save") {
+                root.heldBackend = root.logic.backend.resources.filter(function(item) { return typeof item.signal === "function" && item.running })[0]
+                root.check("the save owns a running checks backend", !!root.heldBackend, true)
+                if (!root.heldBackend) { root.finish(); return }
+                root.heldBackend.signal(19)
+                root.press(Qt.Key_Return)
+                root.check("the held save steps focus to Cancel", [win.submitting, root.cancelButton().activeFocus], [true, true])
+                root.stage = 43
+            } else if (scenario === "pointer-save") {
+                var up = root.named("pickerUp")
+                root.answerFolder = root.parentOf(win.path)
+                keys.mouseClick(up, up.width / 2, up.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
+                root.stage = 41
+            } else if (scenario === "list-folder" || scenario === "list-file") {
+                root.press(Qt.Key_Backtab, Qt.ShiftModifier)
+                root.check("Shift+Tab deliberately focuses the listing", win.viewItem().activeFocus, true)
+                if (scenario === "list-file") win.cursorIndex = root.rowIndex("a.txt")
+                else root.stage = 42
+                root.expectAnswer = scenario === "list-file"
+                root.press(Qt.Key_Return)
+            } else if (scenario === "field-cancel") {
+                root.expectAnswer = true
+                root.press(Qt.Key_Escape)
+            } else if (scenario === "field-keys") {
+                root.press(Qt.Key_X)
+                root.check("typing replaces the selected stem only", win.saveName, "x.pdf")
+                root.press(Qt.Key_L, Qt.ControlModifier)
+                root.check("an unhandled field key still opens the path bar", root.pathEntry().editing, true)
+                root.finish()
+            } else {
+                root.expectAnswer = true
+                root.press(Qt.Key_Return)
+            }
+            return
+        }
+        if (stage === 43) {
+            root.check("the held backend leaves the save pending", [win.submitting, win.backendUnavailable, root.cancelButton().activeFocus], [true, false, true])
+            root.heldBackend.signal(9)
+            root.heldBackend = null
+            root.stage = 44
+            root.stamp = Date.now()
+        } else if (stage === 44) {
+            if (!win.backendUnavailable || Date.now() - root.stamp < root.settleWaitMs) return
+            root.check("backend loss clears the save without answering", [win.submitting, win.answered, root.acceptButton().enabled], [false, false, false])
+            root.check("backend loss preserves the enabled Filename draft", [field.enabled, win.saveName], [true, "report.pdf"])
+            root.check("backend loss during a save keeps Cancel focused", [root.cancelButton().enabled, root.cancelButton().activeFocus, field.activeFocus], [true, true, false])
+            root.finish()
+        } else if (stage === 41) {
+            if (win.path !== root.answerFolder || win.listingState === "loading" || !win.saveReady) return
+            root.check("pointer Up returns focus to Filename", [field.activeFocus, win.viewItem().activeFocus], [true, false])
+            root.listingsBefore = root.listings
+            root.expectAnswer = true
+            root.stage = 40
+            root.press(Qt.Key_Return)
+        } else if (stage === 42) {
+            if (win.path !== root.startFolder() + "/big" || win.listingState !== "ready") return
+            root.check("Enter on a deliberately focused folder opens it without answering", [win.answered, win.viewItem().activeFocus], [false, true])
+            root.finish()
+        } else if (stage === 40 && win.path !== root.answerFolder) {
+            root.check("Enter saves in the shown folder without navigation", win.path, root.answerFolder)
+            root.finish()
+        }
+    }
+
+    readonly property var actionScenarios: ["listing-sort", "listing-view", "header-edit"]
+    property string switchedView: ""
+    function actionFocusStep() {
+        var field = root.saveForm().fieldItem
+        if (stage === 0) {
+            if (!win.saveReady) return
+            if (scenario === "header-edit" && win.viewMode === "grid") {
+                win.setView("list")
+                root.stamp = Date.now()
+                return
+            }
+            root.check("the focus action starts on Filename", [field.activeFocus, win.saveName], [true, "report.pdf"])
+            if (scenario === "header-edit") {
+                field.forceActiveFocus()
+                root.press(Qt.Key_A, Qt.ControlModifier)
+                root.typeText("repo")
+                root.check("the Filename draft has an end caret and no selection", [field.text, field.cursorPosition, field.selectedText], ["repo", 4, ""])
+                var cell = root.typed("PickerHeader").cell("name")
+                keys.mouseClick(cell, cell.width / 2, cell.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
+            } else {
+                root.press(Qt.Key_Backtab, Qt.ShiftModifier)
+                root.check("Shift+Tab puts the focus action on the listing", win.viewItem().activeFocus, true)
+                if (scenario === "listing-sort") {
+                    root.check("the sort starts at Name ascending", [win.sortBy, win.sortDesc], ["name", false])
+                    root.press(Qt.Key_S)
+                } else {
+                    root.switchedView = win.viewMode === "list" ? "grid" : "list"
+                    root.press(root.switchedView === "grid" ? Qt.Key_3 : Qt.Key_1, Qt.ControlModifier)
+                }
+            }
+            root.stage = 1
+            root.stamp = Date.now()
+            return
+        }
+        if (Date.now() - root.stamp < root.pollIntervalMs * 5) return
+        if (scenario === "listing-sort") {
+            if (stage === 1) {
+                root.check("a listing sort key in a save keeps the listing focused", [win.viewItem().activeFocus, field.activeFocus, win.saveName, win.sortBy, win.sortDesc], [true, false, "report.pdf", "size", false])
+                root.press(Qt.Key_S)
+                root.stage = 2
+                root.stamp = Date.now()
+                return
+            }
+            root.check("a second listing sort key advances again without editing Filename", [win.viewItem().activeFocus, field.activeFocus, win.saveName, win.sortBy, win.sortDesc], [true, false, "report.pdf", "mtime", false])
+        } else if (scenario === "listing-view") {
+            root.check("a listing view key in a save keeps the listing focused", [win.viewMode, win.viewItem().activeFocus, field.activeFocus, win.saveName], [root.switchedView, true, false, "report.pdf"])
+            root.press(win.viewMode === "grid" ? Qt.Key_3 : Qt.Key_1, Qt.ControlModifier)
+            root.check("the current view key keeps the listing focused too", [win.viewItem().activeFocus, win.saveName], [true, "report.pdf"])
+        } else {
+            root.check("the header click reverses Name", [win.sortBy, win.sortDesc], ["name", true])
+            root.check("a header sort keeps the Filename edit", [field.activeFocus, field.text, field.cursorPosition, field.selectedText], [true, "repo", 4, ""])
+            root.press(Qt.Key_X)
+            root.check("typing after a header sort appends", win.saveName, "repox")
+            root.press(Qt.Key_3, Qt.ControlModifier)
+            root.check("a view switch keeps the Filename caret", [win.viewMode, field.activeFocus, field.cursorPosition, field.selectedText, win.saveName], ["grid", true, 5, "", "repox"])
+            field.select(1, 3)
+            root.check("the Filename selection is established before switching", [field.selectionStart, field.selectionEnd, field.cursorPosition], [1, 3, 3])
+            root.press(Qt.Key_1, Qt.ControlModifier)
+            root.check("a view switch keeps the Filename selection", [win.viewMode, field.activeFocus, field.selectionStart, field.selectionEnd, field.cursorPosition], ["list", true, 1, 3, 3])
+            root.press(Qt.Key_1, Qt.ControlModifier)
+            root.check("the current view key keeps the Filename selection too", [field.activeFocus, field.selectionStart, field.selectionEnd, field.cursorPosition], [true, 1, 3, 3])
+        }
+        root.finish()
+    }
+
     // The 0.3.10 save area: the column under the listing, the collision review, the marked rows and the Tab walk.
     property bool expectAnswer: false
     readonly property var saveScenarios: ["collision", "replace", "replace-button", "return-twice", "ends", "cancel", "tab", "marked"]
@@ -550,6 +694,8 @@ ShellRoot {
         function onAnsweredChanged() {
             if (!root.win.answered) return
             root.check("the picker answered", root.win.answered, true)
+            if (root.focusScenarios.indexOf(scenario) >= 0 && scenario !== "field-cancel")
+                root.check("Enter saves in the shown folder without navigation", [win.path, root.listings - root.listingsBefore], [root.answerFolder, 0])
             root.verdict()
         }
     }
@@ -570,6 +716,8 @@ ShellRoot {
                 return
             }
             if (!win || win.listingState !== "ready" || !win.rows.length) return
+            if (root.actionScenarios.indexOf(scenario) >= 0) { root.actionFocusStep(); return }
+            if (root.focusScenarios.indexOf(scenario) >= 0) { root.focusStep(); return }
             if (scenario === "answers" || scenario === "single") { root.answersStep(); return }
             if (root.saveScenarios.indexOf(scenario) >= 0) { root.saveStep(); return }
             if (stage === 0) {
