@@ -274,6 +274,15 @@ ShellRoot {
                 return root.finish(false, "a second pane.quickLook() built another Quick Look")
             if (look.pane !== pane || look.active !== false)
                 return root.finish(false, "the built Quick Look is not wired to the current pane, closed")
+            var trashRows = sample.objects.filter(function (object) { return /^RailTrashRow_/.test(String(object)) })
+            if (trashRows.length !== 1)
+                return root.finish(false, "startup has no single Trash row")
+            var trashDrop = trashRows[0].dropDecisions()
+            if (!trashDrop || trashDrop.pane !== pane || trashRows[0].dropDecisions() !== trashDrop)
+                return root.finish(false, "first Trash demand lost its pane or rebuilt its handler")
+            if (trashDrop.accepts("", ["file://" + pane.join(pane.path, "a.txt")], pane.path)
+                    || trashDrop.drop(null, "", []))
+                return root.finish(false, "the loaded Trash handler accepted a foreign offer or no pane")
             var devices = sample.objects.filter(function (object) {
                 return String(object).indexOf("DeviceMounts_") === 0
             })

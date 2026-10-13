@@ -1,7 +1,5 @@
 import QtQuick
-import "." as Flea
 import "js/Drag.js" as DragOps
-import "js/TrashDrop.js" as TrashDrop
 
 // The rail's Trash row: the SidebarRow every place draws, plus a drop target that trashes the rows a
 // drag from this window carries, see ui/js/TrashDrop.js. It lives here rather than inline in
@@ -23,19 +21,26 @@ SidebarRow {
     onActivated: root.rail.activate(root.railIndex)
     onMenuRequested: function (idx, pos) { root.rail.openRailMenu(root.railIndex, pos) }
 
-    Flea.FileDrag {
+    function dropDecisions() {
+        if (feedback.item) return feedback.item
+        feedback.setSource(Qt.resolvedUrl("TrashDropHandler.qml"), { pane: Qt.binding(function () { return root.pane }) })
+        feedback.active = true
+        return feedback.item
+    }
+
+    Loader {
         id: feedback
-        pane: root.pane
+        active: false
+        onStatusChanged: if (status === Loader.Error) console.warn("TrashDropHandler.qml did not load: Loader status " + status)
     }
 
     Loader {
         id: dropLoader
         active: root.dragOver
         anchors.fill: parent
-        sourceComponent: Flea.DropTarget {
-            // TrashDrop always moves to Trash, regardless of the drag's copy or link modifiers.
-            text: DragOps.label(false, false)
-        }
+        // TrashDrop always moves to Trash, regardless of the drag's copy or link modifiers.
+        onActiveChanged: dropLoader.setSource(dropLoader.active ? Qt.resolvedUrl("DropTarget.qml") : "", { text: DragOps.label(false, false) })
+        onStatusChanged: if (status === Loader.Error) throw new Error("DropTarget.qml did not load: Loader status " + status)
     }
 
     DropArea {
@@ -44,18 +49,20 @@ SidebarRow {
         keys: [DragOps.ROWS_MIME]
         onEntered: function (drag) {
             var marker = drag.getDataAsString(DragOps.ROWS_MIME)
-            if (!root.pane || !TrashDrop.accepts(marker, drag.urls, root.pane.path)) {
+            var decisions = root.dropDecisions()
+            if (!root.pane || !decisions || !decisions.accepts(marker, drag.urls, root.pane.path)) {
                 drag.accepted = false
                 return
             }
-            feedback.feedback = DragOps.feedbackFor(marker, drag.urls, "")
-            feedback.say(TrashDrop.line(marker, drag.urls, root.pane.path))
+            decisions.feedback = DragOps.feedbackFor(marker, drag.urls, "")
+            decisions.say(decisions.line(marker, drag.urls, root.pane.path))
         }
-        onExited: feedback.leaveTarget()
+        onExited: if (feedback.item) feedback.item.leaveTarget()
         onDropped: function (drop) {
-            if (TrashDrop.drop(root.pane, drop.getDataAsString(DragOps.ROWS_MIME), drop.urls))
+            var decisions = root.dropDecisions()
+            if (decisions && decisions.drop(root.pane, drop.getDataAsString(DragOps.ROWS_MIME), drop.urls))
                 drop.accept(Qt.CopyAction)
-            feedback.leaveTarget()
+            if (decisions) decisions.leaveTarget()
         }
     }
 }

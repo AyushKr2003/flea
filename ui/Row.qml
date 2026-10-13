@@ -2,7 +2,6 @@ import QtQuick
 import Quickshell
 import qs.Commons
 import "js/Columns.js" as Columns
-import "js/Drag.js" as DragOps
 import "js/Format.js" as Format
 import "js/Icons.js" as Icons
 import "js/Match.js" as Match
@@ -132,25 +131,8 @@ Item {
         id: dropLoader
         active: root.dropTarget || (root.clipMark.length > 0 && !root.renaming && !root.searching)
         anchors.fill: parent
-        sourceComponent: Flea.DropTarget {
-            property alias mark: clipGlyph
-            anchors.fill: parent
-            shown: root.dropTarget
-            paintWidth: root.paintWidth
-            text: DragOps.label(root.dropCopying, root.dropLinking)
-            // A clipboard row under a drag keeps its mark beside the label, one pixel above the text centre line.
-            Glyph {
-                id: clipGlyph
-                visible: root.clipMark.length > 0 && !root.renaming && !root.searching
-                width: root.clipPx
-                height: root.clipPx
-                x: root.clipMark.length > 0 ? root.nameItem().x + Math.min(root.nameItem().implicitWidth, root.nameItem().width) + Theme.spacing.gap : 0
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: -1
-                name: root.clipMark
-                color: Theme.color.mutedFrame
-            }
-        }
+        onActiveChanged: dropLoader.setSource(dropLoader.active ? Qt.resolvedUrl("RowDropTarget.qml") : "", { row: root })
+        onStatusChanged: if (status === Loader.Error) throw new Error("RowDropTarget.qml did not load: Loader status " + status)
     }
 
     // A thumbnail is a decoded image and stays one; the icon beside it is a native mark. The two

@@ -166,7 +166,6 @@ js/Thumbs.js
 js/Transfer.js
 js/Trash.js
 js/TrashDates.js
-js/TrashDrop.js
 js/UiState.js
 js/Update.js
-bytes 1633559
+bytes 1630079
