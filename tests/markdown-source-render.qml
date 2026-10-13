@@ -42,15 +42,19 @@ ShellRoot {
             }
         }
     }
-    // The Source list and its first chunk's text: the notes fit one chunk, so it holds the whole file and carries the insets.
+    // The Source list and its first row: the list sits inside the insets, and the row's body is the file's first line.
     function sourceParts() {
         var flick = sourcePane.sourceItem
         for (var j = 0; j < flick.contentItem.children.length; j++) {
             var row = flick.contentItem.children[j]
-            if (row.objectName === "sourceChunk" && row.index === 0)
-                return { flick: flick, text: row.label }
+            if (row.index === 0 && row.children.length === 2)
+                return { flick: flick, row: row, text: row.children[1] }
         }
         return null
+    }
+    // Sample input: '<font color="#ffffff">&lt;img&gt; &amp;</font>' reads back as '<img> &'.
+    function readBack(markup) {
+        return String(markup).replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")
     }
     function geometry() {
         var rendered = reference.item
@@ -60,20 +64,22 @@ ShellRoot {
             check(false, "source and rendered live text exist")
             return
         }
-        var at = parts.text.mapToItem(sourcePane, 0, 0)
+        var at = parts.flick.mapToItem(sourcePane, 0, 0)
         var first = block.mapToItem(rendered, 0, 0)
         var label = " at body " + Flea.Theme.font.body
         check(at.x === first.x && at.x === sourcePane.insetX, "source left equals rendered inset" + label)
-        check(at.y === first.y && at.y === sourcePane.insetY,
-            "source top equals rendered inset" + label + " (" + at.y + "/" + first.y + "/" + sourcePane.insetY + ")")
-        check(sourcePane.width - at.x - parts.text.width === sourcePane.insetX, "source right inset" + label)
-        // The list holds both insets in its header and footer, so the scrollable height is the text plus both.
-        check(parts.flick.contentHeight === parts.text.implicitHeight + 2 * sourcePane.insetY,
-            "source bottom inset remains scrollable" + label)
-        check(parts.text.textFormat === Text.PlainText && parts.text.text === sourcePane.rawText, "source remains verbatim" + label)
+        check(at.y === sourcePane.insetY, "source top equals rendered inset" + label + " (" + at.y + "/" + sourcePane.insetY + ")")
+        check(sourcePane.width - at.x - parts.flick.width === sourcePane.insetX
+            && sourcePane.height - at.y - parts.flick.height === sourcePane.insetY, "source right and bottom insets" + label)
+        var header = parts.flick.headerItem ? parts.flick.headerItem.height : 0
+        check(parts.flick.contentHeight === header + parts.flick.count * parts.row.height, "source holds one row per line" + label)
+        check(parts.row.children[0].text === "1" && parts.text.textFormat === Text.StyledText
+            && readBack(parts.text.text) === sourcePane.rawText.split("\n")[0], "source numbered first line reads back verbatim" + label)
+        // The bar and the wheel belong to the frame, so the bar is a child of the Source item, beside the list.
+        var holder = parts.flick.parent.parent
         var scrollbars = 0
-        for (var i = 0; i < parts.flick.children.length; i++) {
-            var bar = parts.flick.children[i]
+        for (var i = 0; i < holder.children.length; i++) {
+            var bar = holder.children[i]
             if (bar.knobItem === undefined || bar.flickable !== parts.flick || bar.width <= 0)
                 continue
             scrollbars++
@@ -86,7 +92,7 @@ ShellRoot {
         repeat: true
         running: !shell.done
         onTriggered: {
-            if (!sourcePane.contentReady || (reference.active && (!reference.item || !reference.item.contentReady)))
+            if (!sourcePane.contentReady || !sourcePane.firstScreen || (reference.active && (!reference.item || !reference.item.contentReady)))
                 return
             if (shell.step === 0) {
                 shell.geometry()

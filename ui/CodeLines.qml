@@ -19,6 +19,8 @@ Item {
     // Enables wheel and drag scrolling in the line viewport.
     property bool scrolls: false
     readonly property alias viewport: view
+    // A Component the list draws above its first line and scrolls with the rows; null for none.
+    property Component header: null
     property real pixelSize: Theme.font.caption
     // The most lines drawn, 0 for every line of the file.
     property int limit: 0
@@ -80,10 +82,11 @@ Item {
             Qt.callLater(root.ask)
     }
 
-    // Lines of the caller's own text, drawn plain: no backend to colour them, or no bytes to colour.
-    // Sample input: "a\nb" holds lines 1 and 2, as [0, "a"] and [0, "b"].
+    // Sample input: "a\nb\n" holds only lines 1 and 2, as [0, "a"] and [0, "b"], matching the engine's terminal-newline rule.
     function answerPlain() {
         var rows = root.text.length > 0 ? root.text.split("\n") : []
+        if (rows.length > 0 && root.text.endsWith("\n"))
+            rows.pop()
         var held = {}
         for (var i = 0; i < rows.length && (root.limit <= 0 || i < root.limit); i++)
             held[i + 1] = [0, rows[i]]
@@ -152,6 +155,12 @@ Item {
             Qt.callLater(root.ask)
     }
 
+    // A pane handoff keeps the engine capability, but disconnects the old backend's request.
+    function rebind() {
+        root.fresh()
+    }
+
+    onBackendChanged: root.rebind()
     onPathChanged: root.fresh()
     onTextChanged: root.fresh()
     onFromTextChanged: root.fresh()
@@ -179,6 +188,7 @@ Item {
         cacheBuffer: 0
         boundsBehavior: Flickable.StopAtBounds
         model: root.shown
+        header: root.header
         onContentYChanged: Qt.callLater(root.ask)
         onHeightChanged: Qt.callLater(root.ask)
 

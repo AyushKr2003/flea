@@ -40,21 +40,24 @@ function run(check) {
     check("md3v F2 one module header", !/^\/\/[^\n]*\n\/\//.test(Source.source("tests/markdown-render.js")), true)
     var source = Source.source("tests/markdown-source-render.qml")
     var geometry = new Function("sourcePane", "reference", "Flea", "Text", "check", "sourceParts",
-        Source.slice(source, "function geometry()", "    Timer {") + "\ngeometry()")
+        Source.slice(source, "function readBack(markup)", "    Timer {") + "\ngeometry()")
     function sourceCase(widths, wheel) {
-        var flick = { children: [], height: 240, contentHeight: 300 }
+        var flick = { children: [], width: 520, height: 240, contentHeight: 268, count: 1,
+            mapToItem: function () { return { x: 20, y: 16 } } }
+        flick.parent = { parent: { children: flick.children } }
         for (var w = 0; w < widths.length; w++)
             flick.children.push({ knobItem: {}, flickable: flick, width: widths[w], mapToItem: function () { return { x: 560 } } })
         if (wheel)
             flick.children.push({ flickable: flick, width: 560, mapToItem: function () { return { x: 560 } } })
-        var text = { width: 520, implicitHeight: 268, text: "raw", textFormat: 0,
+        var text = { width: 520, implicitHeight: 268, text: "raw", textFormat: 1,
             mapToItem: function () { return { x: 20, y: 16 } } }
+        var row = { height: 268, children: [{ text: "1" }, text] }
         var failures = []
-        geometry({ width: 560, insetX: 20, insetY: 16, rawText: "raw" },
+        geometry({ width: 560, height: 272, insetX: 20, insetY: 16, rawText: "raw" },
             { item: { blockItem: function () { return text } } },
-            { Theme: { font: { body: 14 } } }, { PlainText: 0 },
+            { Theme: { font: { body: 14 } } }, { PlainText: 0, StyledText: 1 },
             function (ok, label) { if (!ok) failures.push(label) },
-            function () { return { flick: flick, text: text } })
+            function () { return { flick: flick, row: row, text: text } })
         return failures
     }
     check("md3z F4 missing Source scrollbar rejected", sourceCase([]).length > 0, true)

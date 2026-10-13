@@ -106,41 +106,12 @@ Item {
         }
     }
 
-    // The kind's mark and the one line saying why the file has nothing to draw.
-    Column {
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: bar.height + Math.round((parent.height - bar.height - height) / 2)
-        spacing: Theme.spacing.gap
-        visible: root.binary || (root.tooLarge && !root.failed)
-
-        Flea.Glyph {
-            anchors.horizontalCenter: parent.horizontalCenter
-            maxSize: Theme.stateMarkSize
-            width: Theme.stateMarkSize
-            height: Theme.stateMarkSize
-            name: root.markName
-            color: Theme.color.muted
-            opacity: 0.7
-        }
-
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: root.binary ? "binary file" : "too large to preview"
-            color: Theme.color.muted
-            font.family: Theme.font.family
-            font.pixelSize: Theme.font.caption
-            textFormat: Text.PlainText
-        }
-    }
-
-    Text {
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: bar.height + Math.round((parent.height - bar.height - height) / 2)
-        visible: root.failed
-        text: root.status
-        color: Theme.color.muted
-        font.family: Theme.font.family
-        font.pixelSize: Theme.font.body
-        textFormat: Text.PlainText
+    Flea.CodeRefusal {
+        anchors.fill: parent
+        topInset: bar.height
+        binary: root.binary
+        tooLarge: root.tooLarge
+        failed: root.failed
+        markName: root.markName
     }
 }

@@ -1,5 +1,6 @@
 import QtQuick
 import "." as Flea
+import "js/CodeRuns.js" as CodeRuns
 import "js/Markdown.js" as Markdown
 import "js/MdHtmlImage.js" as HtmlImage
 
@@ -98,7 +99,7 @@ Item {
         }
     }
 
-    // A fenced block is a filled block on the code surface with no border.
+    // A named fence takes engine colours after its reply; the escaped foreground text before it preserves its height.
     Component {
         id: fenceBlock
         Rectangle {
@@ -107,6 +108,85 @@ Item {
             width: view.width
             height: fenceText.implicitHeight + 2 * view.preview.fencePadY
             color: view.preview.codeSurface
+            readonly property string info: String(view.block.info || "").trim()
+            readonly property var backend: view.preview.backend
+            readonly property bool coloured: fenceBox.info !== "" && view.preview.shownView !== Markdown.SOURCE
+                && fenceBox.backend !== null && typeof fenceBox.backend.askCode === "function"
+            // The one slot this fence asks on, handed out by the preview so no two fences share one.
+            property string slot: ""
+            property int token: 0
+            // The first 1-based line not yet answered, and the runs of each answered line.
+            property int next: 1
+            property var held: ({})
+            property int stamp: 0
+            // The engine refused this fence (binary, large or failed), so it stays in the foreground.
+            property bool refused: false
+            readonly property var fenceLines: view.block.text.split("\n")
+            readonly property int lineCap: 400
+            readonly property bool awaiting: fenceBox.coloured && !fenceBox.refused && fenceBox.next <= fenceBox.fenceLines.length
+            readonly property bool holdsScreen: fenceBox.awaiting && view.inView
+            readonly property string markup: {
+                if (fenceBox.stamp < 0)
+                    return ""
+                var out = []
+                for (var i = 0; i < fenceBox.fenceLines.length; i++) {
+                    var runs = fenceBox.held[i + 1]
+                    out.push(CodeRuns.styled(runs !== undefined ? runs : [0, fenceBox.fenceLines[i]], view.preview.inks))
+                }
+                return out.join("<br>")
+            }
+
+            function ask() {
+                if (fenceBox.slot === "" || !fenceBox.awaiting || fenceBox.token !== 0)
+                    return
+                var count = Math.min(fenceBox.lineCap, fenceBox.fenceLines.length - fenceBox.next + 1)
+                fenceBox.token = fenceBox.backend.askCode(fenceBox.slot, { text: view.block.text, name: "", lang: fenceBox.info }, fenceBox.next, count)
+            }
+            function rebind() {
+                fenceBox.token = 0
+                fenceBox.held = {}
+                fenceBox.stamp += 1
+                fenceBox.next = 1
+                fenceBox.refused = false
+                Qt.callLater(fenceBox.ask)
+            }
+            onBackendChanged: fenceBox.rebind()
+            function answered(message) {
+                if (fenceBox.token === 0 || message.token !== fenceBox.token)
+                    return
+                fenceBox.token = 0
+                var rows = message.lines || []
+                if ((message.state !== "styled" && message.state !== "plain") || rows.length === 0) {
+                    fenceBox.refused = true
+                    return
+                }
+                for (var i = 0; i < rows.length; i++)
+                    fenceBox.held[fenceBox.next + i] = rows[i]
+                fenceBox.next += rows.length
+                fenceBox.stamp += 1
+                fenceBox.ask()
+            }
+
+            // Only a viewport fence holds the first screen; tearing its block down releases that hold too.
+            property bool waiting: false
+            function setWaiting(on) {
+                if (on === fenceBox.waiting)
+                    return
+                fenceBox.waiting = on
+                view.preview.fenceWaiting(on ? 1 : -1)
+            }
+            onHoldsScreenChanged: fenceBox.setWaiting(fenceBox.holdsScreen)
+            onAwaitingChanged: fenceBox.ask()
+            Component.onCompleted: {
+                fenceBox.slot = view.preview.fenceSlot(fenceBox)
+                fenceBox.setWaiting(fenceBox.holdsScreen)
+                if (fenceBox.awaiting)
+                    fenceBox.ask()
+            }
+            Component.onDestruction: {
+                if (fenceBox.waiting) view.preview.fenceWaiting(-1)
+                delete view.preview.fenceReplies[fenceBox.slot]
+            }
 
             Text {
                 id: fenceText
@@ -115,8 +195,8 @@ Item {
                 anchors.rightMargin: view.preview.fencePadX
                 anchors.topMargin: view.preview.fencePadY
                 anchors.bottomMargin: view.preview.fencePadY
-                text: view.block.text
-                textFormat: Text.PlainText
+                text: fenceBox.coloured ? fenceBox.markup : view.block.text
+                textFormat: fenceBox.coloured ? Text.StyledText : Text.PlainText
                 wrapMode: Text.Wrap
                 color: Theme.color.foreground
                 font.family: Theme.font.family

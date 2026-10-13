@@ -273,6 +273,13 @@ Item {
                     item.externalScrollBars = true
                 }
             }
+            // The Markdown reader takes the pane's backend once loaded, so its Source and fences colour through the engine.
+            Binding {
+                target: markdownLoader.item
+                property: "backend"
+                value: root.pane ? root.pane.backend : null
+                when: markdownLoader.status === Loader.Ready
+            }
             // The PDF's pages, one under another at the frame's width; QtPdf is reached only through this Loader, so a folder with no PDF never opens one.
             Flickable {
                 id: pdfFlick

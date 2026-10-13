@@ -360,9 +360,9 @@ Item {
         if (root.hasBar) root.markdownCloseFocus = !root.markdownCloseFocus
     }
 
-    // w wraps the open code or text Quick Look; ui.json keeps the choice for the next one.
+    // w wraps the open code or text Quick Look, and a Markdown Source; ui.json keeps the choice for the next one.
     function toggleWrap() {
-        if (root.isCodeText) ViewState.changeLeaf("preview", { wrap: !ViewState.previewWrap })
+        if (root.isCodeText || (root.isMarkdown && root.markdownShown && root.markdownShown.shownView === "source")) ViewState.changeLeaf("preview", { wrap: !ViewState.previewWrap })
     }
 
     // The picture is taken now, so the settled load below changes the panes under it.
@@ -794,6 +794,8 @@ Item {
                     })
                     item.active = Qt.binding(function () { return root.isMarkdown })
                     item.closeFocused = Qt.binding(function () { return root.markdownCloseFocused })
+                    item.backend = Qt.binding(function () { return root.pane ? root.pane.backend : null })
+                    item.wrap = Qt.binding(function () { return ViewState.previewWrap })
                     item.closeRequested.connect(root.close)
                     item.viewRequested.connect(root.setMarkdownView)
                 }

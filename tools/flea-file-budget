@@ -98,7 +98,7 @@ tests/js/watch.js 541
 tests/js/xwwatch.js 299
 tests/js/tabs.js 798
 tests/js/search.js 336
-tests/js/previewkeys.js 314
+tests/js/previewkeys.js 320
 tests/button-members.qml 518
 tests/chromering.qml 413
 tests/columnrow-geom.qml 426
@@ -138,6 +138,7 @@ ui/Ipc.qml 983
 tests/gridprebuild.qml 457
 tests/code-column.qml 416
 tests/preview-pdf-flow.qml 439
+tests/preview-layout-loop.qml 408
 tests/columnsprebuild.qml 416
 ui/KeymapSheet.qml 551
 ui/List.qml 480
@@ -157,13 +158,14 @@ ui/PaneMenuActions.qml 527
 ui/PaneWire.qml 602
 ui/PermissionsDialog.qml 658
 ui/PickerWindow.qml 812
-ui/Preview.qml 1009
-ui/PreviewColumn.qml 546
+ui/Preview.qml 1011
+ui/PreviewColumn.qml 553
 ui/DeviceMounts.qml 537
 ui/js/Facts.js 360
 ui/PreviewPdf.qml 482
 ui/PickerChrome.qml 295
-ui/PreviewMarkdown.qml 628
+ui/PreviewMarkdown.qml 668
+tests/markdown-code.qml 477
 ui/Row.qml 496
 ui/SettingsPanel.qml 547
 ui/SettingsRow.qml 409
@@ -178,7 +180,7 @@ ui/js/Anchor.js 379
 ui/js/ColumnsCarry.js 94
 ui/js/Devices.js 405
 ui/js/Filter.js 284
-ui/js/Focus.js 491
+ui/js/Focus.js 492
 ui/js/Keymap.js 370
 ui/js/Nav.js 328
 ui/js/Markdown.js 135

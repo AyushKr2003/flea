@@ -176,40 +176,56 @@ ShellRoot {
         })
     }
 
-    // Sample: the Source view lays out the file as plain-text chunk delegates; walking the list builds each, and the chunks put back with the newlines their cuts dropped are the file.
+    // Sample input: Source rows 'a', 'b' reconstruct 'a\nb\n' when rawText ends in a newline, with no extra empty row.
     function sourceWhole() {
         var list = sourceView.sourceItem
         var text = ""
-        var plain = true
+        var styled = true
         for (var i = 0; i < list.count; i++) {
             list.positionViewAtIndex(i, ListView.Beginning)
             list.forceLayout()
-            var chunk = list.itemAtIndex(i)
-            if (!chunk)
+            var row = list.itemAtIndex(i)
+            if (!row || row.children.length !== 2)
                 return null
-            plain = plain && chunk.label.textFormat === Text.PlainText
-            var piece = String(chunk.label.text)
-            var span = (i + 1 < list.starts.length ? list.starts[i + 1] : sourceView.rawText.length) - list.starts[i]
-            text += piece + (piece.length < span ? "\n" : "")
+            styled = styled && row.children[1].textFormat === Text.StyledText
+            text += (i > 0 ? "\n" : "") + shell.readBack(row.children[1].text)
         }
-        return { text: text, plain: plain }
+        var terminalLF = sourceView.rawText.endsWith("\n")
+        var physicalCount = sourceView.rawText.split("\n").length - (terminalLF ? 1 : 0)
+        if (list.count !== physicalCount) return null
+        return { text: text + (terminalLF ? "\n" : ""), plain: styled }
+    }
+    // Sample input: '<font color="#ffffff">&lt;img&gt; &amp;</font>' reads back as '<img> &'.
+    function readBack(markup) {
+        return String(markup).replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&amp;/g, "&")
+    }
+    // Sample input: 'a\tb' draws as 'a       b', with tabs expanded to eight-column stops and other characters unchanged.
+    function displayedSource(text) {
+        return text.split("\n").map(function (line) {
+            var out = ""
+            for (var i = 0; i < line.length; i++)
+                out += line[i] === "\t" ? " ".repeat(8 - out.length % 8) : line[i]
+            return out
+        }).join("\n")
     }
 
     function finishDrain() {
         if (done || draining || !probesBuilt || !imagesSettled(root))
             return
-        if (sourceView.rawText.length === 0) {
+        if (sourceView.rawText.length === 0 || !sourceView.firstScreen) {
             if (++sourcePolls > sourceLoadPolls)
                 fail("Source view never loaded the corpus")
             return
         }
         draining = true
-        // The zero requests count only over text the Source view shows, and plain text is what keeps it from asking.
+        // The zero requests count only over text the Source view shows, and that text is read back, so no tag in it is parsed.
         var whole = sourceWhole()
-        if (sourceView.view !== "source" || whole === null || whole.text !== sourceView.rawText)
-            validationFailures.push("Source view shows no Text holding the corpus")
+        if (sourceView.view !== "source" || whole === null || whole.text !== shell.displayedSource(sourceView.rawText))
+            validationFailures.push("Source view shows no rows holding the corpus")
         else if (!whole.plain)
-            validationFailures.push("Source view Text is not plain text")
+            validationFailures.push("Source view row is not a StyledText of its line")
+        else if (whole.text.indexOf("<b>x</b> <img src=x> &amp;") < 0)
+            validationFailures.push("Source view draws a line of tags and an entity as text, not as markup")
         else if (whole.text.indexOf("![front](") < 0 || whole.text.indexOf("![math](") < 0)
             validationFailures.push("Source view Text lacks the front matter and display math placements")
         // A fence opened in a list item or a quote ends with its container, so the prose and image after it are drawn, and the fence's own lines are not.
@@ -289,7 +305,7 @@ ShellRoot {
                 onBlockListChanged: Qt.callLater(shell.startDrain)
             }
 
-            // Source view draws the raw file, front matter and display math included, as plain text.
+            // Source view draws the raw file, front matter and display math included, as literal text.
             Flea.PreviewMarkdown {
                 id: sourceView
                 anchors.top: parent.top
