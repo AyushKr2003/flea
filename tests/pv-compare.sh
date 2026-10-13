@@ -50,7 +50,9 @@ for ((i = 0; i < 5000; i++)); do printf 'row %s\n' "$i" > "$fixture/marks/$(prin
 ln -s f0000.txt "$fixture/marks/z-link-a" || exit 1
 ln -s f4800.txt "$fixture/marks/z-link-b" || exit 1
 
-for harness in pv-compare pv-compare-menu; do
+harnesses="pv-compare pv-compare-menu"
+[ "${PVCMP_MENU_ONLY:-0}" -ne 1 ] || harnesses="pv-compare-menu"
+for harness in $harnesses; do
 cp "tests/$harness.qml" "$test_root/config/shell.qml" || exit 1
 printf '{"view":"list","sidebar":false}\n' > "$test_root/state/flea/ui.json"
 log="$test_root/$harness.log"

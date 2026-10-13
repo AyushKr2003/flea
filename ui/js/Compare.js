@@ -88,10 +88,9 @@ function kinds(rowList) {
     return rowList.map(function (row) { return row ? Number(row.p) || 0 : 0 })
 }
 
-// A menu snapshot resolves all selected indices through the paths resolver, including marks outside the held window.
+// A ready matching snapshot wins over held modes that may predate an external replacement.
 function menuKinds(pane) {
     var picked = markedRows(pane)
-    if (picked.every(function (row) { return row !== null && row !== undefined })) return kinds(picked)
     var snapshot = pane.menuActions
     return snapshot && snapshot.ready && snapshot.identity === pane.menuSelectionIdentity()
         && snapshot.selectedKinds.length === picked.length ? snapshot.selectedKinds : kinds(picked)

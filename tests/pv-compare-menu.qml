@@ -1,6 +1,7 @@
 //@ pragma ShellId flea-pv-compare-menu-test
 import QtQuick
 import Quickshell
+import "flea/js/Compare.js" as Compare
 
 // The real pane, menu snapshot and Compare activation over marks farther apart than one held window.
 ShellRoot {
@@ -9,8 +10,11 @@ ShellRoot {
     readonly property int farIndex: 4800
     readonly property int pollMs: 20
     readonly property int stepBudgetMs: 20000
+    readonly property int typeMask: 0o170000
+    readonly property int regularKind: 0o100000
+    readonly property int linkKind: 0o120000
     readonly property string fixture: Quickshell.env("PVCMP_DIR") + "/marks"
-    property int step: 0
+    property int step: -2
     property int checks: 0
     property int failures: 0
     property double started: Date.now()
@@ -51,6 +55,28 @@ ShellRoot {
         if (!body.item) return
         var p = pane(), menu = p.contextMenu(), look = body.item.quickLook
         switch (step) {
+        case -2:
+            if (p.listInFlight || p.listingState !== "ready" || p.total !== rowCount || !p.rowFor(0) || !p.rowFor(1)) return
+            p.selectOnly(0)
+            p.toggleSelectAt(1)
+            openMenu()
+            advance()
+            return
+        case -1:
+            if (!p.menuActions.ready) return
+            // The initial held window can refill after the snapshot; ask again for its current identity.
+            if (p.menuActions.identity !== p.menuSelectionIdentity()) { p.menuActions.snapshot(); return }
+            check("both held rows retain regular modes", [p.rowFor(0).p & root.typeMask, p.rowFor(1).p & root.typeMask], [root.regularKind, root.regularKind])
+            p.menuActions.selectedKinds = [root.linkKind, root.linkKind]
+            check("the ready matching snapshot inspects two links", [p.menuActions.ready, p.menuActions.identity === p.menuSelectionIdentity(), p.menuActions.selectedKinds], [true, true, [root.linkKind, root.linkKind]])
+            menu.refreshProviderRows()
+            check("inspected links hide Compare over held regular rows", row(), null)
+            check("Quick Look is unbuilt before the refused choice", body.item.quickLook === null, true)
+            Compare.open(p, [fixture + "/f0000.txt", fixture + "/f0001.txt"])
+            check("inspected links block Compare.open over held regular rows", [body.item.quickLook !== null, !!(body.item.quickLook && body.item.quickLook.active)], [false, false])
+            menu.close()
+            advance()
+            return
         case 0:
             if (p.listInFlight || p.listingState !== "ready" || p.total !== rowCount || !p.rowFor(0)) return
             p.selectOnly(0)
