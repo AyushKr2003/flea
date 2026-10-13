@@ -62,7 +62,7 @@ fn a_zip_member_named_with_brackets_streams_itself() {
     assert!(made.success());
     let argv = decompressor_argv("zip", &zip, "disk[1].img").unwrap();
     assert_eq!(argv.last().unwrap(), "disk\\[1\\].img", "the member travels escaped, not raw");
-    if crate::backend::sandboxprobe::skipped() { return; }
+    if !crate::backend::sandbox::available() && crate::backend::sandboxprobe::skipped() { return; }
     let cancel = std::sync::atomic::AtomicBool::new(false);
     let dest = std::fs::File::open(d.join("disk[1].img")).unwrap();
     let job = Job::new(&zip, "zip", "disk[1].img", &dest, 0, &cancel);
@@ -81,7 +81,7 @@ fn a_zip_member_named_with_brackets_streams_itself() {
 // A10: the production arm hands the producer's stdout to the writer, or every compressed image fails.
 #[test]
 fn the_production_arm_keeps_the_producers_stdout() {
-    if crate::backend::sandboxprobe::skipped() { return; }
+    if !crate::backend::sandbox::available() && crate::backend::sandboxprobe::skipped() { return; }
     let d = TestDir::new("flashpipe-gz");
     let body: Vec<u8> = (0..70_000u32).map(|n| (n % 251) as u8).collect();
     std::fs::write(d.join("a.img"), &body).unwrap();
