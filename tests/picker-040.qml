@@ -239,6 +239,71 @@ ShellRoot {
         }
     }
 
+    readonly property var actionScenarios: ["listing-sort", "listing-view", "header-edit"]
+    property string switchedView: ""
+    function actionFocusStep() {
+        var field = root.saveForm().fieldItem
+        if (stage === 0) {
+            if (!win.saveReady) return
+            if (scenario === "header-edit" && win.viewMode === "grid") {
+                win.setView("list")
+                root.stamp = Date.now()
+                return
+            }
+            root.check("the focus action starts on Filename", [field.activeFocus, win.saveName], [true, "report.pdf"])
+            if (scenario === "header-edit") {
+                field.forceActiveFocus()
+                root.press(Qt.Key_A, Qt.ControlModifier)
+                root.typeText("repo")
+                root.check("the Filename draft has an end caret and no selection", [field.text, field.cursorPosition, field.selectedText], ["repo", 4, ""])
+                var cell = root.typed("PickerHeader").cell("name")
+                keys.mouseClick(cell, cell.width / 2, cell.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
+            } else {
+                root.press(Qt.Key_Backtab, Qt.ShiftModifier)
+                root.check("Shift+Tab puts the focus action on the listing", win.viewItem().activeFocus, true)
+                if (scenario === "listing-sort") {
+                    root.check("the sort starts at Name ascending", [win.sortBy, win.sortDesc], ["name", false])
+                    root.press(Qt.Key_S)
+                } else {
+                    root.switchedView = win.viewMode === "list" ? "grid" : "list"
+                    root.press(root.switchedView === "grid" ? Qt.Key_3 : Qt.Key_1, Qt.ControlModifier)
+                }
+            }
+            root.stage = 1
+            root.stamp = Date.now()
+            return
+        }
+        if (Date.now() - root.stamp < root.pollIntervalMs * 5) return
+        if (scenario === "listing-sort") {
+            if (stage === 1) {
+                root.check("a listing sort key in a save keeps the listing focused", [win.viewItem().activeFocus, field.activeFocus, win.saveName, win.sortBy, win.sortDesc], [true, false, "report.pdf", "size", false])
+                root.press(Qt.Key_S)
+                root.stage = 2
+                root.stamp = Date.now()
+                return
+            }
+            root.check("a second listing sort key advances again without editing Filename", [win.viewItem().activeFocus, field.activeFocus, win.saveName, win.sortBy, win.sortDesc], [true, false, "report.pdf", "mtime", false])
+        } else if (scenario === "listing-view") {
+            root.check("a listing view key in a save keeps the listing focused", [win.viewMode, win.viewItem().activeFocus, field.activeFocus, win.saveName], [root.switchedView, true, false, "report.pdf"])
+            root.press(win.viewMode === "grid" ? Qt.Key_3 : Qt.Key_1, Qt.ControlModifier)
+            root.check("the current view key keeps the listing focused too", [win.viewItem().activeFocus, win.saveName], [true, "report.pdf"])
+        } else {
+            root.check("the header click reverses Name", [win.sortBy, win.sortDesc], ["name", true])
+            root.check("a header sort keeps the Filename edit", [field.activeFocus, field.text, field.cursorPosition, field.selectedText], [true, "repo", 4, ""])
+            root.press(Qt.Key_X)
+            root.check("typing after a header sort appends", win.saveName, "repox")
+            root.press(Qt.Key_3, Qt.ControlModifier)
+            root.check("a view switch keeps the Filename caret", [win.viewMode, field.activeFocus, field.cursorPosition, field.selectedText, win.saveName], ["grid", true, 5, "", "repox"])
+            field.select(1, 3)
+            root.check("the Filename selection is established before switching", [field.selectionStart, field.selectionEnd, field.cursorPosition], [1, 3, 3])
+            root.press(Qt.Key_1, Qt.ControlModifier)
+            root.check("a view switch keeps the Filename selection", [win.viewMode, field.activeFocus, field.selectionStart, field.selectionEnd, field.cursorPosition], ["list", true, 1, 3, 3])
+            root.press(Qt.Key_1, Qt.ControlModifier)
+            root.check("the current view key keeps the Filename selection too", [field.activeFocus, field.selectionStart, field.selectionEnd, field.cursorPosition], [true, 1, 3, 3])
+        }
+        root.finish()
+    }
+
     // The 0.3.10 save area: the column under the listing, the collision review, the marked rows and the Tab walk.
     property bool expectAnswer: false
     readonly property var saveScenarios: ["collision", "replace", "replace-button", "return-twice", "ends", "cancel", "tab", "marked"]
@@ -651,6 +716,7 @@ ShellRoot {
                 return
             }
             if (!win || win.listingState !== "ready" || !win.rows.length) return
+            if (root.actionScenarios.indexOf(scenario) >= 0) { root.actionFocusStep(); return }
             if (root.focusScenarios.indexOf(scenario) >= 0) { root.focusStep(); return }
             if (scenario === "answers" || scenario === "single") { root.answersStep(); return }
             if (root.saveScenarios.indexOf(scenario) >= 0) { root.saveStep(); return }

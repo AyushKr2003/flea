@@ -61,8 +61,9 @@ ShellRoot {
         // The view the listing draws in; a launch reads pickerView and only setView writes it.
         property string viewMode: "list"
         function setView(mode) {
+            var before = win.actionFocus()
             var next = Picker.viewSwitch(win.viewMode, mode)
-            if (!next) { win.focusDefault(); return }
+            if (!next) { win.restoreActionFocus(before); return }
             win.viewMode = next
             // The user's own switch, and only that, is what the next launch reopens: a launch
             // reads, and cursor moves never owe the file anything.
@@ -71,10 +72,28 @@ ShellRoot {
             var at = Math.max(0, Math.min(win.cursorIndex, win.total - 1))
             if (next === "grid") grid.reshow(at)
             else list.reshow(at)
-            win.focusDefault()
+            win.restoreActionFocus(before)
         }
         function viewItem() { return win.viewMode === "grid" ? grid : list }
         function focusView() { win.viewItem().forceActiveFocus() }
+        function actionFocus() {
+            var view = win.viewItem()
+            if (view.activeFocus) return view
+            var field = save.fieldItem
+            return field.activeFocus ? { field: field, cursor: field.cursorPosition,
+                anchor: field.cursorPosition === field.selectionStart ? field.selectionEnd : field.selectionStart } : null
+        }
+        function restoreActionFocus(before) {
+            if (before === list || before === grid) win.focusView()
+            else if (before) {
+                var field = before.field
+                if (!field.activeFocus) {
+                    field.forceActiveFocus()
+                    field.select(before.anchor, before.cursor)
+                }
+            }
+            else win.focusDefault()
+        }
         // Automatic returns keep a save on Filename; Tab and row clicks can still focus the listing.
         function focusDefault() {
             if (win.saving) save.selectStem()
@@ -194,6 +213,7 @@ ShellRoot {
 
         // Sort reorders the worker's listing, marks stay; remembers folder sort and default sort in ui.json.
         function requestSort(order) {
+            var before = win.actionFocus()
             if (!order || !win.sortable || (backend.sortBy === order.key && backend.sortDesc === order.desc))
                 return
             backend.sortBy = order.key
@@ -207,7 +227,7 @@ ShellRoot {
             listing.sort(order.key, order.desc, ViewState.state.foldersFirst !== false, ViewState.state.groupByKind === true, ViewState.state.hiddenLast === true)
             // sort answers a listed line and no rows of its own, so the reordered window is asked for.
             listing.window(0, win.windowSize)
-            win.focusDefault()
+            win.restoreActionFocus(before)
         }
 
         function filterRequest() {
