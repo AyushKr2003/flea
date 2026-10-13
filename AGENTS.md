@@ -4121,6 +4121,8 @@ The refused-stop wording moves one ceiling, re-derived with `wc -l`: `src/backen
 
 The office preview queue records one ceiling, re-derived with `wc -l`: `src/backend/officepdf.rs` passes the 400-line cap at 404 for the newest started sequence that the end of a job does not clear, which drops a request older than it, running or already finished, instead of converting it after, rather than a body with the comment cut.
 
+The code column reload guard records one ceiling, re-derived with `wc -l`: `tests/code-column.qml` crosses the hard cap at 411 for the listing guard check, which counts the code asks and queued loads made while the reload's listing is out, and the fixture restore that lets both harness runs share one fixture; recorded rather than split because both pin the same reload.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.
@@ -9153,6 +9155,8 @@ The Trash order unit raises the first-frame `bytes` line in `tests/startup-units
 Its review round 1 raises the `src/backend/trashbrowse.rs` ceiling from 834 to 898 (`wc -l`) for `list_with`, `same_items`, `listed_uris` and their five tests; no code or comment was cut.
 
 The preview column width keeps `tests/startup-units.txt` at its 170 units while its `bytes` line moves from 1598076 to 1598360, the sum the probe's tool takes over them with the `preview.width` reader in `ui/ViewState.qml` and the stored-width layout in `ui/ColumnsArea.qml`.
+
+Coloured code lines (the UI half of the code engine) move three recorded ceilings, each re-derived with `wc -l`: `ui/Theme.qml` 443 to 446 for the stored `palette` that `CodeLines` lifts its inks from, `ui/Backend.qml` 550 to 560 for `askCode`, `codeResult` and the token, and `ui/PreviewColumn.qml` 585 to 586 for the two lines that hand the backend to the first-lines reader and let it name a binary file under the row's own mark. The drawing is the new `ui/CodeLines.qml` at 219 lines and the pure helpers `ui/js/CodeRuns.js` at 72 (the ink lift and its six fallbacks live there, so only a launch that previews code loads them), both inside their budgets. The first frame gains only `Backend.qml`'s `askCode` and its signal and `Messages.js`'s one route line (plus Theme's one stored `palette`), which is why `tests/startup-units.txt` pins 1596965 to 1597706 bytes.
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one

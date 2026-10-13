@@ -125,7 +125,7 @@ tests/search-live.qml 417
 tests/sidebar-flows.qml 687
 tests/touchpad.qml 882
 tests/xwsettings-tabs.qml 379
-ui/Backend.qml 578
+ui/Backend.qml 588
 ui/ChromeBar.qml 352
 ui/ColumnsArea.qml 573
 ui/ColumnPane.qml 450
@@ -134,6 +134,7 @@ ui/ConvertDialog.qml 456
 ui/GridArea.qml 663
 ui/Ipc.qml 987
 tests/gridprebuild.qml 457
+tests/code-column.qml 411
 tests/columnsprebuild.qml 416
 ui/KeymapSheet.qml 551
 ui/List.qml 480
@@ -154,7 +155,7 @@ ui/PaneWire.qml 602
 ui/PermissionsDialog.qml 658
 ui/PickerWindow.qml 797
 ui/Preview.qml 898
-ui/PreviewColumn.qml 606
+ui/PreviewColumn.qml 608
 ui/PickerChrome.qml 441
 ui/DeviceMounts.qml 537
 ui/js/Facts.js 354
@@ -164,7 +165,7 @@ ui/SettingsPanel.qml 547
 ui/SettingsRow.qml 409
 ui/Sidebar.qml 713
 ui/StatusBar.qml 477
-ui/Theme.qml 475
+ui/Theme.qml 478
 ui/TrashView.qml 492
 ui/UnlockDialog.qml 450
 ui/ViewState.qml 547
