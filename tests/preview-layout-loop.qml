@@ -319,7 +319,9 @@ ShellRoot {
             if (shell.columnHost) {
                 if (column.textLoading || column.linesItem.readFailed) return
                 var lines = shell.find(column, "PreviewLines")
-                if (!lines || lines.lines.length !== 14) return
+                // TallPreviews fills the frame (1c96d94d0), bounded by the fixture's 96 lines.
+                if (!lines || lines.lines.length !== Math.min(lines.maxLines, 96)) return
+                if (!shell.check(lines.lines.length > 14, "tall column kept the old fourteen-line cap")) return
                 if (!shell.check(lines.numbered === (kind === 1), "code gutter changed")) return
             } else {
                 var text = shell.find(look, "PreviewText")

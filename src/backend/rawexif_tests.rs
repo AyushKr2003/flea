@@ -12,7 +12,7 @@ fn ascii_stops_at_nul_and_trims_spaces() {
 
 #[test]
 fn ascii_caps_at_the_string_cap_on_a_char_boundary() {
-    assert_eq!(ascii(&vec![b'A'; 200]).len(), MAX_STR);
+    assert_eq!(ascii(&[b'A'; 200]).len(), MAX_STR);
     // The cap falls inside a two-byte é, so the cut lands one byte earlier, before it.
     let mut multi = vec![b'B'; MAX_STR - 1];
     multi.extend_from_slice("é".as_bytes());

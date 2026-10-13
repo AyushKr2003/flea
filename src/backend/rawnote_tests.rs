@@ -190,8 +190,10 @@ fn a_pentax_aoc_note_names_its_byte_order_and_counts_from_the_file() {
     }
 }
 
+type NoteOffer = (Vec<(u64, usize)>, Vec<(u64, u64)>);
+
 // Offers the note at `at` with `total` bytes to the walk, answering every read it made and what it collected.
-fn offer(data: &[u8], at: u64, total: u32) -> (Vec<(u64, usize)>, Vec<(u64, u64)>) {
+fn offer(data: &[u8], at: u64, total: u32) -> NoteOffer {
     let mut src = Log { data, reads: Vec::new() };
     let mut w = Walk::new();
     let loc = IfdLoc { base: 0, little_endian: true, depth: 0, in_sub_ifd: false, index_in_chain: 0, is_exif: false, olympus: Oly::No };

@@ -177,7 +177,7 @@ fn a_bad_ask_runs_no_job() {
     sizes.sizes = vec![33, 22];
     let mut huge = ask(&path);
     huge.sizes = vec![33, 22, 100000];
-    for bad in [relative, colour, sizes, huge, ask(&d.join("missing.ttf")), ask(&d.path().to_path_buf())] {
+    for bad in [relative, colour, sizes, huge, ask(&d.join("missing.ttf")), ask(d.path())] {
         let line = rig.run(&bad, &d.join("cache"));
         assert!(line.contains(r#""err":"#), "{}", line);
     }
