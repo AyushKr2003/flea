@@ -97,7 +97,15 @@ directory that package owns.
 
 Pairing an iPhone also switches it to its tethering USB configuration, so iOS shows Personal Hotspot
 as active while it is plugged in; Flea does not use that connection. To keep this machine from routing
-through the phone, add a NetworkManager `conf.d` drop-in with `unmanaged-devices=driver:ipheth`.
+through the phone, tell NetworkManager, which Omarchy runs, to leave that interface alone, for example in
+`/etc/NetworkManager/conf.d/90-ipheth-unmanaged.conf`:
+
+```ini
+[keyfile]
+unmanaged-devices=driver:ipheth
+```
+
+Then run `sudo systemctl restart NetworkManager`.
 
 ## Uninstall
 
