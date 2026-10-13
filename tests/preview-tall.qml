@@ -187,13 +187,13 @@ ShellRoot {
 
     function lineFit() {
         var lines = root.col.linesItem
-        var drawn = root.all(lines, []).filter(function (it) { return it.textFormat === Text.StyledText && it.mapToItem(lines.viewport, 0, 0).y >= 0 && it.mapToItem(lines.viewport, 0, 0).y < lines.viewport.height })
+        var built = root.all(lines, []).filter(function (it) { return it.textFormat === Text.StyledText })
+        var drawn = built.filter(function (it) { return it.mapToItem(lines.viewport, 0, 0).y >= 0 && it.mapToItem(lines.viewport, 0, 0).y < lines.viewport.height })
         var rowH = lines.viewport.itemAtIndex(0).height
         var fits = Math.ceil(lines.viewport.height / rowH)
-        var built = drawn.length
-        root.check("code draws as many lines as fit the frame", built, Math.min(132, fits))
-        root.check("and builds no more line items than fit", built <= fits, true)
-        root.check("and fills the frame past fourteen lines", built > 14, true)
+        root.check("code draws as many lines as fit the frame", drawn.length, Math.min(132, fits))
+        root.check("and builds no more line items than fit (" + built.length + " built, " + fits + " fit)", built.length <= fits, true)
+        root.check("and fills the frame past fourteen lines", drawn.length > 14, true)
     }
 
     // Narrow: the Kind elides alone and the tail is whole; wide: nothing elides.

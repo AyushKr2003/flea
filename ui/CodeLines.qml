@@ -176,6 +176,7 @@ Item {
         anchors.fill: parent
         clip: true
         interactive: root.scrolls
+        cacheBuffer: 0
         boundsBehavior: Flickable.StopAtBounds
         model: root.shown
         onContentYChanged: Qt.callLater(root.ask)

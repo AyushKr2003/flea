@@ -20,6 +20,7 @@ cp tests/preview-scroll.qml "$test_root/config/shell.qml" || exit 1
 python3 - "$test_root/fixture" <<'PY'
 import pathlib, struct, sys, zlib
 root = pathlib.Path(sys.argv[1])
+preview_max_bytes = 1024 * 1024
 for name in ('00-long.rs', '01-other.rs'):
     (root / name).write_text('\n'.join('fn line_%d() { let value = %d; }' % (i, i) for i in range(1, 133)))
 (root / '02-short.txt').write_text('\n'.join('short %d' % i for i in range(10)))
@@ -30,7 +31,7 @@ def chunk(kind, data):
 (root / '05-image.png').write_bytes(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 16, 16, 8, 2, 0, 0, 0))
     + chunk(b'IDAT', zlib.compress((b'\x00' + b'\x55\x88\xaa' * 16) * 16)) + chunk(b'IEND', b''))
 (root / '06-empty.txt').write_text('')
-(root / '07-large.md').write_text('large\n' + 'x' * 1048576)
+(root / '07-large.md').write_text('large\n' + 'x' * preview_max_bytes)
 PY
 env XDG_STATE_HOME="$test_root/state" XDG_CONFIG_HOME="$test_root/home/.config" "$bin" --ui-state '{}' >/dev/null || exit 1
 env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \

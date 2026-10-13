@@ -17,7 +17,7 @@ Item {
     readonly property string subject: root.column.row && root.column.path.length > 0
         ? JSON.stringify([root.column.path, root.column.row.s, root.column.row.m]) : ""
     readonly property bool contentReady: root.markdown ? root.markdown.contentReady : !!root.code && root.code.settled
-    readonly property bool loading: root.scrollPending || (root.markdown ? root.markdown.loading || (root.markdown.contentReady && root.pendingRestore)
+    readonly property bool loading: root.scrollPending || (root.column.isMarkdownRow ? !root.markdown || root.markdown.loading || (root.markdown.contentReady && root.pendingRestore)
         : root.column.linesItem.loading || (!!root.code && root.code.settled && (!root.code.firstScreen || root.pendingRestore))
         )
     property var places: ({})
@@ -28,7 +28,9 @@ Item {
     property var wanted: ({ y: 0 })
     property bool pendingRestore: false
     property bool applying: false
-    property bool scrollPending: false
+    property string scrollKey: ""
+    readonly property bool scrollPending: root.scrollKey.length > 0 && !!root.column.swap
+        && root.column.swap.capturing && root.column.swap.key === root.scrollKey
     property real drawnY: 0
 
     function store(path, fingerprint, place) {
@@ -56,11 +58,12 @@ Item {
     }
 
     function follow() {
+        root.pendingRestore = root.subject.length > 0
+        root.scrollKey = ""
         root.identity = root.subject
         root.filePath = root.identity ? root.column.path : ""
         var saved = root.places[root.filePath]
         root.wanted = saved && saved.fingerprint === root.identity ? saved.place : { y: 0 }
-        root.pendingRestore = root.filePath.length > 0
         Qt.callLater(root.restore)
     }
 
@@ -101,11 +104,13 @@ Item {
                 && !root.column.swap.holding && !root.column.swap.capturing) {
             var target = v.contentY
             var identity = root.identity
-            root.scrollPending = true
+            var key = "scroll:" + identity
+            root.scrollKey = key
             root.applying = true
             v.contentY = root.drawnY
             root.applying = false
             root.column.swap.hold(function () {
+                if (root.scrollKey !== key) return
                 if (root.identity === identity) {
                     root.applying = true
                     v.contentY = target
@@ -114,8 +119,8 @@ Item {
                     root.remember()
                     root.column.swap.start(false)
                 }
-                root.scrollPending = false
-            }, "scroll:" + identity, true)
+                root.scrollKey = ""
+            }, key, true)
             return
         }
         if (root.markdown || root.code.firstScreen)
