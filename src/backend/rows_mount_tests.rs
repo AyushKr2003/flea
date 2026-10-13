@@ -41,6 +41,29 @@ fn an_extensionless_program_draws_the_program_mark_only_where_its_mode_is_its_ow
     assert!(on_btrfs.contains(r#""p":33261,"i":"application-x-executable""#), "a btrfs file keeps its own bits: {}", on_btrfs);
 }
 
+#[test]
+fn modeless_rows_mark_execute_bits_without_changing_modes_or_plain_window_bytes() {
+    let d = crate::backend::testdir::TestDir::new("rows-execute-marker");
+    let dev = device(d.path());
+    let mut l = Listing::new();
+    l.push("Launcher", false);
+    let metas = [Meta { size: 1, mtime: 2, mode: 0o100755, target_is_dir: false, target: String::new(), dev }];
+    let plain = r#"{"t":"rows","start":0,"rows":[{"n":"Launcher","d":false,"s":1,"m":2,"p":33261,"i":"application-x-executable","t":false,"k":0}],"kinds":["Data"],"ms":0.000}"#;
+    for fstype in ["vfat", "exfat", "ext4"] {
+        let body = format!("1 0 {} / / rw - {fstype} /dev/a rw\n", mountinfo::dev_majmin(dev));
+        let (mime, icons, aliases, thumbs, mut kinds) = dbs();
+        let line = rows_line_in(d.path(), &body, &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
+        let parsed = crate::jsondoc::parse(&line).unwrap();
+        let row = &parsed.get("rows").unwrap().as_array().unwrap()[0];
+        assert_eq!(row.get("p").and_then(crate::jsondoc::Json::as_f64), Some(33261.0), "{fstype} keeps the reported 0755 mode");
+        assert_eq!(row.get("x").and_then(crate::jsondoc::Json::as_bool), (fstype != "ext4").then_some(false));
+        if fstype == "ext4" {
+            assert_eq!(line.len(), plain.len(), "a plain window gains no wire bytes");
+            assert_eq!(line, plain, "every original byte of a plain window is preserved");
+        }
+    }
+}
+
 // One window reads the mount table once through the counted seam, so no call site adds a read.
 #[test]
 fn a_row_window_reads_the_mount_table_once() {
@@ -104,7 +127,7 @@ fn a_gvfs_row_window_never_reads_the_mount_table() {
 }
 
 #[test]
-fn smb_rows_keep_real_modes_only_with_posix_or_unix_super_options() {
+fn smb_rows_keep_real_modes_only_with_mode_preserving_super_options() {
     let d = crate::backend::testdir::TestDir::new("rows-smb-device");
     let dev = device(d.path());
     let mut l = Listing::new();
@@ -114,8 +137,10 @@ fn smb_rows_keep_real_modes_only_with_posix_or_unix_super_options() {
         for (options, icon) in [
             ("rw,posix", "application-x-executable"),
             ("rw,unix", "application-x-executable"),
+            ("rw,cifsacl", "application-x-executable"),
+            ("rw,modefromsid", "application-x-executable"),
             ("rw,nounix,noposix", "text-x-generic"),
-            ("rw,posix=0,unix=0", "text-x-generic"),
+            ("rw,posix=0,unix=0,cifsacl=0,modefromsid=0", "text-x-generic"),
             ("rw", "text-x-generic"),
         ] {
             let body = format!("1 0 0:0 / / rw - ext4 /dev/a rw\n2 1 {} / /mnt/share rw - {fstype} //server/share {options}\n", mountinfo::dev_majmin(dev));
@@ -124,6 +149,7 @@ fn smb_rows_keep_real_modes_only_with_posix_or_unix_super_options() {
             let parsed = crate::jsondoc::parse(&line).unwrap();
             let rows = parsed.get("rows").unwrap().as_array().unwrap();
             assert_eq!(rows[0].get("i").and_then(crate::jsondoc::Json::as_str), Some(icon), "{fstype} super options {options}");
+            assert_eq!(mountinfo::modes_are_real(Path::new("/mnt/share/Launcher"), &body), icon == "application-x-executable", "the lexical route agrees for {fstype} {options}");
         }
     }
 }

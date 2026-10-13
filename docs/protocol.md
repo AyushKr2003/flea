@@ -1513,7 +1513,7 @@ A first listing and a navigation carry no `changed`, and a client reads a missin
 
 ### rows
 
-`{"t":"rows","start":<uint>,"rows":[{"n":<string>,"d":<bool>,"s":<uint>,"m":<int>,"p":<uint>,"i":<string>,"t":<bool>,"k":<uint>[,"l":<string>][,"v":<uint>][,"tg":[<string>,...]]},...],"kinds":[<string>,...],"ms":<float>,"listing":<uint>}`
+`{"t":"rows","start":<uint>,"rows":[{"n":<string>,"d":<bool>,"s":<uint>,"m":<int>,"p":<uint>,"i":<string>,"t":<bool>,"k":<uint>[,"l":<string>][,"v":<uint>][,"tg":[<string>,...]][,"x":false]},...],"kinds":[<string>,...],"ms":<float>,"listing":<uint>}`
 
 Example:
 `{"t":"rows","start":0,"rows":[{"n":"say \"hi\".txt","d":false,"s":12,"m":1787790423,"p":33188,"i":"text-x-generic","t":false,"k":0},{"n":"photos","d":true,"s":4096,"m":1787790424,"p":16877,"i":"folder","t":false,"k":1,"v":56}],"kinds":["Plain text document","Folder"],"ms":1.250,"listing":1}`
@@ -1530,6 +1530,11 @@ directory reports `d:false` and carries `S_IFLNK` in `p`), a size in bytes (`s`)
 mtime as a unix timestamp (`m`), a raw `st_mode` (`p`), a freedesktop icon name
 (`i`), a thumbnailable flag (`t`), and a Kind index (`k`, into the envelope's own
 `kinds` array).
+
+**`x:false` means the reported execute bits do not establish per-file executable status.** Only those
+rows carry it; ordinary rows gain no wire bytes. The icon and executable name colour use
+the same backend decision, while `p` stays the reported mode for permission display and
+operations. A symlink's name still uses symlink colour, and a lifted name uses foreground.
 
 **`l` is where a symlink points, and only a symlink row carries it.** It is the link's own bytes,
 verbatim and unresolved, so a relative target stays relative and a broken link still names where it

@@ -455,7 +455,7 @@ Item {
         if (root.row.d) {
             return Theme.color.foreground
         }
-        if (Format.isExecutable(root.row.p)) {
+        if (root.row.x !== false && Format.isExecutable(root.row.p)) {
             return Theme.color.executable
         }
         return Theme.color.foreground

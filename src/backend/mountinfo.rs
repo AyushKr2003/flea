@@ -8,7 +8,7 @@ pub(crate) fn mount_type_in(path: &Path, body: &str) -> Option<String> {
     mount_entry_in(path, body).map(|entry| entry.fstype)
 }
 
-// FAT and NTFS report fixed modes; CIFS and SMB3 keep file modes only with POSIX or unix extensions in their super options.
+// FAT and NTFS report fixed modes; CIFS and SMB3 keep per-file modes with POSIX, Unix, ACL or SID mode options.
 pub(crate) fn modes_are_real(path: &Path, body: &str) -> bool {
     #[cfg(test)]
     LEXICAL_LOOKUPS.with(|lookups| lookups.set(lookups.get() + 1));
@@ -32,10 +32,10 @@ pub(crate) fn modes_are_real_for_dev(dev: u64, body: &str) -> Option<bool> {
     })
 }
 
-// Sample input: cifs with "rw,posix" keeps modes, while cifs with "rw,posix=0" does not.
+// Sample input: cifs with "rw,cifsacl" or "rw,modefromsid" keeps modes, while "rw,cifsacl=0,modefromsid=0" does not.
 fn modes_for_mount(fstype: &str, options: &str) -> bool {
     match fstype {
-        "cifs" | "smb3" => options.split(',').any(|option| matches!(option, "posix" | "unix")),
+        "cifs" | "smb3" => options.split(',').any(|option| matches!(option, "posix" | "unix" | "cifsacl" | "modefromsid")),
         // One proxy device serves every gvfs backend, so it cannot vouch for execute bits; gvfs-spelled paths decide by backend first.
         "fuse.gvfsd-fuse" => false,
         "vfat" | "exfat" | "msdos" | "fat" | "fat12" | "fat16" | "fat32" | "ntfs" | "ntfs3" | "fuseblk" | "smbfs" => false,

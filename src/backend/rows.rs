@@ -126,7 +126,7 @@ fn rows_line_in(
         };
         // The icon is escaped like every other field: the escape is the contract, not an optimisation.
         s.push_str(&format!(
-            r#"{{"n":"{}","d":{},"s":{},"m":{},"p":{},"i":"{}","t":{},"k":{}{}{}{}}}"#,
+            r#"{{"n":"{}","d":{},"s":{},"m":{},"p":{},"i":"{}","t":{},"k":{}{}{}{}{}}}"#,
             escape(name),
             is_dir,
             m.size,
@@ -137,7 +137,8 @@ fn rows_line_in(
             k,
             link,
             dev,
-            tg
+            tg,
+            if real_modes { "" } else { r#","x":false"# }
         ));
     }
     let kinds_json: String = kind_list.iter().map(|k| format!(r#""{}""#, escape(k))).collect::<Vec<_>>().join(",");
