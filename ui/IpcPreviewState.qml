@@ -1,5 +1,6 @@
 import QtQuick
 import "." as Flea
+import "js/Scroll.js" as Scroll
 
 // Quick Look and its shared PDF readers report the surfaces already built by the pane.
 QtObject {
@@ -62,6 +63,43 @@ QtObject {
     }
     function previewKind(): string { return root.look.kind }
     function previewState(): string { return root.look.status }
+    // Read the Compare pane and its real controls only after Quick Look has built it.
+    function compareState(): string {
+        var look = root.look
+        var compare = look.kind === "compare" ? look.surfaceItem() : null
+        if (!compare) return JSON.stringify({ opened: false })
+        var bar = compare.barGeometry()
+        var sentence = ""
+        for (var i = 0; i < compare.children.length; i++) {
+            var child = compare.children[i]
+            if (child.text !== undefined && child.visible) sentence = child.text
+        }
+        return JSON.stringify({ opened: look.active, visible: look.visible, landed: look.openState().landed,
+            ready: bar.ready, answer: compare.answer, title: bar.title.text, sentence: sentence,
+            patch: compare.patch, rows: compare.rows, mark: bar.markName,
+            titleCentre: root.fleaWindow.centreOf(bar.title), rect: root.fleaWindow.rectOf(compare),
+            controls: [bar.copy, bar.close].map(function (control, index) {
+                return { name: index === 0 ? "copy" : "close", label: index === 0 ? control.label : control.accessName,
+                    visible: control.visible, enabled: control.enabled,
+                    focused: control.activeFocus, hovered: control.hovered, pressed: control.pressed,
+                    ring: index === 0 ? control.focusShown : control.ringItem.visible,
+                    centre: root.fleaWindow.centreOf(control), rect: root.fleaWindow.rectOf(control) }
+            }) })
+    }
+    // Both code surfaces expose their live viewport; absent or unbuilt text answers an empty object.
+    function previewTextState(column: bool): string {
+        var surface = column ? (root.pane ? root.pane.previewColumnItem : null) : root.look.kind === "text" ? root.look.surfaceItem() : null
+        var code = surface ? (column ? surface.linesItem.code : surface.bodyItem) : null
+        var viewport = surface ? (column ? surface.linesItem.viewport : surface.list) : null
+        if (!code || !viewport) return "{}"
+        var bounds = Scroll.limitsY(viewport)
+        var swap = column ? surface.swap : root.look.swapState()
+        var ready = code.firstScreen && !(swap && (swap.holding || swap.capturing))
+        return JSON.stringify({ path: surface.path, visible: surface.visible,
+            ready: ready && (column ? !surface.textLoading : root.look.openState().landed),
+            focused: surface.activeFocus, wrap: code.wrap, y: viewport.contentY,
+            minY: bounds.min, maxY: bounds.max, height: viewport.height, total: code.total })
+    }
     // One entry per figure block; "" while no Markdown body is mounted, so a case keeps polling.
     function previewFigures(): string {
         var m = root.look.markdownItem

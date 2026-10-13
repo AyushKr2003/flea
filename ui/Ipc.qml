@@ -483,6 +483,8 @@ QtObject {
         function columnMarkdownView(): string { return root.previewReaders.columnMarkdownView() }
         function previewKind(): string { return root.previewReaders.previewKind() }
         function previewState(): string { return root.previewReaders.previewState() }
+        function compareState(): string { return root.previewReaders.compareState() }
+        function previewTextState(column: bool): string { return root.previewReaders.previewTextState(column) }
         function previewFigures(): string { return root.previewReaders.previewFigures() }
         function previewBlockKinds(column: bool): string { return root.previewReaders.previewBlockKinds(column) }
         function previewPosition(): int { return root.previewReaders.previewPosition() }
