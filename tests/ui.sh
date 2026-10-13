@@ -15776,12 +15776,14 @@ readme_frame_pdf() {
 
 # iphone.png 2536x1381: the stub camera roll over AFC, cursor on its HEIC with a preview.
 readme_frame_iphone() {
-    local facts total media
+    local facts total media heic
     readme_afc_stub "$readme_root/iphone-phones"
     # The stub leaves an empty HEIC, which never decodes, so the frame copies a real one over it.
     media="$FIXTURE_ROOT/flea-media-btrfs"
     [[ -d "$media" ]] || fail "the media fixture is missing at $media"
-    cp "$(ls "$media"/*.heic | head -1)" "$readme_afc_fuse/DCIM/113APPLE/IMG_3263.HEIC"
+    heic=$(find "$media" -maxdepth 1 -name '*.heic' -type f -print -quit)
+    [[ -n "$heic" ]] || fail "readme iphone: the media fixture at $media holds no .heic file"
+    cp -- "$heic" "$readme_afc_fuse/DCIM/113APPLE/IMG_3263.HEIC" || fail "readme iphone: cannot copy $heic over the stub's IMG_3263.HEIC"
     fixture_home_make "$readme_root/iphone-home"
     readme_seed "$readme_root/iphone-state" phones
     export PATH="$readme_root/iphone-phones/bin:$PATH"

@@ -119,7 +119,7 @@ tests/js/runfile.js 305
 tests/ring-bounds.qml 702
 tests/menu-fit.qml 446
 tests/search-live.qml 417
-tests/sidebar-flows.qml 683
+tests/sidebar-flows.qml 687
 tests/touchpad.qml 882
 tests/xwsettings-tabs.qml 379
 ui/Backend.qml 576

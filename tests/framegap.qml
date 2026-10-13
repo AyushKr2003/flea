@@ -26,6 +26,7 @@ ShellRoot {
     readonly property int pickerPlainItems: 4
     property int chipChecks: 0
     property int chipFailed: 0
+    property int chipWant: -1
 
     property var plan: []
     property int at: 0
@@ -103,11 +104,11 @@ ShellRoot {
             root.log("FAIL PickerChips " + chips.length + " items for " + pickerChrome.chips.length + " chips, or no strip built at stop " + stop)
             return
         }
-        // An offscreen window is never active, so the focus a chip takes shows as focus and not activeFocus; a pass with none would re-measure rest.
-        if (state === "focus" && !chips.some(function (chip) { return chip.focus })) {
+        // An offscreen window is never active, so the focus a chip takes shows as focus and not activeFocus; a pass without the asked chip would re-measure another state.
+        if (state === "focus" && !(chips[root.chipWant] && chips[root.chipWant].focus)) {
             root.chipChecks += 1
             root.chipFailed += 1
-            root.log("FAIL PickerChips no chip holds the focus at stop " + stop)
+            root.log("FAIL PickerChips chip " + root.chipWant + " does not hold the focus at stop " + stop)
         }
         var stripTop = strip.mapToItem(pickerChrome, 0, 0).y
         var ruleTop = stripTop + strip.height - Flea.Theme.spacing.hairline
@@ -130,8 +131,8 @@ ShellRoot {
             })
         })
     }
-    function chipRest() { parking.forceActiveFocus() }
-    function chipFocus(i) { root.pickerChips()[i].forceActiveFocus() }
+    function chipRest() { root.chipWant = -1; parking.forceActiveFocus() }
+    function chipFocus(i) { root.chipWant = i; root.pickerChips()[i].forceActiveFocus() }
 
     // A focused DialogButton frames itself in the rule's colour, read off Theme and never off focusFrame.
     function drawsFocus(button) {

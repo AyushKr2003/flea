@@ -459,8 +459,12 @@ ShellRoot {
             check("lit-place: the cursor on Trash, not lit, draws its frame and the IPC does not read it as current", [root.railIndices("frame"), root.railLit(), root.ipc(true).trashRail().current], [[root.railTrash], [root.railRecent], false])
             rail.cursorIndex = root.railRecent
             check("lit-place: the cursor on the lit row draws both", [root.railIndices("frame"), root.railLit()], [[root.railRecent], [root.railRecent]])
-            rail.pointerFocus = true
-            check("lit-place: a pointer press on the focused rail hides the frame and keeps the lit place", [root.railIndices("frame"), root.railLit()], [[], [root.railRecent]])
+            // A real press through the rail's PointHandler, released past the drag threshold so the row's tap never fires.
+            var litRow = rail.railItemFor(root.railRecent)
+            driver.mousePress(litRow, litRow.width / 2, litRow.height / 2, Qt.LeftButton, Qt.NoModifier, 1)
+            check("lit-place: a pointer press on the focused rail hides the frame and keeps the lit place", [rail.pointerFocus, root.railIndices("frame"), root.railLit()], [true, [], [root.railRecent]])
+            driver.mouseMove(litRow, litRow.width * 3, litRow.height / 2, 1, Qt.LeftButton, Qt.NoModifier)
+            driver.mouseRelease(litRow, litRow.width * 3, litRow.height / 2, Qt.LeftButton, Qt.NoModifier, 1)
             rail.pointerFocus = false
             // Trash always offers its menu, where Home's rows sit behind the Places menu switch.
             rail.openRailMenu(root.railTrash, Qt.point(40, 80))
