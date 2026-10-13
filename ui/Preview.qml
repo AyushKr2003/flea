@@ -484,7 +484,10 @@ Item {
     function show(newPath, newIcon, newSize, newKind, newThumb, newRow) {
         var row = root.namedRow(newRow, newPath)
         root.inlineMarkdownPath = row !== null && Prepared.readsInline(row, root.pane.storageClass, root.pane.storageKnown) ? newPath : ""
-        root.kind = root.kindFor(newPath, newIcon, newThumb, newRow)
+        var kind = root.kindFor(newPath, newIcon, newThumb, newRow)
+        // Gate the live image reader before its path moves, so a follow cannot decode at the previous card size while its dimensions are owed.
+        root.sizeWait = kind === "image" && root.pane !== null && newRow >= 0
+        root.kind = kind
         // A pane of another kind goes before the path moves, or it tries to open a file it cannot draw: an image
         // pane handed a video logged "Unsupported image format" on every move from a picture to a clip.
         if (!root.isMedia) mediaLoader.source = ""

@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "flea" as Flea
+import "flea/js/Messages.js" as Messages
 
 // Counts preview work after observed completions and checks every frame request against its decode target.
 ShellRoot {
@@ -21,7 +22,7 @@ ShellRoot {
     readonly property int largePngWidth: 3000
     readonly property int largePngHeight: 2000
 
-    property var c: ({ meta: 0, replies: 0, thumb: 0, loads: 0, ready: 0, errors: 0, qlShow: 0 })
+    property var c: ({ meta: 0, replies: 0, qlMeta: 0, qlReplies: 0, thumb: 0, loads: 0, ready: 0, errors: 0, qlShow: 0 })
     property var loadLog: []
     property int passed: 0
     property int failed: 0
@@ -52,7 +53,8 @@ ShellRoot {
         property bool swallowed: false
         function peek(path, size, hidden) {}
         function askMeta(index, wantLines, wantMedia, wantArchive) {
-            root.bump("meta")
+            // The column cannot ask while Quick Look owns the selection; each still has its own exact work count.
+            root.bump(quick.active ? "qlMeta" : "meta")
             seq += 1
             pending.push({ token: seq, index: index })
             Qt.callLater(backend.flushMeta)
@@ -63,13 +65,13 @@ ShellRoot {
             pending = []
             for (var i = 0; i < p.length; i++) {
                 var r = root.rowsList[p[i].index]
-                var message = { token: p[i].token, w: r.w || 0, h: r.h || 0, ms: r.ms || 0, rate: 0, entries: 0,
+                var message = { t: "meta", row: p[i].index, token: p[i].token, w: r.w || 0, h: r.h || 0, ms: r.ms || 0, rate: 0, entries: 0,
                     unpacked: 0, afailed: false, names: [], lines: r.lines || 0, partial: false, lfailed: false,
                     target: "", targetdir: "", owner: "", orient: 1 }
                 if (root.swallowReply && !swallowed && root.label === "col1") {
                     swallowed = true
                     root.log("SWALLOWED meta token=" + message.token)
-                } else backend.metaResult(message)
+                } else Messages.route(backend, message)
             }
         }
         function thumb(rows, cacheOnly) { root.bump("thumb", rows ? rows.length : 0) }
@@ -163,6 +165,7 @@ ShellRoot {
             id: quick
             pane: pane
             onPathChanged: if (path !== "") root.bump("qlShow")
+            onImageWChanged: if (imageW > 0) root.bump("qlReplies")
         }
     }
 
@@ -257,6 +260,8 @@ ShellRoot {
         var p = root.activeStep
         root.check(root.label + " meta", d.meta || 0, p.meta || 0)
         root.check(root.label + " replies", d.replies || 0, p.meta || 0)
+        root.check(root.label + " Quick Look meta", d.qlMeta || 0, p.qlMeta || 0)
+        root.check(root.label + " Quick Look replies", d.qlReplies || 0, p.qlMeta || 0)
         root.check(root.label + " loads", d.loads || 0, p.loads || 0)
         root.check(root.label + " ready", d.ready || 0, p.loads || 0)
         root.check(root.label + " show", d.qlShow || 0, p.show ? 1 : 0)
@@ -285,6 +290,7 @@ ShellRoot {
                 || (d.meta || 0) < p.meta || (d.replies || 0) < p.meta
                 || (d.loads || 0) < p.loads || (d.ready || 0) + (d.errors || 0) < p.loads)) return false
         if (p.show && ((d.qlShow || 0) < 1 || !quick.active || quick.path !== root.rowPath(p.row)
+                || (d.qlMeta || 0) < (p.qlMeta || 0) || (d.qlReplies || 0) < (p.qlMeta || 0)
                 || !quick.lookReady || quick.status === "loading" || !root.swapIdle(quick.swap))) return false
         if (p.closed && quick.active) return false
         return true
@@ -362,13 +368,13 @@ ShellRoot {
         for (var q = 0; q < kinds.length; q++) {
             (function (r) {
                 p.push({ label: "listto" + r, row: r })
-                p.push({ label: "qlopen" + r, row: r, show: true, act: function () { root.qlOpen(r) } })
+                p.push({ label: "qlopen" + r, row: r, show: true, qlMeta: r === 1 || r === 2 || r === 6 ? 1 : 0, act: function () { root.qlOpen(r) } })
                 p.push({ label: "qlclose" + r, closed: true, act: function () { quick.close() } })
             })(kinds[q])
         }
         p.push({ label: "listto1", row: 1, mark: "qlf" })
-        p.push({ label: "qlopen1f", row: 1, show: true, act: function () { root.qlOpen(1) } })
-        p.push({ label: "qlfollow2", row: 2, show: true, act: function () { root.qlFollow(2) } })
+        p.push({ label: "qlopen1f", row: 1, show: true, qlMeta: 1, act: function () { root.qlOpen(1) } })
+        p.push({ label: "qlfollow2", row: 2, show: true, qlMeta: 1, act: function () { root.qlFollow(2) } })
         p.push({ label: "qlclosef", closed: true, act: function () { quick.close() } })
         root.plan = p
     }
