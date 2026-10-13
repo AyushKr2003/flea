@@ -188,12 +188,13 @@ ShellRoot {
     // The code lines are CodeLines' rows, each a StyledText body in its own delegate, one row per line.
     function lineFit() {
         var lines = root.col.linesItem
-        var bodies = root.all(lines, []).filter(function (it) { return it.textFormat === Text.StyledText && it.visible })
-        var rowH = bodies.length > 0 ? bodies[0].parent.height : 1
-        var fits = Math.floor((lines.height - 2 * root.gap) / rowH)
-        root.check("code draws as many lines as fit the frame", bodies.length, Math.min(132, fits))
-        root.check("and builds no more line items than fit", bodies.length <= fits, true)
-        root.check("and fills the frame past fourteen lines", bodies.length > 14, true)
+        var built = root.all(lines, []).filter(function (it) { return it.textFormat === Text.StyledText })
+        var drawn = built.filter(function (it) { return it.visible && it.mapToItem(lines.viewport, 0, 0).y >= 0 && it.mapToItem(lines.viewport, 0, 0).y < lines.viewport.height })
+        var row = lines.viewport ? lines.viewport.itemAtIndex(0) : null
+        var fits = row ? Math.ceil(lines.viewport.height / row.height) : -1
+        root.check("code draws as many lines as fit the frame", drawn.length, Math.min(132, fits))
+        root.check("and builds no more line items than fit (" + built.length + " built, " + fits + " fit)", built.length <= fits, true)
+        root.check("and fills the frame past fourteen lines", drawn.length > 14, true)
     }
 
     // Narrow: the Kind elides alone and the tail is whole; wide: nothing elides.

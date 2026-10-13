@@ -16,8 +16,9 @@ Item {
     property bool active: false
     property bool numbered: false
     property bool wrap: false
-    // True when the view scrolls under the wheel; the preview column's frame does not.
+    // Enables wheel and drag scrolling in the line viewport.
     property bool scrolls: false
+    readonly property alias viewport: view
     property real pixelSize: Theme.font.caption
     // The most lines drawn, 0 for every line of the file.
     property int limit: 0
@@ -175,6 +176,7 @@ Item {
         anchors.fill: parent
         clip: true
         interactive: root.scrolls
+        cacheBuffer: 0
         boundsBehavior: Flickable.StopAtBounds
         model: root.shown
         onContentYChanged: Qt.callLater(root.ask)

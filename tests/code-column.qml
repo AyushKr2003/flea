@@ -84,7 +84,10 @@ ShellRoot {
         return root.descendants(root.pane).filter(function (n) { return typeof n.rowAt === "function" && typeof n.fresh === "function" }).length
     }
     function column() { return root.pane ? root.pane.previewColumnItem : null }
-    function drawnLines(code) { return Math.min(code.total, root.column().linesItem.maxLines) }
+    function drawnLines(code) {
+        var row = code ? code.viewport.itemAtIndex(0) : null
+        return row ? Math.min(code.shown, Math.ceil(code.viewport.height / row.height)) : -1 // An unbuilt first row must fail the drawn-line checks.
+    }
     // The CodeLines under the column's lines: the one item that can say which line it holds.
     function codeOf(col) {
         if (!col) return null
@@ -96,7 +99,9 @@ ShellRoot {
     // The drawn line texts, top to bottom: the StyledText bodies the view has built.
     function bodies(code) {
         return root.descendants(code).filter(function (n) {
-            return n.visible && n.textFormat === Text.StyledText
+            if (!n.visible || n.textFormat !== Text.StyledText) return false
+            var y = n.mapToItem(code.viewport, 0, 0).y
+            return y >= 0 && y < code.viewport.height
         }).sort(function (a, b) { return a.mapToItem(code, 0, 0).y - b.mapToItem(code, 0, 0).y })
     }
     // What a StyledText string reads as once drawn.
@@ -297,9 +302,9 @@ ShellRoot {
         var col = root.column(), code = root.codeOf(col), texts = root.bodies(code), name = op.show
         if (op.coloured || op.plain) {
             var first = texts[0].text
-            root.check(name + " draws its lines", [code.lines.length, root.plainOf(first).indexOf("fn ") === 0], [root.drawnLines(code), true])
+            root.check(name + " draws its lines", [texts.length, root.plainOf(first).indexOf("fn ") === 0], [root.drawnLines(code), true])
             root.check(name + " asks the backend once per move", root.backend().codeToken - root.askBase <= 1, true)
-            root.check(name + " asks for no more than the frame's lines", root.farthest <= root.column().linesItem.maxLines, true)
+            root.check(name + " asks for no more than the frame's lines", root.farthest <= Math.ceil(code.viewport.height / code.rowHeight), true)
             root.check(name + " has a muted number gutter", col.linesItem.numbered, true)
             if (op.coloured) {
                 root.check(name + " the fn keyword draws in the magenta ink", first.indexOf("<font color=\"" + root.ink(5) + "\">fn</font>") >= 0, true)

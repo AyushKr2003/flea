@@ -22,6 +22,7 @@ PreviewColumn 1.0 PreviewColumn.qml
 CodeLines 1.0 CodeLines.qml
 CompareView 1.0 CompareView.qml
 PreviewLines 1.0 PreviewLines.qml
+PreviewScroll 1.0 PreviewScroll.qml
 PreviewMarkdown 1.0 PreviewMarkdown.qml
 MarkdownSource 1.0 MarkdownSource.qml
 MarkdownRemote 1.0 MarkdownRemote.qml
