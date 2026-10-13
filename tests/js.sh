@@ -38,6 +38,7 @@ run() {
   fi
   printf '%s' "$out" | grep -qE "checks, 0 failed" || exit 1
   if [ -z "${2:-}" ] || [ "$2" = devices ]; then
+    # Sample input: "qml: power-off warning begin: Device listing for /dev/sda could not be parsed (JSON.parse: Parse error); mounted rail volumes were queued instead.", then "qml: Device listing for /dev/sda could not be parsed (JSON.parse: Parse error); mounted rail volumes were queued instead.", then "qml: power-off warning end".
     local active=0 expected="" warnings=0 bad=0 fallbacks=0 valid=0 line
     while IFS= read -r line; do
       case "$line" in
