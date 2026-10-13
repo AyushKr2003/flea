@@ -2660,7 +2660,7 @@ record clears when the edit leaves that row or the tile is reused, so a pooled t
 
 ## File budget
 
-Qt 6.12 sequence handling adds `js/Lists.js` to the first-frame unit list. The 176 units sum to 1,687,703 bytes, re-derived with the `wc -c` sum used by `tests/startup-objects.sh`, from 1,687,239 bytes over 175 units. The shared list test changes sequence recognition in Compare and nested Markdown readers. The `ui/js/Menu.js` ceiling moves from 502 to 503, re-derived with `wc -l` for its helper import. The 26 existing `QuickLookPrepare.qml` lint allowances move one line for the same import; their source text, symbols, reasons and counts are unchanged.
+Qt 6.12 sequence handling adds `js/Lists.js` to the first-frame unit list. The 176 units sum to 1,687,748 bytes, re-derived with the `wc -c` sum used by `tests/startup-objects.sh`, from 1,687,239 bytes over 175 units. The shared list test changes sequence recognition in Compare and nested Markdown readers. The `ui/js/Menu.js` ceiling moves from 502 to 503, re-derived with `wc -l` for its helper import. The 26 existing `QuickLookPrepare.qml` lint allowances move one line for the same import; their source text, symbols, reasons and counts are unchanged.
 
 COPY-TRASH on the 0.3.11 stage moves the `src/backend/trashbrowse.rs` ceiling from 900 to 1025 (`wc -l`) for the approved typed refusals, per-item damaged-record failures and backward target naming, retaining the stage's newest-first listing and membership checks.
 The same port moves `src/backend/trashdelete.rs` from 938 to 965 (`wc -l`) for the approved outcome wrappers and cleanup logging, with the failed child put-back logging credited once to this port.
