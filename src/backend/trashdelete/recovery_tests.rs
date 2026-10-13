@@ -136,7 +136,7 @@ fn recovery_never_overwrites_an_original_name_collision() {
     drop(journal);
     let report = replay(&d);
     assert_eq!(report.recovered, 0);
-    assert_eq!(report.failures.len(), 1);
+    assert!(report.failures.len() == 1 && report.failures[0].contains("Flea found an interrupted Trash operation; its items are kept at ") && crate::backend::trashmanifest::logged().iter().any(|line| line.contains("without overwriting")));
     assert_eq!(std::fs::read_to_string(&reviewed.path).unwrap(), "later arrival");
     assert_eq!(std::fs::read_to_string(quarantine.join("payload")).unwrap(), "payload");
     assert!(quarantine.join("metadata").exists());
@@ -370,7 +370,7 @@ fn recovery_preserves_an_unmarked_record_when_the_quarantine_is_missing() {
     let report = replay(&d);
     assert_eq!(report.recovered, 0);
     assert_eq!(report.failures.len(), 1);
-    assert!(report.failures[0].contains("without a completion record"));
+    assert!(report.failures[0].ends_with("Flea found an interrupted Trash operation; nothing was moved.") && crate::backend::trashmanifest::logged().iter().any(|line| line.contains("without a completion record")));
     assert!(record.exists());
     assert_eq!(std::fs::read_to_string(moved.join("payload")).unwrap(), "payload");
     assert!(moved.join("metadata").exists());

@@ -2656,6 +2656,9 @@ record clears when the edit leaves that row or the tile is reused, so a pooled t
 
 ## File budget
 
+COPY-TRASH on the 0.3.11 stage moves the `src/backend/trashbrowse.rs` ceiling from 900 to 1025 (`wc -l`) for the approved typed refusals, per-item damaged-record failures and backward target naming, retaining the stage's newest-first listing and membership checks.
+The same port moves `src/backend/trashdelete.rs` from 938 to 965 (`wc -l`) for the approved outcome wrappers and cleanup logging, with the failed child put-back logging credited once to this port.
+
 xw6 adversarial fixes retain the tab handoff detail and exact payload paths. Each lift
 captures a stable tab identity and its source pane until acknowledgment or the existing
 15-second deadline. Accepted lifts wait for pane settlement beyond that deadline, and source
