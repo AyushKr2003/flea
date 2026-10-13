@@ -111,7 +111,7 @@ function run(check) {
         "Keys.onEnterPressed: function(event) { root.keyActivate(event) }", "Keys.onSpacePressed: function(event) { root.keyActivate(event) }"]
         .every(function (line) { return button.indexOf(line) >= 0 }), true)
 
-    // S0-UNL5 F1: submit moved the keyboard to Cancel, so every refusal returns it to the field.
+    // Submit moved the keyboard to Cancel, so every refusal returns it to the field.
     var refusal = Source.slice(dialog, "    function showRefusal(note)", "    // A dialog that ends")
     check("a refusal returns the keyboard to the field", refusal.indexOf("field.takeFocus()") >= 0, true)
     var refuseFn = Source.slice(dialog, "    function refuse(note)", "    function showRefusal(note)")
@@ -142,7 +142,7 @@ function run(check) {
         Source.slice(hostBody, "    function nameDevice()", "    // After an unlock").indexOf("lookupRow") >= 0
         && Source.slice(hostBody, "    function lookupRow(", "    // A hidden rail").indexOf("Unlock.namingRow") >= 0, true)
 
-    // S0-UNL5 F2: the name poller is one-shot, ending with its first listing, and never starts on a touched card.
+    // The name poller is one-shot, ending with its first listing, and never starts on a touched card.
     var pollerHead = Source.slice(hostBody, "id: namePoller", "sourceComponent:")
     check("the name poller ends with its first listing", pollerHead.indexOf("_namePollDone") >= 0, true)
     check("the name poller never starts on a touched card", pollerHead.indexOf("cardTouched") >= 0, true)
@@ -155,7 +155,7 @@ function run(check) {
     check("a reopened card gets a fresh one-shot poll",
         Source.slice(hostBody, "    function openForDevice(", "    // Only an untouched").indexOf("_namePollDone = false") >= 0, true)
 
-    // S0-UNL5 F4: the card reads its LUKS version off the remembered rail, not the call's argument.
+    // The card reads its LUKS version off the remembered rail, not the call's argument.
     check("the version read uses the remembered rail",
         Source.slice(hostBody, "    function openFor(", "    // The rail row carries").indexOf("root.versionFor(root.sidebar,") >= 0, true)
 

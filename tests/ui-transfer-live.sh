@@ -162,7 +162,7 @@ transferlive_teardown() {
     (( drained )) || fail "transferlive: the window or a clipboard owner did not drain at teardown; the payload was deleted anyway"
 }
 
-# Diagnostic for the N1 stall: FLEA_TRANSFERLIVE_SYNC=1 waits for the fixture's own writeback before each launch; S0 rules after the native A/B whether it stays.
+# A diagnostic for a transfer that stalls: FLEA_TRANSFERLIVE_SYNC=1 waits for the fixture's own writeback before each launch.
 transferlive_sync() {
     if [[ "${FLEA_TRANSFERLIVE_SYNC:-}" == 1 ]]; then
         sync -f "$transferlive_root" || fail "transferlive: sync -f $transferlive_root failed"
