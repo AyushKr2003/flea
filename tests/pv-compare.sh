@@ -13,6 +13,9 @@ qs_bin=$(command -v qs)
 timeout_bin=$(command -v timeout)
 # The deadline for the harness, in seconds.
 RUN_BOUND=120
+# One byte past Compare's size gate, and the regular-file count in the marked fixture.
+OVER_LIMIT_BYTES=1048577
+MARKS_COUNT=5000
 
 sandbox_root_ok
 test_root=$(mktemp -d "$SANDBOX_ROOT/flea-pv-compare-XXXXXX") || exit 1
@@ -42,18 +45,19 @@ tail_lines() { printf 'Only the visible lines are asked for.\nA newer request ca
 cp "$fixture/same-a.md" "$fixture/same-b.md"
 printf 'PNG\0data\n' > "$fixture/shot-a.png"
 printf 'PNG\0other\n' > "$fixture/shot-b.png"
-yes 'a log line' | head -c 1048577 > "$fixture/dump-a.log"
-yes 'a log line' | head -c 1048577 > "$fixture/dump-b.log"
+yes 'a log line' | head -c "$OVER_LIMIT_BYTES" > "$fixture/dump-a.log"
+yes 'a log line' | head -c "$OVER_LIMIT_BYTES" > "$fixture/dump-b.log"
 printf 'caf\351\n' > "$fixture/latin1.md"
 mkdir -p "$fixture/marks" "$test_root/state/flea" || exit 1
-for ((i = 0; i < 5000; i++)); do printf 'row %s\n' "$i" > "$fixture/marks/$(printf 'f%04d.txt' "$i")"; done
+for ((i = 0; i < MARKS_COUNT; i++)); do printf 'row %s\n' "$i" > "$fixture/marks/$(printf 'f%04d.txt' "$i")"; done
 ln -s f0000.txt "$fixture/marks/z-link-a" || exit 1
 ln -s f4800.txt "$fixture/marks/z-link-b" || exit 1
 
 harnesses="pv-compare pv-compare-menu"
 [ "${PVCMP_MENU_ONLY:-0}" -ne 1 ] || harnesses="pv-compare-menu"
 for harness in $harnesses; do
-cp "tests/$harness.qml" "$test_root/config/shell.qml" || exit 1
+# The temporary harness derives its total from the regular files and two links.
+sed -E "s/^([[:space:]]*readonly property int rowCount:).*/\1 $((MARKS_COUNT + 2))/" "tests/$harness.qml" > "$test_root/config/shell.qml" || exit 1
 printf '{"view":"list","sidebar":false}\n' > "$test_root/state/flea/ui.json"
 log="$test_root/$harness.log"
 env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \

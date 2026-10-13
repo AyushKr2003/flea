@@ -120,8 +120,10 @@ or replacement of the pending request, and fetch metadata only for the visible w
 
 `{"c":"menuaction","op":"activate","id":4,"action":"duplicate"}` revalidates the
 selection captured by `snapshot` before the GUI dispatches a selected-item menu action.
-The response echoes `id`, `op`, and `action`, with `ok` and `error`. Clipboard, Copy Path,
-compression, and Compare actions return captured `paths`; other actions do not serialize unused paths.
+The response echoes `id`, `op`, and `action`, with `ok` and `error`. Captured selection `paths`
+are returned for `validate`, and for `activate` when the action needs resolved paths for client-side
+dispatch; other activations return an empty array. `taildrop:*` and `sharelink` return the captured
+cursor path instead.
 The client also rechecks its listing identity and current action eligibility before dispatch.
 
 An optional `menuId` on `transfer`, `trash`, `duplicate`, `rename`, `archive`, or `convert`
@@ -1837,10 +1839,16 @@ with `jq` first, so its `total` and lines are those of the formatted text.
 Example: `{"t":"compare","token":3,"state":"diff","patch":"--- /a\n+++ /b\n@@ -1 +1 @@\n-x\n+y\n"}`
 
 The answer to one `compare` request, echoing its `token`. `state` is `diff` (`diff` exited 1 and `patch`
-holds what it printed, headers included), `identical` (it exited 0), `binary` (a NUL in the first 8,192
-bytes of either file), `over` (either file is over 1,048,576 bytes) or `failed` (a path that cannot be
-read as a regular file, any other exit, `diff` or the jail not starting, or a patch past 8 MiB). `patch`
-is the empty string in every state but `diff`.
+holds what it printed, headers included), `identical` (it exited 0), `binary` (screening found a NUL in
+a file's first 8,192 bytes), `over` (either file is over 1,048,576 bytes) or `failed` (a path
+that cannot be read as a regular file, invalid UTF-8 in a file or the patch, any other exit, `diff` or
+the jail not starting, or a patch past 8 MiB). `patch` is the empty string in every state but `diff`.
+
+Screening first requires both absolute paths to open as regular files with readable lengths;
+either initial length over 1,048,576 bytes returns `over`. It then reads `a`, followed by `b`, up to
+1,048,577 bytes each, checking read failure (`failed`), growth past the limit (`over`), a NUL in the
+first 8,192 bytes (`binary`), then UTF-8 validity (`failed`), stopping at the first refusal. An earlier
+file's `failed` or `over` therefore takes precedence over a later file's NUL.
 
 ### collisions
 
