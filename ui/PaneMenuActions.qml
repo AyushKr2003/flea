@@ -132,6 +132,7 @@ Loader {
     property string identity: ""
     property string folder: ""
     property bool ready: false
+    property var selectedKinds: []
     property string pendingAction: ""
     property bool pendingActivation: false
     property bool activationUsed: false
@@ -205,6 +206,7 @@ Loader {
         if (deleting || survivorId) return
         requestId++
         ready = false
+        selectedKinds = []
         pendingAction = ""
         pendingActivation = false
         activationUsed = false
@@ -403,6 +405,7 @@ Loader {
                 return
             }
             if (message.op === "snapshot") {
+                root.selectedKinds = message.kinds || []
                 root.ready = message.ok === true && root.identity === root.pane.menuSelectionIdentity()
                 if (!root.ready) {
                     // A late snapshot answers no dismissed menu with nothing awaiting it; an open one keeps its refusal.
@@ -423,6 +426,7 @@ Loader {
                     // No installed flag: the flyout draws the registry alone, and asking for the
                     // whole catalogue here walked every applications directory on every right-click.
                     root.pane.backend.send({c: "menuaction", op: "applications", id: root.requestId})
+                root.pane.contextMenu().refreshProviderRows()
                 root.finishProviders()
                 return
             }

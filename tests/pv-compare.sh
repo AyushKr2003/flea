@@ -30,6 +30,7 @@ chmod 700 "$test_root/runtime" || exit 1
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
 ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
+ln -s "$PWD/ui/boot/fleatab.qml" "$test_root/config/fleatab.qml" || exit 1
 cp tests/pv-compare.qml "$test_root/config/shell.qml" || exit 1
 
 # Twenty lines each; lines 12 to 17 differ, which is the board's hunk (@@ -9,12 +9,12 @@).
@@ -43,23 +44,36 @@ printf 'PNG\0data\n' > "$fixture/shot-a.png"
 printf 'PNG\0other\n' > "$fixture/shot-b.png"
 yes 'a log line' | head -c 1048577 > "$fixture/dump-a.log"
 yes 'a log line' | head -c 1048577 > "$fixture/dump-b.log"
+printf 'caf\351\n' > "$fixture/latin1.md"
+mkdir -p "$fixture/marks" "$test_root/state/flea" || exit 1
+for ((i = 0; i < 5000; i++)); do printf 'row %s\n' "$i" > "$fixture/marks/$(printf 'f%04d.txt' "$i")"; done
+ln -s f0000.txt "$fixture/marks/z-link-a" || exit 1
+ln -s f4800.txt "$fixture/marks/z-link-b" || exit 1
 
-log="$test_root/run.log"
+for harness in pv-compare pv-compare-menu; do
+cp "tests/$harness.qml" "$test_root/config/shell.qml" || exit 1
+printf '{"view":"list","sidebar":false}\n' > "$test_root/state/flea/ui.json"
+log="$test_root/$harness.log"
 env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_RUNTIME_DIR="$test_root/runtime" \
     XDG_CONFIG_HOME="$test_root/home/.config" XDG_CACHE_HOME="$test_root/home/.cache" \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_QPA_UPDATE_IDLE_TIME=16 QT_FORCE_STDERR_LOGGING=1 \
-    FLEA_BIN="$bin" PVCMP_DIR="$fixture" \
-    "$timeout_bin" "$RUN_BOUND" "$qs_bin" -p "$test_root/config" > "$log" 2>&1
+    FLEA_BIN="$bin" FLEA_PATH="$fixture/marks" PVCMP_DIR="$fixture" PVCMP_UI="$PWD/ui" \
+    dbus-run-session -- /bin/bash -c 'exec "$1" "$2" "$3" -p "$4" > "$5" 2>&1' _ \
+        "$timeout_bin" "$RUN_BOUND" "$qs_bin" "$test_root/config" "$log" 2> "$test_root/$harness-bus.log"
 status=$?
+# WindowBody's completed drain sends SIGTERM to its own shell, as in watch-views.sh.
+bad_exit=0
+[ "$status" -eq 0 ] || { [ "$harness" = pv-compare-menu ] && [ "$status" -eq 143 ]; } || bad_exit=1
 # Sample input, the receipt: "  INFO qml: PVCMP DONE 60 checks, 0 failed".
 done_count=$(grep -ac 'PVCMP DONE' "$log")
 noisy=$(grep -aiE 'WARN|ERROR|TypeError|ReferenceError|is not a function|is not defined|Binding loop|Unable to assign|Cannot assign' "$log" \
     | grep -av 'does not support setting window masks' | grep -avF '$HYPRLAND_INSTANCE_SIGNATURE is unset. Cannot connect to hyprland.')
 grep -a 'PVCMP' "$log"
-if [ "$done_count" -ne 1 ] || grep -aq 'PVCMP FAIL' "$log" || [ "$status" -ne 0 ] || [ -n "$noisy" ]; then
-    printf 'FAIL pv-compare: qs exit %s, receipts %s\n' "$status" "$done_count"
+if [ "$done_count" -ne 1 ] || grep -aq 'PVCMP FAIL' "$log" || [ "$bad_exit" -ne 0 ] || [ -n "$noisy" ]; then
+    printf 'FAIL %s: qs exit %s, receipts %s\n' "$harness" "$status" "$done_count"
     [ -n "$noisy" ] && printf '%s\n' "$noisy"
     exit 1
 fi
+done
 exit 0

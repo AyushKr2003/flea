@@ -40,8 +40,7 @@ fn the_boards_hunk_is_what_diff_prints_with_the_real_paths_as_labels() {
     }
     let d = TestDir::new("comparehunk");
     let (a, b) = pair(&d, &notes(false), &notes(true));
-    let Outcome::Patch(bytes) = compare(&a, &b) else { panic!("two different files answer a patch") };
-    let patch = String::from_utf8(bytes).expect("a text patch");
+    let Outcome::Patch(patch) = compare(&a, &b) else { panic!("two different files answer a patch") };
     let want = format!(
         "--- {a}\n+++ {b}\n@@ -9,12 +9,12 @@\n ## Previews\n \n Each kind asks for what it shows.\n\
 -Thumbnails never load on phones.\n-The map holds every row.\n-A taller preview costs nothing.\n-Ports keep their slots.\n-Marks ship one size.\n-Facts fold into two lines.\n\
@@ -93,9 +92,18 @@ fn a_missing_file_a_folder_and_a_relative_path_fail() {
 }
 
 #[test]
+fn compare_missing_regular_file_precedes_the_size_refusal() {
+    let d = TestDir::new("comparecheckorder");
+    let over = d.file("over.log", &text_of(OVER_BYTES as usize + 1)).to_string_lossy().into_owned();
+    let missing = d.join("missing.md").to_string_lossy().into_owned();
+    assert_eq!(compare(&over, &missing), Outcome::Failed);
+    assert_eq!(compare(&missing, &over), Outcome::Failed);
+}
+
+#[test]
 fn only_exit_zero_and_a_patch_with_output_are_answers() {
     assert_eq!(by_exit(Some(0), Vec::new()), Outcome::Identical);
-    assert_eq!(by_exit(Some(1), b"--- /a\n".to_vec()), Outcome::Patch(b"--- /a\n".to_vec()));
+    assert_eq!(by_exit(Some(1), b"--- /a\n".to_vec()), Outcome::Patch("--- /a\n".into()));
     assert_eq!(by_exit(Some(1), Vec::new()), Outcome::Failed, "a jail that could not start diff also exits 1");
     assert_eq!(by_exit(Some(2), b"diff: trouble\n".to_vec()), Outcome::Failed);
     assert_eq!(by_exit(None, Vec::new()), Outcome::Failed, "ended by a signal");
@@ -117,7 +125,7 @@ fn the_reply_is_one_wire_line_per_outcome() {
     assert_eq!(state(&Outcome::Binary), "binary");
     assert_eq!(state(&Outcome::Over), "over");
     assert_eq!(state(&Outcome::Failed), "failed");
-    let patch = doc(&Outcome::Patch(b"--- /a\n+++ /b\n@@ -1 +1 @@\n-x\n+y\n".to_vec()));
+    let patch = doc(&Outcome::Patch("--- /a\n+++ /b\n@@ -1 +1 @@\n-x\n+y\n".into()));
     assert_eq!(patch.get("state").and_then(Json::as_str), Some("diff"));
     assert_eq!(patch.get("patch").and_then(Json::as_str), Some("--- /a\n+++ /b\n@@ -1 +1 @@\n-x\n+y\n"));
     assert_eq!(patch.get("token").and_then(Json::as_f64), Some(3.0));
@@ -132,4 +140,80 @@ fn a_request_is_answered_on_the_channel() {
     spawn(Ask::parse(&line), tx);
     let OpMsg::Meta { line } = rx.recv_timeout(std::time::Duration::from_secs(20)).expect("one reply") else { panic!("a meta line") };
     assert!(line.starts_with(r#"{"t":"compare","token":9,"state":""#), "{line}");
+}
+
+#[test]
+fn non_utf8_text_is_refused_instead_of_copying_replacement_bytes() {
+    let d = TestDir::new("compareutf8");
+    let (a, b) = pair(&d, "old\n", "new\n");
+    let bad = b"caf\xe9\n";
+    d.assert_contains(Path::new(&a));
+    std::fs::write(&a, bad).unwrap();
+    let (tx, rx) = channel();
+    let code = format!(r#"{{"c":"code","slot":"compare-utf8","path":"{}","raw":true,"first":1,"count":1}}"#, escape(&a));
+    crate::backend::codereq::spawn(crate::backend::codereq::Ask::parse(&code), tx);
+    let OpMsg::Meta { line } = rx.recv_timeout(crate::backend::fifotest::BOUND).unwrap() else { panic!("a code reply") };
+    assert_eq!(crate::json::field_str(&line, "state").as_deref(), Some("plain"));
+    assert!(line.contains("caf\u{fffd}"), "the text preview draws invalid UTF-8 lossily");
+    assert_eq!(compare(&a, &b), Outcome::Failed);
+    assert_eq!(compare(&b, &a), Outcome::Failed);
+    let mut tail = vec![b'a'; NUL_WINDOW as usize + 8];
+    tail.push(0xff);
+    std::fs::write(&a, tail).unwrap();
+    assert_eq!(screen(&a, &b), Err(Outcome::Failed), "UTF-8 validation covers the whole bounded file");
+}
+
+#[test]
+fn a_path_swapped_for_a_fifo_after_screening_is_killed_and_answers_failed() {
+    if crate::backend::sandboxprobe::skipped() { return; }
+    let d = TestDir::new("comparefifo");
+    let (a, b) = pair(&d, "old\n", "new\n");
+    assert_eq!(screen(&a, &b), Ok(()));
+    d.assert_contains(Path::new(&b));
+    std::fs::remove_file(&b).unwrap();
+    crate::backend::fifotest::mkfifo(Path::new(&b));
+    let outcome = crate::backend::fifotest::within("diff after a screened path becomes a FIFO", move || diff(&a, &b));
+    assert_eq!(outcome, Outcome::Failed);
+}
+
+#[test]
+fn compare_deadline_also_kills_the_reopened_fifo_without_a_working_host_jail() {
+    let d = TestDir::new("comparedrain");
+    let (a, b) = pair(&d, "old\n", "new\n");
+    assert_eq!(screen(&a, &b), Ok(()));
+    d.assert_contains(Path::new(&b));
+    std::fs::remove_file(&b).unwrap();
+    crate::backend::fifotest::mkfifo(Path::new(&b));
+    let jailed = jail::spawn_jailed(&diff_argv(&a, &b), |cmd| {
+        cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
+    }).unwrap();
+    let pid = jailed.child.id();
+    let outcome = crate::backend::fifotest::within("the production diff collector on a reopened FIFO", move || read_diff(jailed));
+    assert_eq!(outcome, Outcome::Failed);
+    assert!(!Path::new(&format!("/proc/{pid}")).exists(), "the diff was killed and reaped");
+}
+
+#[test]
+fn compare_patch_bytes_never_become_lossy_clipboard_text() {
+    assert_eq!(by_exit(Some(1), b"--- /a\n-caf\xe9\n+new\n".to_vec()), Outcome::Failed);
+}
+
+#[test]
+fn compare_menu_snapshot_carries_own_kinds_for_unheld_marks() {
+    let d = TestDir::new("comparemarks");
+    let (a, b) = pair(&d, "old\n", "new\n");
+    let (tx, rx) = channel();
+    let menu = crate::backend::menu_actions::MenuActions::new(tx);
+    assert!(menu.request(r#"{"op":"snapshot","id":1}"#.into(), vec![b.clone(), a.clone()], None));
+    let OpMsg::Meta { line } = rx.recv_timeout(crate::backend::fifotest::BOUND).unwrap() else { panic!("a snapshot reply") };
+    let kinds = crate::json::field_usize_array(&line, "kinds");
+    assert_eq!(kinds, [0o100000, 0o100000]);
+    assert!(menu.request(r#"{"op":"activate","id":1,"action":"compare"}"#.into(), vec![], None));
+    let OpMsg::Meta { line } = rx.recv_timeout(crate::backend::fifotest::BOUND).unwrap() else { panic!("an activation reply") };
+    assert_eq!(crate::json::field_str_array(&line, "paths"), [b, a.clone()], "Compare activation carries both snapshot paths");
+    let link = d.join("link.md");
+    std::os::unix::fs::symlink(&a, &link).unwrap();
+    assert!(menu.request(r#"{"op":"snapshot","id":2}"#.into(), vec![a, link.to_string_lossy().into()], None));
+    let OpMsg::Meta { line } = rx.recv_timeout(crate::backend::fifotest::BOUND).unwrap() else { panic!("a snapshot reply") };
+    assert_eq!(crate::json::field_usize_array(&line, "kinds"), [0o100000, 0o120000]);
 }

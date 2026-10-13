@@ -120,8 +120,8 @@ or replacement of the pending request, and fetch metadata only for the visible w
 
 `{"c":"menuaction","op":"activate","id":4,"action":"duplicate"}` revalidates the
 selection captured by `snapshot` before the GUI dispatches a selected-item menu action.
-The response echoes `id`, `op`, and `action`, with `ok` and `error`. Only clipboard, Copy Path,
-and compression actions return captured `paths`; other actions do not serialize unused paths.
+The response echoes `id`, `op`, and `action`, with `ok` and `error`. Clipboard, Copy Path,
+compression, and Compare actions return captured `paths`; other actions do not serialize unused paths.
 The client also rechecks its listing identity and current action eligibility before dispatch.
 
 An optional `menuId` on `transfer`, `trash`, `duplicate`, `rename`, `archive`, or `convert`
@@ -133,7 +133,9 @@ batch handoff. These checks do not make subsequent external-helper filesystem op
 atomic. Omitting `menuId` preserves the existing keyboard and protocol entry paths.
 
 `{"c":"menuaction","op":"snapshot","id":4,"rows":[0,2]}` captures the selected identities
-from the active listing. `prepareDelete` with that `id` reviews the captured trees and returns a
+from the active listing and returns `count` and `kinds`, an array of each captured item's own file
+type bits in request order, including symlinks without following them. `prepareDelete` with that
+`id` reviews the captured trees and returns a
 fresh `token`, selected `count`, and total `bytes`. `checkDelete` with the `id` and `token` returns
 `valid` without mutating files. A changed set requires `refreshDelete`: it reviews only the same
 captured paths, drops missing paths, captures replacement identities, and issues a fresh token.
@@ -1217,12 +1219,17 @@ bytes the verdict was made on.
 Example: `{"c":"compare","token":3,"a":"/home/gm/notes-a.md","b":"/home/gm/notes-b.md"}`
 
 The unified diff of two regular files a client actually named, never a sweep; `a` is the first of the
-pair in the listing's order and `b` the second, and both are absolute. Either file over 1,048,576 bytes
-answers `over`, judged on both files before anything else; a NUL byte in the first 8,192 bytes of either
-answers `binary`; a path that is not absolute, not a regular file or not readable answers `failed`.
+pair in the listing's order and `b` the second. Absolute paths and readable regular files are checked
+first; a refusal answers `failed`. Either file over 1,048,576 bytes then answers `over`, judged on both
+files before reading their contents. The bounded contents of each file are read in pair order: a read
+failure answers `failed`, growth past the limit answers `over`, a NUL byte in its first 8,192 bytes
+answers `binary`, and invalid UTF-8 anywhere answers `failed`. Code preview displays invalid UTF-8
+lossily, but a copied patch must preserve bytes, so Compare refuses it.
 Otherwise `/usr/bin/diff -u --label <a> --label <b> -- <a> <b>` runs once in the same read-only jail as
 the other helpers, with the two files bound read-only and nothing writable, so the patch names the real
-paths. Answers one `compare` line on a thread, and `token` echoes the request's so a client matches the
+paths. The diff has a 2 s deadline; expiry kills its process tree and answers `failed`. Invalid UTF-8
+in the diff output also answers `failed`, so the clipboard never receives replacement bytes.
+Answers one `compare` line on a thread, and `token` echoes the request's so a client matches the
 one it last sent and drops any other.
 
 ### pdfcopy

@@ -2617,6 +2617,8 @@ record clears when the edit leaves that row or the tile is reused, so a pooled t
 
 ## File budget
 
+Compare for marks outside the held window moves `ui/PaneMenuActions.qml` 490 to 494, for the menu snapshot's selected kinds and the row refresh that offers Compare once the snapshot answers, and `src/backend/menu_actions.rs` 641 to 642, for the inspected kinds in the snapshot reply, each re-derived with `wc -l`.
+
 xw6 adversarial fixes retain the tab handoff detail and exact payload paths. Each lift
 captures a stable tab identity and its source pane until acknowledgment or the existing
 15-second deadline. Accepted lifts wait for pane settlement beyond that deadline, and source

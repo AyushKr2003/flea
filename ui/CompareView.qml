@@ -36,14 +36,22 @@ Item {
     readonly property bool engine: root.backend !== null && typeof root.backend.askCompare === "function"
 
     // Compare.html resolves its pixels at body 14, and each one follows the body from there.
+    readonly property int boardBodyPx: 14
+    readonly property int numberBoardWidth: 34
+    readonly property int columnBoardGap: 10
+    readonly property int signBoardWidth: 9
+    readonly property int copyPaddingBoardPx: 8
+    readonly property int contentMarginBoardPx: 12
+    readonly property int contentPaddingBoardPx: 16
+    readonly property real rowLineHeightFactor: 1.45
     function boardPx(px) {
-        return Math.round(px * Theme.font.body / 14)
+        return Math.round(px * Theme.font.body / root.boardBodyPx)
     }
-    readonly property int numberWidth: root.boardPx(34)
-    readonly property int columnGap: root.boardPx(10)
-    readonly property int signWidth: root.boardPx(9)
+    readonly property int numberWidth: root.boardPx(root.numberBoardWidth)
+    readonly property int columnGap: root.boardPx(root.columnBoardGap)
+    readonly property int signWidth: root.boardPx(root.signBoardWidth)
     readonly property int textX: 2 * root.numberWidth + root.signWidth + 3 * root.columnGap
-    readonly property int rowHeight: Math.round(Theme.font.body * 1.45) + 2 * Theme.spacing.hairline
+    readonly property int rowHeight: Math.round(Theme.font.body * root.rowLineHeightFactor) + 2 * Theme.spacing.hairline
 
     signal closeRequested
 
@@ -155,7 +163,7 @@ Item {
             label: "Copy patch"
             inStrip: true
             // Compare.html pads the label 8 either side of its 1 px frame; the recipe's own padding is the gap.
-            horizontalPadding: root.boardPx(8)
+            horizontalPadding: root.boardPx(root.copyPaddingBoardPx)
             onActivated: root.copyPatch()
         }
 
@@ -214,11 +222,11 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         clip: true
-        topMargin: root.boardPx(12)
-        bottomMargin: root.boardPx(12)
+        topMargin: root.boardPx(root.contentMarginBoardPx)
+        bottomMargin: root.boardPx(root.contentMarginBoardPx)
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.AutoFlickDirection
-        contentWidth: root.textX + widest.advanceWidth + root.boardPx(16)
+        contentWidth: root.textX + widest.advanceWidth + root.boardPx(root.contentPaddingBoardPx)
         model: root.rows
 
         delegate: Item {

@@ -88,11 +88,26 @@ function kinds(rowList) {
     return rowList.map(function (row) { return row ? Number(row.p) || 0 : 0 })
 }
 
-// The Compare choice: exactly two marked regular files open the overlay, anything else changed since the menu opened does nothing.
-function open(pane) {
+// A menu snapshot resolves all selected indices through the paths resolver, including marks outside the held window.
+function menuKinds(pane) {
+    var picked = markedRows(pane)
+    if (picked.every(function (row) { return row !== null && row !== undefined })) return kinds(picked)
+    var snapshot = pane.menuActions
+    return snapshot && snapshot.ready && snapshot.identity === pane.menuSelectionIdentity()
+        && snapshot.selectedKinds.length === picked.length ? snapshot.selectedKinds : kinds(picked)
+}
+
+// The choice uses the menu's validated paths, reordered like the marked indices; unvalidated choices can only use held rows.
+function open(pane, paths) {
     var indices = markedIndices(pane)
     var picked = indices.map(function (index) { return pane.rowFor(index) })
-    if (!Menu.canCompare(kinds(picked))) return
-    var paths = Ops.targetPaths(pane, indices)
-    pane.quickLook().openCompare(paths[0], paths[1], picked[0].i)
+    if (!Menu.canCompare(menuKinds(pane))) return
+    if (paths && paths.length === indices.length) {
+        var original = Ops.targetIndices(pane)
+        paths = indices.map(function (index) { return paths[original.indexOf(index)] })
+    } else {
+        paths = Ops.targetPaths(pane, indices)
+    }
+    if (paths.length !== 2 || paths.some(function (path) { return typeof path !== "string" || path.charAt(0) !== "/" })) return
+    pane.quickLook().openCompare(paths[0], paths[1], picked[0] ? picked[0].i : "text-x-generic")
 }

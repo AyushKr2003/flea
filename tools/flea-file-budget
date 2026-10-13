@@ -21,7 +21,7 @@ src/backend/gvfslist.rs 513
 src/backend/imagesize.rs 473
 src/backend/iomount.rs 613
 src/backend/localsend.rs 406
-src/backend/menu_actions.rs 641
+src/backend/menu_actions.rs 642
 src/backend/menu_registry.rs 564
 src/backend/meta.rs 551
 src/backend/metareq.rs 416
@@ -130,7 +130,7 @@ ui/NetworkForm.qml 413
 ui/NetworkMounts.qml 901
 ui/OpenWithDialog.qml 613
 ui/Pane.qml 1183
-ui/PaneMenuActions.qml 490
+ui/PaneMenuActions.qml 494
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 797

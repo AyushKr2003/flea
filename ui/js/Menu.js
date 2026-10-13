@@ -178,7 +178,7 @@ function availableEntry(e, p, kind) {
     }
     // Only a cursor-row script without any execute bit qualifies; its two-byte probe runs once at menu open.
     if (e.action === "makeExecutable" && !canMakeExecutable(p.rowMode, count, p.hasShebang, p.cursorIsTarget)) return false
-    // The kinds are read once at menu open and only the choice asks the backend for anything.
+    // The held rows or menu snapshot supply every selected item's own kind.
     if (e.action === "compare" && !canCompare(p.compareKinds)) return false
     if (e.action === "runScript") {
         if (!(p.scripts || []).length) return false
@@ -314,7 +314,7 @@ function canMakeExecutable(mode, count, hasShebang, cursorIsTarget) {
     return (bits & Format.ANY_EXECUTE_BIT) === 0
 }
 
-// Exactly two marked rows, both regular files once any symlink is followed; kinds holds each marked row's resolved file type bits.
+// Exactly two marked regular files; kinds holds each item's own type bits, so links stay links.
 // Sample input: [0o100000, 0o100000] is true; [0o100000, 0o040000], [0o100000] and a link left at 0o120000 are false.
 function canCompare(kinds) {
     if (!Array.isArray(kinds) || kinds.length !== 2) return false

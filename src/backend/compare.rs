@@ -1,12 +1,13 @@
 // The compare request: two regular files answered with the unified diff of their lines, or the reason there is none.
 use crate::backend::opsreq::OpMsg;
 use crate::backend::regfile::open_regular;
-use crate::backend::{jail, sandbox};
+use crate::backend::{child, jail, sandbox};
 use crate::json::{escape, field_str, field_usize};
 use std::io::Read;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::mpsc::Sender;
+use std::time::{Duration, Instant};
 
 // A file past this many bytes is too large to compare.
 const OVER_BYTES: u64 = 1_048_576;
@@ -14,6 +15,8 @@ const OVER_BYTES: u64 = 1_048_576;
 const NUL_WINDOW: u64 = 8192;
 // Two files at the limit differ by a patch of about twice that; more than this is a diff that went wrong.
 const PATCH_CAP: u64 = 8 * 1_048_576;
+// The archive reader's deadline also bounds one small text diff.
+const DIFF_WAIT: Duration = Duration::from_millis(crate::backend::archivelist::ARCHIVE_READ_MS);
 const DIFF: &str = "/usr/bin/diff";
 
 pub struct Ask {
@@ -25,7 +28,7 @@ pub struct Ask {
 #[derive(Debug, PartialEq)]
 enum Outcome {
     Identical,
-    Patch(Vec<u8>),
+    Patch(String),
     Binary,
     Over,
     Failed,
@@ -70,12 +73,14 @@ fn screen(a: &str, b: &str) -> Result<(), Outcome> {
     }
     for file in [first, second] {
         let mut head = Vec::new();
-        if file.take(NUL_WINDOW).read_to_end(&mut head).is_err() {
+        if file.take(OVER_BYTES + 1).read_to_end(&mut head).is_err() {
             return Err(Outcome::Failed);
         }
-        if head.contains(&0) {
+        if head.len() as u64 > OVER_BYTES { return Err(Outcome::Over); }
+        if head[..head.len().min(NUL_WINDOW as usize)].contains(&0) {
             return Err(Outcome::Binary);
         }
+        if std::str::from_utf8(&head).is_err() { return Err(Outcome::Failed); }
     }
     Ok(())
 }
@@ -98,17 +103,28 @@ fn diff(a: &str, b: &str) -> Outcome {
         cmd.env("LANG", std::env::var_os("LANG").unwrap_or_else(|| "C.UTF-8".into()));
         cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
     });
-    let Ok(mut jailed) = spawned else { return Outcome::Failed };
-    let mut out = Vec::new();
-    if let Some(pipe) = jailed.child.stdout.take() {
-        if pipe.take(PATCH_CAP + 1).read_to_end(&mut out).is_err() || out.len() as u64 > PATCH_CAP {
-            jail::kill_tree(&mut jailed);
-            return Outcome::Failed;
-        }
+    let Ok(jailed) = spawned else { return Outcome::Failed };
+    read_diff(jailed)
+}
+
+// The pipe drains beside the existing exit waiter, so a reopen or read that hangs cannot outlive the deadline.
+fn read_diff(mut jailed: jail::Jailed) -> Outcome {
+    let Some(pipe) = jailed.child.stdout.take() else {
+        jail::kill_tree(&mut jailed);
+        return Outcome::Failed;
+    };
+    let reader = std::thread::spawn(move || {
+        let mut out = Vec::new();
+        pipe.take(PATCH_CAP + 1).read_to_end(&mut out).map(|_| out)
+    });
+    if !matches!(child::wait_for_exit(&jailed.child, Instant::now() + DIFF_WAIT), child::Woke::Exited) {
+        jail::kill_tree(&mut jailed);
+        return Outcome::Failed;
     }
-    match jailed.child.wait().map(|status| status.code()) {
-        Ok(code) => by_exit(code, out),
-        Err(_) => Outcome::Failed,
+    let code = jailed.child.wait().ok().and_then(|status| status.code());
+    match reader.join() {
+        Ok(Ok(out)) if out.len() as u64 <= PATCH_CAP => by_exit(code, out),
+        _ => Outcome::Failed,
     }
 }
 
@@ -116,7 +132,7 @@ fn diff(a: &str, b: &str) -> Outcome {
 fn by_exit(code: Option<i32>, out: Vec<u8>) -> Outcome {
     match code {
         Some(0) => Outcome::Identical,
-        Some(1) if !out.is_empty() => Outcome::Patch(out),
+        Some(1) if !out.is_empty() => String::from_utf8(out).map_or(Outcome::Failed, Outcome::Patch),
         _ => Outcome::Failed,
     }
 }
@@ -124,13 +140,13 @@ fn by_exit(code: Option<i32>, out: Vec<u8>) -> Outcome {
 // Sample output: {"t":"compare","token":3,"state":"diff","patch":"--- /a\n+++ /b\n@@ -1 +1 @@\n-x\n+y\n"}
 fn reply(token: usize, outcome: &Outcome) -> String {
     let (state, patch) = match outcome {
-        Outcome::Identical => ("identical", String::new()),
-        Outcome::Patch(bytes) => ("diff", String::from_utf8_lossy(bytes).into_owned()),
-        Outcome::Binary => ("binary", String::new()),
-        Outcome::Over => ("over", String::new()),
-        Outcome::Failed => ("failed", String::new()),
+        Outcome::Identical => ("identical", ""),
+        Outcome::Patch(patch) => ("diff", patch.as_str()),
+        Outcome::Binary => ("binary", ""),
+        Outcome::Over => ("over", ""),
+        Outcome::Failed => ("failed", ""),
     };
-    format!(r#"{{"t":"compare","token":{token},"state":"{state}","patch":"{}"}}"#, escape(&patch))
+    format!(r#"{{"t":"compare","token":{token},"state":"{state}","patch":"{}"}}"#, escape(patch))
 }
 
 #[cfg(test)]

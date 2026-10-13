@@ -223,6 +223,16 @@ ShellRoot {
         },
         function () {
             root.check("live: a folder fails", root.liveReply.state, "failed")
+            root.liveAsk(root.fixture + "/latin1.md", root.fixture + "/notes-b.md")
+            return function () { return root.liveReply !== null }
+        },
+        function () {
+            root.check("live: invalid UTF-8 refuses a lossy clipboard patch", [root.liveReply.state, root.liveReply.patch], ["failed", ""])
+            root.liveAsk(root.fixture + "/dump-a.log", root.fixture + "/none.md")
+            return function () { return root.liveReply !== null }
+        },
+        function () {
+            root.check("live: opening both regular files precedes the size check", root.liveReply.state, "failed")
             return null
         }
     ], root.wiring())

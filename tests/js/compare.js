@@ -2,6 +2,7 @@
 .import "../../ui/js/Menu.js" as Menu
 .import "../../ui/js/Keymap.js" as Keymap
 .import "../../ui/js/PreviewKeys.js" as PreviewKeys
+.import "../../ui/js/Focus.js" as Focus
 .import "sourcefixture.js" as Source
 
 var REG = 0o100644
@@ -24,13 +25,28 @@ function run(plain) {
     // check compares with ===, so lists and numbers go through JSON to compare by value.
     function check(label, got, want) { plain(label, JSON.stringify(got), JSON.stringify(want)) }
     check("two regular files offer Compare", Menu.canCompare([REG, REG]), true)
-    check("a symlink already followed to a regular file counts as one", Menu.canCompare([0o100000, 0o100755]), true)
+    check("regular files qualify regardless of permission bits", Menu.canCompare([0o100000, 0o100755]), true)
     check("one marked file does not", Menu.canCompare([REG]), false)
     check("three marked files do not", Menu.canCompare([REG, REG, REG]), false)
     check("a folder among them does not", Menu.canCompare([REG, DIR]), false)
-    check("a symlink to a folder, followed, does not", Menu.canCompare([REG, 0o040000]), false)
-    check("a symlink left unresolved does not", Menu.canCompare([REG, LINK]), false)
+    check("a second directory mode does not", Menu.canCompare([REG, 0o040000]), false)
+    check("a link stays a link and does not qualify", Menu.canCompare([REG, LINK]), false)
     check("no kinds, or kinds that are not a list, do not", [Menu.canCompare(undefined), Menu.canCompare(null), Menu.canCompare("")], [false, false, false])
+
+    check("a symlink pair hides Compare", actions([LINK, LINK]).indexOf("compare"), -1)
+    var opened = [], selection = [4800, 3]
+    var wide = { cursorIndex: 4800, selectedIndices: function () { return selection },
+        rowFor: function (index) { return index === 4800 ? { n: "b.txt", p: REG, i: "text-x-generic" } : null },
+        menuSelectionIdentity: function () { return "wide" },
+        menuActions: { ready: true, identity: "wide", selectedKinds: [REG, REG] },
+        quickLook: function () { return { openCompare: function (a, b, icon) { opened.push([a, b, icon]) } } } }
+    check("marks more than one held window apart still show Compare", Menu.canCompare(Compare.menuKinds(wide)), true)
+    Compare.open(wide, ["/wide/b.txt", "/wide/a.txt"])
+    check("validated paths outside the window open in listing order", opened.map(function (pair) { return pair.slice(0, 2) }), [["/wide/a.txt", "/wide/b.txt"]])
+    wide.menuActions.identity = "retired"
+    check("an old snapshot cannot supply an unheld kind", Menu.canCompare(Compare.menuKinds(wide)), false)
+    Compare.open(wide, ["/wide/b.txt", "/wide/a.txt"])
+    check("an old snapshot cannot open Compare", opened.length, 1)
 
     var shown = actions([REG, REG])
     check("the row is present for two files", shown.indexOf("compare") >= 0, true)
@@ -71,6 +87,19 @@ function run(plain) {
     var pane = { preview: { isCompare: true, revealStrip: function () {}, copyPatch: function () { copied += 1 } } }
     PreviewKeys.act("copyPatch", pane)
     check("the action reaches the overlay once", copied, 1)
+    var event = { key: 0, text: "y", modifiers: Qt.NoModifier }
+    var regularPreview = { preview: { active: true, isPdf: false, isMedia: false, isCompare: false } }
+    var binding = Keymap.PRESET_KEYS.filter(function (row) { return row.action === "copyPatch" && row.context === "preview" })[0]
+    var slot = Keymap.PRESET_KEYS.indexOf(binding)
+    Keymap.PRESET_KEYS.splice(slot, 1)
+    check("before Compare's binding a regular preview had no y action", Focus.lookup(event, regularPreview), "")
+    Keymap.PRESET_KEYS.splice(slot, 0, binding)
+    check("after Compare's binding y cannot copy a non-Compare file", Focus.lookup(event, regularPreview), "copyPatch")
+    var ignored = 0, nonCompare = { isCompare: false }
+    var compareLoader = { item: { copyPatch: function () { ignored += 1 } } }
+    var guardedCopy = new Function("root", "compareLoader", Source.block(Source.source("ui/Preview.qml"), "function copyPatch()", "ui/Preview.qml"))
+    PreviewKeys.act("copyPatch", { preview: { revealStrip: function () {}, copyPatch: function () { guardedCopy(nonCompare, compareLoader) } } })
+    check("the production preview guard copies nothing outside Compare", ignored, 0)
     var other = { cursorIndex: 0, preview: { isCompare: true, revealStrip: function () {}, close: function () {} } }
     PreviewKeys.act("cursorDown", other)
     check("the cursor keys leave a Compare overlay as it is", other.cursorIndex, 0)

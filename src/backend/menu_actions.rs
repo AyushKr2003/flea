@@ -199,7 +199,8 @@ impl Snapshot {
                     self.cursor = cursor.map(Selected::inspect).transpose()?;
                     self.items = items;
                     self.id = id;
-                    Ok(format!(r#""count":{}"#, self.items.len()))
+                    let kinds = self.items.iter().map(|item| item.kind.to_string()).collect::<Vec<_>>().join(",");
+                    Ok(format!(r#""count":{},"kinds":[{}]"#, self.items.len(), kinds))
                 })
             }
         } else if op == "close" {
@@ -267,7 +268,7 @@ impl Snapshot {
                 cursor.current()?;
                 return Ok(format!(r#""action":"{}","paths":["{}"]"#, escape(&action), escape(&cursor.path.to_string_lossy())));
             }
-            let needs_paths = op == "validate" || matches!(action.as_str(), "copy" | "cut" | "copypath" | "copyAs" | "copyPath" | "copyName" | "copyStem" | "copydirpath" | "copyUri" | "copyQuoted" | "showOriginal" | "makeExecutable" | "pasteAs" | "pasteLink" | "pasteAbsoluteLink" | "pasteHardLink" | "addFavourite" | "localsend") || action.starts_with("compress:") || action.starts_with("runScript:") || action.starts_with("localsend:") || action.starts_with("copyAs:") || action.starts_with("pasteAs:");
+            let needs_paths = op == "validate" || matches!(action.as_str(), "copy" | "cut" | "compare" | "copypath" | "copyAs" | "copyPath" | "copyName" | "copyStem" | "copydirpath" | "copyUri" | "copyQuoted" | "showOriginal" | "makeExecutable" | "pasteAs" | "pasteLink" | "pasteAbsoluteLink" | "pasteHardLink" | "addFavourite" | "localsend") || action.starts_with("compress:") || action.starts_with("runScript:") || action.starts_with("localsend:") || action.starts_with("copyAs:") || action.starts_with("pasteAs:");
             let paths: Vec<String> = if needs_paths { self.items.iter().map(|i| format!(r#""{}""#, escape(&i.path.to_string_lossy()))).collect() } else { Vec::new() };
             return Ok(format!(r#""action":"{}","paths":[{}],"dest":"{}""#,
                 escape(&action), paths.join(","),
