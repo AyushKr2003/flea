@@ -278,6 +278,23 @@ function run(check) {
     // Only the safe verdict may say safe; the other two tell the user to leave the stick in.
     check("the safe verdict earns the unplug sentence", Eject.sentence("safe", "128GB").text, "Ejected 128GB. It is safe to unplug.")
     check("the safe verdict is not an error", Eject.sentence("safe", "128GB").isError, false)
+    check("a real drive keeps the safe unplug sentence", Eject.sentence("safe", "128GB", [], false).text, "Ejected 128GB. It is safe to unplug.")
+    check("a loop image's safe verdict says only that it was ejected", Eject.sentence("safe", "OMARCHY_202608", [], true).text, "Ejected OMARCHY_202608.")
+    check("a loop image's safe verdict is not an error", Eject.sentence("safe", "ISO", [], true).isError, false)
+    check("a loop image's successful eject never says unplug", /unplug/i.test(Eject.sentence("safe", "ISO", [], true).text), false)
+    check("a failed loop detach keeps its exact sentence", Eject.sentence("attached", "ISO", [], true).text, "Unmounted ISO, but its loop device is still attached.")
+    var imageOtherVerdicts = [
+        { verdict: "attached", blockers: [] },
+        { verdict: "mounted", blockers: [] },
+        { verdict: "mounted", blockers: ["first"] },
+        { verdict: "mounted", blockers: ["first", "second"] },
+        { verdict: "unknown", blockers: [] }
+    ]
+    imageOtherVerdicts.forEach(function (test) {
+        check("loop identity preserves the " + test.verdict + " verdict with " + test.blockers.length + " blockers",
+              JSON.stringify(Eject.sentence(test.verdict, "ISO", test.blockers, true)),
+              JSON.stringify(Eject.sentence(test.verdict, "ISO", test.blockers, false)))
+    })
     check("the mounted verdict with the row itself still mounted says try again", Eject.sentence("mounted", "128GB", []).text, "128GB is still mounted; close what is using it.")
     check("the mounted verdict is an error", Eject.sentence("mounted", "128GB", []).isError, true)
     check("a sibling blocker is named instead of an instruction that would do nothing", Eject.sentence("mounted", "second", ["first"]).text, "second could not be ejected because first on the same drive is still mounted. Eject that instead.")

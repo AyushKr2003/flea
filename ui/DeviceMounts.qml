@@ -63,6 +63,7 @@ Item {
     // the only witness: gio's own exit code has been 0 over a volume that was still mounted.
     property string _ejectDevice: ""
     property string _ejectLabel: ""
+    property bool _ejectLoop: false
     // A loop row's unmount succeeded but its detach did not (Devices.detachFailedExit).
     property bool _ejectDetachFailed: false
     // Listings are counted as they start. _verdictFromListing is 0 while gio runs, so nothing is
@@ -242,6 +243,7 @@ Item {
     function armEject(e) {
         root._ejectDevice = e.device
         root._ejectLabel = e.label
+        root._ejectLoop = e.loop === true
         root._ejectDetachFailed = false
         root._verdictFromListing = 0
     }
@@ -351,14 +353,14 @@ Item {
             root.reportEject(verdict, Eject.blockers(body, root._ejectDevice), body)
     }
 
-    // "Safe to unplug" is a safety claim: Eject.sentence says it for the "safe" verdict only.
+    // "Safe to unplug" is a safety claim: only a real drive's "safe" verdict earns it.
     function reportEject(verdict, others, body) {
         if (root._ejectDevice.length === 0)
             return
         powerOffTimeout.stop()
         ejectVerdictTimeout.stop()
         // An unmounted loop row reads as safe to the listing; a failed detach still has to say so.
-        var s = Eject.sentence(verdict === "safe" && root._ejectDetachFailed ? "attached" : verdict, root._ejectLabel, others)
+        var s = Eject.sentence(verdict === "safe" && root._ejectDetachFailed ? "attached" : verdict, root._ejectLabel, others, root._ejectLoop)
         if (!s.isError)
             root.lockCrypt(root._ejectDevice, root._ejectLabel, body)
         root._ejectDevice = ""

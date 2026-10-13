@@ -175,13 +175,13 @@ case_cap_iso() (
         loops=$(cap_iso_loops) || fail "cap_iso: cannot verify loop detachment"
         if jq -e --arg device "$iso_loop" --arg label "$iso_label" \
             'all(.[]; .device != $device and .label != $label)' <<< "$entries" >/dev/null \
-            && [[ -z "$loops" && "$chain" == "|$iso_label||0|Ejected $iso_label, it is safe to unplug.|false|false" ]]; then break; fi
+            && [[ -z "$loops" && "$chain" == "|$iso_label||0|Ejected $iso_label.|false|false" ]]; then break; fi
         sleep 0.1
     done
     jq -e --arg device "$iso_loop" --arg label "$iso_label" \
         'all(.[]; .device != $device and .label != $label)' <<< "$entries" >/dev/null \
         || fail "cap_iso: Eject left the ISO row on the rail: $entries"
-    [[ -z "$loops" && "$chain" == "|$iso_label||0|Ejected $iso_label, it is safe to unplug.|false|false" ]] \
+    [[ -z "$loops" && "$chain" == "|$iso_label||0|Ejected $iso_label.|false|false" ]] \
         || fail "cap_iso: Eject did not finish with an owned loop detached: loops=[$loops] chain=[$chain]"
     [[ "$(ipc contextMenuVisible)" == false && "$(ipc statusError)" == false ]] \
         || fail "cap_iso: Eject left a menu or reported an error"
