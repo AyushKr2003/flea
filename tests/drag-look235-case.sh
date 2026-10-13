@@ -45,6 +45,12 @@ look235_shot() {
   footer=$(ipc statusFooterState) || die "look235: footer observer failed"
   activity=$(ipc statusActivityState) || die "look235: activity observer failed"
   rail=$(ipc railDetails) || die "look235: rail observer failed"
+  jq -e --arg target "$target" \
+    '[.rows[] | select(.kind == "trash")] | length == 1 and
+     (.[0] | if $target == "Trash" then .detail == "move here" and
+       .labelRect.x + .labelRect.width < .detailRect.x and .detailRect.width > 0
+       else .detail != "move here" end)' <<< "$rail" >/dev/null \
+    || die "look235: Trash drop cue does not describe $name: $rail"
   jq -e --arg path "$HOMEDIR" --arg primary "$primary" --argjson total "$total" \
     --argjson selected "$selected" --argjson undo "$undo" \
     '.path == $path and .total == $total and .selected == $selected and .listingState == "ready"

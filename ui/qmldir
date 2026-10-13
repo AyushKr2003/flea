@@ -153,6 +153,7 @@ ShareBrowser 1.0 ShareBrowser.qml
 Sidebar 1.0 Sidebar.qml
 SidebarRow 1.0 SidebarRow.qml
 RailTrashRow 1.0 RailTrashRow.qml
+DropTarget 1.0 DropTarget.qml
 Spinner 1.0 Spinner.qml
 SearchStrip 1.0 SearchStrip.qml
 FilterStrip 1.0 FilterStrip.qml

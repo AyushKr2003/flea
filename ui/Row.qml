@@ -132,32 +132,12 @@ Item {
         id: dropLoader
         active: root.dropTarget || (root.clipMark.length > 0 && !root.renaming && !root.searching)
         anchors.fill: parent
-        sourceComponent: Item {
-            property alias label: dropLabel
+        sourceComponent: Flea.DropTarget {
             property alias mark: clipGlyph
             anchors.fill: parent
-            // The board's accent hairline over a faint wash at the hover rung's alpha: the token wins over the mock's own 0.07.
-            Rectangle {
-                visible: root.dropTarget
-                width: root.paintWidth > 0 ? root.paintWidth : parent.width
-                height: parent.height
-                color: Util.alpha(Theme.color.accent, Style.hoverFillAlpha)
-                border.width: Theme.spacing.hairline
-                border.color: Theme.color.accent
-            }
-            // The board's own words in the columns' place: caption type in the accent, against the row padding.
-            Text {
-                id: dropLabel
-                visible: root.dropTarget
-                anchors.right: parent.right
-                anchors.rightMargin: Theme.spacing.rowPaddingX
-                anchors.verticalCenter: parent.verticalCenter
-                text: DragOps.label(root.dropCopying, root.dropLinking)
-                color: Theme.color.accent
-                font.family: Theme.font.family
-                font.pixelSize: Theme.font.caption
-                textFormat: Text.PlainText
-            }
+            shown: root.dropTarget
+            paintWidth: root.paintWidth
+            text: DragOps.label(root.dropCopying, root.dropLinking)
             // A clipboard row under a drag keeps its mark beside the label, one pixel above the text centre line.
             Glyph {
                 id: clipGlyph

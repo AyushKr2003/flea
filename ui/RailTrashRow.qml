@@ -15,16 +15,27 @@ SidebarRow {
     // Exposed so ui/PaneRail.qml keeps an overlay rail up while a drag rests on this row.
     readonly property bool dragOver: target.containsDrag
 
-    // The held location and keyboard frame keep the rail's bindings; a drag resting here draws the frame too.
+    // The drop cue is separate from the rail's own location and keyboard cursor.
     lit: root.railIndex === root.rail.litIndex
-    cursor: target.containsDrag || (root.rail.cursorDrawn && root.railIndex === root.rail.cursorIndex)
+    cursor: root.rail.cursorDrawn && root.railIndex === root.rail.cursorIndex
     focused: root.rail.focused
+    trailingLabel: dropLoader.item ? dropLoader.item.label : null
     onActivated: root.rail.activate(root.railIndex)
     onMenuRequested: function (idx, pos) { root.rail.openRailMenu(root.railIndex, pos) }
 
     Flea.FileDrag {
         id: feedback
         pane: root.pane
+    }
+
+    Loader {
+        id: dropLoader
+        active: root.dragOver
+        anchors.fill: parent
+        sourceComponent: Flea.DropTarget {
+            // TrashDrop always moves to Trash, regardless of the drag's copy or link modifiers.
+            text: DragOps.label(false, false)
+        }
     }
 
     DropArea {
