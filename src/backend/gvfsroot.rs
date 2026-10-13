@@ -78,6 +78,14 @@ pub fn gvfs_class(path: &Path) -> Option<&'static str> {
     }
 }
 
+// Sample input: /run/user/1000/gvfs/smb-share:server=n,share=x/dir gives backend smb-share, so false; SFTP and unknown backends keep their bits.
+pub(crate) fn gvfs_modes_are_real(path: &Path) -> Option<bool> {
+    let (_, share) = mounted(path)?;
+    let backend = share.split(':').next().unwrap_or_default().to_ascii_lowercase();
+    Some(!matches!(backend.as_str(), "smb-share" | "smb-server" | "mtp" | "afc" | "gphoto2"
+        | "dav" | "davs" | "http" | "https" | "google-drive" | "onedrive"))
+}
+
 // Sample input: "/run/user/1000/gvfs/smb-share:server=n,share=x/dir" answers "/run/user/1000/gvfs/smb-share:server=n,share=x".
 pub fn gvfs_root(path: &Path) -> Option<PathBuf> {
     let (root, share) = mounted(path)?;

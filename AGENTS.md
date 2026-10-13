@@ -2714,6 +2714,8 @@ and adjacent-item geometry checks, with the details beside the md3 paragraph bel
 `tests/rename-cost.qml` is recorded at 482 lines: its per-key census (frames, replies, selection bumps, delegates
 built, destroyed and rebound, row field reads) runs for each rename end in all four views and cannot split from the one
 real WindowBody it drives.
+`tests/js/runfile.js` is recorded at 313 lines, from 305, for the extensionless-program check. Such a program
+reaches the card under either icon mark, pinned at `Nav.openCursor`.
 `ui/GridArea.qml` is 665 lines by `wc -l`, its recorded ceiling (moved from 663 for the `viewTop()` helper and its comment, which keeps the viewport top at `contentY - originY` for the drift check and `coversCursor`); the column and row-count handlers restart that drift check with `coalesce.restart()`, so a resize that re-flows the tiles asks for the window they draw without waiting for a scroll.
 
 The budget is a smell detector, not a target, and **it is not a reason to refactor a
@@ -7596,6 +7598,16 @@ three bits `Row.nameColor` reads: set gives `application-x-executable`, clear gi
 says so. `application/x-shellscript` and `application/x-pie-executable` have no `globs2`
 entry at all, so `mime::Db` can never produce them; `*.sh` is `text/x-shellscript`, which
 `generic-icons` lists as `text-x-script`, so a shell script never reaches this arm.
+
+A name no glob claims has no type at all, and `mime::Db` never reads a file's bytes, so a PIE
+named with no extension never becomes `x-pie-executable` or `x-sharedlib` here. Before 0.3.11 that
+row answered `text-x-generic` whatever its mode, so an extensionless program drew the document
+mark in every listing and on the run card, while `flea --open` had already read its magic and asked.
+Now a row with no type and any execute bit on a non-symlink answers `application-x-executable`, the
+same rule an unlisted application type gets. A symlink's lstat mode is always `0777`, so its own bits
+never count. `peek.rs` passes mode 0 by design, so a neighbour column's extensionless program still
+draws the document mark; fixing that needs a stat per peeked row, which the name-order peek cost comment rules out.
+On a mount whose filesystem keeps no POSIX modes (the FAT family, NTFS, or CIFS and SMB without mode-preserving extensions), a file's execute bits can come from the mount's fixed mode, so `rows_line` clears them before it asks for the icon and sends `x:false` only on those rows so `Row.nameColor` uses foreground instead of executable ink; `Row.p` keeps the reported mode for the Permissions column and mode cell, and ordinary rows gain no wire bytes. CIFS and SMB3 keep file modes when their mount's super options carry any of `posix`, `unix`, `cifsacl` or `modefromsid`. `rows_line` reads the mount table at most once per window, never for a gvfs base, through `mountinfo::read_body`, and `mountinfo::modes_are_real` decides. A gvfs path is decided from its spelling, unresolved, using its backend: SMB, MTP, AFC, gphoto2, WebDAV, HTTP, Google Drive and OneDrive have no real Unix execute bits; SFTP and unknown backends keep their reported bits. The existing `phone` and `network` classes stay unchanged. For other rows, `mountinfo::modes_are_real_for_dev` decides from the row's held `Meta.dev` and the matching mountinfo entry's filesystem type and super options, cached once per distinct device in the window. The device comes from the existing stat, so a symlinked base or parent keeps the target filesystem's rules without resolving any path on the backend loop, except for a gvfs target whose shared proxy device cannot identify its backend. A zero or unlisted device, including an anonymous btrfs subvolume device, falls back to the lexical mount owning `base.join(name)`; a failed device lookup is cached, and its lexical fallback is cached per (device, borrowed directory part of the name), so plain rows share one decision per device while search and listpaths rows share only the same device and parent spelling. The key borrows the name without allocating, and the fallback builds `base.join(name)` only on a cache miss. `fatnames` uses the source device from its existing lstat, with the same gvfs-first and lexical fallback rules. Row mode decisions add no path resolution or stat, which `rows_mount_tests` gates by counting forbidden path-call sites in the production row and mount helpers; restoring a canonicalize call makes that gate fail. Both icon callers clear the same named `icons::ANY_EXECUTE_BIT` mask. `collide.rs` and `merge.rs` still pass a FAT source's bits through, since neither holds the source's mount type.
 
 `Row.iconSource` turns that name into a source. `Quickshell.iconPath(name, true)` does not
 answer a filesystem path: it answers the image provider URL `image://icon/<name>`, and the

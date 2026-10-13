@@ -83,8 +83,7 @@ pub fn peek_line(path: &str, first: usize, hidden: bool, order: Order, focus: &s
         }
         let name = listing.name(i);
         let dir = listing.is_dir(i);
-        // Mode 0, because no row here is stat'd; the execute-bit fallback for an application type
-        // therefore resolves to the generic mark rather than the executable one in a column.
+        // Mode 0, because no row here is stat'd, so an unlisted program draws the generic mark, not the executable one.
         let icon = icons.icon_for(mime.lookup(name), dir, 0);
         out.push_str(&format!(
             r#"{{"n":"{}","d":{},"i":"{}"}}"#,

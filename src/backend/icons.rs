@@ -10,7 +10,10 @@ const UNKNOWN: &str = "text-x-generic";
 // The icon naming spec's generic file, for the application types generic-icons does not list.
 const GENERIC: &str = "application-x-generic";
 // The execute bits of st_mode, the same three Row.nameColor reads to colour an executable.
-const ANY_EXECUTE_BIT: u32 = 0o111;
+pub(crate) const ANY_EXECUTE_BIT: u32 = 0o111;
+// The file type bits of st_mode, so a symlink's own mode is told apart from the file it names.
+const S_IFMT: u32 = 0o170000;
+const S_IFLNK: u32 = 0o120000;
 
 impl Names {
     pub fn load() -> Names {
@@ -43,6 +46,8 @@ impl Names {
         }
         let mime = match mime {
             Some(m) if !m.is_empty() => m,
+            // No glob names this file, so its execute bit alone says it is a program, as it does for an unlisted application type.
+            _ if is_program(mode) => return "application-x-executable",
             _ => return UNKNOWN,
         };
         if let Some(icon) = self.generic.get(mime) {
@@ -61,6 +66,11 @@ impl Names {
             _ => UNKNOWN,
         }
     }
+}
+
+// A symlink's mode is the link's own, which always carries execute bits, so only a file's own bits count.
+fn is_program(mode: u32) -> bool {
+    mode & S_IFMT != S_IFLNK && mode & ANY_EXECUTE_BIT != 0
 }
 
 // Returning a borrow rules out building "<class>-x-generic", so the shipped class names are literals here.
@@ -149,6 +159,29 @@ mod tests {
         // application/pkcs7-mime is unlisted in the fixture, as it is in this box's own table.
         assert_eq!(n.icon_for(Some("application/pkcs7-mime"), false, PLAIN), "application-x-generic");
         assert_eq!(n.icon_for(Some("application/x-sharedlib"), false, EXECUTABLE), "application-x-executable");
+    }
+
+    #[test]
+    fn a_shared_object_draws_the_program_mark_only_with_its_execute_bit() {
+        let n = names();
+        assert_eq!(n.icon_for(Some("application/x-sharedlib"), false, PLAIN), "application-x-generic");
+        assert_eq!(n.icon_for(Some("application/x-sharedlib"), false, EXECUTABLE), "application-x-executable");
+    }
+
+    #[test]
+    fn an_extensionless_program_draws_the_program_mark_from_its_execute_bit() {
+        // A PIE or non-PIE ELF named with no extension has no glob, so the mode is the only signal the row has.
+        let n = names();
+        assert_eq!(n.icon_for(None, false, EXECUTABLE), "application-x-executable");
+        assert_eq!(n.icon_for(Some(""), false, EXECUTABLE), "application-x-executable");
+        assert_eq!(n.icon_for(None, false, PLAIN), "text-x-generic");
+    }
+
+    #[test]
+    fn a_symlink_never_draws_the_program_mark_from_its_own_execute_bits() {
+        // lstat gives a link mode 0777, so its own bits say nothing about the file it names.
+        let n = names();
+        assert_eq!(n.icon_for(None, false, 0o120777), "text-x-generic");
     }
 
     #[test]

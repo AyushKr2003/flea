@@ -1,4 +1,6 @@
 .import "../../ui/js/Format.js" as Format
+.import "../../ui/js/Messages.js" as Messages
+.import "sourcefixture.js" as Source
 
 function run(check) {
     // One grouping rule for every count the product prints: the search's scan and the filter's scope.
@@ -85,6 +87,20 @@ function run(check) {
     check("mode 755 is executable", Format.isExecutable(33261), true)
     check("mode 644 is not executable", Format.isExecutable(33188), false)
     check("a vanished row is not executable", Format.isExecutable(0), false)
+
+    // Execute semantics travel unchanged through the real row parser and the shipped colour function.
+    var nameColor = eval("(function(root, Theme, Format) {" + Source.block(Source.source("ui/Row.qml"), "function nameColor()", "ui/Row.qml") + "})")
+    var palette = {color: {foreground: "foreground", executable: "executable", symlink: "symlink", muted: "muted"}}
+    for (var fstype of ["exfat", "vfat"]) {
+        var row = Messages.sized(JSON.parse('{"rows":[{"n":"Launcher","d":false,"p":33261,"x":false}]}'))[0]
+        check(fstype + " 0755 name keeps foreground", nameColor({row: row, lifted: false}, palette, Format), "foreground")
+        check(fstype + " keeps its reported 0755 permission cell", Format.permissions(row.p), "rwxr-xr-x")
+        check(fstype + " keeps its reported mode after colour lookup", row.p, 0o100755)
+    }
+    check("a normal disk 0755 name stays executable", nameColor({row: {p: 0o100755}, lifted: false}, palette, Format), "executable")
+    check("a normal disk 0644 name stays foreground", nameColor({row: {p: 0o100644}, lifted: false}, palette, Format), "foreground")
+    check("a modeless symlink keeps symlink colour", nameColor({row: {p: 0o120777, x: false}, lifted: false}, palette, Format), "symlink")
+    check("a lifted executable keeps foreground", nameColor({row: {p: 0o100755}, lifted: true}, palette, Format), "foreground")
 
     // Issue 67, jesedv: the yanked path is quoted unless a shell reads every character as itself.
     check("a path a shell reads as one word is handed over as it is",

@@ -198,6 +198,14 @@ function runActivation(check) {
     Nav.openCursor(bundle, archiveOpener)
     check("an AppImage row asks on the run card, never the archive preview",
           bundle.qlOpened.length + "|" + archiveOpener.opened.join("|"), "0|/d/Obsidian-1.9.AppImage")
+    // An extensionless program reaches the card whichever mark its row carries: the open predicate never reads the icon.
+    var named = { opened: [], open: function (path) { this.opened.push(path) } }
+    var plain = cursorPane({ d: false, i: "text-x-generic", n: "PinyonShiftLauncher", s: 8 })
+    var program = cursorPane({ d: false, i: "application-x-executable", n: "PinyonShiftLauncher", s: 8 })
+    Nav.openCursor(plain, named)
+    Nav.openCursor(program, named)
+    check("an extensionless program reaches the card under either mark",
+          named.opened.join("|") + "|" + plain.qlOpened.length + program.qlOpened.length, "/d/PinyonShiftLauncher|/d/PinyonShiftLauncher|00")
     var keyed = { opened: false, openCursor: function () { this.opened = true } }
     Focus.act("open", keyed)
     check("the menu Open reaches the same cursor", keyed.opened, true)

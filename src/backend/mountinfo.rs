@@ -8,6 +8,41 @@ pub(crate) fn mount_type_in(path: &Path, body: &str) -> Option<String> {
     mount_entry_in(path, body).map(|entry| entry.fstype)
 }
 
+// FAT and NTFS report fixed modes; CIFS and SMB3 keep per-file modes with POSIX, Unix, ACL or SID mode options.
+pub(crate) fn modes_are_real(path: &Path, body: &str) -> bool {
+    #[cfg(test)]
+    LEXICAL_LOOKUPS.with(|lookups| lookups.set(lookups.get() + 1));
+    if let Some(real) = super::gvfsroot::gvfs_modes_are_real(path) {
+        return real;
+    }
+    mount_type_in(path, body).map_or(true, |fstype| modes_for_mount(&fstype, &mount_options_in(path, body).unwrap_or_default()))
+}
+
+// Sample input: dev 0x811 finds a "8:17 ... - cifs ... rw,posix" entry and answers Some(true), with no path syscall.
+pub(crate) fn modes_are_real_for_dev(dev: u64, body: &str) -> Option<bool> {
+    #[cfg(test)]
+    DEV_LOOKUPS.with(|lookups| lookups.set(lookups.get() + 1));
+    if dev == 0 {
+        return None;
+    }
+    let want = dev_majmin(dev);
+    body.lines().find_map(|line| {
+        let (_, fstype, majmin, _) = parse_line(line)?;
+        (majmin == want).then(|| modes_for_mount(&fstype, &super_options(line)))
+    })
+}
+
+// Sample input: cifs with "rw,cifsacl" or "rw,modefromsid" keeps modes, while "rw,cifsacl=0,modefromsid=0" does not.
+fn modes_for_mount(fstype: &str, options: &str) -> bool {
+    match fstype {
+        "cifs" | "smb3" => options.split(',').any(|option| matches!(option, "posix" | "unix" | "cifsacl" | "modefromsid")),
+        // One proxy device serves every gvfs backend, so it cannot vouch for execute bits; gvfs-spelled paths decide by backend first.
+        "fuse.gvfsd-fuse" => false,
+        "vfat" | "exfat" | "msdos" | "fat" | "fat12" | "fat16" | "fat32" | "ntfs" | "ntfs3" | "fuseblk" | "smbfs" => false,
+        _ => true,
+    }
+}
+
 // Sample dev: makedev(8,17) is 0x811 and answers "8:17"; the glibc major/minor packing, see sys/sysmacros.h.
 pub(crate) fn dev_majmin(dev: u64) -> String {
     let major = ((dev >> 8) & 0xfff) | ((dev >> 32) & 0xffff_f000);
@@ -146,18 +181,28 @@ pub(crate) fn read_body() -> String {
 #[cfg(test)]
 thread_local! {
     static READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static DEV_LOOKUPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    pub(crate) static LEXICAL_LOOKUPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 // Counted reads since the last reset, so a session walk asserts at most one over a known walk.
 #[cfg(test)]
 pub(crate) fn test_reset() {
     READS.with(|reads| reads.set(0));
+    DEV_LOOKUPS.with(|lookups| lookups.set(0));
+    LEXICAL_LOOKUPS.with(|lookups| lookups.set(0));
 }
 
 // The counted reads since the last reset.
 #[cfg(test)]
 pub(crate) fn test_reads() -> usize {
     READS.with(|reads| reads.get())
+}
+
+// Device lookups on this thread, so a window proves it decides each distinct device only once.
+#[cfg(test)]
+pub(crate) fn test_device_lookups() -> usize {
+    DEV_LOOKUPS.with(|lookups| lookups.get())
 }
 
 // Sample line as above: mount point, fstype, major:minor and source, or None for a line with no "-" or too few fields.
@@ -322,5 +367,32 @@ mod tests {
         );
         assert_eq!(raw_mount_options_in(Path::new("/elsewhere"), info).as_deref(), Some("rw"));
         assert_eq!(raw_mount_options_in(Path::new("/home/pi"), "junk\n"), None);
+    }
+
+    #[test]
+    fn modes_are_real_only_where_a_file_keeps_its_own_mode() {
+        for fstype in ["ext4", "btrfs", "xfs", "tmpfs"] {
+            let body = format!("1 0 8:1 / / rw - {fstype} /dev/a rw\n");
+            assert!(modes_are_real(Path::new("/file"), &body), "{fstype} stores POSIX modes");
+        }
+        for fstype in ["vfat", "exfat", "msdos", "fat", "fat12", "fat16", "fat32", "ntfs", "ntfs3", "fuseblk", "cifs", "smb3", "smbfs"] {
+            let body = format!("1 0 8:1 / / rw - {fstype} /dev/a rw\n");
+            assert!(!modes_are_real(Path::new("/file"), &body), "{fstype} reports a mount default for every file, not the file's own mode");
+        }
+        assert!(modes_are_real(Path::new("/file"), "junk\n"), "an unknown mount preserves the reported mode");
+    }
+
+    #[test]
+    fn smb_modes_use_only_the_owning_mounts_super_options() {
+        for fstype in ["cifs", "smb3"] {
+            let body = format!("1 0 0:30 / / rw - {fstype} //server/root rw,posix\n\
+                                2 1 0:31 / /share rw,posix,unix - {fstype} //server/share rw\n\
+                                3 2 0:32 / /share/unix rw - {fstype} //server/unix rw,unix\n");
+            assert!(modes_are_real(Path::new("/file"), &body));
+            assert!(!modes_are_real(Path::new("/share/file"), &body), "raw or parent options cannot enable real modes");
+            assert!(modes_are_real(Path::new("/share/unix/file"), &body));
+            let stacked = format!("{body}4 1 0:33 / /share/unix rw - {fstype} //server/fixed rw\n");
+            assert!(!modes_are_real(Path::new("/share/unix/file"), &stacked), "the later mount wins the same depth");
+        }
     }
 }

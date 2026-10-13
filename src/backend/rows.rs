@@ -1,11 +1,13 @@
 use crate::backend::aliases::Aliases;
 use crate::backend::appicon;
 use crate::backend::extclass;
-use crate::backend::icons::Names;
+use crate::backend::gvfsroot::gvfs_class;
+use crate::backend::icons::{Names, ANY_EXECUTE_BIT};
 use crate::backend::kind::Kinds;
 use crate::backend::listing::Listing;
 use crate::backend::meta::{thumbnailable, Meta};
 use crate::backend::mime::Db;
+use crate::backend::mountinfo;
 use crate::backend::tags;
 use crate::backend::thumbspec::Thumbnailers;
 use crate::json::escape;
@@ -27,11 +29,35 @@ pub fn rows_line(
     thumbs: &Thumbnailers,
     kinds: &mut Kinds,
 ) -> String {
+    // A gvfs path names its own class and reads no mount table; every other base reads it once, here.
+    let body = if gvfs_class(base).is_some() { String::new() } else { mountinfo::read_body() };
+    rows_line_in(base, &body, l, metas, start, ms, mime, icons, aliases, thumbs, kinds)
+}
+
+// The window against a mount table the caller read, so a test can stand an exFAT or btrfs mount where it cannot make one.
+#[allow(clippy::too_many_arguments)]
+fn rows_line_in(
+    base: &Path,
+    body: &str,
+    l: &Listing,
+    metas: &[Meta],
+    start: usize,
+    ms: f64,
+    mime: &Db,
+    icons: &Names,
+    aliases: &Aliases,
+    thumbs: &Thumbnailers,
+    kinds: &mut Kinds,
+) -> String {
     // Field names stay one character: a window serialises on every scroll.
     let mut s = String::with_capacity(metas.len() * ROW_BYTES_ESTIMATE);
     s.push_str(&format!(r#"{{"t":"rows","start":{},"rows":["#, start));
     // Tags are read for exactly the rows a window emits, and never on a network or phone mount, where each read is a round trip.
-    let tag_ok = !matches!(extclass::classify(base), "network" | "phone");
+    let tag_ok = !matches!(extclass::classify_in(base, body), "network" | "phone");
+    // A type with no POSIX modes reports the mount's 0755 for every file, so its execute bits say nothing; Row.p keeps the reported mode.
+    let gvfs_modes = crate::backend::gvfsroot::gvfs_modes_are_real(base);
+    let mut device_modes = HashMap::new();
+    let mut lexical_modes: HashMap<(u64, &str), bool> = HashMap::new();
     // Clamped like stat_range, so a stale start cannot panic the backend.
     let n = metas.len().min(l.len().saturating_sub(start));
     // Distinct Kind strings this one response uses, so the per-row cost is an integer, not a repeated string.
@@ -42,6 +68,19 @@ pub fn rows_line(
             s.push(',');
         }
         let name = l.name(start + i);
+        let gvfs_modes = if name.contains('/') { crate::backend::gvfsroot::gvfs_modes_are_real(&base.join(name)) } else { gvfs_modes };
+        // The stat's dev names the filesystem through symlinks; unlisted devices cache lexical decisions by device and parent without another stat.
+        let real_modes = gvfs_modes.unwrap_or_else(|| {
+            device_modes.entry(m.dev).or_insert_with(|| mountinfo::modes_are_real_for_dev(m.dev, body))
+                .unwrap_or_else(|| {
+                    let parent = name.rfind('/').map_or("", |at| &name[..at.max(1)]);
+                    *lexical_modes.entry((m.dev, parent)).or_insert_with(|| {
+                        #[cfg(test)]
+                        mount_tests::MODE_PATH_BUILDS.with(|builds| builds.set(builds.get() + 1));
+                        mountinfo::modes_are_real(&base.join(name), body)
+                    })
+                })
+        });
         let is_dir = l.is_dir(start + i);
         // Looked up once and shared with the icon and the Kind text, because it is the only per-row allocation here.
         let mime_name = mime.lookup(name);
@@ -51,7 +90,8 @@ pub fn rows_line(
         let appimage = if can_thumb && mime_name.is_some_and(|m| appicon::is_appimage(m, aliases)) { r#","a":true"# } else { "" };
         // A symlink to a directory carries d:false by contract, so only the ICON follows the target.
         let folder_icon = is_dir || m.target_is_dir;
-        let icon = icons.icon_for(mime_name, folder_icon, m.mode);
+        let icon_mode = if real_modes { m.mode } else { m.mode & !ANY_EXECUTE_BIT };
+        let icon = icons.icon_for(mime_name, folder_icon, icon_mode);
         let kind = kind_for(folder_icon, mime_name, icon, aliases, kinds);
         let k = match kind_index.get(&kind) {
             Some(&idx) => idx,
@@ -89,7 +129,7 @@ pub fn rows_line(
         };
         // The icon is escaped like every other field: the escape is the contract, not an optimisation.
         s.push_str(&format!(
-            r#"{{"n":"{}","d":{},"s":{},"m":{},"p":{},"i":"{}","t":{},"k":{}{}{}{}{}}}"#,
+            r#"{{"n":"{}","d":{},"s":{},"m":{},"p":{},"i":"{}","t":{},"k":{}{}{}{}{}{}}}"#,
             escape(name),
             is_dir,
             m.size,
@@ -101,7 +141,8 @@ pub fn rows_line(
             link,
             dev,
             tg,
-            appimage
+            appimage,
+            if real_modes { "" } else { r#","x":false"# }
         ));
     }
     let kinds_json: String = kind_list.iter().map(|k| format!(r#""{}""#, escape(k))).collect::<Vec<_>>().join(",");
@@ -130,7 +171,7 @@ mod tests {
     use super::*;
 
     // Literal databases, so a serialiser test never depends on the box's /usr/share/mime.
-    fn dbs() -> (Db, Names, Aliases, Thumbnailers, Kinds) {
+    pub(super) fn dbs() -> (Db, Names, Aliases, Thumbnailers, Kinds) {
         // The glob names the alias and the thumbnailer the canonical type, so a dropped aliases argument reddens.
         let aliases = Aliases::from_str("image/pjpeg image/jpeg\n");
         let spec = "[Thumbnailer Entry]\nTryExec=/bin/sh\nExec=/bin/sh %i %o\nMimeType=image/jpeg;\n";
@@ -295,7 +336,7 @@ mod tests {
     fn a_type_nothing_can_describe_reads_as_data_and_never_as_an_icon_name() {
         let mut l = Listing::new();
         l.push("thing.zzzznotreal", false);
-        let metas = vec![Meta { size: 1, mtime: 2, mode: 3, target_is_dir: false, target: String::new(), dev: 0 }];
+        let metas = vec![Meta { size: 1, mtime: 2, mode: 0o100644, target_is_dir: false, target: String::new(), dev: 0 }];
         let (mime, icons, aliases, thumbs, mut kinds) = dbs();
         let s = rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
         // No glob matches, so there is no type to describe. The icon ladder still falls to
@@ -383,3 +424,7 @@ mod tests {
         assert!(!s.contains(r#""tg""#), "{}", s);
     }
 }
+
+#[cfg(test)]
+#[path = "rows_mount_tests.rs"]
+mod mount_tests;

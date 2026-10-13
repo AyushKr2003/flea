@@ -47,6 +47,31 @@ fn anything_else_is_not_a_program() {
     assert_eq!(classify_header(b"# !/bin/sh"), None);
 }
 
+// A PIE is ET_DYN (3) at e_type, the same magic as a fixed-address ELF (ET_EXEC, 2): the classifier reads the magic and never e_type.
+fn elf_head(e_type: u16) -> Vec<u8> {
+    let mut head = vec![0x7f, b'E', b'L', b'F', 2, 1, 1, 0];
+    head.resize(16, 0);
+    head.extend_from_slice(&e_type.to_le_bytes());
+    head.resize(64, 0);
+    head
+}
+
+#[test]
+fn a_pie_program_asks_with_its_execute_bit_and_a_shared_object_does_not_without_it() {
+    let dir = crate::backend::testdir::TestDir::new("runfile-pie");
+    let mounts = "1 0 8:1 / / rw - ext4 /dev/a rw\n";
+    assert_eq!(classify_header(&elf_head(2)), Some(Kind::Elf));
+    assert_eq!(classify_header(&elf_head(3)), Some(Kind::Elf));
+    let pie = write(&dir, "PinyonShiftLauncher", &elf_head(3), 0o755);
+    let pie_plain = write(&dir, "PinyonNoExec", &elf_head(3), 0o644);
+    let so = write(&dir, "libexec-bit.so", &elf_head(3), 0o755);
+    let so_plain = write(&dir, "libpinyon.so", &elf_head(3), 0o644);
+    assert_eq!(decide_with(&pie, mounts), Decision::Ask(Kind::Elf));
+    assert_eq!(decide_with(&so, mounts), Decision::Ask(Kind::Elf));
+    assert_eq!(decide_with(&pie_plain, mounts), Decision::MakeExecutable(Kind::Elf));
+    assert_eq!(decide_with(&so_plain, mounts), Decision::MakeExecutable(Kind::Elf));
+}
+
 #[test]
 fn an_executable_script_asks_and_a_plain_one_offers_the_chmod_path() {
     let dir = crate::backend::testdir::TestDir::new("runfile-decide");
