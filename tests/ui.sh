@@ -15555,6 +15555,7 @@ clipboard_wait() {
 . "$repo/tests/ui-captures-bulk.sh"
 . "$repo/tests/ui-captures-tags.sh"
 . "$repo/tests/ui-captures-filter.sh"
+. "$repo/tests/ui-captures-iso.sh"
 . "$repo/tests/ui-transfer-live.sh"
 . "$repo/tests/ui-columns-background.sh"
 . "$repo/tests/ui-colwatch.sh"
