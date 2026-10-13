@@ -36,6 +36,8 @@ pub(crate) fn modes_are_real_for_dev(dev: u64, body: &str) -> Option<bool> {
 fn modes_for_mount(fstype: &str, options: &str) -> bool {
     match fstype {
         "cifs" | "smb3" => options.split(',').any(|option| matches!(option, "posix" | "unix")),
+        // One proxy device serves every gvfs backend, so it cannot vouch for execute bits; gvfs-spelled paths decide by backend first.
+        "fuse.gvfsd-fuse" => false,
         "vfat" | "exfat" | "msdos" | "fat" | "fat12" | "fat16" | "fat32" | "ntfs" | "ntfs3" | "fuseblk" | "smbfs" => false,
         _ => true,
     }

@@ -336,10 +336,17 @@ mod tests {
         let dev = super::super::mountinfo::dev_majmin(std::fs::metadata(&bad).unwrap().dev());
         let link = d.join("linked-usb");
         std::os::unix::fs::symlink(&usb, &link).unwrap();
+        let source = link.join("clip: launcher");
+        let device_mount = d.join("device-only");
+        assert!(!source.starts_with(&device_mount) && !bad.starts_with(&device_mount));
         let (db, icons) = (crate::backend::mime::Db::load(), crate::backend::icons::Names::load());
-        for fstype in ["vfat", "exfat", "ext4"] {
-            let table = format!("1 0 0:0 / / rw - ext4 /dev/a rw\n40 1 0:0 / {} rw - exfat /dev/b rw\n41 1 {dev} / {} rw - {fstype} /dev/c rw\n", dest.display(), usb.display());
-            let line = answer_in(&table, 7, &[link.join("clip: launcher").to_string_lossy().into()], &dest.to_string_lossy(), &db, &icons).expect("asked");
+        for fstype in ["vfat", "exfat", "ext4", "fuse.gvfsd-fuse"] {
+            let lexical = if fstype == "ext4" { "exfat" } else { "ext4" };
+            let table = format!("1 0 0:0 / / rw - {lexical} /dev/a rw\n40 1 0:0 / {} rw - exfat /dev/b rw\n41 1 {dev} / {} rw - {fstype} /dev/c rw\n", dest.display(), device_mount.display());
+            let real_modes = fstype == "ext4";
+            assert_eq!(super::super::mountinfo::modes_are_real(Path::new(&source), &table), !real_modes);
+            assert_eq!(super::super::mountinfo::modes_are_real(&bad, &table), !real_modes);
+            let line = answer_in(&table, 7, &[source.to_string_lossy().into()], &dest.to_string_lossy(), &db, &icons).expect("asked");
             let icon = if fstype == "ext4" { "application-x-executable" } else { "text-x-generic" };
             assert!(line.contains(&format!(r#""i":"{icon}""#)), "{fstype}: {line}");
         }

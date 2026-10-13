@@ -220,6 +220,24 @@ fn a_symlinked_window_base_uses_the_target_mounts_modes() {
 }
 
 #[test]
+fn a_symlinked_gvfs_base_cannot_infer_execute_bits_from_the_proxy_device() {
+    let d = crate::backend::testdir::TestDir::new("rows-linked-gvfs");
+    let share = d.dir("share");
+    let dev = device(&share);
+    let link = d.join("nas");
+    std::os::unix::fs::symlink(&share, &link).unwrap();
+    let mount = Path::new("/run/user/1000/gvfs");
+    let body = format!("1 0 0:0 / / rw - ext4 /dev/a rw\n2 1 {} / {} rw - fuse.gvfsd-fuse gvfsd-fuse rw\n", mountinfo::dev_majmin(dev), mount.display());
+    assert_eq!(crate::backend::gvfsroot::gvfs_modes_are_real(mount), None);
+    assert!(!mountinfo::modes_are_real(mount, &body), "the lexical mountpoint fallback also refuses proxy modes");
+    assert!(mountinfo::modes_are_real(&link.join("Launcher"), &body), "only the device lookup identifies the proxy through this symlink");
+    mountinfo::test_reset();
+    assert_program_icon(&link, &body, &["Launcher", "sub/OtherLauncher"], &[dev; 2], &["text-x-generic"; 2]);
+    assert_eq!(mountinfo::test_device_lookups(), 1);
+    assert_eq!(lexical_lookups(), 0, "a listed proxy device needs no lexical fallback");
+}
+
+#[test]
 fn mixed_path_rows_decide_each_distinct_device_once() {
     let d = crate::backend::testdir::TestDir::new("rows-linked-parents");
     let usb = d.dir("usb");
@@ -250,12 +268,16 @@ fn assert_no_path_calls() {
         ("rows.rs", include_str!("rows.rs")),
         ("mountinfo.rs", include_str!("mountinfo.rs")),
         ("gvfsroot.rs", include_str!("gvfsroot.rs")),
+        ("fatnames.rs", include_str!("fatnames.rs")),
     ] {
         let production = source.split("\n#[cfg(test)]\nmod tests {").next().unwrap();
         let calls: String = production.chars().filter(|ch| !ch.is_whitespace()).collect();
-        for api in ["canonicalize(", "metadata(", "symlink_metadata(", "read_link(", "fstatat(", "statx("] {
+        for api in ["canonicalize(", "read_link(", "fstatat(", "statx("] {
             assert_eq!(calls.matches(api).count(), 0, "{file} must not resolve or stat a row path through {api}");
         }
+        let source_stats = usize::from(file == "fatnames.rs");
+        assert_eq!(calls.matches("symlink_metadata(").count(), source_stats, "{file} keeps only its existing source lstat");
+        assert_eq!(calls.matches("metadata(").count() - calls.matches("symlink_metadata(").count(), 0, "{file} must not add a metadata call");
     }
 }
 
