@@ -4,8 +4,7 @@ import qs.Commons
 import "." as Flea
 import "js/Markdown.js" as Markdown
 
-// Quick Look's code and text pane: the bar, then the file's lines coloured by the backend, a gutter for code and none for plain text.
-// A network or phone file is read here, under the size gate, so the backend is never given its path.
+// Quick Look's code and text pane: the bar, then the lines coloured by the backend; a network or phone file is read here, never by the backend.
 Item {
     id: root
 
@@ -13,8 +12,7 @@ Item {
     property string path: ""
     property int size: 0
 
-    // FileView reads the whole file into memory, so this is the largest read a preview will start.
-    // Remote storage keeps the smaller 256 KiB gate through maxBytes, and refuses past it too.
+    // Past this size the pane draws the too-large frame; remote storage sets 256 KiB, the most FileView reads whole into memory here.
     property int maxBytes: 1048576
     // True on network and phone storage, where the backend is never given the path.
     property bool truncate: false

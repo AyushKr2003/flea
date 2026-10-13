@@ -175,7 +175,8 @@ ui/js/Tabs.js 717
 ui/js/UiState.js 435
 ui/TabBar.qml 640
 ui/boot/fleatab.qml 50
-tests/unlock-stdin.qml 427"
+tests/unlock-stdin.qml 427
+tests/quicklook-code.qml 424"
 
 status=0
 

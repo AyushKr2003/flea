@@ -218,7 +218,8 @@ function runWrapKeys(check) {
         for (var other of ["markdown", "pdf", "image", "archive", "audio", "video"])
             check(preset + ": w reaches nothing on a " + other + " Quick Look", Focus.lookup(w, pane(open(other))), "")
         check(preset + ": w stays close tab in the listing", Focus.lookup(w, pane({ active: false, isMedia: false, isPdf: false })), "tabClose")
-        check(preset + ": r still reaches only the preview context", Keymap.lookupFor(preset, 0, "r", Qt.NoModifier, "preview", "gui"), "markdownView")
+        check(preset + ": r reaches the Markdown view in the preview context", Keymap.lookupFor(preset, 0, "r", Qt.NoModifier, "preview", "gui"), "markdownView")
+        check(preset + ": r in the listing is never the Markdown view", Keymap.lookupFor(preset, 0, "r", Qt.NoModifier, "listing", "gui") !== "markdownView", true)
     }
     Keymap.setPreset(kept)
     var wrapped = { preview: { toggled: 0, revealStrip: function () {}, toggleWrap: function () { this.toggled += 1 } } }

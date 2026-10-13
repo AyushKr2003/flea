@@ -6,19 +6,20 @@ import Quickshell.Io
 import "flea" as Flea
 import "flea/js/Icons.js" as Icons
 
-// tests/quicklook-code.sh's harness: Quick Look on code and text over the real backend and bat, with the bar, the gutter, w and its memory.
-// QLCODE_RUN=fresh walks every state from an empty ui.json; QLCODE_RUN=again starts on the ui.json the first run left, wrap on.
+// tests/quicklook-code.sh's harness over the real backend and bat: QLCODE_RUN=fresh walks every state from an empty ui.json, again starts on the one fresh left, wrap on.
 ShellRoot {
     id: root
 
     readonly property bool again: Quickshell.env("QLCODE_RUN") === "again"
     readonly property int settleMs: 250
     readonly property int giveUpMs: 12000
-    readonly property int fixtureRows: 7
+    readonly property int fixtureRows: 8
     // The fixture's lines: the 132-line file, and the long file's 60 lines with the 6,000-character one at 40.
     readonly property int iconLines: 132
     readonly property int longAt: 40
     readonly property int longChars: 6000
+    // 03-remote.txt: a markup line and an ampersand line, read on the remote route.
+    readonly property var remoteLines: ["first line", "<img src=\"http://127.0.0.1:9/x\">", "a & b"]
     property int checks: 0
     property int failures: 0
     property int at: 0
@@ -35,13 +36,15 @@ ShellRoot {
     property int liveFrames: 0
     property int midBase: 0
     property var bad: []
+    // The backend the remote leg wraps to record what Quick Look asks of it.
+    property var spy: null
     property int topBefore: 0
     property int lastTop: 0
 
     readonly property var freshOps: [{ boot: true }, { open: "00-notes.md" }, { markdownW: true },
         { move: "01-icons.rs", kind: "styled" }, { icons: true }, { scrollEnd: true }, { tab: true },
         { move: "02-more.rs", kind: "styled", walk: true }, { move: "03-plain.txt", kind: "text" },
-        { move: "04-nul.txt", kind: "binary" }, { move: "05-over.log", kind: "large" },
+        { remoteOn: true }, { move: "03-remote.txt", kind: "remote" }, { move: "04-nul.txt", kind: "binary" }, { move: "05-over.log", kind: "large" },
         { move: "06-long.rs", kind: "plain" }, { wrap: true }, { reopen: true }, { tabReturn: true }, { done: true }]
     readonly property var againOps: [{ boot: true }, { open: "01-icons.rs", remembered: true }, { unwrap: true }, { done: true }]
     readonly property var ops: root.again ? root.againOps : root.freshOps
@@ -123,13 +126,14 @@ ShellRoot {
         if (kind === "large") return t.tooLarge && root.pv().lookReady
         if (!c.active) return false
         if (kind === "binary") return c.answer === "binary" && root.pv().lookReady
-        if (kind === "text") return c.settled && c.firstScreen && root.pv().lookReady
+        if (kind === "text" || kind === "remote") return c.settled && c.firstScreen && root.pv().lookReady
         return c.answer === kind && c.firstScreen && root.pv().lookReady && root.pv().swapState().holding === false
     }
     function begin() {
         root.replies = []
         root.bad = []
         root.liveFrames = 0
+        if (root.spy) root.spy.asks = []
         root.midBase = root.pv() ? root.pv().swapState().midFrames : 0
     }
     // Every frame drawn while a move runs: whatever lines are on screen are coloured.
@@ -198,6 +202,8 @@ ShellRoot {
                 root.judgeMove(op)
                 return true
             }
+        } else if (op.remoteOn) {
+            root.remoteRoute()
         } else if (op.icons) {
             root.judgeIcons()
         } else if (op.scrollEnd) {
@@ -264,6 +270,17 @@ ShellRoot {
         var found = root.bodies().filter(function (b) { return b.text.length > root.longChars - 100 })
         return found.length > 0 ? found[0] : null
     }
+    // The pane as Preview.qml sets it on network or phone storage (truncate), its backend wrapped to record each ask.
+    function remoteRoute() {
+        var t = root.textPane(), real = t.backend
+        root.spy = Qt.createQmlObject("import QtQuick; QtObject { property var real: null; property var asks: []; signal codeResult(var message)\n"
+            + "function askCode(slot, source, first, count) { asks.push(source); return real.askCode(slot, source, first, count) } }", root)
+        root.spy.real = real
+        real.codeResult.connect(root.spy.codeResult)
+        t.backend = root.spy
+        t.truncate = true
+        root.awaiting = function () { return root.calm(root.drawn("03-plain.txt", "remote")) }
+    }
     function judgeIcons() {
         var t = root.textPane(), c = root.code(), g = root.bar().geometry(), row = root.pane().rowFor(root.pane().cursorIndex)
         root.check("the bar draws the row's mark, the name and the count, a close mark and no segment",
@@ -289,6 +306,13 @@ ShellRoot {
         } else if (op.kind === "text") {
             root.check(op.move + ": plain text draws no gutter", [t.numbered, root.gutters().length], [false, 0])
             root.check(op.move + ": the bar counts its lines", [g.lines.text, g.countShown], ["8 lines", true])
+        } else if (op.kind === "remote") {
+            var shown = root.bodies().map(function (b) { return b.text })
+            root.check(op.move + ": the remote route draws the file's own lines in order, plain, no gutter", [c.lines, t.fromFile, t.numbered, root.gutters().length], [root.remoteLines, true, false, 0])
+            root.check(op.move + ": the markup and ampersand lines are escaped text, never a tag", [shown[1].indexOf("&lt;img") === 0, shown[2], shown.some(function (b) { return b.indexOf("<img") >= 0 })], [true, "a &amp; b", false])
+            root.check(op.move + ": the backend is never given the path", root.spy.asks.filter(function (a) { return a.path !== undefined }).length, 0)
+            t.truncate = false
+            t.backend = root.spy.real
         } else if (op.kind === "binary") {
             root.check(op.move + ": a binary file draws the frame under the bar", [root.frameText(), c.visible, g.countShown, t.status], ["binary file", false, false, "ready"])
         } else if (op.kind === "large") {

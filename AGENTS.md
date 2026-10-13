@@ -9018,3 +9018,5 @@ The Columns prebuild convergence fix moves two ceilings, each re-derived with `w
 The shared prebuild driver (`ui/PrebuildDriver.qml`, 146 lines, under the QML cap) moves five ceilings, each re-derived with `wc -l`: `ui/List.qml` 589 to 480, `ui/GridArea.qml` 506 to 461 and `ui/ColumnPane.qml` 534 to 438, whose three drivers it replaces; `tests/listprebuild.qml` 413 to 412; `tests/gridprebuild.qml` 456 to 458 for the way back from 50 rows, which now checks that the next landing builds nothing.
 
 The key log's tick cap check moves one ceiling, re-derived with `wc -l`: `tests/columnsprebuild.qml` 415 to 416 for the check that fails once the tick log reaches `keepTicks`, where a key's stored tick index no longer holds.
+
+The remote-route leg of `tests/quicklook-code.qml` moves one ceiling, re-derived with `wc -l`: the file crosses the hard cap at 424 for the leg that reads a markup fixture through `truncate` with the backend wrapped to record its asks; recorded rather than split because it shares the harness that drives the local legs.

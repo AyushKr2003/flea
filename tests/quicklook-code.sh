@@ -22,12 +22,13 @@ cp -a ui "$test_root/config/flea" || exit 1
 cp tests/quicklook-code.qml "$test_root/config/shell.qml" || exit 1
 printf '{}\n' > "$test_root/state/flea/ui.json"
 
-# Sorted by name: a Markdown note, two Rust files (the first of 132 lines), a text file, a NUL file, a file over 1 MiB, and 60 lines with a 6,000-character one at line 40.
+# Sorted by name: a Markdown note, two Rust files (the first of 132 lines), a text file, a remote-route text file with markup, a NUL file, a file over 1 MiB, and 60 lines with a 6,000-character one at line 40.
 fixture="$test_root/fixture"
 printf '# Notes\n\nplain words, no code\n' > "$fixture/00-notes.md"
 for i in $(seq 1 132); do printf 'fn f%d() { let s = "x"; }\n' "$i"; done > "$fixture/01-icons.rs"
 for i in $(seq 1 132); do printf 'fn g%d() { let s = "y"; }\n' "$i"; done > "$fixture/02-more.rs"
 for i in $(seq 1 8); do printf 'plain words on line %d\n' "$i"; done > "$fixture/03-plain.txt"
+printf 'first line\n<img src="http://127.0.0.1:9/x">\na & b\n' > "$fixture/03-remote.txt"
 printf 'text\0text\n' > "$fixture/04-nul.txt"
 yes 'a log line' | head -c 1048577 > "$fixture/05-over.log"
 for i in $(seq 1 60); do
