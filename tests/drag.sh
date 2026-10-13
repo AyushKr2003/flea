@@ -14,7 +14,23 @@ export FLEA_BIN="${FLEA_BIN:-$repo/target/release/flea}"
 export FLEA_UI="$repo/ui"
 . "$repo/tools/flea-sandbox-guard"
 
-SB=$FIXTURE_ROOT/flea-drag-char-$$
+drag_case=${1:-all}
+capture_root=""
+case "$drag_case" in
+  all) SB=$FIXTURE_ROOT/flea-drag-char-$$ ;;
+  look235)
+    look235_started=$SECONDS
+    FIXTURE_ROOT="$repo/.superpowers/look235"
+    sandbox_root_ok
+    mkdir -p "$SANDBOX_ROOT" || exit 1
+    capture_root=$(mktemp -d "$SANDBOX_ROOT/run.XXXXXXXX") || exit 1
+    printf 'look235 native captures\n' > "$capture_root/$SANDBOX_MARKER" || exit 1
+    FIXTURE_ROOT="$capture_root"
+    SB="$capture_root/fixture"
+    printf 'LOOK235_EVIDENCE_ROOT=%s\n' "$capture_root"
+    ;;
+  *) printf 'Usage: %s [look235]\n' "$0" >&2; exit 2 ;;
+esac
 HOMEDIR=$SB/home
 pass=0
 fail=0
@@ -299,6 +315,13 @@ ln -sfn "$HOME/.local/state/omarchy/current" "$HOMEDIR/.local/state/omarchy/curr
 for f in r1a r1b r2 r3 r4; do printf '%s payload\n' "$f" > "$HOMEDIR/$f.txt"; done
 # R6 shows hidden files in a second tab on the same directory, so every index below this one shifts.
 printf 'hidden\n' > "$HOMEDIR/.r0hidden"
+if [[ "$drag_case" == look235 ]]; then
+  mkdir "$HOMEDIR/omarchy" || exit 1
+  seed=$(jq -nc --arg path "$HOMEDIR/omarchy" '{view:"list",keys:"default",updates:{autoCheck:false},
+    places:{rail:"shown",autoHide:false,showHome:true,showTrash:true,showNetwork:false,showDevices:false,
+      favourites:[{label:"omarchy",path:$path}]}}') || exit 1
+  HOME="$HOMEDIR" "$FLEA_BIN" --ui-state "$seed" >/dev/null || exit 1
+fi
 
 # ---------------------------------------------------------------- pointer
 warp() { glide_to "$1" "$2"; }
@@ -621,6 +644,11 @@ wait_for() {
   done
   return 1
 }
+
+if [[ "$drag_case" == look235 ]]; then
+  . "$repo/tests/drag-look235-case.sh"
+  exit "$fail"
+fi
 
 # ---------------------------------------------------------------- R0
 echo
