@@ -8,6 +8,11 @@ pub(crate) fn mount_type_in(path: &Path, body: &str) -> Option<String> {
     mount_entry_in(path, body).map(|entry| entry.fstype)
 }
 
+// Types with no POSIX modes: FAT, exFAT and NTFS (fuseblk for ntfs-3g), and CIFS or SMB, which report a fixed file_mode.
+pub(crate) fn modes_are_real(fstype: &str) -> bool {
+    !matches!(fstype, "vfat" | "exfat" | "msdos" | "fat" | "fat12" | "fat16" | "fat32" | "ntfs" | "ntfs3" | "fuseblk" | "cifs" | "smb3" | "smbfs")
+}
+
 // Sample dev: makedev(8,17) is 0x811 and answers "8:17"; the glibc major/minor packing, see sys/sysmacros.h.
 pub(crate) fn dev_majmin(dev: u64) -> String {
     let major = ((dev >> 8) & 0xfff) | ((dev >> 32) & 0xffff_f000);
@@ -322,5 +327,15 @@ mod tests {
         );
         assert_eq!(raw_mount_options_in(Path::new("/elsewhere"), info).as_deref(), Some("rw"));
         assert_eq!(raw_mount_options_in(Path::new("/home/pi"), "junk\n"), None);
+    }
+
+    #[test]
+    fn modes_are_real_only_where_a_file_keeps_its_own_mode() {
+        for fstype in ["ext4", "btrfs", "xfs", "tmpfs"] {
+            assert!(modes_are_real(fstype), "{fstype} stores POSIX modes");
+        }
+        for fstype in ["vfat", "exfat", "msdos", "fat", "fat12", "fat16", "fat32", "ntfs", "ntfs3", "fuseblk", "cifs", "smb3", "smbfs"] {
+            assert!(!modes_are_real(fstype), "{fstype} reports a mount default for every file, not the file's own mode");
+        }
     }
 }

@@ -154,7 +154,7 @@ pub fn ask_leaf(fat: Option<Choice>, fs_fat: bool, dest: &Path, name: &str) -> O
 }
 
 // The card's rows, one per name that cannot stand: the mark, what was asked for and what Rename and copy writes.
-fn rename_rows(paths: &[String], mime: &super::mime::Db, icons: &super::icons::Names) -> Vec<String> {
+fn rename_rows(paths: &[String], body: &str, mime: &super::mime::Db, icons: &super::icons::Names) -> Vec<String> {
     let mut shown = Vec::new();
     for raw in paths {
         let Some(leaf) = Path::new(raw).file_name().and_then(|n| n.to_str()) else { continue };
@@ -162,6 +162,9 @@ fn rename_rows(paths: &[String], mime: &super::mime::Db, icons: &super::icons::N
             continue;
         }
         let (dir, mode) = std::fs::symlink_metadata(raw).map(|m| (m.is_dir(), m.mode())).unwrap_or((false, 0));
+        // The mode is the source's own stat, so its execute bits count only where the source's mount keeps modes.
+        let real_modes = super::mountinfo::mount_type_in(Path::new(raw), body).map_or(true, |fstype| super::mountinfo::modes_are_real(&fstype));
+        let mode = if real_modes { mode } else { mode & !0o111 };
         let new = sanitize(leaf);
         shown.push(format!(r#"{{"old":"{}","new":"{}","d":{},"i":"{}"}}"#,
             crate::json::escape(leaf), crate::json::escape(&new), dir,
@@ -179,7 +182,7 @@ pub fn answer(id: usize, paths: &[String], dest: &str, mime: &super::mime::Db, i
 // The answer against a given mount table, so a suite can stand a FAT mount where it cannot make one.
 fn answer_in(body: &str, id: usize, paths: &[String], dest: &str, mime: &super::mime::Db, icons: &super::icons::Names) -> Option<String> {
     let entry = super::mountinfo::mount_entry_in(Path::new(dest), body).filter(|entry| is_fat_fstype(&entry.fstype))?;
-    let shown = rename_rows(paths, mime, icons);
+    let shown = rename_rows(paths, body, mime, icons);
     let volume = entry.mount.file_name().and_then(|n| n.to_str()).unwrap_or_default();
     (!shown.is_empty()).then(|| format!(r#"{{"t":"fatnames","id":{},"fstype":"{}","volume":"{}","renames":[{}]}}"#,
         id, crate::json::escape(&entry.fstype), crate::json::escape(volume), shown.join(",")))
@@ -263,7 +266,7 @@ mod tests {
         let d = TestDir::new("fatnames-rows");
         let dir = d.dir("a: folder");
         let names: Vec<String> = ["clip: final.mp4", "notes?.md", "draft.", "final.mp4"].iter().map(|n| d.join(n).to_string_lossy().into()).collect();
-        let rows = rename_rows(&[names.clone(), vec![dir.to_string_lossy().into()]].concat(), &crate::backend::mime::Db::load(), &crate::backend::icons::Names::load());
+        let rows = rename_rows(&[names.clone(), vec![dir.to_string_lossy().into()]].concat(), "", &crate::backend::mime::Db::load(), &crate::backend::icons::Names::load());
         let joined = rows.join("|");
         assert_eq!(rows.len(), 4, "the clean name never reaches the card: {}", joined);
         assert!(joined.contains(r#""old":"clip: final.mp4","new":"clip_ final.mp4","d":false"#), "{}", joined);
@@ -284,6 +287,37 @@ mod tests {
         assert!(answer_in(&table, 7, &[d.join("ok.mp4").to_string_lossy().into()], &dest.to_string_lossy(), &db, &icons).is_none(), "clean names ask nothing");
         let ext4 = table.replace("exfat", "ext4");
         assert!(answer_in(&ext4, 7, &[bad], &dest.to_string_lossy(), &db, &icons).is_none(), "an ext4 destination asks nothing");
+    }
+
+    // A FAT volume stores 0755 on every file, so a bad-named program read from one keeps the document mark.
+    #[test]
+    fn a_program_from_a_fat_source_draws_the_document_mark_because_its_mode_is_the_mounts_default() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = TestDir::new("fatnames-fatsrc");
+        let dest = d.dir("128GB");
+        let usb = d.dir("usb");
+        let bad = usb.join("clip: launcher");
+        std::fs::write(&bad, "x").unwrap();
+        std::fs::set_permissions(&bad, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let table = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n40 1 8:17 / {} rw - exfat /dev/sdb1 rw\n41 1 8:33 / {} rw - vfat /dev/sdc1 rw\n", dest.display(), usb.display());
+        let (db, icons) = (crate::backend::mime::Db::load(), crate::backend::icons::Names::load());
+        let line = answer_in(&table, 7, &[bad.to_string_lossy().into()], &dest.to_string_lossy(), &db, &icons).expect("asked");
+        assert!(line.contains(r#""i":"text-x-generic""#), "{}", line);
+    }
+
+    // The execute bits are the source's own, so a program on a mode-keeping source keeps its mark on a FAT destination.
+    #[test]
+    fn a_program_from_a_mode_keeping_source_keeps_its_mark_on_a_fat_destination() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = TestDir::new("fatnames-extsrc");
+        let dest = d.dir("128GB");
+        let bad = d.join("clip: launcher");
+        std::fs::write(&bad, "x").unwrap();
+        std::fs::set_permissions(&bad, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let table = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n40 1 8:17 / {} rw - exfat /dev/sdb1 rw\n", dest.display());
+        let (db, icons) = (crate::backend::mime::Db::load(), crate::backend::icons::Names::load());
+        let line = answer_in(&table, 7, &[bad.to_string_lossy().into()], &dest.to_string_lossy(), &db, &icons).expect("asked");
+        assert!(line.contains(r#""i":"application-x-executable""#), "{}", line);
     }
 
     #[test]

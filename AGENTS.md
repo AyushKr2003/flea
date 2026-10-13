@@ -7541,6 +7541,7 @@ Now a row with no type and any execute bit on a non-symlink answers `application
 same rule an unlisted application type gets. A symlink's lstat mode is always `0777`, so its own bits
 never count. `peek.rs` passes mode 0 by design, so a neighbour column's extensionless program still
 draws the document mark; fixing that needs a stat per peeked row, which the name-order peek cost comment rules out.
+On a mount whose filesystem keeps no POSIX modes (the FAT family, NTFS, CIFS and SMB) every file reports the mount's 0755, so `rows_line` clears the execute bits before it asks for the icon, and `Row.p` keeps the reported mode. `rows_line` reads the mount table once per window, through `mountinfo::read_body`, and `mountinfo::modes_are_real` decides. `fatnames` clears the bits by the source's own mount, because its stat is the source's. `collide.rs` and `merge.rs` still pass a FAT source's bits through, since neither holds the source's mount type.
 
 `Row.iconSource` turns that name into a source. `Quickshell.iconPath(name, true)` does not
 answer a filesystem path: it answers the image provider URL `image://icon/<name>`, and the
