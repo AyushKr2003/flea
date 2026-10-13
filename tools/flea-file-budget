@@ -53,7 +53,7 @@ src/backend/undoshare_tests.rs 563
 src/backend/collide_replace_tests.rs 492
 src/backend/proto.rs 465
 src/backend/thumbworker.rs 961
-src/backend/trashbrowse.rs 780
+src/backend/trashbrowse.rs 900
 src/backend/trashdelete.rs 938
 src/clip/watch_end_tests.rs 405
 src/gvfsprefetch_tests.rs 398
@@ -165,7 +165,7 @@ ui/SettingsRow.qml 409
 ui/Sidebar.qml 713
 ui/StatusBar.qml 477
 ui/Theme.qml 475
-ui/TrashView.qml 472
+ui/TrashView.qml 492
 ui/UnlockDialog.qml 450
 ui/ViewState.qml 544
 ui/WindowBody.qml 816

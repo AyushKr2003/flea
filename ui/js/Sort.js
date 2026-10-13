@@ -120,3 +120,8 @@ function applyPending(pane) {
     if (held.forget) { column(pane, "__default__"); return }
     resort(pane, held.key, held.desc)
 }
+
+// A sorted column's title: the label and the geometric mark of the direction, characters the stock monospace has, so the mark scales with the font like the label.
+function title(label, descending) {
+    return label + " " + (descending ? "\u25be" : "\u25b4")
+}

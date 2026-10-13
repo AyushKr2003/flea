@@ -9148,6 +9148,9 @@ The tag place's live walk gets the names it asks for. `src/backend/searchtags.rs
 The font page keeps `tests/startup-units.txt` at its 170 units while its `bytes` line moves from 1596965 to 1598587, the sum the probe's tool takes over them with the `fontlook` request and `fontLooked` signal in `ui/Backend.qml`, the `fontlooked` route in `ui/js/Messages.js` and the font kind, sample sizes, shared ask count and facts line in `ui/js/Kinds.js`.
 
 The tall previews line keeps `tests/startup-units.txt` at its 170 units while its `bytes` line moves from 1596965 to 1597596, the sum the probe's tool takes over them with the `previewFacts` key in `ui/ViewState.qml` and `ui/js/UiState.js`, the `factsToggle` route in `ui/js/Focus.js` and its generated rows in `ui/js/Keymap.js`.
+
+The Trash order unit raises the first-frame `bytes` line in `tests/startup-units.txt` from 1,596,965 to 1,597,470 (+505, no unit added): `ui/TrashView.qml` opens the cursor row's menu under that row (`openMenu`), lands the cursor on the newest row and draws the Deleted title with `Sort.title` in `ui/js/Sort.js`, which `ui/Header.qml` now asks for its own sort mark, and `ui/js/Trash.js` gains `menuTarget`.
+Its review round 1 raises the `src/backend/trashbrowse.rs` ceiling from 834 to 898 (`wc -l`) for `list_with`, `same_items`, `listed_uris` and their five tests; no code or comment was cut.
 ## The image flasher
 
 The backend and the QML pane of Flash image are built against the approved Flasher boards and one

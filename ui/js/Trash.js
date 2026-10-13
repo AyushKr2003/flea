@@ -72,3 +72,10 @@ function confirmBody(snapshot, scope) {
     if (!filled(snapshot)) return ""
     return snapshot.all ? Ops.deleteAllLine(snapshot.count, Format.size(snapshot.bytes || 0)) : Ops.deleteScopeLine(scope, snapshot.count)
 }
+
+// Where m opens: the cursor row's menu when no row is marked or the only mark is the cursor row, the marked rows' menu otherwise, the whole-Trash menu when nothing is listed.
+function menuTarget(total, markedCount, cursorMarked) {
+    if (total === 0) return "strip"
+    if (markedCount === 0 || (markedCount === 1 && cursorMarked)) return "cursor"
+    return "marked"
+}
