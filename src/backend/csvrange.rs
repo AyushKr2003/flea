@@ -1,6 +1,7 @@
 use crate::json::{field_bool, field_str};
 
 // Only raw table requests align records; csv "," and "\t" select their field separator.
+// Sample input: delimiter(r#"{"csv":",","raw":false}"#) returns None.
 pub fn delimiter(request: &str) -> Option<u8> {
     if !field_bool(request, "raw") {
         return None;
@@ -13,6 +14,7 @@ pub fn delimiter(request: &str) -> Option<u8> {
 }
 
 // Expand the physical-line window to whole RFC 4180 records, scanning the bytes the code request already holds.
+// Sample input: align(b"id,note\n1,\"two\nlines\",9\n2,last\n", 3, 1, b',') returns (2, 2).
 pub fn align(data: &[u8], first: usize, count: usize, delim: u8) -> (usize, usize) {
     let wanted_end = first.saturating_add(count.saturating_sub(1));
     let mut line = 1;
