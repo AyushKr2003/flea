@@ -295,25 +295,39 @@ function writtenSectors(body) {
     return fields.length >= 7 ? fields[6] : ""
 }
 
-// Every mounted volume on one disk, for a power-off that unmounts each before stopping the drive.
-function powerOffQueue(entries, disk) {
-    var queue = []
-    var list = entries || []
-    for (var i = 0; i < list.length; i++) {
-        if (list[i].kind === "volume" && list[i].mounted && powerOffDisk(list[i].device) === disk)
-            queue.push(list[i].device)
+// Every mounted node under one disk in the last listing, hidden ones too (an ESP has no rail row, yet a power-off must unmount it); system mounts never queue.
+// Sample input: sda1 (ESP) mounted at /run/media/u/EFI answers [{device: "/dev/sda1", path: "/run/media/u/EFI"}] for "/dev/sda".
+function powerOffQueue(listing, disk, entries) {
+    var tree
+    var out = []
+    try {
+        tree = JSON.parse(String(listing || ""))
+    } catch (e) {
+        // An unparsable listing keeps the mounted rail volumes queued, as before the hidden-node walk.
+        console.warn("Device listing for " + disk + " could not be parsed (" + e.message + "); mounted rail volumes were queued instead.")
+        var rows = entries || []
+        for (var r = 0; r < rows.length; r++) {
+            var row = rows[r]
+            if (row.kind === "volume" && row.mounted && powerOffDisk(row.device) === disk)
+                out.push({ device: row.device, path: row.path })
+        }
+        return dedupeVolumes(out)
     }
-    return queue
+    var nodes = (tree && tree.blockdevices) || []
+    for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i].name && powerOffDisk(devicePath(nodes[i])) === disk)
+            collectMounted(nodes[i], out)
+    }
+    return dedupeVolumes(out)
 }
 
-// The mountpoint the last listing reported for a device, "" when it reported none.
-function mountpointOf(entries, device) {
-    var list = entries || []
-    for (var i = 0; i < list.length; i++) {
-        if (list[i].device === device)
-            return list[i].path
-    }
-    return ""
+function collectMounted(node, out) {
+    var point = mountOf(node)
+    if (point.length > 0 && !holdsRoot(node) && !isSystemMountOnly(node))
+        out.push({ device: devicePath(node), path: point })
+    var kids = node.children || []
+    for (var i = 0; i < kids.length; i++)
+        collectMounted(kids[i], out)
 }
 
 // Sample gio stderr: "Error 1: target is busy", "Not authorized to perform operation",

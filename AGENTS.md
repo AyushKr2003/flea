@@ -4136,6 +4136,18 @@ The AppImage icon route, merged from `gm/0310-pv-appi` onto the 0.3.11 stage, mo
 
 The RAW eviction race pin moves one ceiling, re-derived with `wc -l`: `src/backend/rawpreview_tests.rs` 394 to 410 (new row) for the test that serves a copy between the scan and its removal.
 
+The power-off fix moves two ceilings, each re-derived with `wc -l`: `ui/js/Devices.js` 391 to 397 for
+`powerOffQueue` reading the last listing, hidden partitions included, and `tests/js/devices.js` 363 to 365 for its pins.
+An unparsable listing falls back to the mounted volume rail rows on the same disk and says that once on stderr,
+naming the disk and parse error; queue legs are deduplicated by
+device path, so a dm node repeated under two partitions is unmounted once. These adversarial fixes move
+`ui/js/Devices.js` 397 to 404 for the rail fallback and shared dedupe, and `tests/js/devices.js` 365 to 392 for the
+unparsable, truncated and empty listing checks and the repeated dm node, each re-derived with `wc -l`.
+`ui/DeviceMounts.qml` stays at 537, passing its rail entries beside the listing for that fallback.
+The fallback warning moves `ui/js/Devices.js` 404 to 405 and its warning count, message and valid-listing checks
+move `tests/js/devices.js` 392 to 405, each re-derived with `wc -l`; `tests/js.sh` checks each marked call's stderr.
+Its one-line lsblk sample moves `tests/js/devices.js` 405 to 406, re-derived with `wc -l`.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

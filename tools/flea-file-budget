@@ -74,7 +74,7 @@ tests/js/drag.js 493
 tests/js/dropsflow.js 301
 tests/js/collide.js 319
 tests/js/facts.js 346
-tests/js/devices.js 363
+tests/js/devices.js 406
 tests/js/previewswap.js 469
 tests/js/mdstructure.js 655
 tests/js/keymap.js 356
@@ -172,7 +172,7 @@ ui/ViewState.qml 547
 ui/WindowBody.qml 816
 ui/js/Anchor.js 379
 ui/js/ColumnsCarry.js 94
-ui/js/Devices.js 391
+ui/js/Devices.js 405
 ui/js/Filter.js 284
 ui/js/Focus.js 484
 ui/js/Keymap.js 366
