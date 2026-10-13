@@ -104,8 +104,8 @@ check "run_one launches the entrant from a background group of this shell" 'eval
 check "a probe's launch hands every TUI kitty the dump" "$tui_lines" "$(grep -c -- "--class flea-bench-kitty --dump-bytes $scratch/kitty.dump " "$scratch/argv")"
 : > "$scratch/argv"; launched ""
 check "a measured launch hands no TUI kitty a dump" "$tui_lines 0" "$(grep -c -- '--class flea-bench-kitty ' "$scratch/argv") $(grep -c -- '--dump-bytes' "$scratch/argv")"
-check "the header ends with first_rows_ms" 1 "$(grep -c '^echo "id,run,.*,rerun,first_rows_ms" >> "\$OUT"$' "$bench")"
-check "the row ends with the first rows" 1 "$(grep -c '"\$WG_CLEAN" "\$RERUN_N" "\$first_rows"$' "$bench")"
+check "the header ends with first_rows_ms,launch_pos" 1 "$(grep -c '^echo "id,run,.*,rerun,first_rows_ms,launch_pos" >> "\$OUT"$' "$bench")"
+check "the row ends with the first rows and the launch place" 1 "$(grep -c '"\$WG_CLEAN" "\$RERUN_N" "\$first_rows" "\$LAUNCH_POS"$' "$bench")"
 
 [ "$bad" = 0 ] && echo "field-tui-frame: all passed" || echo "field-tui-frame: failures above"
 exit "$bad"

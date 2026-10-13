@@ -97,12 +97,12 @@ check "a cache home elsewhere refuses" 3 "$(cache_home "$scratch/elsewhere")"
 
 # The wiring: parked beside the thumbnails and before the warm launch, restored on both exits, and the warm launch must have recorded a list.
 park_line=$(grep -n '^park_prefetch$' "$bench" | cut -d: -f1)
-warm_line=$(grep -n 'then warm_qml_cache; fi$' "$bench" | cut -d: -f1)
+warm_line=$(grep -n 'warm_qml_cache ) || exit 1$' "$bench" | head -1 | cut -d: -f1)
 check "park_prefetch runs once at setup" 1 "$(printf '%s\n' "$park_line" | grep -c .)"
-check "the warm launch is called once" 1 "$(printf '%s\n' "$warm_line" | grep -c .)"
-check "the list is parked before the warm launch records one" yes "$([ "${park_line:-0}" -gt 0 ] && [ "${park_line:-0}" -lt "${warm_line:-0}" ] && echo yes || echo no)"
+check "each Flea build is warmed once, the flea and the anchor" 2 "$(grep -c 'warm_qml_cache ) || exit 1$' "$bench")"
+check "the list is parked before the first warm launch records one" yes "$([ "${park_line:-0}" -gt 0 ] && [ "${park_line:-0}" -lt "${warm_line:-0}" ] && echo yes || echo no)"
 check "restore_prefetch runs at the end" 1 "$(grep -c '^restore_prefetch$' "$bench")"
-check "the EXIT trap restores in a subshell, so a failure there skips no later step" 1 "$(grep -c '^  ( restore_prefetch )$' "$bench")"
+check "the EXIT trap restores in a subshell, so a failure there skips no later step" 1 "$(grep -c '^  ( restore_prefetch ) || cleanup_rc=1$' "$bench")"
 check "the warm launch refuses to leave no list" 1 "$(grep -c 'the warm launch recorded no prefetch list' "$bench")"
 
 # A TERM during the warm launch runs the bench's EXIT trap, and that must end the warm Flea: a fake one that carries the bench token, wired with the bench's own blocks.

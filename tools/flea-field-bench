@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Cold-cache file manager benchmark against the installed field, see AGENTS.md "Testing".
-# RUN IT FROM A COPY OUTSIDE THIS TREE, because it launches the tree it measures.
-# Reads the sudo password as the first line of stdin, so it never appears in argv.
-# FIXTURE_KIND=nas|usb, NAS_HOST, PRE_LAUNCH, SETTLE_GAP_MS and ONLY=flea-tui: see AGENTS.md "Testing".
+# RUN IT FROM A COPY OUTSIDE THE TREE IT MEASURES, or from a frozen arm checkout nothing edits during the
+# run, because bash reads a script as it runs. It launches the tree it measures.
+# Drops caches through the fixed sysctl sudoers rule when one exists; otherwise the sudo password is the
+# first line of stdin, so it never appears in argv.
+# FIXTURE_KIND=nas|usb, NAS_HOST, PRE_LAUNCH, SETTLE_GAP_MS and ONLY (a space-separated entrant list, e.g.
+# ONLY='flea flea-anchor flea-tui strata'): see AGENTS.md "Testing".
 # FIELD_MEMINFO and FIELD_VMSTAT point the write guard at fixture files, for tests/field-write-guard.sh only.
 set -uo pipefail
 # This one runs from a copy outside the tree, so the guard is sourced by the tree's own path rather
@@ -28,8 +31,13 @@ case "$(cut -d: -f3 /proc/self/cgroup)" in
 esac
 
 # First statement after the re-entry: nothing else may touch stdin before the password is taken.
-read -r -s SUDO_PW || true
-[ -n "${SUDO_PW:-}" ] || { printf 'FAIL: no sudo password arrived on stdin\n' >&2; exit 1; }
+# The fixed sysctl rule needs no password, and a runner with none on stdin must not block on the read.
+SUDO_NOPASSWD=no
+if sudo -n -l /usr/bin/sysctl -w vm.drop_caches=3 > /dev/null 2>&1; then SUDO_NOPASSWD=yes; fi
+if [ "$SUDO_NOPASSWD" = no ]; then
+  read -r -s SUDO_PW || true
+  [ -n "${SUDO_PW:-}" ] || { printf 'FAIL: no sudo password arrived on stdin\n' >&2; exit 1; }
+fi
 
 export PATH="$HOME/.local/bin:$PATH"
 eval "$(omarchy-drive env)"
@@ -56,8 +64,23 @@ export FLEA_UI="$FLEA_REPO/ui"
 export FLEA_BIN="$FLEA_REPO/target/release/flea"
 # The tested Flea's own QML disk cache, in its build tree: a sandbox arm never grows the user's ~/.cache/quickshell/qmlcache.
 export FLEA_QMLCACHE="$FLEA_REPO/target/qmlcache"
+# The level-shift anchor: an older tested build run interleaved in the same run as its own entrant, so a
+# rank compares like with like. Its tree is frozen, so only its binary's existence is checked.
+export ANCHOR_REPO="${ANCHOR_REPO:-$FLEA_REPO}"
+export ANCHOR_BIN="$ANCHOR_REPO/target/release/flea"
+export ANCHOR_UI="$ANCHOR_REPO/ui"
+export ANCHOR_QMLCACHE="$ANCHOR_REPO/target/qmlcache"
+# A manifest tool beside this bench wins; otherwise the tree's own. Either way it is the same tool, so a
+# run from an arm's checkout records that arm's manifest code.
+MANIFEST_TOOL=$(dirname "$0")/flea-bench-manifest-039
+[ -x "$MANIFEST_TOOL" ] || MANIFEST_TOOL=$FLEA_REPO/tools/flea-bench-manifest
 # Strata is built from source rather than packaged, so its path is a variable and not a PATH lookup.
+# STRATA_SRC is the tree that built STRATA_BIN; strata_provenance refuses a run where the two disagree.
 STRATA_BIN=${STRATA_BIN:-$HOME/Work/strata/target/release/strata}
+STRATA_SRC=${STRATA_SRC:-}
+# The harness's own file, so the manifest can record its sha256 and whether a copy was patched.
+HARNESS_TOOL=$(readlink -f "$0")
+export ANCHOR_REPO ANCHOR_BIN ANCHOR_UI ANCHOR_QMLCACHE HARNESS_TOOL
 # The one entrant here that persists no thumbnail. strata renders each one in a sandboxed helper
 # that writes result.png into /tmp/strata-preview-<pid>-<n> and deletes the directory on drop, so it
 # fills the screen and leaves the cache this harness counts empty. Same two names, and the same live
@@ -72,6 +95,10 @@ TUI_CONF_SRC="$FLEA_REPO/tools/flea-bench-tui"
 TUI_CONF=""
 # Cleared before the trap, so the cleanup can never remove a directory the caller named in its environment.
 FLEA_STATE=""
+# The anchor's own state directory: its older build reads and writes an older ui-state schema.
+ANCHOR_STATE=""
+# This entrant's place in its kind's order for the current run, written to its CSV row by run_one.
+LAUNCH_POS=-
 # Set at the first launch, so the cleanup never kills an operator's window the start-up refusal left alone.
 ENTRANT_LAUNCHED=""
 # The group's terminal, named once. foot is sixel only and every entrant here that previews at all
@@ -300,8 +327,13 @@ run_guarded() {
 }
 
 drop_caches() {
-  printf '%s\n' "$SUDO_PW" | sudo -S -k -p "" sh -c "sync; echo 3 > /proc/sys/vm/drop_caches" \
-    || fail "could not drop caches"
+  if [ "$SUDO_NOPASSWD" = yes ]; then
+    /usr/bin/sync
+    sudo -n /usr/bin/sysctl -w vm.drop_caches=3 > /dev/null || fail "could not drop caches"
+  else
+    printf '%s\n' "$SUDO_PW" | sudo -S -k -p "" sh -c "sync; echo 3 > /proc/sys/vm/drop_caches" \
+      || fail "could not drop caches"
+  fi
 }
 
 # The thumbnail cache belongs to the user, so it is moved exactly once and moved back once.
@@ -533,6 +565,35 @@ restore_prefetch() {
   fi
 }
 # prefetch park end
+
+# prefetch slots begin
+# Two Flea builds alternate in one run and each records its own list, so each keeps it in its own tree and the
+# shared path holds the list of the build about to launch. flea-tui is the same build as flea.
+PREFETCH_ARM=""
+FLEA_PREFETCH_SLOT="$FLEA_REPO/target/prefetch-list"
+ANCHOR_PREFETCH_SLOT="$ANCHOR_REPO/target/prefetch-list"
+# The list the last launch recorded goes back to the slot of the build that recorded it.
+prefetch_keep() {
+  [ -n "$PREFETCH_ARM" ] || return 0
+  if [ -e "$PREFETCH" ]; then
+    cp -p "$PREFETCH" "$PREFETCH_ARM.bench-tmp" && mv -f "$PREFETCH_ARM.bench-tmp" "$PREFETCH_ARM" || fail "could not keep $PREFETCH as $PREFETCH_ARM"
+  else
+    rm -f "$PREFETCH_ARM"
+  fi
+  PREFETCH_ARM=""
+}
+# The slot's list becomes the shared path's list before a launch of that build; nothing changes within one build.
+prefetch_for() {
+  local slot=$1
+  [ "$PREFETCH_ARM" = "$slot" ] && return 0
+  prefetch_keep
+  rm -f "$PREFETCH"
+  if [ -e "$slot" ]; then
+    cp -p "$slot" "$PREFETCH.bench-tmp" && mv -f "$PREFETCH.bench-tmp" "$PREFETCH" || fail "could not put $slot at $PREFETCH"
+  fi
+  PREFETCH_ARM=$slot
+}
+# prefetch slots end
 
 # entrant sweep begin
 # Sample input: /proc/123/environ "HOME=/home/gm\0FLEA_FIELD_BENCH=4242-1760000000\0..."
@@ -860,6 +921,9 @@ kill_entrant() {
 # Fields: comm|token, in kill order, so clean_bench and the start-up refusal read one list and cannot drift apart.
 declare -a KILL_TARGETS=(
   "qs|$FLEA_UI"
+  # The anchor's qs carries ANCHOR_UI as its token, so it needs its own row; when ANCHOR_REPO is FLEA_REPO
+  # the two rows match the same pids.
+  "qs|$ANCHOR_UI"
   "flea|--backend"
   # The group's terminal, matched by the class this run gives it: a bare kitty target would name
   # every terminal the operator has open.
@@ -900,7 +964,7 @@ declare -a KILL_TARGETS=(
 # The processes in KILL_TARGETS one entrant owns. Two ids are not named after their own process.
 kill_comms_for() {
   case $1 in
-    flea) printf 'qs\nflea\n' ;;
+    flea|flea-anchor) printf 'qs\nflea\n' ;;
     # tumblerd outlives thunar by 300 s, and a full-field start refuses to begin beside it.
     thunar) printf 'thunar\ntumblerd\n' ;;
     # The indexer nautilus starts outlives it the same way, so ONLY=nautilus ends it too.
@@ -917,15 +981,19 @@ kill_comms_for() {
 # refusal to the entrant named. A row that names nothing is a typo and takes the run down with it.
 if [ -n "${ONLY:-}" ]; then
   declare -a scoped_targets=()
-  while IFS= read -r only_comm; do
-    for kill_row in "${KILL_TARGETS[@]}"; do
-      [ "${kill_row%%|*}" = "$only_comm" ] && scoped_targets+=("$kill_row")
-    done
-  done < <(kill_comms_for "$ONLY")
+  for one_only in $ONLY; do
+    while IFS= read -r only_comm; do
+      for kill_row in "${KILL_TARGETS[@]}"; do
+        [ "${kill_row%%|*}" = "$only_comm" ] && scoped_targets+=("$kill_row")
+      done
+    done < <(kill_comms_for "$one_only")
+  done
   [ ${#scoped_targets[@]} -gt 0 ] \
     || fail "ONLY=$ONLY names no process in the kill list, so this run could not clean up after itself"
   KILL_TARGETS=("${scoped_targets[@]}")
 fi
+# ONLY is a space-separated entrant list, so membership is a word match.
+only_has() { [ -z "${ONLY:-}" ] && return 0; case " $ONLY " in *" $1 "*) return 0 ;; esac; return 1; }
 
 clean_bench() {
   local row comm token
@@ -1139,6 +1207,11 @@ run_one() {
   [ "$DROP_THUMBS" = yes ] && [ "$id" = "$TRANSIENT_ID" ] && watch_start "$id"
   # PRE_LAUNCH evens out gvfsd's own listing memory, which drop_caches never reaches.
   if [ -n "${PRE_LAUNCH:-}" ]; then bash -c "$PRE_LAUNCH" > /dev/null 2>&1 || fail "PRE_LAUNCH failed: $PRE_LAUNCH"; fi
+  # The build's own list is in place before its launch, and the cache drop below does not touch it.
+  case $id in
+    flea|flea-tui) prefetch_for "$FLEA_PREFETCH_SLOT" ;;
+    flea-anchor) prefetch_for "$ANCHOR_PREFETCH_SLOT" ;;
+  esac
   drop_caches
   drop_thumbs
 
@@ -1324,7 +1397,7 @@ run_one() {
   fi
   # A contaminated row stays in the CSV and never ranks: the cell says why, and the columns carry the numbers.
   ranked=$(write_guard_ranked "$ranked")
-  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N" "$first_rows"
+  printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' "$id" "$RUN_INDEX" "$mapped" "$settled" "$best_pss" "$cpu_s" "$child_pss" "$thumbs_n" "$best_anon" "$best_uss" "$DRM_KB" "$thumbs_dirs" "$cpu_tree_s" "$thumbs_fmt" "$ranked" "$preview_ms" "$cpu_reaped_s" "$cpu_sys_s" "$WG_DIRTY_WB_KB" "$WG_PGPGOUT_PRE_KB" "$WG_PGPGOUT_LAUNCH_KB" "$WG_CLEAN" "$RERUN_N" "$first_rows" "$LAUNCH_POS"
   clean_bench
   release_run_cg
 }
@@ -1358,26 +1431,49 @@ done < <(ls -A "$FIXTURE" | grep '^\.')
 fi
 require_bench_idle
 
-# Everything this run made, and nothing else: the parked cache goes back, and the only directory
-# removed is the one mktemp -d handed out above, checked absolute and two components deep first.
+# The marker every directory this run makes carries; safe_rm_tmpdir removes a directory only while it names this run.
+PERF_TMP_MARK=.flea-perf-tmp
+# Removes one directory this run made: absolute, two deep, a real directory and not a symlink, marked by this run.
+safe_rm_tmpdir() {
+  local dir=$1 kind=$2 mark
+  case ${dir:-} in /*/*) ;; *) printf 'WARNING: not removing %s path %s, it is not an absolute path two deep\n' "$kind" "${dir:-}" >&2; return 1 ;; esac
+  [ -e "$dir" ] || return 0
+  [ -L "$dir" ] && { printf 'WARNING: not removing %s path %s, it is a symlink\n' "$kind" "$dir" >&2; return 1; }
+  [ -d "$dir" ] || { printf 'WARNING: not removing %s path %s, it is not a directory\n' "$kind" "$dir" >&2; return 1; }
+  [ -f "$dir/$PERF_TMP_MARK" ] || { printf 'WARNING: not removing %s path %s, it carries no marker\n' "$kind" "$dir" >&2; return 1; }
+  [ -L "$dir/$PERF_TMP_MARK" ] && { printf 'WARNING: not removing %s path %s, its marker is a symlink\n' "$kind" "$dir" >&2; return 1; }
+  mark=$(cat "$dir/$PERF_TMP_MARK" 2>/dev/null) || { printf 'WARNING: not removing %s path %s, its marker is unreadable\n' "$kind" "$dir" >&2; return 1; }
+  [ "$mark" = "owner=$$" ] || { printf 'WARNING: not removing %s path %s, its marker names another owner\n' "$kind" "$dir" >&2; return 1; }
+  rm -rf "$dir" || { printf 'WARNING: could not remove %s path %s\n' "$kind" "$dir" >&2; return 1; }
+}
+# The copied kitty callback must not point outside the marked roots: its socket lives under TUI_CONF.
+materialize_tui_socket() {
+  [ -f "$TUI_CONF/kitty/kitty.conf" ] || return 0
+  sed -i "s|unix:/tmp/flea-bench-kitty|unix:$TUI_CONF/flea-bench-kitty|" "$TUI_CONF/kitty/kitty.conf" || return 1
+  grep -q "unix:$TUI_CONF/flea-bench-kitty" "$TUI_CONF/kitty/kitty.conf" || return 1
+  ! grep -q "unix:/tmp/flea-bench-kitty" "$TUI_CONF/kitty/kitty.conf" || return 1
+}
+
+# Everything this run made, and nothing else: the parked cache goes back, and the only directories
+# removed are the ones mktemp -d handed out above, each checked and marked by this run first.
 bench_cleanup() {
+  # A prior nonzero exit stands; a failed teardown step is itself the nonzero result only when nothing failed before it.
+  local prior=$? cleanup_rc=0
   # A run that fails mid-entrant ends that entrant here, or it stays resident through every run after it.
   watch_kill
   [ -n "$ROWS_PID" ] && kill "$ROWS_PID" 2>/dev/null
   # Subshells, because each of these can fail and an exit inside this trap would skip every step after it.
-  [ -n "$ENTRANT_LAUNCHED" ] && ( clean_bench )
-  release_run_cg
-  ( restore_thumbs )
-  ( restore_prefetch )
-  case ${TUI_CONF:-} in
-    /*/*) rm -rf "$TUI_CONF" ;;
-    *) printf 'WARNING: not removing TUI config path %s, it is not an absolute path two deep\n' "${TUI_CONF:-}" >&2 ;;
-  esac
-  case ${FLEA_STATE:-} in
-    /tmp/flea-bench-state.*) rm -rf "$FLEA_STATE" ;;
-    "") ;;
-    *) printf 'WARNING: not removing Flea state path %s, it is not the mktemp directory this run made\n' "$FLEA_STATE" >&2 ;;
-  esac
+  if [ -n "$ENTRANT_LAUNCHED" ]; then ( clean_bench ) || cleanup_rc=1; fi
+  release_run_cg || cleanup_rc=1
+  ( restore_thumbs ) || cleanup_rc=1
+  # Keeps the list of the build that ran last, before the operator's list comes back over the shared path.
+  ( prefetch_keep ) || cleanup_rc=1
+  ( restore_prefetch ) || cleanup_rc=1
+  case ${TUI_CONF:-} in "") ;; *) safe_rm_tmpdir "$TUI_CONF" "TUI config" || cleanup_rc=1 ;; esac
+  case ${FLEA_STATE:-} in /tmp/flea-bench-state.*) safe_rm_tmpdir "$FLEA_STATE" "Flea state" || cleanup_rc=1 ;; "") ;; *) printf 'WARNING: not removing Flea state path %s, it is not the mktemp directory this run made\n' "$FLEA_STATE" >&2; cleanup_rc=1 ;; esac
+  case ${ANCHOR_STATE:-} in /tmp/flea-bench-state.*) safe_rm_tmpdir "$ANCHOR_STATE" "anchor state" || cleanup_rc=1 ;; "") ;; *) printf 'WARNING: not removing anchor state path %s, it is not the mktemp directory this run made\n' "$ANCHOR_STATE" >&2; cleanup_rc=1 ;; esac
+  if [ "$prior" -ne 0 ]; then exit "$prior"; fi
+  exit "$cleanup_rc"
 }
 trap bench_cleanup EXIT
 # A signal exits and lets the EXIT trap clean up once: a TERM trap that returned let a stopped bench keep benching.
@@ -1387,6 +1483,7 @@ trap 'exit 143' TERM
 # After the trap, never before it: a temp directory made above the handler that removes it leaks on
 # every early exit between the two.
 TUI_CONF=$(mktemp -d) || fail "no temp directory for the TUI configuration"
+printf 'owner=%s\n' "$$" > "$TUI_CONF/$PERF_TMP_MARK" || fail "could not mark $TUI_CONF"
 cp -r "$TUI_CONF_SRC/." "$TUI_CONF/" || fail "could not copy $TUI_CONF_SRC"
 # What a TUI rows probe's kitty receives from its child, and the entry names whose first appearance in it stamps first_rows_ms.
 TUI_DUMP=$TUI_CONF/kitty.dump
@@ -1404,8 +1501,9 @@ TUI_CONF_FS=$(findmnt -no FSTYPE --target "$TUI_CONF")
 # image until the path was absolute. The committed file carries the name so it stays readable, and
 # the run materialises it. The manifest records the materialised copy, which is what actually ran.
 find "$TUI_CONF" -type f -exec sed -i "s|\$XDG_CONFIG_HOME|$TUI_CONF|g" {} +
+materialize_tui_socket || fail "the copied kitty callback keeps a socket outside $TUI_CONF"
 # broot lists nothing until its first-run install question is answered (src/shell_install/state.rs), so a run with broot starts answered.
-if { [ -z "${ONLY:-}" ] || [ "${ONLY:-}" = broot ]; } && command -v broot > /dev/null 2>&1; then
+if only_has broot && command -v broot > /dev/null 2>&1; then
   XDG_CONFIG_HOME=$TUI_CONF broot --write-default-conf "$TUI_CONF/broot" > /dev/null 2>&1 || fail "could not write broot's default configuration"
   XDG_CONFIG_HOME=$TUI_CONF broot --set-install-state refused > /dev/null 2>&1 || fail "could not answer broot's install question"
   [ -e "$TUI_CONF/broot/launcher/refused" ] || fail "broot's install answer is missing"
@@ -1413,11 +1511,21 @@ fi
 
 # Flea runs on its shipped defaults, because an operator's saved view, sort or rows decide what the first screen holds.
 FLEA_STATE=$(mktemp -d /tmp/flea-bench-state.XXXXXX) || fail "no temp directory for Flea's state"
+printf 'owner=%s\n' "$$" > "$FLEA_STATE/$PERF_TMP_MARK" || fail "could not mark $FLEA_STATE"
 mkdir -p "$FLEA_STATE/flea" "$FLEA_STATE/no-config" || fail "could not make $FLEA_STATE/flea"
 # An empty config directory for this one write, so an old view.json cannot migrate into the defaults.
 XDG_STATE_HOME="$FLEA_STATE" XDG_CONFIG_HOME="$FLEA_STATE/no-config" "$FLEA_BIN" --ui-state '{"sort":{"key":"name","reverse":false}}' >/dev/null \
   || fail "flea --ui-state refused to write the shipped defaults into $FLEA_STATE"
 printf 'flea-state: %s, the shipped defaults, whose text size follows the system font as every entrant does\n' "$FLEA_STATE"
+# The anchor gets its own state directory, written by its own binary, so its older ui-state schema never touches the fresh build's state.
+[ -x "$ANCHOR_BIN" ] || fail "$ANCHOR_BIN is missing, so the anchor arm is not built"
+ANCHOR_STATE=$(mktemp -d /tmp/flea-bench-state.XXXXXX) || fail "no temp directory for the anchor state"
+printf 'owner=%s\n' "$$" > "$ANCHOR_STATE/$PERF_TMP_MARK" || fail "could not mark $ANCHOR_STATE"
+mkdir -p "$ANCHOR_STATE/flea" "$ANCHOR_STATE/no-config" || fail "could not make $ANCHOR_STATE/flea"
+[ "$ANCHOR_STATE" != "$FLEA_STATE" ] || fail "the anchor state is the fresh state, refusing a shared ui-state schema"
+XDG_STATE_HOME="$ANCHOR_STATE" XDG_CONFIG_HOME="$ANCHOR_STATE/no-config" "$ANCHOR_BIN" --ui-state '{"sort":{"key":"name","reverse":false}}' >/dev/null \
+  || fail "flea --ui-state refused to write the shipped defaults into $ANCHOR_STATE"
+printf 'anchor-state: %s, the shipped defaults for the anchor build\n' "$ANCHOR_STATE"
 
 # The band the TUI group watches for its preview, and the file it captures into.
 # corner: one monitor and one tiled window, which require_bench_idle already guarantees. The band is
@@ -1458,7 +1566,7 @@ if [ "$FIXTURE_KIND" = nas ]; then
 fi
 mkdir -p "$(dirname "$OUT")"
 : > "$OUT"
-echo "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun,first_rows_ms" >> "$OUT"
+echo "id,run,mapped_ms,settled_ms,pss_kb,cpu_s,child_pss_kb,thumbs_n,pss_anon_kb,uss_kb,drm_kb,thumbs_by_dir,cpu_tree_s,thumbs_by_format,ranked,preview_ms,cpu_reaped_s,cpu_sys_s,dirty_wb_kb,pgpgout_pre_kb,pgpgout_launch_kb,write_clean,rerun,first_rows_ms,launch_pos" >> "$OUT"
 
 # Fields: id|kind|class|comm|token|helper_comm|helper_token|command; the command holds any later pipe, and its \$TUI_DUMP_FLAG is read by each launch's eval.
 declare -a ENTRANTS=(
@@ -1470,6 +1578,9 @@ declare -a ENTRANTS=(
   # than by instruction; the moment a package installs /usr/share/flea/ui that branch is checked
   # second and wins, and the run would launch this tree's binary against the installed shell.
   "flea|gui|com.thisisgm.flea|qs|$FLEA_UI|flea|--backend|FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI QML_DISK_CACHE_PATH=$FLEA_QMLCACHE XDG_STATE_HOME=$FLEA_STATE setsid nohup $FLEA_BIN --gui $FIXTURE"
+  # The flea-anchor entrant: the flea line above with ANCHOR_REPO in place of FLEA_REPO, so the stored FF row
+  # runs interleaved in the same run as the candidate for the rank level shift.
+  "flea-anchor|gui|com.thisisgm.flea|qs|$ANCHOR_UI|flea|--backend|FLEA_BIN=$ANCHOR_BIN FLEA_UI=$ANCHOR_UI QML_DISK_CACHE_PATH=$ANCHOR_QMLCACHE XDG_STATE_HOME=$ANCHOR_STATE setsid nohup $ANCHOR_BIN --gui $FIXTURE"
   "nautilus|gui|org.gnome.Nautilus|nautilus||||setsid nohup nautilus --new-window $FIXTURE"
   "thunar|gui|thunar|thunar||tumblerd||setsid nohup thunar $FIXTURE"
   "pcmanfm|gui|pcmanfm|pcmanfm||||setsid nohup pcmanfm $FIXTURE"
@@ -1494,6 +1605,45 @@ declare -a ENTRANTS=(
   "superfile|tui|$TUI_CLASS|spf||||XDG_CONFIG_HOME=$TUI_CONF setsid nohup $TUI_TERM --class $TUI_CLASS \$TUI_DUMP_FLAG spf $FIXTURE"
 )
 
+# launch order begin
+# Sample input: launch_rotation 2 0 1 2 answers 1, 2, 0 one index a line: run 2 starts its kind at place 2.
+# Run r starts at place (r - 1) mod N, so each entrant of a kind launches first once per N runs. Every other
+# N runs the cycle reverses, so an adjacent pair leads once in each order per 2N runs, not in N-1 of N runs.
+launch_rotation() {
+  local run=$1 n off k cyc
+  local -a ids=() rotated=()
+  shift
+  n=$#
+  [ "$n" -gt 0 ] || return 0
+  ids=("$@")
+  off=$(( (run - 1) % n ))
+  cyc=$(( (run - 1) / n ))
+  for (( k = 0; k < n; k++ )); do rotated+=("${ids[$(( (off + k) % n ))]}"); done
+  if [ $(( cyc % 2 )) -eq 1 ]; then
+    for (( k = n - 1; k >= 0; k-- )); do printf '%s\n' "${rotated[$k]}"; done
+  else
+    printf '%s\n' "${rotated[@]}"
+  fi
+}
+# One line per ENTRANTS row for run RUN, "index place": each kind is rotated on its own and placed from 1.
+run_order() {
+  local run=$1 kind i place row_kind
+  local -a idx=()
+  for kind in gui tui; do
+    idx=()
+    for i in "${!ENTRANTS[@]}"; do
+      IFS='|' read -r _ row_kind _ <<< "${ENTRANTS[$i]}"
+      [ "$row_kind" = "$kind" ] && idx+=("$i")
+    done
+    place=0
+    while IFS= read -r i; do
+      place=$(( place + 1 ))
+      printf '%s %s\n' "$i" "$place"
+    done < <(launch_rotation "$run" "${idx[@]+"${idx[@]}"}")
+  done
+}
+# launch order end
+
 # nnn loads plugins from its config directory, and the plugin this uses is the one nnn itself ships.
 # Linked at run time rather than committed, so this repo carries no copy of it and no dangling link.
 if [ -x /usr/share/nnn/plugins/preview-tui ]; then
@@ -1511,6 +1661,29 @@ fi
 [ -x "$FLEA_BIN" ] || fail "$FLEA_BIN is missing, so run cargo build --release before benching"
 stale_src=$(find "$FLEA_REPO/src" "$FLEA_REPO/Cargo.toml" "$FLEA_REPO/Cargo.lock" -newer "$FLEA_BIN" -print -quit)
 [ -z "$stale_src" ] || fail "$stale_src is newer than $FLEA_BIN, so this run would bench a stale build"
+# strata provenance begin
+# STRATA_SRC defaults to the tree that built STRATA_BIN, which a cargo target/release path names; any other
+# binary must name its tree. The binary must report that tree's version, or the manifest names the wrong source.
+# Sample input: STRATA_BIN=/x/target/release/strata gives STRATA_SRC=/x, and Cargo.toml's version "1.0.0" must
+# appear in the binary's own "strata 1.0.0".
+strata_provenance() {
+  local ver out
+  if [ -z "${STRATA_SRC:-}" ]; then
+    case $STRATA_BIN in
+      */target/release/strata) STRATA_SRC=${STRATA_BIN%/target/release/strata} ;;
+      *) fail "STRATA_BIN=$STRATA_BIN is not in a cargo target/release, so the tree it was built from is unknown: set STRATA_SRC" ;;
+    esac
+  fi
+  [ -f "$STRATA_SRC/Cargo.toml" ] || fail "STRATA_SRC=$STRATA_SRC has no Cargo.toml, so it is not the tree that built $STRATA_BIN"
+  ver=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$STRATA_SRC/Cargo.toml" | head -1)
+  [ -n "$ver" ] || fail "$STRATA_SRC/Cargo.toml names no version, so STRATA_SRC cannot be checked against $STRATA_BIN"
+  out=$("$STRATA_BIN" --version 2>&1) || true
+  [[ $out =~ (^|[^0-9.])${ver//./\\.}([^0-9.]|$) ]] \
+    || fail "$STRATA_BIN reports '${out:-nothing}', not version $ver of STRATA_SRC=$STRATA_SRC, so the manifest would name the wrong source"
+  export STRATA_SRC
+}
+# strata provenance end
+if only_has strata && [ -x "$STRATA_BIN" ]; then strata_provenance; fi
 
 # What was benched, written beside the numbers before the first one is taken: a timing figure with
 # no version behind it is not citable, and a run that produced numbers without this is wasted.
@@ -1521,12 +1694,20 @@ MANIFEST="${OUT%.csv}.manifest.md"
 # the RUN and the RECORD would diverge on the one case the format declares legal, and the line above
 # claims they cannot. No flea command has a pipe today, so this is latent rather than wrong.
 flea_cmd=$(printf '%s\n' "${ENTRANTS[@]}" | grep '^flea|' | cut -d'|' -f8-)
+# Every run's launch order, named in the manifest so a rank can be read against the place each entrant held.
+LAUNCH_ORDER=""
+for r in $(seq 1 "$RUNS"); do
+  line="run $r:"
+  while read -r i place; do line="$line ${ENTRANTS[$i]%%|*}@$place"; done < <(run_order "$r")
+  LAUNCH_ORDER="${LAUNCH_ORDER:+$LAUNCH_ORDER$'\n'}$line"
+done
 printf '%s\n' "${ENTRANTS[@]}" | cut -d'|' -f1,2,4 \
   | FLEA_LAUNCH_LINE="$flea_cmd" TUI_TERMINAL="$TUI_TERM" EXPECT_FILES="$EXPECT_FILES" \
     TUI_CONFIG_DIR="$TUI_CONF" PREVIEW_TARGET="$PREVIEW_TARGET" \
     BENCH_IDLE_WAITED="$BENCH_IDLE_WAITED" FIXTURE_KIND="$FIXTURE_KIND" \
     SETTLE_GAP_MS="$SETTLE_GAP_MS" SETTLE_WATCH_PIDS="${MOUNT_PIDS[*]:-none}" NET_IFACE="$NET_IFACE" \
-    "$FLEA_REPO/tools/flea-bench-manifest" "$MANIFEST" "$FIXTURE" \
+    LAUNCH_ORDER="$LAUNCH_ORDER" \
+    "$MANIFEST_TOOL" "$MANIFEST" "$FIXTURE" \
   || fail "the manifest did not write, so this run would produce numbers nobody can cite"
 echo "manifest: $MANIFEST"
 
@@ -1539,13 +1720,27 @@ if [ "$DROP_THUMBS" = yes ]; then
   echo "key map: $KEY_MAP, $(wc -l < "$KEY_MAP") keys"
 fi
 
-# Only a run that times the Flea GUI needs its cache warm.
-if [ -z "${ONLY:-}" ] || [ "$ONLY" = flea ]; then warm_qml_cache; fi
+# Each Flea build the run times is warmed with its own binary, UI, cache, defaults and prefetch list; a subshell keeps the globals.
+# The flag is set here too, so an interrupted warm launch is ended by the EXIT trap rather than left running.
+if only_has flea; then
+  prefetch_for "$FLEA_PREFETCH_SLOT"
+  ENTRANT_LAUNCHED=yes
+  ( warm_qml_cache ) || exit 1
+fi
+if only_has flea-anchor; then
+  prefetch_for "$ANCHOR_PREFETCH_SLOT"
+  ENTRANT_LAUNCHED=yes
+  ( FLEA_BIN=$ANCHOR_BIN; FLEA_UI=$ANCHOR_UI; FLEA_QMLCACHE=$ANCHOR_QMLCACHE; FLEA_STATE=$ANCHOR_STATE; warm_qml_cache ) || exit 1
+fi
 
+# Every row is placed once per run, absent ones included, so a skipped entrant never moves another's place.
+[ "$(run_order 1 | wc -l)" -eq "${#ENTRANTS[@]}" ] || fail "an entrant row has a kind other than gui or tui, so it would never launch"
 for RUN_INDEX in $(seq 1 "$RUNS"); do
-  for row in "${ENTRANTS[@]}"; do
-    IFS='|' read -r id kind class comm token helper_comm helper_token cmd <<< "$row"
-    [ -n "${ONLY:-}" ] && [ "$ONLY" != "$id" ] && continue
+  mapfile -t RUN_ORDER < <(run_order "$RUN_INDEX")
+  for line in "${RUN_ORDER[@]}"; do
+    read -r i LAUNCH_POS <<< "$line"
+    IFS='|' read -r id kind class comm token helper_comm helper_token cmd <<< "${ENTRANTS[$i]}"
+    if [ -n "${ONLY:-}" ]; then case " $ONLY " in *" $id "*) ;; *) continue ;; esac; fi
     # An absent entrant is named and skipped, never silently dropped from the table, see hard rule 7.
     if [ "$id" = strata ]; then
       [ -x "$STRATA_BIN" ] || { printf 'SKIP: strata is not built at %s\n' "$STRATA_BIN" >&2; continue; }
@@ -1558,11 +1753,13 @@ done
 
 clean_bench
 restore_thumbs
+# In this shell, not a subshell: it clears PREFETCH_ARM, so the EXIT trap never copies the operator's list into a slot.
+prefetch_keep
 restore_prefetch
 # Every row is in the CSV; this names how many of each entrant's rows the ranks may use.
 write_guard_summary "$OUT"
 # What the run turned out to be: the capability each entrant demonstrated, and every row this
 # harness refuses to rank, written where the versions are rather than left for a reader to infer.
-"$FLEA_REPO/tools/flea-bench-manifest" "$MANIFEST" close "$OUT" \
+"$MANIFEST_TOOL" "$MANIFEST" close "$OUT" \
   || printf 'WARNING: the manifest did not close, so the capability and refusal blocks are missing\n' >&2
 echo "done, results in $OUT"
