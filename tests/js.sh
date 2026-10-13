@@ -37,6 +37,31 @@ run() {
     exit 1
   fi
   printf '%s' "$out" | grep -qE "checks, 0 failed" || exit 1
+  if [ -z "${2:-}" ] || [ "$2" = devices ]; then
+    printf '%s\n' "$out" | awk '
+      /^qml: power-off warning begin: / {
+        if (active) bad = 1
+        expected = substr($0, length("qml: power-off warning begin: ") + 1)
+        active = 1; warnings = 0; next
+      }
+      /^qml: power-off warning end$/ {
+        if (!active || warnings != (expected != "")) bad = 1
+        if (expected != "") fallbacks++; else valid++
+        active = 0; next
+      }
+      active {
+        warnings++
+        if ($0 != "qml: " expected) bad = 1
+      }
+      END {
+        if (active || bad || !fallbacks || !valid) {
+          print "FAIL power-off warning: expected one exact warning per fallback and none for valid listings"
+          exit 1
+        }
+        print "ok   power-off warnings: " fallbacks " fallbacks, " valid " valid listings"
+      }
+    ' || exit 1
+  fi
   [ "$code" = 0 ] || exit "$code"
 }
 

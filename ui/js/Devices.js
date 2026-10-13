@@ -304,6 +304,7 @@ function powerOffQueue(listing, disk, entries) {
         tree = JSON.parse(String(listing || ""))
     } catch (e) {
         // An unparsable listing keeps the mounted rail volumes queued, as before the hidden-node walk.
+        console.warn("Device listing for " + disk + " could not be parsed (" + e.message + "); mounted rail volumes were queued instead.")
         var rows = entries || []
         for (var r = 0; r < rows.length; r++) {
             var row = rows[r]
