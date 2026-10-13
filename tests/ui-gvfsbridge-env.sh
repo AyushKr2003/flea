@@ -143,11 +143,12 @@ want="FAIL: cannot inspect Hyprland clients while draining, because hyprctl exit
 out=$(kill_run "" 2>&1)
 [ "$out" = drained ] && ok "a working hyprctl with no dead window drains" || bad "a working hyprctl gave [$out], wanted drained"
 
-# The runtime dir must keep Quickshell's IPC socket, the longest socket Flea binds under it, inside sun_path's 107 bytes.
+# The runtime dir must keep Quickshell's IPC socket and Hyprland's event socket, the longest path it reaches there, inside sun_path's 107 bytes.
 if [ -z "$fits_def" ]; then
     bad "gvfsbridge_runtime_fits is not defined in tests/ui-gvfsbridge.sh"
 else
     fits() (
+        unset HYPRLAND_INSTANCE_SIGNATURE
         eval "$fits_def"
         fail() { printf 'FAIL: %s\n' "$*"; exit 1; }
         gvfsbridge_runtime_fits "$1"
@@ -168,9 +169,14 @@ else
         && [ "${out%, so the runtime directory needs a shorter root}" != "$out" ] \
         && ok "a Wayland display name that passes 107 bytes fails with a whole sentence while the IPC socket path fits" \
         || bad "the long Wayland display name gave [$out]"
-    # Sample input: the dir the case now makes under the run root, mktemp -d /tmp/flea-ui-run.XXXXXXXX.
-    out=$(fits /tmp/flea-ui-run.ZyXqhjfz/gvfsbridge-rt)
-    [ "$out" = fits ] && ok "the case's runtime dir under the run root fits" || bad "the run root's runtime dir gave [$out]"
+    # Sample input: the dir the case once made under the run root, whose Hyprland event socket path is 121 bytes (39 plus 6, 62 and 14).
+    old=/tmp/flea-ui-run.ZyXqhjfz/gvfsbridge-rt
+    out=$(fits "$old")
+    [ "${out#FAIL: gvfsbridge: the socket path $old/hypr/}" != "$out" ] \
+        && ok "a runtime dir under the run root fails on Hyprland's socket path" || bad "the run root's runtime dir gave [$out]"
+    # Sample input: the root the case now makes, mktemp -d /tmp/fgb.XXXXXX.
+    out=$(fits /tmp/fgb.Zq3x9a)
+    [ "$out" = fits ] && ok "the case's own /tmp runtime root fits" || bad "the case's runtime root gave [$out]"
 fi
 
 [ "$failed" = 0 ] || exit 1

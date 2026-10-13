@@ -1,9 +1,10 @@
-# Quickshell binds its IPC socket under XDG_RUNTIME_DIR, and a unix socket path has a fixed byte limit.
+# Quickshell binds its IPC socket under XDG_RUNTIME_DIR and reaches Hyprland's there, and a unix socket path has a fixed byte limit.
 gvfsbridge_runtime_fits() {
     # sun_path holds 108 bytes with its NUL, so a socket path holds 107.
-    local socket sun_path_max=107
-    # Sample input: /tmp/flea-ui-run.ZyXqhjfz/gvfsbridge-rt; instance ids have run to 11 characters, so the sample id has 16.
-    for socket in "$1/quickshell/by-id/0123456789abcdef/ipc.sock" "$1/${WAYLAND_DISPLAY:-wayland-1}"; do
+    local socket sun_path_max=107 signature="${HYPRLAND_INSTANCE_SIGNATURE:-}"
+    # Sample input: /tmp/fgb.Zq3x9a; instance ids have run to 11 characters, so the sample id has 16, and a Hyprland signature has 62.
+    (( ${#signature} >= 62 )) || signature=$(printf '%062d' 0)
+    for socket in "$1/quickshell/by-id/0123456789abcdef/ipc.sock" "$1/${WAYLAND_DISPLAY:-wayland-1}" "$1/hypr/$signature/.socket2.sock"; do
         (( ${#socket} <= sun_path_max )) || fail "gvfsbridge: the socket path $socket is ${#socket} bytes, past the $sun_path_max a unix socket path holds, so the runtime directory needs a shorter root"
     done
 }
@@ -15,6 +16,15 @@ gvfsbridge_launch() {
     launch "$dir"
 }
 
+# Removes the case's runtime root, whose entries link into the operator's, and the quickshell dir the case made there.
+gvfsbridge_drop() {
+    local runtime="$1" made="${2:-}"
+    [[ -z "$made" ]] || rmdir -- "$made" 2>/dev/null || true
+    # rm does not follow the links into the operator's runtime dir.
+    [[ "$runtime" == /tmp/fgb.?* && -f "$runtime/.flea-test-sandbox" ]] && rm -rf -- "$runtime"
+    return 0
+}
+
 # The GVFS bridge's Starting and failure lines, staged through the FLEA_GVFS_FUSE seam; runs only by name (ui:gvfsbridge).
 case_gvfsbridge() {
     local dir="$fixture_root/gvfsbridge"
@@ -24,10 +34,11 @@ case_gvfsbridge() {
     local fixture_home="$fixture_root/gvfsbridge-home"
     fixture_home_make "$fixture_home"
     local state="$fixture_root/gvfsbridge-state"
-    # Under the run root, whose /tmp name is short enough for Quickshell's IPC socket path.
-    local runtime="$run_root/gvfsbridge-rt"
-    mkdir -m 700 "$runtime" || fail "gvfsbridge: cannot create the runtime directory $runtime"
+    # A root of its own, since the run root's /tmp name leaves Hyprland's socket path past the limit; the trap removes it on a failure too.
+    local runtime
+    runtime=$(mktemp -d /tmp/fgb.XXXXXX) || fail "gvfsbridge: cannot create a runtime directory under /tmp"
     : > "$runtime/.flea-test-sandbox"
+    trap "gvfsbridge_drop ${runtime@Q}" EXIT
     gvfsbridge_runtime_fits "$runtime"
     mkdir "$runtime/gvfs"
     local leaf_slow="smb-share:server=bridge-slow.test,share=data"
@@ -37,7 +48,7 @@ case_gvfsbridge() {
     local real_runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
     if [[ -d "$real_runtime" ]]; then
         # Quickshell registers the instance under the runtime dir, so the restored client only sees it through this link; a directory made here goes again at exit.
-        [[ -d "$real_runtime/quickshell" ]] || trap "rmdir -- ${real_runtime@Q}/quickshell 2>/dev/null || true" EXIT
+        [[ -d "$real_runtime/quickshell" ]] || trap "gvfsbridge_drop ${runtime@Q} ${real_runtime@Q}/quickshell" EXIT
         mkdir -p "$real_runtime/quickshell"
         local entry base
         shopt -s nullglob dotglob
@@ -120,7 +131,7 @@ EOS
     kill_flea
     sandbox_remove "$fixture_home"
     # The runtime dir holds links into the operator's, and rm does not follow them.
-    [[ "$runtime" == /?* && "$runtime" == "$run_root"/?* && -f "$runtime/.flea-test-sandbox" && -f "$run_root/.flea-test-sandbox" ]] \
-        || fail "gvfsbridge: $runtime is not a marked directory inside the run root, so it stays"
+    [[ "$runtime" == /tmp/fgb.?* && -f "$runtime/.flea-test-sandbox" ]] \
+        || fail "gvfsbridge: $runtime is not the case's marked runtime root, so it stays"
     rm -rf -- "$runtime"
 }
