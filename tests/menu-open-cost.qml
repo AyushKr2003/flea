@@ -91,7 +91,7 @@ ShellRoot {
             tFrame = 0
             measuring = true
             if (root.early) {
-                check("early " + path + " starts before prewarm completes", pane.menuHost.item === null && !pane.menuHost.ready)
+                check("early " + path + " starts with an untouched Loader", pane.menuHost.status === Loader.Null && pane.menuHost.item === null && !pane.menuHost.ready)
             } else if (sample === 0) {
                 check("first " + path + " menu is compiled before input", pane.menuHost.status === Loader.Ready)
                 log("PREWARM ready=" + pane.menuHost.status)
