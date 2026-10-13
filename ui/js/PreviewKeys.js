@@ -71,8 +71,9 @@ function open(root) {
 function act(action, root) {
     root.preview.revealStrip()
     switch (action) {
-    case "cursorDown": Filter.moveCursor(root, 1); Marks.follow(root); follow(root); return
-    case "cursorUp": Filter.moveCursor(root, -1); Marks.follow(root); follow(root); return
+    // A Compare overlay names two files, so the cursor moving under it opens no other file in its place.
+    case "cursorDown": if (!root.preview.isCompare) { Filter.moveCursor(root, 1); Marks.follow(root); follow(root) } return
+    case "cursorUp": if (!root.preview.isCompare) { Filter.moveCursor(root, -1); Marks.follow(root); follow(root) } return
     case "preview": root.preview.close(); return
     // Space closes every kind now, so playback has its own key; it self-guards, because p reaches
     // this only in the media context and a still image has nothing to play.
@@ -80,6 +81,8 @@ function act(action, root) {
         if (root.preview.isMedia) root.preview.togglePlay()
         return
     case "escape": root.preview.close(); return
+    // Compare's y: the whole patch goes to the clipboard; the overlay guards on its own kind.
+    case "copyPatch": root.preview.copyPatch(); return
     case "seekBack":
         if (root.preview.isPdf) root.preview.turnPage(-1)
         else root.preview.seek(-SEEK_MS)

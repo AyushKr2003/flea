@@ -623,6 +623,8 @@ fn handle_line(
         }
         // Answered on a thread, since bat runs in a jail and a read on a hung mount never returns.
         Request::Code(ask) => super::codereq::spawn(ask, ops.tx.clone()),
+        // Answered on a thread: diff runs in a jail and a read on a hung mount never returns.
+        Request::Compare(ask) => super::compare::spawn(ask, ops.tx.clone()),
         tags @ (Request::SetTags { .. } | Request::TagStates { .. }) => {
             let written = super::tagsreq::handle(out, ops, st, tags);
             note_tag_writes(st, &written);
@@ -722,6 +724,7 @@ fn rows_needed(request: &Request) -> usize {
         // Lines, dialogs and the clipboard name paths or nothing, never a row index.
         Request::Shebang { .. }
         | Request::Code(_)
+        | Request::Compare(_)
         | Request::FsInfo
         | Request::Peek { .. }
         | Request::PdfCopy { .. }

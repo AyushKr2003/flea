@@ -120,8 +120,10 @@ or replacement of the pending request, and fetch metadata only for the visible w
 
 `{"c":"menuaction","op":"activate","id":4,"action":"duplicate"}` revalidates the
 selection captured by `snapshot` before the GUI dispatches a selected-item menu action.
-The response echoes `id`, `op`, and `action`, with `ok` and `error`. Only clipboard, Copy Path,
-and compression actions return captured `paths`; other actions do not serialize unused paths.
+The response echoes `id`, `op`, and `action`, with `ok` and `error`. Captured selection `paths`
+are returned for `validate`, and for `activate` when the action needs resolved paths for client-side
+dispatch; other activations return an empty array. `taildrop:*` and `sharelink` return the captured
+cursor path instead.
 The client also rechecks its listing identity and current action eligibility before dispatch.
 
 An optional `menuId` on `transfer`, `trash`, `duplicate`, `rename`, `archive`, or `convert`
@@ -133,7 +135,9 @@ batch handoff. These checks do not make subsequent external-helper filesystem op
 atomic. Omitting `menuId` preserves the existing keyboard and protocol entry paths.
 
 `{"c":"menuaction","op":"snapshot","id":4,"rows":[0,2]}` captures the selected identities
-from the active listing. `prepareDelete` with that `id` reviews the captured trees and returns a
+from the active listing and returns `count` and `kinds`, an array of each captured item's own file
+type bits in request order, including symlinks without following them. `prepareDelete` with that
+`id` reviews the captured trees and returns a
 fresh `token`, selected `count`, and total `bytes`. `checkDelete` with the `id` and `token` returns
 `valid` without mutating files. A changed set requires `refreshDelete`: it reviews only the same
 captured paths, drops missing paths, captures replacement identities, and issues a fresh token.
@@ -1247,6 +1251,26 @@ so a client matches the `token` of what it last sent and drops any other. At mos
 of a file are ever read, and `bat` runs in the same read-only jail as the other helpers, on the
 bytes the verdict was made on.
 
+### compare
+
+`{"c":"compare","token":<uint>,"a":"<string>","b":"<string>"}`
+
+Example: `{"c":"compare","token":3,"a":"/home/gm/notes-a.md","b":"/home/gm/notes-b.md"}`
+
+The unified diff of two regular files a client actually named, never a sweep; `a` is the first of the
+pair in the listing's order and `b` the second. Absolute paths and readable regular files are checked
+first; a refusal answers `failed`. Either file over 1,048,576 bytes then answers `over`, judged on both
+files before reading their contents. The bounded contents of each file are read in pair order: a read
+failure answers `failed`, growth past the limit answers `over`, a NUL byte in its first 8,192 bytes
+answers `binary`, and invalid UTF-8 anywhere answers `failed`. Code preview displays invalid UTF-8
+lossily, but a copied patch must preserve bytes, so Compare refuses it.
+Otherwise `/usr/bin/diff -u --label <a> --label <b> -- <a> <b>` runs once in the same read-only jail as
+the other helpers, with the two files bound read-only and nothing writable, so the patch names the real
+paths. The diff has a 2 s deadline; expiry kills its process tree and answers `failed`. Invalid UTF-8
+in the diff output also answers `failed`, so the clipboard never receives replacement bytes.
+Answers one `compare` line on a thread, and `token` echoes the request's so a client matches the
+one it last sent and drops any other.
+
 ### pdfcopy
 
 `{"c":"pdfcopy","id":<uint>,"slot":"<string>","path":"<string>"}`
@@ -1900,6 +1924,24 @@ a role from 0 to 6 then the run's text, in order, an empty line being an empty l
 returned are those asked for that exist. The roles are the foreground (0) and bat's ANSI colours
 31 to 36 in order: red, green, yellow, blue, magenta, cyan. A one-line `.json` file is formatted
 with `jq` first, so its `total` and lines are those of the formatted text.
+
+### compare
+
+`{"t":"compare","token":<uint>,"state":"<string>","patch":"<string>"}`
+
+Example: `{"t":"compare","token":3,"state":"diff","patch":"--- /a\n+++ /b\n@@ -1 +1 @@\n-x\n+y\n"}`
+
+The answer to one `compare` request, echoing its `token`. `state` is `diff` (`diff` exited 1 and `patch`
+holds what it printed, headers included), `identical` (it exited 0), `binary` (screening found a NUL in
+a file's first 8,192 bytes), `over` (either file is over 1,048,576 bytes) or `failed` (a path
+that cannot be read as a regular file, invalid UTF-8 in a file or the patch, any other exit, `diff` or
+the jail not starting, or a patch past 8 MiB). `patch` is the empty string in every state but `diff`.
+
+Screening first requires both absolute paths to open as regular files with readable lengths;
+either initial length over 1,048,576 bytes returns `over`. It then reads `a`, followed by `b`, up to
+1,048,577 bytes each, checking read failure (`failed`), growth past the limit (`over`), a NUL in the
+first 8,192 bytes (`binary`), then UTF-8 validity (`failed`), stopping at the first refusal. An earlier
+file's `failed` or `over` therefore takes precedence over a later file's NUL.
 
 ### collisions
 

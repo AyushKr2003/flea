@@ -101,6 +101,9 @@ Item {
     // The coloured lines of one slot's file or text, answered late with the token askCode returned.
     signal codeResult(var message)
     property int codeToken: 0
+    // The unified diff of two files, or the reason there is none, answered late with the token askCompare returned.
+    signal compareResult(var message)
+    property int compareToken: 0
     // One counter numbers every PDF fetch, so two viewers never share an id.
     property int pdfCopySeq: 0
     signal meta(int row, int w, int h, int orient, real durationMs, int sampleRate, int entries, real unpacked, bool archiveFailed, var names, real lines, bool partial, bool linesFailed, string target, bool targetDir, string owner)
@@ -348,6 +351,12 @@ Item {
         root.codeToken += 1
         root.send(Object.assign({ c: "code", token: root.codeToken, slot: slot, first: first, count: count }, source))
         return root.codeToken
+    }
+
+    function askCompare(a, b) {
+        root.compareToken += 1
+        root.send({ c: "compare", token: root.compareToken, a: a, b: b })
+        return root.compareToken
     }
 
     function askFsInfo() {

@@ -52,6 +52,7 @@ pub mod answersizes;
 pub mod shebang;
 pub mod sgr;
 pub mod codereq;
+pub mod compare;
 pub mod sort;
 pub mod ordering;
 pub mod state;

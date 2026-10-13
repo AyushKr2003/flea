@@ -2060,6 +2060,17 @@ label = "wrap"
 frontend = "all"
 context = "preview"
 
+# Compare's overlay: y copies the whole patch, headers included, and the listing's y stays copy (preview context only).
+[[preset]]
+name = "all"
+mods = "text"
+key = "y"
+keys = "y"
+action = "copyPatch"
+label = "copy patch"
+frontend = "all"
+context = "preview"
+
 [[preset]]
 name = "all"
 mods = "text"

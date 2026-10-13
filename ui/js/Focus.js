@@ -4,6 +4,7 @@
 .import "Eject.js" as Eject
 .import "Filter.js" as Filter
 .import "Grid.js" as Grid
+.import "Compare.js" as Compare
 .import "Format.js" as Format
 .import "Keymap.js" as Keymap
 .import "KeyName.js" as KeyName
@@ -215,6 +216,7 @@ function act(action, root, menuId, paths) {
     case "invertSelection": root.invertSelection(); return
     case "showOriginal": root.showOriginal(); return
     case "makeExecutable": root.makeExecutable(paths); return
+    case "compare": Compare.open(root, paths); return
     case "copyPath": Ops.copyAs(root, "path", paths); return
     case "copyName": Ops.copyAs(root, "name", paths); return
     case "copyStem": Ops.copyAs(root, "stem", paths); return
