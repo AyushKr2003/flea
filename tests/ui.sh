@@ -15776,8 +15776,12 @@ readme_frame_pdf() {
 
 # iphone.png 2536x1381: the stub camera roll over AFC, cursor on its HEIC with a preview.
 readme_frame_iphone() {
-    local facts total
+    local facts total media
     readme_afc_stub "$readme_root/iphone-phones"
+    # The stub leaves an empty HEIC, which never decodes, so the frame copies a real one over it.
+    media="$FIXTURE_ROOT/flea-media-btrfs"
+    [[ -d "$media" ]] || fail "the media fixture is missing at $media"
+    cp "$(ls "$media"/*.heic | head -1)" "$readme_afc_fuse/DCIM/113APPLE/IMG_3263.HEIC"
     fixture_home_make "$readme_root/iphone-home"
     readme_seed "$readme_root/iphone-state" phones
     export PATH="$readme_root/iphone-phones/bin:$PATH"
@@ -15805,7 +15809,8 @@ readme_frame_iphone() {
     click_chrome columns
     settle
     [[ "$(ipc viewMode)" == "columns" ]] || fail "readme iphone: the chrome button did not switch the view"
-    [[ "$(ipc rowAt "$(ipc cursor)")" == "IMG_3263.HEIC|"* ]] || fail "readme iphone: the cursor sits on $(ipc rowAt "$(ipc cursor)"), not the HEIC"
+    wait_listing 1
+    [[ "$(ipc visibleRowName "$(ipc cursor)")" == "IMG_3263.HEIC" ]] || fail "readme iphone: the cursor sits on $(ipc visibleRowName "$(ipc cursor)"), not the HEIC"
     [[ "$(ipc previewColumnState)" == "image" ]] || fail "readme iphone: the HEIC previews as $(ipc previewColumnState), not image"
     facts=$(ipc previewFacts)
     [[ "$facts" == *"Size="* ]] || fail "readme iphone: the HEIC states $facts, with no file details"
