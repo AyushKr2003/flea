@@ -10,7 +10,7 @@ const UNKNOWN: &str = "text-x-generic";
 // The icon naming spec's generic file, for the application types generic-icons does not list.
 const GENERIC: &str = "application-x-generic";
 // The execute bits of st_mode, the same three Row.nameColor reads to colour an executable.
-const ANY_EXECUTE_BIT: u32 = 0o111;
+pub(crate) const ANY_EXECUTE_BIT: u32 = 0o111;
 // The file type bits of st_mode, so a symlink's own mode is told apart from the file it names.
 const S_IFMT: u32 = 0o170000;
 const S_IFLNK: u32 = 0o120000;

@@ -10,6 +10,9 @@ pub(crate) fn mount_type_in(path: &Path, body: &str) -> Option<String> {
 
 // FAT and NTFS report fixed modes; CIFS and SMB3 keep file modes only with POSIX or unix extensions in their super options.
 pub(crate) fn modes_are_real(path: &Path, body: &str) -> bool {
+    if let Some(real) = super::gvfsroot::gvfs_modes_are_real(path) {
+        return real;
+    }
     match mount_type_in(path, body).as_deref() {
         Some("cifs" | "smb3") => mount_options_in(path, body)
             // Sample input: "rw,vers=3.1.1,cache=strict,posix,serverino" (CIFS super options).
@@ -17,6 +20,17 @@ pub(crate) fn modes_are_real(path: &Path, body: &str) -> bool {
         Some("vfat" | "exfat" | "msdos" | "fat" | "fat12" | "fat16" | "fat32" | "ntfs" | "ntfs3" | "fuseblk" | "smbfs") => false,
         _ => true,
     }
+}
+
+// Decide gvfs paths from their spelling; resolve other owning paths once, keeping the original spelling when resolution fails.
+pub(crate) fn resolved_modes_are_real(path: &Path, body: &str) -> bool {
+    if let Some(real) = super::gvfsroot::gvfs_modes_are_real(path) {
+        return real;
+    }
+    #[cfg(test)]
+    RESOLVES.with(|resolves| resolves.set(resolves.get() + 1));
+    let resolved = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    modes_are_real(&resolved, body)
 }
 
 // Sample dev: makedev(8,17) is 0x811 and answers "8:17"; the glibc major/minor packing, see sys/sysmacros.h.
@@ -157,18 +171,26 @@ pub(crate) fn read_body() -> String {
 #[cfg(test)]
 thread_local! {
     static READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static RESOLVES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 // Counted reads since the last reset, so a session walk asserts at most one over a known walk.
 #[cfg(test)]
 pub(crate) fn test_reset() {
     READS.with(|reads| reads.set(0));
+    RESOLVES.with(|resolves| resolves.set(0));
 }
 
 // The counted reads since the last reset.
 #[cfg(test)]
 pub(crate) fn test_reads() -> usize {
     READS.with(|reads| reads.get())
+}
+
+// Resolution calls on this thread, so a window proves it resolves bases and distinct parents rather than every row.
+#[cfg(test)]
+pub(crate) fn test_resolutions() -> usize {
+    RESOLVES.with(|resolves| resolves.get())
 }
 
 // Sample line as above: mount point, fstype, major:minor and source, or None for a line with no "-" or too few fields.

@@ -163,8 +163,8 @@ fn rename_rows(paths: &[String], body: &str, mime: &super::mime::Db, icons: &sup
         }
         let (dir, mode) = std::fs::symlink_metadata(raw).map(|m| (m.is_dir(), m.mode())).unwrap_or((false, 0));
         // The mode is the source's own stat, so its execute bits count only where the source's mount keeps modes.
-        let real_modes = super::mountinfo::modes_are_real(Path::new(raw), body);
-        let mode = if real_modes { mode } else { mode & !0o111 };
+        let real_modes = super::mountinfo::resolved_modes_are_real(Path::new(raw), body);
+        let mode = if real_modes { mode } else { mode & !super::icons::ANY_EXECUTE_BIT };
         let new = sanitize(leaf);
         shown.push(format!(r#"{{"old":"{}","new":"{}","d":{},"i":"{}"}}"#,
             crate::json::escape(leaf), crate::json::escape(&new), dir,
@@ -318,6 +318,26 @@ mod tests {
         let (db, icons) = (crate::backend::mime::Db::load(), crate::backend::icons::Names::load());
         let line = answer_in(&table, 7, &[bad.to_string_lossy().into()], &dest.to_string_lossy(), &db, &icons).expect("asked");
         assert!(line.contains(r#""i":"application-x-executable""#), "{}", line);
+    }
+
+    #[test]
+    fn a_symlinked_source_parent_uses_its_target_mounts_modes() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = TestDir::new("fatnames-linked-source");
+        let dest = d.dir("128GB");
+        let usb = d.dir("usb");
+        let bad = usb.join("clip: launcher");
+        std::fs::write(&bad, "x").unwrap();
+        std::fs::set_permissions(&bad, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let link = d.join("linked-usb");
+        std::os::unix::fs::symlink(&usb, &link).unwrap();
+        let (db, icons) = (crate::backend::mime::Db::load(), crate::backend::icons::Names::load());
+        for fstype in ["vfat", "exfat", "ext4"] {
+            let table = format!("1 0 8:1 / / rw - ext4 /dev/a rw\n40 1 8:17 / {} rw - exfat /dev/b rw\n41 1 8:33 / {} rw - {fstype} /dev/c rw\n", dest.display(), usb.display());
+            let line = answer_in(&table, 7, &[link.join("clip: launcher").to_string_lossy().into()], &dest.to_string_lossy(), &db, &icons).expect("asked");
+            let icon = if fstype == "ext4" { "application-x-executable" } else { "text-x-generic" };
+            assert!(line.contains(&format!(r#""i":"{icon}""#)), "{fstype}: {line}");
+        }
     }
 
     #[test]
