@@ -1,5 +1,6 @@
 import QtQuick
 import QtMultimedia
+import Quickshell.Wayland
 import "." as Flea
 import "js/Format.js" as Format
 
@@ -55,6 +56,8 @@ Item {
     }
 
     readonly property alias position: player.position
+    readonly property alias keepsAwake: inhibitor.enabled
+    readonly property alias inhibitedWindow: inhibitor.window
     readonly property alias duration: player.duration
 
     // Preview.qml's own strip drives these two; kept here, not there, so Preview.qml never has to
@@ -65,7 +68,53 @@ Item {
     }
 
     function seekTo(ms) {
-        player.position = Math.max(0, Math.min(player.duration, ms))
+        var target = Math.max(0, Math.min(player.duration, ms))
+        player.position = target
+        root.publish(target, true)
+    }
+
+    // One state line for the MPRIS helper per status, track or seek change; the position rides on it and is never sent per tick.
+    function publish(position, seeked) {
+        if (!session.active) return
+        session.send({
+            status: player.playbackState === MediaPlayer.PlayingState ? "Playing"
+                : player.playbackState === MediaPlayer.PausedState ? "Paused" : "Stopped",
+            title: root.path.substring(root.path.lastIndexOf("/") + 1),
+            url: Format.fileUri(root.path),
+            length: player.duration,
+            position: position,
+            seeked: seeked
+        })
+    }
+
+    // The helper's commands, in milliseconds: Seek is relative, SetPosition absolute. Sample lines: "PlayPause", "Seek -2500", "SetPosition 700".
+    function remote(line) {
+        var word = line.split(" ")
+        if (word[0] === "Play") player.play()
+        else if (word[0] === "Pause") player.pause()
+        else if (word[0] === "PlayPause") root.togglePlay()
+        else if (word[0] === "Stop") player.stop()
+        else if (word[0] === "Seek") root.seekTo(player.position + Number(word[1]))
+        else if (word[0] === "SetPosition") root.seekTo(Number(word[1]))
+    }
+
+    Flea.MediaSession {
+        id: session
+        media: root
+    }
+
+    // The window object IdleInhibitor takes is the FloatingWindow that ui/WindowBody.qml holds as host, which no Window.window attachment gives.
+    readonly property var hostWindow: {
+        for (var item = root.parent; item; item = item.parent)
+            if (item.host !== undefined) return item.host
+        return null
+    }
+
+    // The screen stays awake exactly while a clip with a picture plays; audio never holds it.
+    IdleInhibitor {
+        id: inhibitor
+        window: root.hostWindow
+        enabled: player.hasVideo && player.playbackState === MediaPlayer.PlayingState
     }
 
     MediaPlayer {
@@ -75,6 +124,13 @@ Item {
         // MediaMute rule 5: mute silences without pausing, so the clock and the handle keep moving.
         audioOutput: AudioOutput { muted: Flea.MediaSound.muted; volume: Flea.MediaSound.gain }
         videoOutput: video
+        // The first play makes this an MPRIS player.
+        onPlaybackStateChanged: {
+            if (playbackState === MediaPlayer.PlayingState) session.active = true
+            root.publish(position, false)
+        }
+        onDurationChanged: root.publish(position, false)
+        onSourceChanged: root.publish(position, false)
     }
 
     // A clip almost never matches the frame, so the letterbox bars are the canvas's own darker

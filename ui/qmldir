@@ -65,6 +65,7 @@ SettingsGroup 1.0 SettingsGroup.qml
 SettingsHint 1.0 SettingsHint.qml
 SettingsRuler 1.0 SettingsRuler.qml
 SettingsSegment 1.0 SettingsSegment.qml
+MediaSession 1.0 MediaSession.qml
 MediaStrip 1.0 MediaStrip.qml
 MediaTrack 1.0 MediaTrack.qml
 MediaVolume 1.0 MediaVolume.qml
