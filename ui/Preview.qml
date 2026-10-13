@@ -294,6 +294,11 @@ Item {
         if (root.isMarkdown) root.markdownSource = !root.markdownSource
     }
 
+    // A word of the Quick Look bar names the view it wants, so asking for the one already shown changes nothing.
+    function setMarkdownView(which) {
+        if (root.isMarkdown) root.markdownSource = which === "source"
+    }
+
     function toggleMarkdownClose() {
         if (root.isMarkdown) root.markdownCloseFocus = !root.markdownCloseFocus
     }
@@ -689,6 +694,7 @@ Item {
                     item.active = Qt.binding(function () { return root.isMarkdown })
                     item.closeFocused = Qt.binding(function () { return root.markdownCloseFocused })
                     item.closeRequested.connect(root.close)
+                    item.viewRequested.connect(root.setMarkdownView)
                 }
             }
 

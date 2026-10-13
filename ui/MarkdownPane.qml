@@ -17,13 +17,15 @@ Item {
     property bool closeFocused: false
 
     signal closeRequested
+    // The view a pointer chose on the bar; the host sets its own state to it, which comes back as view.
+    signal viewRequested(string view)
 
     readonly property var bodyItem: doc.bodyItem
     readonly property var tableWheel: doc.tableWheel
     function tableScroller() { return doc.tableScroller() }
     readonly property real scrollY: doc.scrollY
     function endGap() { return doc.endGap() }
-    function closeState() { var c = barClose.mapToItem(null, barClose.width / 2, barClose.height / 2); return { hovered: barClose.hovered, pressed: barClose.pressed, focused: barClose.keyboardFocused, centre: Math.round(c.x) + " " + Math.round(c.y) } }
+    function closeState() { return bar.closeState() }
     readonly property string rawText: doc.rawText
     readonly property string status: doc.status
     readonly property string lineLabel: doc.lineLabel
@@ -36,83 +38,26 @@ Item {
     readonly property bool contentReady: doc.contentReady
     readonly property bool firstScreen: doc.firstScreen
 
-    // The render suite reads the bar's order off these rects, the way PdfViewer.buttonFor opens its buttons.
+    // The render suite reads the bar's order off these rects; the pane adds what only it knows.
     function barGeometry() {
-        return { mark: barMark, markName: barMark.name, name: barName, nameEnd: barName.x + Math.min(barName.width, barName.implicitWidth),
-            lines: barLines, close: barClose, bar: bar, height: bar.height, ready: root.contentReady }
+        var g = bar.geometry()
+        g.ready = root.contentReady
+        return g
     }
 
-    // No fill of its own: Quick Look's surface is already the chrome colour and rounds the corners this bar sits under.
-    Item {
+    Flea.QuickLookBar {
         id: bar
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: Theme.chromeHeight
-        readonly property real ruleOpacity: 0.12
-
-        Rectangle {
-            anchors.bottom: parent.bottom
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: Theme.spacing.hairline
-            color: Theme.color.foreground
-            opacity: bar.ruleOpacity
-        }
-
-        // The Markdown mark of the LanguageMarks set, in foreground and centred above the rule like the PDF viewer's kind mark.
-        Flea.Glyph {
-            id: barMark
-            anchors.left: parent.left
-            anchors.leftMargin: Theme.spacing.rowPaddingX
-            y: Math.round((parent.height - Theme.spacing.hairline - height) / 2)
-            width: Theme.chromeMarkSize
-            height: Theme.chromeMarkSize
-            name: "markdown"
-            color: Theme.color.foreground
-        }
-
-        // corner: a filename is arbitrary text, so PlainText, the same rule every name on this surface follows.
-        Text {
-            id: barName
-            anchors.left: barMark.right
-            anchors.leftMargin: Theme.spacing.gap
-            anchors.verticalCenter: parent.verticalCenter
-            width: Math.min(implicitWidth, Math.max(0, barClose.x - x - 2 * Theme.spacing.gap
-                - (root.contentReady ? barLines.implicitWidth : 0)))
-            text: root.path.substring(root.path.lastIndexOf("/") + 1)
-            color: Theme.color.foreground
-            font.family: Theme.font.family
-            font.pixelSize: Theme.font.caption
-            textFormat: Text.PlainText
-            elide: Text.ElideMiddle
-        }
-
-        Text {
-            id: barLines
-            anchors.left: barName.right
-            anchors.leftMargin: Theme.spacing.gap
-            anchors.verticalCenter: parent.verticalCenter
-            text: root.lineLabel
-            visible: root.contentReady
-            color: Theme.color.muted
-            font.family: Theme.font.family
-            font.pixelSize: Theme.font.caption
-            textFormat: Text.PlainText
-        }
-
-        Flea.ChromeButton {
-            id: barClose
-            gesturePolicy: TapHandler.ReleaseWithinBounds
-            ruleRows: Theme.spacing.hairline
-            anchors.right: parent.right
-            anchors.rightMargin: Theme.spacing.rowPaddingX
-            anchors.verticalCenter: parent.verticalCenter
-            glyph: "x"
-            keyboardFocused: root.closeFocused
-            accessName: "Close"
-            onActivated: root.closeRequested()
-        }
+        markName: "markdown"
+        name: root.path.substring(root.path.lastIndexOf("/") + 1)
+        countLabel: root.contentReady ? root.lineLabel : ""
+        views: true
+        view: root.shownView
+        closeFocused: root.closeFocused
+        onCloseRequested: root.closeRequested()
+        onViewRequested: function (which) { root.viewRequested(which) }
     }
 
     Flea.PreviewMarkdown {
