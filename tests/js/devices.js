@@ -9,6 +9,7 @@
 function powerQueue(listing, disk, entries) {
     var expected = ""
     try {
+        // Sample input: {"blockdevices":[{"name":"sda","path":"/dev/sda","mountpoints":[null],"type":"disk"}]}, a valid lsblk listing with no fallback warning.
         JSON.parse(String(listing || ""))
     } catch (e) {
         expected = "Device listing for " + disk + " could not be parsed (" + e.message + "); mounted rail volumes were queued instead."

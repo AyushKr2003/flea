@@ -4119,7 +4119,7 @@ The join of that Tab ring with the Dual Tab walk keeps one ring in `ui/js/Focus.
 
 The refused-stop wording moves one ceiling, re-derived with `wc -l`: `src/backend/menu_registry.rs` 569 to 570 for the test-only `REFUSED_KILL` errno hook in `terminate`, which lets the wording test drive a refused stop through `Registry::cancel` without sending a signal.
 
-The KI-232 power-off fix moves two ceilings, each re-derived with `wc -l`: `ui/js/Devices.js` 391 to 397 for
+The power-off fix moves two ceilings, each re-derived with `wc -l`: `ui/js/Devices.js` 391 to 397 for
 `powerOffQueue` reading the last listing, hidden partitions included, and `tests/js/devices.js` 363 to 365 for its pins.
 An unparsable listing falls back to the mounted volume rail rows on the same disk and says that once on stderr,
 naming the disk and parse error; queue legs are deduplicated by
@@ -4129,6 +4129,7 @@ unparsable, truncated and empty listing checks and the repeated dm node, each re
 `ui/DeviceMounts.qml` stays at 537, passing its rail entries beside the listing for that fallback.
 The fallback warning moves `ui/js/Devices.js` 404 to 405 and its warning count, message and valid-listing checks
 move `tests/js/devices.js` 392 to 405, each re-derived with `wc -l`; `tests/js.sh` checks each marked call's stderr.
+Its one-line lsblk sample moves `tests/js/devices.js` 405 to 406, re-derived with `wc -l`.
 
 ## The key table is generated
 

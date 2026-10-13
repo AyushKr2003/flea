@@ -38,6 +38,7 @@ run() {
   fi
   printf '%s' "$out" | grep -qE "checks, 0 failed" || exit 1
   if [ -z "${2:-}" ] || [ "$2" = devices ]; then
+    # awk pairs begin and end markers and counts lines per call; grep loses those boundaries and a plain loop needs the same state.
     printf '%s\n' "$out" | awk '
       /^qml: power-off warning begin: / {
         if (active) bad = 1
