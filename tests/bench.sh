@@ -648,6 +648,7 @@ cleanup_out=$((
   eval "$(sed -n '/^prefetch_keep() {/,/^}/p' "$bench")"
   eval "$(sed -n '/^watch_kill() {/,/^}/p' "$bench")"
   eval "$(sed -n '/^safe_rm_tmpdir() {/,/^}/p' "$bench")"
+  eval "$(sed -n '/^stop_warm_job() {/,/^}/p' "$bench")"
   eval "$(sed -n '/^bench_cleanup() {/,/^}/p' "$bench")"
   BENCH_TOKEN="bench-clean-$$-$RANDOM"
   SWEEP_TERM_POLLS=20 SWEEP_KILL_POLLS=20

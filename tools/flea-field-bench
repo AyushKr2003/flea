@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Cold-cache file manager benchmark against the installed field, see AGENTS.md "Testing".
-# Run from a copy outside the measured tree; the sudo password arrives on stdin's first line, never argv.
+# Run from a copy outside the measured tree; NOPASSWD needs no stdin, otherwise the sudo password is stdin's first line, never argv.
 # FIELD_MEMINFO and FIELD_VMSTAT point the write guard at fixture files, for tests/field-write-guard.sh only.
 set -uo pipefail
 # This one runs from a copy outside the tree, so the guard is sourced by the tree's own path rather
@@ -97,6 +97,8 @@ ANCHOR_STATE=""
 LAUNCH_POS=-
 # Set at the first launch, so the cleanup never kills an operator's window the start-up refusal left alone.
 ENTRANT_LAUNCHED=""
+# Only this invocation assigns the warm job pid, never the caller's environment.
+WARM_PID=""
 # The group's terminal, named once. foot is sixel only and every entrant here that previews at all
 # prefers the Kitty protocol, so the old group's zero across all eight was this choice and not a
 # result about the entrants.
@@ -1023,7 +1025,7 @@ warm_qml_cache() {
   : > "$state/polled" || fail "cannot write the poll marker in $state"
   # A leaf of its own, as a timed run has, so warm_stop can end everything it starts, sandboxed decoders in their own sessions included.
   mkdir "$cg" || fail "could not make the control group $cg"
-  # The EXIT trap's clean_bench runs only once this is set, so it is what ends an interrupted warm launch.
+  # The parent also marks the launch before starting this job, so its EXIT trap sweeps an interrupted warm Flea.
   ENTRANT_LAUNCHED=yes
   { printf '%s\n' "$BASHPID" > "$cg/cgroup.procs" \
       || { printf 'FAIL: could not join %s, so the warm launch was not started\n' "$cg" >&2; exit 1; }
@@ -1067,6 +1069,23 @@ warm_stop() {
   while ! cg_empty "$cg" && [ "$polls" -lt "$WARM_KILL_POLLS" ]; do sleep "$WARM_POLL_S"; polls=$(( polls + 1 )); done
   cg_empty "$cg" || fail "the warm launch's control group $cg did not empty, so it could run into the timed launches"
   rmdir "$cg" || fail "could not remove the control group $cg"
+}
+
+# Stop the warm shell and its setup children before restoring caches, even if no Flea launched yet.
+stop_warm_job() {
+  local pid=${WARM_PID:-} polls=0
+  [ -n "$pid" ] || return 0
+  kill -TERM -- "-$pid" 2>/dev/null || true
+  while kill -0 -- "-$pid" 2>/dev/null && [ "$polls" -lt 20 ]; do sleep 0.1; polls=$(( polls + 1 )); done
+  kill -KILL -- "-$pid" 2>/dev/null || true
+  polls=0
+  while kill -0 -- "-$pid" 2>/dev/null && [ "$polls" -lt 20 ]; do sleep 0.1; polls=$(( polls + 1 )); done
+  if kill -0 -- "-$pid" 2>/dev/null; then
+    printf 'WARNING: warm job process group %s outlived SIGKILL\n' "$pid" >&2
+    return 1
+  fi
+  wait "$pid" 2>/dev/null || true
+  WARM_PID=""
 }
 # warm launch end
 
@@ -1460,11 +1479,13 @@ materialize_tui_socket() {
 bench_cleanup() {
   # A prior nonzero exit stands; a failed teardown step is itself the nonzero result only when nothing failed before it.
   local prior=$? cleanup_rc=0
+  stop_warm_job || cleanup_rc=1
   # A run that fails mid-entrant ends that entrant here, or it stays resident through every run after it.
   watch_kill
   [ -n "$ROWS_PID" ] && kill "$ROWS_PID" 2>/dev/null
   # Subshells, because each of these can fail and an exit inside this trap would skip every step after it.
   if [ -n "$ENTRANT_LAUNCHED" ]; then ( clean_bench ) || cleanup_rc=1; fi
+  if [ -d "$BENCH_CG/run-warm" ]; then ( warm_stop "$BENCH_CG/run-warm" ) || cleanup_rc=1; fi
   release_run_cg || cleanup_rc=1
   ( restore_thumbs ) || cleanup_rc=1
   # Keeps the list of the build that ran last, before the operator's list comes back over the shared path.
@@ -1627,17 +1648,21 @@ launch_rotation() {
     printf '%s\n' "${rotated[@]}"
   fi
 }
-# One line per launched ENTRANTS row for run RUN, "index place": each kind rotates on its own and places count only the entrants that launch in that kind and run, after ONLY and absence.
+# One line per selected ENTRANTS row, "index place": present rows rotate within their kind and absent rows carry no place, "-".
 run_order() {
   local run=$1 kind i place row_kind id comm
-  local -a idx=()
+  local -a idx=() absent=()
   for kind in gui tui; do
-    idx=()
+    idx=(); absent=()
     for i in "${!ENTRANTS[@]}"; do
       IFS='|' read -r id row_kind _ comm _ <<< "${ENTRANTS[$i]}"
       [ "$row_kind" = "$kind" ] || continue
       only_has "$id" || continue
-      if [ "$id" = strata ]; then [ -x "${STRATA_BIN:-}" ] || continue; else command -v "$comm" >/dev/null 2>&1 || continue; fi
+      if [ "$id" = strata ]; then
+        [ -x "${STRATA_BIN:-}" ] || { absent+=("$i"); continue; }
+      else
+        command -v "$comm" >/dev/null 2>&1 || { absent+=("$i"); continue; }
+      fi
       idx+=("$i")
     done
     place=0
@@ -1645,6 +1670,7 @@ run_order() {
       place=$(( place + 1 ))
       printf '%s %s\n' "$i" "$place"
     done < <(launch_rotation "$run" "${idx[@]+"${idx[@]}"}")
+    for i in "${absent[@]}"; do printf '%s -\n' "$i"; done
   done
 }
 # launch order end
@@ -1668,6 +1694,7 @@ stale_src=$(find "$FLEA_REPO/src" "$FLEA_REPO/Cargo.toml" "$FLEA_REPO/Cargo.lock
 [ -z "$stale_src" ] || fail "$stale_src is newer than $FLEA_BIN, so this run would bench a stale build"
 # strata provenance begin
 # STRATA_SRC defaults to the cargo target/release tree that built STRATA_BIN; the binary must report that tree's version exactly.
+# Sample input: Cargo.toml has version = "1.0.0", and STRATA_BIN --version prints "strata 1.0.0".
 strata_provenance() {
   local ver out
   if [ -z "${STRATA_SRC:-}" ]; then
@@ -1722,20 +1749,30 @@ if [ "$DROP_THUMBS" = yes ]; then
   echo "key map: $KEY_MAP, $(wc -l < "$KEY_MAP") keys"
 fi
 
-# Each Flea build is warmed with its own settings in the background under wait, so a TERM runs the trap at once.
+# warm jobs begin
+# Monitor mode gives each warm shell its own process group; its foreground setup children stay in that group with monitor mode off.
 if only_has flea; then
   prefetch_for "$FLEA_PREFETCH_SLOT"
   ENTRANT_LAUNCHED=yes
-  warm_qml_cache & WARM_PID=$!
+  set -m
+  ( set +m; warm_qml_cache ) & WARM_PID=$!
+  set +m
   wait "$WARM_PID" || exit 1
+  WARM_PID=""
 fi
 if [ "$WITH_ANCHOR" = yes ] && only_has flea-anchor; then
   prefetch_for "$ANCHOR_PREFETCH_SLOT"
   ENTRANT_LAUNCHED=yes
-  FLEA_BIN=$ANCHOR_BIN FLEA_UI=$ANCHOR_UI FLEA_QMLCACHE=$ANCHOR_QMLCACHE FLEA_STATE=$ANCHOR_STATE warm_qml_cache & WARM_PID=$!
+  set -m
+  ( set +m; FLEA_BIN=$ANCHOR_BIN FLEA_UI=$ANCHOR_UI FLEA_QMLCACHE=$ANCHOR_QMLCACHE FLEA_STATE=$ANCHOR_STATE warm_qml_cache ) & WARM_PID=$!
+  set +m
   wait "$WARM_PID" || exit 1
+  WARM_PID=""
 fi
 
+# warm jobs end
+
+# entrant runs begin
 # Every row names a kind that launches, so a typo row fails here rather than vanishing from every run.
 for row in "${ENTRANTS[@]}"; do IFS='|' read -r _ row_kind _ <<< "$row"; case $row_kind in gui|tui) ;; *) fail "an entrant row has a kind other than gui or tui, so it would never launch";; esac; done
 for RUN_INDEX in $(seq 1 "$RUNS"); do
@@ -1753,6 +1790,8 @@ for RUN_INDEX in $(seq 1 "$RUNS"); do
     run_guarded "$id" "$kind" "$class" "$comm" "$token" "$helper_comm" "$helper_token" "$cmd"
   done
 done
+
+# entrant runs end
 
 clean_bench
 restore_thumbs

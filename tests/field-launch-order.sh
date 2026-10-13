@@ -72,10 +72,33 @@ with_only "nautilus yazi"
 only_run2=$(run_order 2 | while read -r i place; do printf '%s@%s ' "${ENTRANTS[$i]%%|*}" "$place"; done)
 check "ONLY keeps only the named rows, placed from 1 among the entrants that launch" "nautilus@1 yazi@1 " "$only_run2"
 with_only ""
-# Ghost's comm names no program, pinning that an absent entrant takes no place.
+# Ghost's comm names no program, so it is retained for SKIP without taking a launch place.
 ENTRANTS+=("ghost|gui|x|definitely-not-a-command")
 ghost_run1=$(run_order 1 | while read -r i place; do printf '%s@%s ' "${ENTRANTS[$i]%%|*}" "$place"; done)
-check "an absent entrant takes no place" "flea@1 flea-anchor@2 nautilus@3 flea-tui@1 yazi@2 mc@3 " "$ghost_run1"
+check "an absent entrant takes no place" "flea@1 flea-anchor@2 nautilus@3 ghost@- flea-tui@1 yazi@2 mc@3 " "$ghost_run1"
+
+# The real entrant loop must name each missing row exactly once per run, including a missing Strata binary.
+scratch=$(mktemp -d /tmp/flea-launch-order.XXXXXX) || exit 1
+: > "$scratch/.flea-test-sandbox"
+trap 'case $scratch in /tmp/?*) [ -f "$scratch/.flea-test-sandbox" ] && rm -rf -- "$scratch" ;; esac' EXIT
+run_text=$(sed -n '/^# entrant runs begin$/,/^# entrant runs end$/p' "$bench")
+[ -n "$run_text" ] || { echo "FAIL: no entrant run block in $bench"; exit 1; }
+STRATA_BIN="$scratch/absent-strata"
+ENTRANTS=("ghost|gui|x|definitely-not-a-command" "strata|gui|x|strata" "present|gui|x|sh" "ghost-tui|tui|x|definitely-not-a-command")
+run_guarded() { printf '%s@%s\n' "$1" "$LAUNCH_POS"; }
+fail() { echo "FAIL: $*" >&2; exit 1; }
+RUNS=3
+eval "$run_text" > "$scratch/launched" 2> "$scratch/skips"
+check "a missing GUI command prints one SKIP per run" 3 "$(grep -cxF 'SKIP: ghost is not installed' "$scratch/skips")"
+check "a missing TUI command prints one SKIP per run" 3 "$(grep -cxF 'SKIP: ghost-tui is not installed' "$scratch/skips")"
+check "a missing Strata binary prints one SKIP per run" 3 "$(grep -cxF "SKIP: strata is not built at $STRATA_BIN" "$scratch/skips")"
+check "the three absent rows print exactly nine SKIPs" 9 "$(wc -l < "$scratch/skips")"
+check "missing rows never launch or consume a place" 'present@1 present@1 present@1' "$(paste -sd' ' "$scratch/launched")"
+with_only present
+eval "$run_text" > "$scratch/launched-only" 2> "$scratch/skips-only"
+check "ONLY excludes absent entrants without naming or launching them" 0 "$(wc -l < "$scratch/skips-only")"
+check "ONLY still launches the selected entrant in each run" 3 "$(grep -cx 'present@1' "$scratch/launched-only")"
+with_only ""
 
 # The CSV: the header ends with launch_pos, and the row format writes one value per header column.
 header=$(grep -m1 '^echo "id,run,' "$bench" | sed 's/^echo "//; s/" >> .*//')

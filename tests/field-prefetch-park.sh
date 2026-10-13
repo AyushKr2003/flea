@@ -5,12 +5,13 @@ cd "$(dirname "$0")/.." || exit 1
 bench="$PWD/tools/flea-field-bench"
 
 # The fixture root is a mktemp -d of its own, and its one delete is checked absolute and two deep before the trap exists.
-scratch=$(mktemp -d) || exit 1
+scratch=$(mktemp -d /tmp/flea-prefetch-park.XXXXXX) || exit 1
 case $scratch in
   /*/*) ;;
   *) echo "FAIL: mktemp -d gave '$scratch', which is not an absolute path two components deep"; exit 1 ;;
 esac
-trap 'rm -rf "$scratch"' EXIT
+: > "$scratch/.flea-test-sandbox"
+trap 'case $scratch in /tmp/?*) [ -f "$scratch/.flea-test-sandbox" ] && rm -rf -- "$scratch" ;; esac' EXIT
 
 fail=0
 check() {
@@ -97,7 +98,7 @@ check "a cache home elsewhere refuses" 3 "$(cache_home "$scratch/elsewhere")"
 
 # The wiring: parked beside the thumbnails and before the warm launch, restored on both exits, and the warm launch must have recorded a list.
 park_line=$(grep -n '^park_prefetch$' "$bench" | cut -d: -f1)
-warm_line=$(grep -n 'warm_qml_cache &' "$bench" | head -1 | cut -d: -f1)
+warm_line=$(grep -n '^# warm jobs begin$' "$bench" | cut -d: -f1)
 check "park_prefetch runs once at setup" 1 "$(printf '%s\n' "$park_line" | grep -c .)"
 check "each Flea build is warmed once, the flea and the anchor" 2 "$(grep -c 'wait "$WARM_PID" || exit 1$' "$bench")"
 check "the list is parked before the first warm launch records one" yes "$([ "${park_line:-0}" -gt 0 ] && [ "${park_line:-0}" -lt "${warm_line:-0}" ] && echo yes || echo no)"
@@ -108,12 +109,28 @@ check "restore_prefetch runs at the end" 1 "$(grep -c '^restore_prefetch$' "$ben
 check "the EXIT trap restores in a subshell, so a failure there skips no later step" 1 "$(grep -c '^  ( restore_prefetch ) || cleanup_rc=1$' "$bench")"
 check "the warm launch refuses to leave no list" 1 "$(grep -c 'the warm launch recorded no prefetch list' "$bench")"
 
-# A TERM during the warm launch runs the bench's EXIT trap, and that must end the warm Flea: a fake one that carries the bench token, wired with the bench's own blocks.
+# Signals must stop the warm shell and its group both before Flea starts and while it polls a mapped Flea.
 export WARM_TEXT=$(sed -n '/^# warm launch begin$/,/^# warm launch end$/p' "$bench") SWEEP_TEXT=$(sed -n '/^# entrant sweep begin$/,/^# entrant sweep end$/p' "$bench")
 export CLEAN_TEXT=$(sed -n '/^clean_bench() {$/,/^}$/p' "$bench") CLEANUP_TEXT=$(sed -n '/^bench_cleanup() {$/,/^}$/p' "$bench")
-warm="$scratch/warm"; mkdir -p "$warm/cg" "$warm/qml" "$warm/state/flea"
-printf '#!/bin/bash\necho $$ > "$FAKE_PIDFILE"\n: > "$QML_DISK_CACHE_PATH/unit"\necho list > "$FAKE_PREFETCH"\nexec sleep 300\n' > "$warm/flea"; chmod +x "$warm/flea"
-cat > "$warm/run.sh" <<'EOS'
+export WARM_START_TEXT=$(sed -n '/^# warm jobs begin$/,/^# warm jobs end$/p' "$bench")
+# Sample input: ps -o stat= -p 4242 prints "S" for a live process or "Z" for a process that has ended but is not yet reaped.
+running() {
+  local state
+  [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -gt 1 ] || return 1
+  state=$(ps -o stat= -p "$1" 2>/dev/null)
+  [[ -n "$state" && "$state" != *Z* ]]
+}
+group_running() {
+  local pid
+  for pid in $(pgrep -g "$1"); do running "$pid" && return 0; done
+  return 1
+}
+signal_case() {
+  local mode=$1 signal=$2 expected=$3 warm="$scratch/warm-$1-$2" warm_pid fake copy_pid rc elapsed alive group_alive
+  mkdir -p "$warm/cg" "$warm/qml" "$warm/state/flea"
+  printf '#!/bin/bash\necho $$ > "$FAKE_PIDFILE"\n: > "$QML_DISK_CACHE_PATH/unit"\necho list > "$FAKE_PREFETCH"\nexec sleep 300\n' > "$warm/flea"; chmod +x "$warm/flea"
+  printf '#!/bin/bash\ntrap "" TERM\necho $$ > "$W/copy-pid"\nwhile :; do sleep 1; done\n' > "$warm/copy.sh"
+  cat > "$warm/run.sh" <<'EOS'
 set -uo pipefail
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 now_ms() { NOW_MS=$(( $(date +%s%N) / 1000000 )); }
@@ -123,40 +140,88 @@ close_entrant_dialogs() { :; }
 watch_kill() { :; }
 release_run_cg() { :; }
 restore_thumbs() { :; }
-restore_prefetch() { :; }
-cg_empty() { local p; while read -r p; do kill -0 "$p" 2>/dev/null && return 1; done < "$1/cgroup.procs"; return 0; }
+restore_prefetch() { printf 'operator list\n' > "$PREFETCH"; }
+prefetch_keep() { :; }
+prefetch_for() { :; }
+only_has() { [ "$1" = flea ]; }
 KILL_TARGETS=(); SWEEP_TERM_POLLS=20; SWEEP_KILL_POLLS=20; TUI_CONF=""
 BENCH_TOKEN="warm-test-$$-$RANDOM"; BENCH_CG=$W/cg; FLEA_QMLCACHE=$W/qml; FLEA_STATE=$W/state
-FLEA_BIN=$W/flea; FLEA_UI=$W/ui; FIXTURE=$W; PREFETCH=$W/prefetch; ENTRANT_LAUNCHED=""; ROWS_PID=""
+FLEA_BIN=$W/flea; FLEA_UI=$W/ui; FIXTURE=$W; PREFETCH=$W/prefetch; ENTRANT_LAUNCHED=""; ROWS_PID=""; WARM_PID=""
+FLEA_PREFETCH_SLOT=""; WITH_ANCHOR=no
 export FAKE_PIDFILE=$W/pid FAKE_PREFETCH=$W/prefetch
 eval "$WARM_TEXT"; eval "$SWEEP_TEXT"; eval "$CLEAN_TEXT"; eval "$CLEANUP_TEXT"
+# The fake cgroup is ordinary files; the real token sweep still ends the independently sessioned Flea.
+warm_stop() { :; }
+eval "$(declare -f warm_qml_cache | sed '1s/warm_qml_cache/warm_qml_cache_body/')"
+warm_qml_cache() { printf '%s\n' "$BASHPID" > "$W/warm-pid"; warm_qml_cache_body; }
+if [ "$MODE" = setup ]; then cp() { bash "$W/copy.sh"; }; fi
 WARM_QUIET_POLLS=600
 trap bench_cleanup EXIT
+trap 'exit 130' INT
 trap 'exit 143' TERM
-ENTRANT_LAUNCHED=yes
-warm_qml_cache & WARM_PID=$!
-wait "$WARM_PID"
+eval "$WARM_START_TEXT"
 EOS
-W=$warm bash "$warm/run.sh" > "$warm/run.log" 2>&1 &
-harness=$!
-for _ in $(seq 100); do [ -s "$warm/pid" ] && break; sleep 0.1; done
-sleep 0.5
-kill -TERM "$harness"
-term_start=$(date +%s)
-for _ in $(seq 100); do kill -0 "$harness" 2>/dev/null || break; sleep 0.1; done
-term_waited=$(( $(date +%s) - term_start ))
-wait "$harness" 2>/dev/null
-check "a TERM during the warm launch is trapped promptly" yes "$([ "$term_waited" -lt 8 ] && echo yes || echo no)"
-fake=$(cat "$warm/pid" 2>/dev/null)
-# A missing or bare pid would make kill reach this test's own process group, so only a real child pid is probed.
-if [[ "$fake" =~ ^[0-9]+$ ]] && [ "$fake" -gt 1 ]; then
-    for _ in $(seq 40); do kill -0 "$fake" 2>/dev/null || break; sleep 0.1; done
-    alive=no; kill -0 "$fake" 2>/dev/null && alive=yes
-    [ "$alive" = yes ] && kill "$fake"
-else
-    alive="no-pid:$fake"
-fi
-check "a signal during the warm launch ends the warm Flea through the EXIT trap" "alive=no" "alive=$alive"
+  W=$warm MODE=$mode python3 - "$signal" <<'PYDRIVER'
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
+root = Path(os.environ['W'])
+signum = getattr(signal, 'SIG' + sys.argv[1])
+with root.joinpath('run.log').open('w') as log:
+    child = subprocess.Popen(['bash', str(root / 'run.sh')], stdout=log, stderr=log,
+                             preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL))
+    root.joinpath('harness-pid').write_text(str(child.pid))
+    ready = root / ('copy-pid' if os.environ['MODE'] == 'setup' else 'pid')
+    deadline = time.monotonic() + 10
+    while not ready.exists() and child.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.05)
+    root.joinpath('ready').write_text('yes' if ready.exists() else 'no')
+    time.sleep(0.2)
+    started = time.monotonic()
+    if child.poll() is None:
+        child.send_signal(signum)
+    try:
+        rc = child.wait(timeout=8)
+    except subprocess.TimeoutExpired:
+        child.kill()
+        child.wait()
+        rc = 124
+    root.joinpath('status').write_text(f'{rc} {int((time.monotonic() - started) * 1000)}')
+PYDRIVER
+  read -r rc elapsed < "$warm/status" || true
+  check "$signal during $mode reached the warm job" yes "$(cat "$warm/ready")"
+  check "$signal during $mode exits with its signal status" "$expected" "$rc"
+  check "$signal during $mode is trapped promptly" yes "$([ "${elapsed:-8000}" -lt 8000 ] && echo yes || echo no)"
+  warm_pid=$(cat "$warm/warm-pid" 2>/dev/null)
+  if [[ "$warm_pid" =~ ^[0-9]+$ ]] && [ "$warm_pid" -gt 1 ]; then
+    alive=no; running "$warm_pid" && alive=yes
+    group_alive=no; group_running "$warm_pid" && group_alive=yes
+    check "$signal during $mode ends the warm shell" no "$alive"
+    check "$signal during $mode ends the warm process group" no "$group_alive"
+  else
+    check "$signal during $mode recorded a real warm pid" yes no
+  fi
+  fake=$(cat "$warm/pid" 2>/dev/null)
+  if [ "$mode" = mapped ]; then
+    alive=no; running "$fake" && alive=yes
+    [ "$alive" = yes ] && kill -KILL "$fake" 2>/dev/null
+    check "$signal during $mode ends the warm Flea through the EXIT trap" no "$alive"
+  else
+    copy_pid=$(cat "$warm/copy-pid" 2>/dev/null)
+    alive=no; running "$copy_pid" && alive=yes
+    check "$signal during $mode kills a setup child that ignores TERM" no "$alive"
+    check "$signal during $mode never launches Flea after cleanup" "" "$fake"
+  fi
+  check "$signal during $mode restores the operator's list unchanged" 'operator list' "$(cat "$warm/prefetch" 2>/dev/null)"
+  # Rescue runs after every assertion, so it cannot make an un-killed setup child appear stopped.
+  [ "${group_alive:-no}" = yes ] && kill -KILL -- "-$warm_pid" 2>/dev/null
+}
+signal_case mapped TERM 143
+signal_case setup TERM 143
+signal_case setup INT 130
 
 [ "$fail" = 0 ] && echo "field-prefetch-park: all passed" || echo "field-prefetch-park: failures above"
 exit "$fail"
