@@ -171,6 +171,9 @@ ShellRoot {
         followed = followed && menu.parent === originalParent
         secondParent.destroy()
         if (!followed) return root.finish(false, "loaded menu parent did not follow host parent")
+        if (host.item !== menu || host.status !== Loader.Ready
+                || (root.census().counts.ContextMenu || 0) !== 1)
+            return root.finish(false, "reparenting the host lost the ready menu root")
         console.log("STARTUP_OBJECTS PARENT follows=1")
         return root.finish(true, "early-menu=" + root.earlyMenu + " ready=1 retained=1")
     }
