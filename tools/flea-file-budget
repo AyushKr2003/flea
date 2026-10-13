@@ -98,6 +98,7 @@ tests/js/watch.js 541
 tests/js/xwwatch.js 299
 tests/js/tabs.js 798
 tests/js/search.js 336
+tests/js/previewkeys.js 314
 tests/button-members.qml 518
 tests/chromering.qml 413
 tests/columnrow-geom.qml 426
