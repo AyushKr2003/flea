@@ -37,10 +37,7 @@ function parseDevices(body, unmounted) {
     return dedupeVolumes(out)
 }
 
-// zram is type "disk" too and nobody browses it. A loop device is the same, except when it is
-// mounted: opening an .iso from the file list gio loop-mounts it, and that mount is exactly as
-// browsable as a stick's, even though the kernel never sets "rm" for one. An unmounted loop device
-// (systemd, some package manager, ...) has nothing to do with anyone browsing files and stays out.
+// zram stays out; a loop device is browsable only while it or a child is mounted, despite rm=false.
 function isPseudo(node) {
     var name = String(node.name || "")
     if (/^zram/.test(name))
@@ -48,8 +45,7 @@ function isPseudo(node) {
     return /^loop/.test(name) && !holdsMount(node)
 }
 
-// Same shape as holdsRoot below, but for any mountpoint at all rather than "/" specifically -- a
-// mounted loop device's own node is never itself mounted, only a partition under it is.
+// Like holdsRoot, but a mount on the loop itself or any child keeps the image browsable.
 function holdsMount(node) {
     if (mountOf(node).length > 0)
         return true
@@ -105,7 +101,7 @@ function collectVolumes(nodes, model, unplugs, out, unmounted, removableDisk, ho
         // Loop ancestry routes eject through unmount and detach, and skips the optional unmounted-volume rule.
         var loopHere = underLoop || /^loop/.test(String(n.name || ""))
         // No row on any setting for a hidden leaf (ESP, swap, member) or for the leaf holding /, which its disk row stands for.
-        if (n.name && kids.length === 0 && !hidden(n) && !holdsRoot(n)
+        if (n.name && (kids.length === 0 || mountOf(n).length > 0) && !hidden(n) && !holdsRoot(n)
                 && (pulls || mountOf(n).length > 0 || (unmounted && browsable(n) && !loopHere) || isLockedNode(n)))
             out.push(volumeRow(n, own, pulls, removableDisk === true, holder, loopHere))
         collectVolumes(kids, own, pulls, out, unmounted, removableDisk === true || unpluggable(n), containerName(n), loopHere)
@@ -301,24 +297,22 @@ function powerOffDisk(device) {
     return bare ? text : ""
 }
 
-// The eject command for one volume row. A loop row (an opened .iso) is unmounted with -u, since
-// gio mount -e hangs on a loop volume, and then its loop device is detached, since -u alone left
-// one attached per open. With another partition of it still mounted, the kernel only marks the
-// loop to clear on its last close (measured: AUTOCLEAR 0 to 1, the mount kept reading), so the
-// detach never pulls a mount away. Sample: {device: "/dev/loop0p1", path: "/run/media/u/ISO",
-// loop: true} answers the sh chain against /dev/loop0; any other row answers gio mount -e.
-// A failed unmount exits 1; an unmount whose detach then failed exits detachFailedExit, so the
-// verdict can say the loop device is still attached instead of a plain "Ejected".
+// Autoclear can detach or reuse a loop during unmount; detach only the same non-empty backing file afterward.
+// A failed unmount exits 1 after detach is tried; a failed detach of our loop exits detachFailedExit.
+// Sample input: {device: "/dev/loop0p1", path: "/run/media/u/ISO", loop: true} answers the sh chain on /dev/loop0.
 var detachFailedExit = 3
 function ejectCommand(e) {
     var path = String(e.path || "")
     if (e.loop !== true)
         return ["gio", "mount", "-e", path]
-    var loopDisk = powerOffDisk(e.device)
-    if (!/^\/dev\/loop\d+$/.test(loopDisk))
+    var loop = String(e.device || "").match(/^\/dev\/(loop\d+)(?:p\d+)?$/)
+    if (!loop)
         return ["gio", "mount", "-u", path]
-    return ["sh", "-c", 'gio mount -u "$1" || exit 1; udisksctl loop-delete --no-user-interaction -b "$2" || exit ' + detachFailedExit,
-            "sh", path, loopDisk]
+    var loopDisk = "/dev/" + loop[1]
+    return ["sh", "-c", 'before=$(cat -- "$3" 2>/dev/null); status=0; gio mount -u "$1" || status=1; '
+            + 'after=$(cat -- "$3" 2>/dev/null); if [ -n "$before" ] && [ "$after" = "$before" ]; then '
+            + 'udisksctl loop-delete --no-user-interaction -b "$2" || exit ' + detachFailedExit + '; fi; exit "$status"',
+            "sh", path, loopDisk, "/sys/block/" + loop[1] + "/loop/backing_file"]
 }
 
 // The sysfs block name for a disk path, so the eject chain can watch its write counter.

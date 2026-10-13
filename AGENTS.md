@@ -3838,12 +3838,12 @@ The stage2 merge of fs1 and fs5 records `ui/js/Devices.js` at 366, fs1's udisks 
 300 hard cap and recorded rather than split, re-derived with `wc -l`.
 
 The mounted-loop rail fix (an opened .iso in DEVICES) on the 0.3.11 stage moves four recorded ceilings, each re-derived with `wc -l`:
-`ui/js/Devices.js` 405 to 446 for the mounted-loop pseudo test, the loop flag on the walk and the row, and
-`ejectCommand`, which detaches a loop row's loop device after its unmount and exits apart when only the detach fails,
-`ui/DeviceMounts.qml` 537 to 551 for a loop row's `-u` eject route around the power-off chain and its
+`ui/js/Devices.js` 405 to 440 for the mounted-loop pseudo test, the loop flag on the walk and the row, mounted parents with children, and
+`ejectCommand`, which checks the same non-empty backing file before detaching after any unmount status and exits apart when that detach fails,
+`ui/DeviceMounts.qml` 537 to 553 for a loop row's `-u` eject route around the power-off chain and its
 failed-detach verdict, and
-`tests/js/devices.js` 406 to 408 for the not-loop pin on a real stick and `tests/js/mounts.js` 349 to 359 for the loop menu checks beside the stage's Unmount and Flash image rows. The loop cases live in `tests/js/loopdevices.js`.
-The same merge keeps the 168 first-frame units and raises `tests/startup-units.txt` from 1,627,609 to 1,631,292 bytes, re-derived by summing `wc -c` over its units: `DeviceMounts.qml` adds 1,128 bytes, `js/Devices.js` 2,286, `js/Eject.js` 223, `js/Menu.js` 25 and `js/Mounts.js` 21. Both unqualified-read profiles follow the merged source; the missing-module allowances retain their original symbols and reasons at the current lines, while the present-module profile has no DeviceMounts allowances.
+`tests/js/devices.js` 406 to 437 for the not-loop pin on a real stick and the mounted-whole stick fixture, and `tests/js/mounts.js` 349 to 359 for the loop menu checks beside the stage's Unmount and Flash image rows. The loop cases and the driven DeviceMounts exit paths live in `tests/js/loopdevices.js`.
+The fix keeps the 168 first-frame units and raises `tests/startup-units.txt` from 1,627,609 to 1,630,961 bytes, re-derived by summing `wc -c` over its units: `DeviceMounts.qml` adds 1,230 bytes, `js/Devices.js` 1,786, `js/Eject.js` 290, `js/Menu.js` 25 and `js/Mounts.js` 21. The DeviceMounts allowances in both unqualified-read profiles follow the final source; its missing-module rows retain their original symbols and reasons at the derived lines, while the present-module profile has no DeviceMounts allowances.
 
 The stage4 merge records the merged ceilings, re-derived with `wc -l` at
 the merge: `tests/js/watch.js` 354 (us1's kill-sweep pins beside xw4r2's two-window settle pins) and `ui/Pane.qml` 1013

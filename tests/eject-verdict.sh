@@ -43,4 +43,21 @@ check "slow legs diagnose a failure with rail and chain" 1 "$(grep -c 'deviceEje
 if [ "$fail" -ne 0 ]; then
   exit 1
 fi
+. tools/flea-sandbox-guard
+sandbox_require "$FIXTURE_ROOT/flea-loop-eject"
+mkdir -p "$SANDBOX_ROOT" || exit 1
+test_root=$(mktemp -d "$SANDBOX_ROOT/flea-loop-eject.XXXXXXXX") || exit 1
+printf 'loop eject regression\n' > "$test_root/$SANDBOX_MARKER"
+trap 'sandbox_remove "$test_root"' EXIT
+if ! XDG_CACHE_HOME="$test_root/cache" QML_XHR_ALLOW_FILE_READ=1 \
+    QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
+    timeout 120 qml6 tests/js/harness.qml -- loopdevices > "$test_root/command.log" 2>&1; then
+    cat "$test_root/command.log"
+    exit 1
+fi
+if ! grep -q 'checks, 0 failed' "$test_root/command.log"; then
+    cat "$test_root/command.log"
+    exit 1
+fi
+python3 -B tests/loop-eject.py "$test_root" || exit 1
 printf 'EJECTVERDICT PASS pins=%s\n' "$pins"

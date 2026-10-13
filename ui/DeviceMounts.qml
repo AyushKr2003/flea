@@ -64,7 +64,7 @@ Item {
     property string _ejectDevice: ""
     property string _ejectLabel: ""
     property bool _ejectLoop: false
-    // A loop row's unmount succeeded but its detach did not (Devices.detachFailedExit).
+    // A loop detach failed; the next listing judges whether the unmount succeeded.
     property bool _ejectDetachFailed: false
     // Listings are counted as they start. _verdictFromListing is 0 while gio runs, so nothing is
     // judged before it exits; at exit it becomes one past the count, so the listing in flight at
@@ -544,7 +544,7 @@ Item {
             }
             if (root._powerOffDisk.length > 0)
                 root._powerOffDisk = ""
-            root._ejectDetachFailed = exitCode === Devices.detachFailedExit
+            root._ejectDetachFailed = root._ejectLoop && exitCode === Devices.detachFailedExit
             root._verdictFromListing = root._listingsStarted + 1
             ejectVerdictTimeout.restart()
             root.poll()

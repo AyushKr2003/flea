@@ -50,6 +50,18 @@ function run(check) {
     check("a loop device is not a device row", d.map(function (e) { return e.label }).join(","), "nvme0n1,128GB")
     check("a real removable volume is not marked loop", d[1].loop, false)
 
+    var wholeStick = { blockdevices: [{ name: "sdb", path: "/dev/sdb", type: "disk", rm: true, tran: "usb",
+        fstype: "iso9660", label: "WHOLE_STICK", mountpoints: ["/run/media/user/WHOLE_STICK"], children: [
+            { name: "sdb1", path: "/dev/sdb1", type: "part", fstype: "iso9660", mountpoints: ["/run/media/user/CHILD"], rm: true },
+            { name: "sdb2", path: "/dev/sdb2", type: "part", mountpoints: [null], rm: true }] }] }
+    var wholeRows = Devices.parseDevices(JSON.stringify(wholeStick))
+    var whole = wholeRows.filter(function (e) { return e.device === "/dev/sdb" })[0]
+    check("a stick mounted whole is a row even with a partition table", wholeRows.length, 2)
+    check("the whole stick keeps its mountpoint", whole ? whole.path : "missing", "/run/media/user/WHOLE_STICK")
+    check("the whole stick still ejects through gio mount -e", whole ? Devices.ejectCommand(whole).join(" ") : "missing",
+          "gio mount -e /run/media/user/WHOLE_STICK")
+    check("the mounted whole stick still recurses into its mounted child", wholeRows.some(function (e) { return e.device === "/dev/sdb1" }), true)
+
     // The system disk is the one place the walk never goes: /boot and /home are the box's own
     // plumbing, and the disk row above already stands for that drive.
     check("no partition of the system disk becomes a row of its own",

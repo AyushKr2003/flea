@@ -1,5 +1,8 @@
 .import "../../ui/js/Devices.js" as Devices
 .import "../../ui/js/Eject.js" as Eject
+.import "../../ui/js/Format.js" as Format
+.import "../../ui/js/Mounts.js" as Mounts
+.import "sourcefixture.js" as Source
 
 // A loop-mounted .iso in the DEVICES rail: the one volume whose lsblk "rm" flag is never true
 // even though it is as browsable as a stick's. tests/js/devices.js keeps the removable and
@@ -32,19 +35,46 @@ function run(check) {
     check("the mounted loop partition is marked loop for eject to route around", iso[1].loop, true)
     // Eject unmounts it and then detaches its loop device, which -u alone left attached.
     var loopEject = Devices.ejectCommand(iso[1])
-    check("a loop row's eject unmounts it with -u, then detaches the loop device",
-          [loopEject[0], loopEject[2]].join(" "), 'sh gio mount -u "$1" || exit 1; udisksctl loop-delete --no-user-interaction -b "$2" || exit 3')
+    check("a loop row's eject uses a shell with argument-only paths", loopEject.slice(0, 2).join(" "), "sh -c")
+    check("a loop row passes its validated backing-file path as argument 3", loopEject[6], "/sys/block/loop0/loop/backing_file")
+    console.log("LOOP_EJECT_COMMAND " + JSON.stringify(loopEject))
     check("a failed detach exits with its own code, apart from a failed unmount", Devices.detachFailedExit, 3)
-    check("a failed detach after an unmount is an error that names the loop device",
-          JSON.stringify(Eject.sentence("attached", "OMARCHY_202608", [])),
-          JSON.stringify({ text: "Unmounted OMARCHY_202608, but its loop device is still attached.", isError: true }))
     check("a loop row's eject passes the mountpoint and the loop device as arguments",
-          loopEject.slice(3).join(" "), "sh /run/media/user/OMARCHY_202608 /dev/loop0")
+          loopEject.slice(3, 6).join(" "), "sh /run/media/user/OMARCHY_202608 /dev/loop0")
     check("a stick's eject stays gio mount -e on its mountpoint",
           Devices.ejectCommand({ device: "/dev/sda1", path: "/run/media/user/128GB", loop: false }).join(" "),
           "gio mount -e /run/media/user/128GB")
     check("a loop row whose device is no loop node falls back to -u alone",
           Devices.ejectCommand({ device: "/dev/mapper/x", path: "/m", loop: true }).join(" "), "gio mount -u /m")
+    for (var number of [0, 9, 10, 12, 1234]) {
+        for (var suffix of ["", "p1", "p12"]) {
+            var device = "/dev/loop" + number
+            check("eject keeps the exact loop number for " + device + suffix,
+                  Devices.ejectCommand({ device: device + suffix, path: "/m", loop: true }).slice(5).join("|"),
+                  device + "|/sys/block/loop" + number + "/loop/backing_file")
+        }
+    }
+
+    var hybrid = JSON.parse(mountedIso)
+    hybrid.blockdevices[1].fstype = "iso9660"
+    hybrid.blockdevices[1].label = "WHOLE_ISO"
+    hybrid.blockdevices[1].mountpoints = ["/run/media/user/WHOLE_ISO"]
+    var parents = Devices.parseDevices(JSON.stringify(hybrid))
+    var parent = parents.filter(function (e) { return e.device === "/dev/loop0" })[0]
+    check("a mounted hybrid loop parent is a row beside its mounted child", parents.length, 3)
+    check("the mounted hybrid loop parent keeps its mountpoint", parent ? parent.path : "missing", "/run/media/user/WHOLE_ISO")
+    check("the mounted hybrid loop parent keeps its loop eject route", parent ? Devices.ejectCommand(parent).slice(4, 6).join("|") : "missing",
+          "/run/media/user/WHOLE_ISO|/dev/loop0")
+    check("walking a mounted parent still finds its mounted child", parents.some(function (e) { return e.device === "/dev/loop0p1" }), true)
+
+    var gone = '{"blockdevices":[{"name":"nvme0n1","path":"/dev/nvme0n1","mountpoints":["/"]}]}'
+    var kept = '{"blockdevices":[{"name":"loop0","path":"/dev/loop0","children":[{"name":"loop0p1","path":"/dev/loop0p1","mountpoints":["/run/media/user/OMARCHY_202608"]}]}]}'
+    check("exit 3 with an unmounted loop reports the failed detach", ejectMessage(3, gone),
+          "Unmounted OMARCHY_202608, but its loop device is still attached.|true")
+    check("exit 1 with the mount gone is judged ejected by the next listing", ejectMessage(1, gone), "Ejected OMARCHY_202608.|false")
+    check("exit 1 with the mount kept reports still mounted", ejectMessage(1, kept), "OMARCHY_202608 is still mounted; close what is using it.|true")
+    check("exit 0 with the mount gone reports ejected without an unplug line", ejectMessage(0, gone), "Ejected OMARCHY_202608.|false")
+    check("exit 0 with the mount kept never reports success", ejectMessage(0, kept), "OMARCHY_202608 is still mounted; close what is using it.|true")
 
     // With unmounted volumes shown, a loop device's unmounted partition stays out even when it
     // has a filesystem to browse: only the partition gio mounted is a row.
@@ -63,4 +93,28 @@ function run(check) {
                   + '{"name":"loop0","path":"/dev/loop0","label":"FLEATEST","mountpoints":[null],"rm":false,"size":67108864,"type":"loop","model":null}'
                   + ']}'
     check("an unmounted bare loop device is still not a device row", Devices.parseDevices(bareLoop).length, 1)
+}
+
+// Sample input: exit 3 and a listing with the loop gone drive the shipped exit handler to its emitted message.
+function ejectMessage(exitCode, listing) {
+    var source = Source.source("ui/DeviceMounts.qml")
+    var process = source.substring(source.indexOf("        id: ejectProcess"))
+    var exited = Source.block(process, "onExited: function (exitCode)", "ui/DeviceMounts.qml")
+    var verdict = Source.slice(source, "    function judgeEject(", "    Timer {")
+    var messages = []
+    var stale = '{"blockdevices":[{"name":"loop0","children":[{"name":"loop0p1","mountpoints":["/old-mount"]}]}]}'
+    var root = { _ejectDevice: "/dev/loop0p1", _ejectLabel: "OMARCHY_202608", _ejectLoop: true,
+        _ejectDetachFailed: false, _ejectEndedLate: false, _powerOffDisk: "", _powerOffQueue: [],
+        _verdictFromListing: 0, _listingsStarted: 7, _lastVerdict: "",
+        lockCrypt: function () {}, forgetMessage: function () {},
+        message: function (text, error) { messages.push(text + "|" + error) },
+        poll: function () {
+            this.judgeEject(stale)
+            this._listingsStarted += 1
+            this.judgeEject(listing)
+        } }
+    var timer = { stop: function () {}, restart: function () {} }
+    new Function("root", "Devices", "Eject", "Format", "Mounts", "powerOffTimeout", "ejectVerdictTimeout", "exitCode",
+        verdict + "; root.reportEject = reportEject; root.judgeEject = judgeEject; " + exited)(root, Devices, Eject, Format, Mounts, timer, timer, exitCode)
+    return messages.join(";")
 }
