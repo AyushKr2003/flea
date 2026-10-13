@@ -83,7 +83,7 @@ fi
 out=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"thumb","rows":[0]}\n{"c":"list","path":"%s","first":10}\n{"c":"quit"}\n' "$D/gen" "$D/other" | timeout 120 $BIN --backend)
 check "a result for a superseded listing is dropped" "0" "$(echo "$out" | grep -c '"t":"thumbed"')"
 
-# The flood is larger than thumbs.rs's MAX_QUEUE of 70, so without the dedupe it evicts the victim row's queued job; see AGENTS.md "Thumbnail requests".
+# The FIFO queues the victim first; without dedupe the repeated row answers 75 times, caught by the second check, while the first guards against eviction; see AGENTS.md "Thumbnail requests".
 mkdir -p "$D/flood"
 for i in 0 1 2 3 4 5; do cp "$FIXTURE/clip_6.mp4" "$D/flood/v$i.mp4"; done
 flood='0,1,2,3,5'

@@ -155,6 +155,39 @@ fn a_jail_that_never_writes_the_status_fd_still_returns_promptly() {
     );
 }
 
+// A reap the kernel holds, as an uninterruptible sleep does, must not hold kill_tree: it returns within its bound, and the reap thread takes the child once the hold lets go.
+#[test]
+fn a_child_the_kernel_holds_does_not_hold_kill_tree() {
+    let child = std::process::Command::new("/usr/bin/sleep")
+        .arg("30")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("sleep did not start");
+    let pid = child.id() as i32;
+    let proc_entry = format!("/proc/{pid}");
+    crate::backend::reaphold::hold(pid);
+    let mut jailed = Jailed { child, sandbox_pid: Arc::new(AtomicI32::new(GONE)) };
+    let (done, returned) = std::sync::mpsc::channel();
+    let helper = std::thread::spawn(move || {
+        kill_tree(&mut jailed);
+        let _ = done.send(());
+    });
+    // The bound is the 200 ms status wait plus the 500 ms reap wait; 2 s leaves the margin a loaded box needs.
+    let outcome = returned.recv_timeout(std::time::Duration::from_secs(2));
+    let unreaped_while_held = std::path::Path::new(&proc_entry).exists();
+    crate::backend::reaphold::release(pid);
+    let _ = helper.join();
+    assert!(outcome.is_ok(), "kill_tree was still waiting on a child the kernel held after 2 s");
+    assert!(unreaped_while_held, "the held child was reaped before its hold let go");
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while std::path::Path::new(&proc_entry).exists() && std::time::Instant::now() < until {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(!std::path::Path::new(&proc_entry).exists(), "the reap thread did not reap the child after its hold let go");
+}
+
 // Sample /proc/self/fd listing: one numeric entry per open descriptor, so the count is the inheritance signal.
 fn child_fd_count() -> usize {
     let out = std::process::Command::new("/usr/bin/ls")

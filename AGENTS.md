@@ -2683,6 +2683,13 @@ geometry snapshot and shared own-return path. `ui/js/Tabs.js` 672 to 686 adds th
 catcher outcome decision using the existing insertion math. Geometry query plumbing
 lives in `ui/TabDragGeometry.qml`, below the soft budget; no global limit changes.
 
+The deferred-row queue moves one ceiling: `src/backend/thumbreq.rs` 448 to 454 for the `queue_row`, `cancel_row` and
+`report_done` bookkeeping, then to 457 for pumping before the cap check and passing the wire to the shared pump, then to 464 for `cancel_all`, the
+cancel-everything arm the dispatcher and its regression share.
+`src/backend/thumbdefer.rs` is 93 lines for the FIFO, returned-job accounting and its forced stale-room regression;
+`src/backend/thumbdefer_tests.rs` is 273 for the request, cancellation and freed-room regressions, with a queued-row cancel
+that admits the oldest waiting row at once and a cancel-everything that takes every waiting row. The `State` field
+adds 2 lines to `src/backend/state.rs`; the `run.rs` call sites are net-zero lines. All counts are re-derived with `wc -l`.
 The Quick Look volume track moves four ceilings, each re-derived with `wc -l`: `src/uischema.rs` 502 to 503 for the
 `preview.volume` default and its `Count(0, 100)` rule, `src/uistate.rs` 674 to 704 for the two tests that pin a stored level
 and a refused patch for anything but a whole level, `ui/ViewState.qml` 536 to 539 for `mediaVolume` and `setMediaVolume`,
@@ -5500,7 +5507,7 @@ to a temporary name and renamed would need; only those two thumbnailers were pro
 learns the init pid from `--json-status-fd`, and `kill_tree` waits a bounded 200 ms (`STATUS_WAIT_MS`)
 for that pid when none is stored yet, SIGKILLs it only while `/proc/<pid>/stat` still names this
 jail's bwrap as its parent (field 4, so a forged pid is refused), then the launcher process group
-and the child, reaps bwrap and waits up to 2 s (`WAIT_GONE_SECS`) for the killed pid to vanish.
+and the child, reaps bwrap within `REAP_WAIT_MS` (500 ms), and hands a reap the kernel still holds to a detached thread (`src/backend/jailreap.rs`), so no caller waits on it; then it waits up to 2 s (`WAIT_GONE_SECS`) for the killed pid to vanish.
 The wait ends at once when the reader sees EOF, which it records as 0 when no pid arrived; there is
 no kill after the reap, since the kernel reparents the init there and no parent check can pass.
 The metareq and mediaprobe watchdogs kill through the same gate while the child is still alive,
@@ -5837,9 +5844,15 @@ same lock that dropped them, so `run.rs` can unmap exactly those rows and answer
 than only counting them; see "Thumbnail requests".
 
 `MAX_QUEUE` is 70, two viewports of about 35 rows, and `submit` drops from the FRONT when it
-is full. The oldest job is the row furthest from the viewport after a scroll, so it is the one
-whose answer nobody is waiting for. `cancel` and `cancel_all` only remove queued jobs; a job
-already inside a child runs to its own end or to the timeout.
+is full. The request path never fills it past that bound: a row that finds the queue full waits in
+`thumbdefer.rs`'s `Deferred`, in request order, and `thumbdefer::pump` submits it as workers take jobs
+off the pool. The drop was the wrong answer for a row the client still wants. The client cancels each pending row
+once it leaves the viewport, the preview row aside, so what is left to evict is still wanted. A request
+wider than 70 uncached rows evicted its own first rows and answered them empty, and `Thumbs.plan` keeps any
+row that has an answer, so an empty one stayed blank for good. `Deferred`
+holds at most `MAX_DEFERRED` (4096) rows; past that a row is answered empty at once. `cancel` and
+`cancel_all` remove queued jobs and waiting ones alike; a job already inside a child runs to its own
+end or to the timeout.
 
 `JOB_TIMEOUT` is 20 seconds, and `backend/child.rs` enforces it. The child is waited on
 exactly, not polled: `pidfd_open` gives a descriptor that becomes readable when the child exits,
@@ -6050,10 +6063,9 @@ paths answer a row without reporting it, so a trace-line count is not a job coun
 
 1. A job whose listing was superseded is dropped in `report_done` before it is reported.
 2. A row the drain deadline cut short is answered in `drain` rather than by a result.
-3. A job the pool evicted for `MAX_QUEUE` overflow is answered by `queue_row`'s own loop over
-   what `submit` returned, which writes a bare `thumbed_line` and never enters `report_done`.
-   That job carries a live `Trace` it never gets to emit. It is not a defect, since the row IS
-   answered, but a debugger reconciling counts will trip on it.
+3. A row past `MAX_DEFERRED` is answered by `queue_row` with a bare `thumbed_line` and never enters
+   the pool, so it carries no `Trace`. It is not a defect, since the row IS answered, but a debugger
+   reconciling counts will trip on it.
 
 **stderr is not negotiable.** stdout is the wire, `ui/Backend.qml` parses every line of it, and a
 trace line there is reported to the user as a line this build cannot read. `tests/thumbs.sh`
@@ -6214,28 +6226,30 @@ carried in the `Job`: a counter bumped on `list` alone would still misreport a r
 second directory between the request and the result and asserting no `thumbed` line at all;
 removing the clear from the `list` arm reddens exactly that check and nothing else.
 
-**The map is bounded by the pool, and the loop never trims it.** It holds one entry per queued or
-running job, so the pool's own `MAX_QUEUE` plus the worker count already bounds it at 74 and
-nothing in `run.rs` removes an entry the pool still owns. An earlier version trimmed the map from
+**The map is bounded by the pool, and the loop never trims it.** It holds one entry per queued,
+waiting or running job, so `MAX_QUEUE`, `MAX_DEFERRED` and the worker count bound it and nothing in `run.rs`
+removes an entry the pool or `Deferred` still owns. An earlier version trimmed the map from
 the FRONT past that number, justified as dropping "the entries the pool silently dropped to make
 room". The box disproved that: workers pop from the front, so the oldest mappings are the RUNNING
 jobs. A single request for 80 rows against the 70-job queue and four workers answered 74 of them
 and stranded the first six, four of which finished inside a worker and had their results discarded
 because `report_done` found no mapping, which breaks the contract that a client never waits forever
 for a row that will not arrive. `submit` therefore returns the `Job`s it dropped rather than a
-count, and `queue_row` unmaps each one and answers its row with an empty `file` on the spot.
-`tests/thumbs.sh` asks for 80 rows and asserts one `thumbed` line per row; the old trim answers 74.
+count. `queue_row` maps an uncached row and puts its job at the tail of `Deferred`, then pumps into the pool's room;
+it also pumps before checking the deferred cap, so newly free pool room prevents an unnecessary empty answer.
+The pump unmaps every job `submit` returns, answers its row with an empty `file` and releases its outstanding count
+in release builds too. Normal requests do not drop (see "Thumbnail pool"): an 80-row request answers none of its
+rows early and waits for its jobs, and `tests/thumbs.sh` still asserts one `thumbed` line per row.
 
 **The map is also the dedupe.** A path already in it has a job queued or running for this
 listing, so `queue_row` returns without submitting a second one. Without that, `rows:[0,0,0]`
 queues three identical decodes, because all three iterations run before the first job finishes
-and so all three see `Hit::Miss`. The wire stays correct either way, since `report_done` removes
-the mapping and the duplicate results are dropped on arrival, but three of a four worker pool
-spend tens to hundreds of milliseconds each on work already in flight, which is the exact
+and so all three see `Hit::Miss`. Each duplicate also gets a mapping, so all three results are answered,
+and three of a four worker pool spend tens to hundreds of milliseconds each on work already in flight, which is the exact
 resource `MAX_QUEUE` and the worker count exist to ration. `tests/thumbs.sh` proves it without
 timing anything: it saturates the four workers, queues a victim row, then floods one row with 75
-repeats, and the victim is evicted from the front of a full queue and answers empty unless the
-dedupe holds.
+repeats. The FIFO queues the victim first; without the dedupe the repeated row is answered 75 times,
+which the second check catches. The first check guards against eviction, and the dedupe keeps the request to six distinct rows.
 
 **A cancelled row leaves the map with its job.** `thumbcancel` with an explicit `rows` unmaps each
 row whose queued job it actually dropped, and `thumbcancel` with an empty or malformed `rows`

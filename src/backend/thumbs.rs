@@ -130,8 +130,8 @@ impl Pool {
         Pool { inner: Arc::new((Mutex::new(VecDeque::new()), Condvar::new())) }
     }
 
-    #[cfg(test)]
-    fn pending(&self) -> usize {
+    // Jobs no worker has taken yet; the request policy reads it to see how many more the queue holds.
+    pub fn pending(&self) -> usize {
         let (lock, _cv) = &*self.inner;
         lock.lock().unwrap().len()
     }

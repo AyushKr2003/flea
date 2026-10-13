@@ -168,7 +168,7 @@ pub fn spawn_jailed(full: &[String], setup: impl FnOnce(&mut std::process::Comma
     Ok(Jailed { child, sandbox_pid: pid })
 }
 
-// SIGKILLs the sandbox init as well as bwrap, then waits; the init is killed while bwrap is alive, since after the reap no parent check can pass.
+// Kills bwrap and the sandbox init, reaps bwrap within a bound, and leaves the Jailed finished.
 pub fn kill_tree(jailed: &mut Jailed) {
     let bwrap = jailed.child.id() as i32;
     // Ownership is proven before any kill: after the reap the kernel reparents the init, so a later check refuses every time.
@@ -181,7 +181,8 @@ pub fn kill_tree(jailed: &mut Jailed) {
     let pid = jailed.child.id() as i32;
     let _ = crate::procsignal::signal_group(pid, SIGKILL);
     let _ = jailed.child.kill();
-    let _ = jailed.child.wait();
+    // A held reap may finish on another thread, so no caller waits on or signals this child again.
+    crate::backend::jailreap::reap_or_hand_off(&mut jailed.child);
     wait_gone(killed);
 }
 
