@@ -167,6 +167,13 @@ ShellRoot {
             root.fail("step " + (root.step + 1) + " rested on " + s.name + " without a closed card and swap wrapper built: card=" + (look !== null) + " swap=" + (look !== null && look.swapBuilt))
         if (!root.cardExpected && look !== null)
             root.fail("step " + (root.step + 1) + " built a Quick Look card at a rest on " + s.name + ", which has no unit")
+        // Qt incubates cached rows asynchronously; compare visible delegates and every wrapper consistently on both opens.
+        if (s.unit === "PreviewText.qml") {
+            var code = root.find(look, "CodeLines")
+            var view = root.find(code, "QQuickListView")
+            if (!view) root.fail("the text pane has no scrolling view for the object census")
+            else view.cacheBuffer = 0
+        }
     }
     // Presses Space with the census taken first.
     function startOpen() {
@@ -292,6 +299,8 @@ ShellRoot {
             var built = root.objects() - root.objectsAtKey
             root.log("COST " + root.leg + " open=" + (root.opened + 1) + " objects=+" + built + " mapped=" + added.length + " " + added.join(" "))
             var unit = root.steps[root.step].unit
+            if (unit === "PreviewText.qml" && root.find(look, "CsvTable") !== null)
+                root.fail("a text Quick Look built a CsvTable")
             if (root.opened === 0) {
                 root.firstObjects = built
                 // The media backend is a library the clip itself loads; every other kind maps nothing new in its first Space.

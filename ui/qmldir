@@ -20,6 +20,7 @@ Crumb 1.0 Crumb.qml
 CursorMark 1.0 CursorMark.qml
 PreviewColumn 1.0 PreviewColumn.qml
 CodeLines 1.0 CodeLines.qml
+CsvTable 1.0 CsvTable.qml
 PreviewLines 1.0 PreviewLines.qml
 PreviewMarkdown 1.0 PreviewMarkdown.qml
 MarkdownSource 1.0 MarkdownSource.qml
