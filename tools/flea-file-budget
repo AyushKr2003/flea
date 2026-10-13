@@ -77,7 +77,7 @@ tests/js/mdstructure.js 655
 tests/js/keymap.js 356
 tests/js/focus.js 843
 tests/js/mounts.js 349
-tests/js/menu.js 597
+tests/js/menu.js 669
 tests/js/nav.js 478
 tests/js/rail.js 471
 tests/js/picker.js 352

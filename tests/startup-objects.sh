@@ -150,6 +150,6 @@ for early in cold warming; do
         grep -aE 'STARTUP_OBJECTS|TypeError|ReferenceError|ERROR' "$early_log"
         exit 1
     fi
-    grep -a 'STARTUP_OBJECTS PASS' "$early_log"
+    grep -aE 'STARTUP_OBJECTS (PASS|PARENT)' "$early_log"
 done
 printf 'startup-objects: 1 passed, 0 failed\n'

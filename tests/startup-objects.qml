@@ -160,6 +160,15 @@ ShellRoot {
             return root.finish(false, "early menu close did not restore focus")
         host.openBackground(Qt.point(60, 60))
         host.close()
+        var originalParent = host.parent
+        var secondParent = Qt.createQmlObject('import QtQuick; Item { anchors.fill: parent }', originalParent, "menu-parent-check")
+        host.parent = secondParent
+        var followed = menu.parent === secondParent
+        host.parent = originalParent
+        followed = followed && menu.parent === originalParent
+        secondParent.destroy()
+        if (!followed) return root.finish(false, "loaded menu parent did not follow host parent")
+        console.log("STARTUP_OBJECTS PARENT follows=1")
         if (!menu || host.item !== menu || host.status !== Loader.Ready
                 || (root.census().counts.ContextMenu || 0) !== 1)
             return root.finish(false, "early menu demand did not retain one ready root")

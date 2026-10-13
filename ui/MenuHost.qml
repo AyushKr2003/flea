@@ -122,7 +122,7 @@ Item {
     }
     function configure() {
         if (String(visual.source).length > 0) return
-        var values = { parent: root.parent }
+        var values = { parent: root.liveInput("parent") }
         for (var i = 0; i < root.inputNames.length; i++) values[root.inputNames[i]] = root.liveInput(root.inputNames[i])
         visual.setSource("ContextMenu.qml", values)
     }

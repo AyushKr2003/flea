@@ -68,12 +68,12 @@ cost_run() {
         QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 \
         timeout "$cost_limit_seconds" dbus-run-session -- qs -p "$cost_root/config" 2>&1
 }
-# Each process opens four menus, its own first one cold: the key path first, then the click path first.
-readonly cost_limit_seconds=60 cost_qs_status=143 cost_checks=29
+# Each process opens once before warming, then four alternating ready menus; key first, then click first.
+readonly cost_limit_seconds=60 cost_qs_status=143 cost_checks=39
 for first in key click; do
     cost_out=$(cost_run "$first")
     cost_status=$?
-    # Sample input: "  INFO qml: MENUOPEN open 0 key reads=2 builds=2 frame_ms=11" then "MENUOPEN PASS 29 checks".
+    # Sample input: "  INFO qml: MENUOPEN open 0 key reads=2 builds=2 frame_ms=11" then "MENUOPEN PASS 39 checks".
     if [ "$cost_status" -ne "$cost_qs_status" ] || ! printf '%s\n' "$cost_out" | grep -aq "MENUOPEN PASS $cost_checks checks" \
             || printf '%s\n' "$cost_out" | grep -aq 'MENUOPEN FAIL'; then
         printf 'FAIL a menu opened by %s read its rows widths once per row, or the leg did not finish (qs exit %s)\n' "$first" "$cost_status"
@@ -85,6 +85,6 @@ for first in key click; do
         printf 'FAIL the open-cost leg logged a warning\n%s\n' "$cost_warnings" | head -10
         exit 1
     fi
-    printf '%s\n' "$cost_out" | grep -aoE 'MENUOPEN (open|PREWARM) .*'
+    printf '%s\n' "$cost_out" | grep -aoE 'MENUOPEN (early|open|PREWARM) .*'
 done
 printf 'MENUOPEN PASS both paths\n'
