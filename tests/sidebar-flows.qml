@@ -459,6 +459,14 @@ ShellRoot {
             check("lit-place: the cursor on Trash, not lit, draws its frame and the IPC does not read it as current", [root.railIndices("frame"), root.railLit(), root.ipc(true).trashRail().current], [[root.railTrash], [root.railRecent], false])
             rail.cursorIndex = root.railRecent
             check("lit-place: the cursor on the lit row draws both", [root.railIndices("frame"), root.railLit()], [[root.railRecent], [root.railRecent]])
+            rail.pointerFocus = true
+            check("lit-place: a pointer press on the focused rail hides the frame and keeps the lit place", [root.railIndices("frame"), root.railLit()], [[], [root.railRecent]])
+            rail.pointerFocus = false
+            // Trash always offers its menu, where Home's rows sit behind the Places menu switch.
+            rail.openRailMenu(root.railTrash, Qt.point(40, 80))
+            check("lit-place: a rail menu open on a row draws no frame there", [rail.menu.opened, rail.cursorIndex, root.railIndices("frame")], [true, root.railTrash, []])
+            rail.menu.close()
+            check("lit-place: closing the menu gives the focused rail its frame back on the menu's row", root.railIndices("frame"), [root.railTrash])
             pane.focusView = "list"
             check("lit-place: giving the rail's focus up takes the frame away and leaves the lit place", [root.railIndices("frame"), root.railLit()], [[], [root.railRecent]])
             pane.closeRecent()

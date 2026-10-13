@@ -97,7 +97,7 @@ tests/js/search.js 336
 tests/button-members.qml 515
 tests/chromering.qml 413
 tests/columnrow-geom.qml 426
-tests/dialog-board.qml 654
+tests/dialog-board.qml 663
 tests/columnscost.qml 416
 tests/rowcost.qml 417
 tests/gridmark.qml 419
@@ -119,7 +119,7 @@ tests/js/runfile.js 305
 tests/ring-bounds.qml 702
 tests/menu-fit.qml 446
 tests/search-live.qml 417
-tests/sidebar-flows.qml 675
+tests/sidebar-flows.qml 683
 tests/touchpad.qml 882
 tests/xwsettings-tabs.qml 379
 ui/Backend.qml 576
@@ -152,15 +152,15 @@ ui/PermissionsDialog.qml 658
 ui/PickerWindow.qml 797
 ui/Preview.qml 863
 ui/PreviewColumn.qml 589
-ui/PickerChrome.qml 429
+ui/PickerChrome.qml 441
 ui/DeviceMounts.qml 537
 ui/PreviewMarkdown.qml 625
 ui/Row.qml 496
 ui/SettingsPanel.qml 547
 ui/SettingsRow.qml 409
-ui/Sidebar.qml 710
+ui/Sidebar.qml 713
 ui/StatusBar.qml 477
-ui/Theme.qml 472
+ui/Theme.qml 475
 ui/TrashView.qml 472
 ui/UnlockDialog.qml 450
 ui/ViewState.qml 542

@@ -3,6 +3,7 @@ import qs.Commons
 import "." as Flea
 import "js/Format.js" as Format
 import "js/PropertyFacts.js" as PropertyFacts
+import "js/Tags.js" as Tags
 
 // Menu-only actions share the existing card, field and button language.
 FocusScope {
@@ -308,25 +309,60 @@ FocusScope {
                         ["Size", "", "size"],
                         ...(root.facts.directory ? [["Contains", "", "contains"]] : []),
                         ...(root.extraPairs || []),
+                        // A foreign word stays untouched and shows here, so a tag another app set is visible.
+                        ...((root.facts.tags || []).length > 0 ? [["Tags", (root.facts.tags || []).join(", ")]] : []),
                         ["Modified", Format.date(root.facts.modified)],
                         ["Permissions", root.facts.mode],
                         ["Owner", (root.facts.owner || "Unknown") + " (uid " + root.facts.uid + ")"],
-                        ["Group", "gid " + root.facts.gid]
-                        // A foreign word stays untouched and shows here, so a tag another app set is visible.
-                    ].concat((root.facts.tags || []).length > 0 ? [["Tags", (root.facts.tags || []).join(", ")]] : [])
-                        .concat(root.facts.symlink ? [["Link target", root.facts.target]] : []) : []
+                        ["Group", "gid " + root.facts.gid],
+                        ...(root.facts.symlink ? [["Link target", root.facts.target]] : [])
+                    ] : []
                     Column {
+                        id: pair
                         required property var modelData
+                        // The Tags value is drawn as swatch and name per tag, so its plain string stays only as the model's text.
+                        readonly property bool tagged: modelData[0] === "Tags"
                         width: body.holderWidth
                         Text { width: parent.width; text: parent.modelData[0]; textFormat: Text.PlainText; color: Theme.color.muted; font { family: Theme.font.family; pixelSize: Theme.font.caption } }
                         Text {
                             readonly property var line: parent.modelData.length > 2 ? root.liveLines[parent.modelData[2]] : null
+                            visible: !pair.tagged
                             width: parent.width
                             text: line ? PropertyFacts.styled(line, Theme.color.muted) : parent.modelData[1]
                             textFormat: line ? Text.StyledText : Text.PlainText
                             wrapMode: Text.WrapAnywhere
                             color: Theme.color.foreground
                             font { family: Theme.font.family; pixelSize: Theme.font.body }
+                        }
+                        Flow {
+                            visible: pair.tagged
+                            width: parent.width
+                            spacing: Theme.spacing.tagPairGap
+                            Repeater {
+                                model: pair.tagged ? root.facts.tags : []
+                                Row {
+                                    id: tagItem
+                                    required property string modelData
+                                    spacing: Theme.spacing.tagNameGap
+                                    // A name Flea does not know is plain text with no swatch; a digit fallback keeps the 14 px square its digit needs.
+                                    Flea.TagSwatch {
+                                        size: Theme.tag.fallback ? Tags.SWATCH_SIZE : Tags.PAIR_SWATCH_SIZE
+                                        visible: Tags.NAMES.indexOf(tagItem.modelData) >= 0
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        swatch: tagItem.modelData
+                                        fallback: Theme.tag.fallback
+                                        digit: Tags.keyFor(tagItem.modelData)
+                                        tagColors: Theme.tag.menuColors
+                                    }
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: tagItem.modelData
+                                        textFormat: Text.PlainText
+                                        color: Theme.color.foreground
+                                        font { family: Theme.font.family; pixelSize: Theme.font.body }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

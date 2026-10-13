@@ -61,7 +61,7 @@ Column {
                     spacing: Theme.spacing.gap
                     Flea.Glyph { width: Theme.markSize; height: parent.height; name: "drive"; color: Theme.color.foreground }
                     Text {
-                        width: Math.max(0, parent.width - Theme.markSize - driveDetail.width - driveSize.width - 2 * parent.spacing)
+                        width: Math.max(0, parent.width - Theme.markSize - driveDetail.width - driveSize.width - 3 * parent.spacing)
                         anchors.verticalCenter: parent.verticalCenter
                         text: row ? Flash.driveName(row, root.drives) : ""
                         textFormat: Text.PlainText

@@ -22,7 +22,9 @@ Item {
     property bool focusOnOpen: false
     // Right Arrow from a row that releases puts the keyboard on its eject mark; the cursor row draws the frame, and a move, a lost focus or a vanished mark ends it.
     property bool markFocused: false
-    onFocusedChanged: if (!root.focused) root.markFocused = false
+    // A pointer press on a focused rail hides the keyboard frame until the next rail key, as a focus ring shows only for the keyboard.
+    property bool pointerFocus: false
+    onFocusedChanged: if (!root.focused) { root.markFocused = false; root.pointerFocus = false }
     // ui/Pane.qml's one ui/ContextMenu.qml, handed in rather than built here: a second instance in
     // this tree took the keyboard away from the list, see ui/SidebarRow.qml's own note.
     property var menu: null
@@ -30,8 +32,8 @@ Item {
     property var cursorEntries: []
     // The row that holds what the rail pane shows. It is settled only once no listing is out, so it moves in the frame the listing swaps.
     property int litIndex: -1
-    // The menu sets cursorIndex on open, so the cursor row is also the row an open rail menu is on.
-    readonly property bool cursorDrawn: RailKeys.cursorDrawn(root.focused, root.menu && root.menu.opened && root.menu.forRail)
+    // The menu sets cursorIndex on open, so Escape out of it leaves the cursor on its row; the frame stays off while that menu is open.
+    readonly property bool cursorDrawn: RailKeys.cursorDrawn(root.focused, root.menu && root.menu.opened && root.menu.forRail, root.pointerFocus)
     function settleLit() {
         var pane = root.navigationPane
         if (pane === null || pane.listInFlight)
@@ -698,7 +700,8 @@ Item {
         z: 1
         PointHandler {
             acceptedButtons: Qt.AllButtons
-            onActiveChanged: if (active) root.pressed()
+            // After pressed(), which can hand an overlay rail the keyboard, so the press that claimed it still hides the frame.
+            onActiveChanged: if (active) { root.pressed(); if (root.focused) root.pointerFocus = true }
         }
     }
     // The rail edge, one Divider shared with the column edges.

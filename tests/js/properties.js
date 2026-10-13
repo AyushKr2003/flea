@@ -37,7 +37,12 @@ function run(check) {
     check("an untagged link ends with its Link target", JSON.stringify(untaggedLink[untaggedLink.length - 1]),
         JSON.stringify(["Link target", "/fixture/real.txt"]))
     var taggedLink = pairsOf(linkFacts(["Red"]), Format)
-    check("a tagged link shows Tags, then Link target", names(taggedLink.slice(-2)), "Tags,Link target")
+    check("a tagged link ends with Link target and draws Tags after Size", names(taggedLink.slice(-2)) + "|" + names(taggedLink.slice(2, 4)), "Group,Link target|Size,Tags")
+    // The board's Tagged file draws Tags right after Size, and after Contains for a folder.
+    check("a tagged file orders its pairs as the board does", names(tagged), "Path,Type,Size,Tags,Modified,Permissions,Owner,Group")
+    var folderFacts = propertiesFacts(["Red"])
+    folderFacts.facts.directory = true
+    check("a tagged folder puts Tags after Contains", names(pairsOf(folderFacts, Format)), "Path,Type,Size,Contains,Tags,Modified,Permissions,Owner,Group")
     // The video and photo pairs sit between Size and Modified, as the board draws them; a card with none is unchanged.
     function withExtra(extraPairs) {
         var reply = propertiesFacts([])
@@ -49,4 +54,9 @@ function run(check) {
         "Path,Type,Size,Codecs,Bit rate,Modified,Permissions,Owner,Group")
     check("the photo pairs land between Size and Modified", names(pairsOf(withExtra([["Camera", "x"], ["Lens", "y"], ["Exposure", "z"], ["Taken", "t"]]), Format)),
         "Path,Type,Size,Camera,Lens,Exposure,Taken,Modified,Permissions,Owner,Group")
+    // Tags follow the extra pairs and come before Modified, so a card with both keeps the board's order.
+    var taggedVideo = withExtra([["Codecs", "H.264 · AAC"], ["Bit rate", "8.1 Mb/s"]])
+    taggedVideo.facts.tags = ["Red"]
+    check("a tagged card puts Tags after the extra pairs", names(pairsOf(taggedVideo, Format)),
+        "Path,Type,Size,Codecs,Bit rate,Tags,Modified,Permissions,Owner,Group")
 }

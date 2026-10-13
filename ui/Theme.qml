@@ -99,6 +99,9 @@ Singleton {
         readonly property int rowPaddingX: Math.round(Style.spacing.rowPaddingX * root.sizeRatio)
         readonly property int rowPaddingY: Math.round(Style.spacing.controlPaddingY * root.sizeRatio)
         readonly property int gap: Math.round(Style.spacing.rowGap * root.sizeRatio)
+        // Properties040's Tags pair: 6 px from a swatch to its name and 16 px between tags at text size 14.
+        readonly property int tagNameGap: Math.round(Style.space(5) * root.sizeRatio)
+        readonly property int tagPairGap: Math.round(Style.space(14) * root.sizeRatio)
     }
 
     // One glyph's advance in a monospace face is every glyph's advance, so this sizes every fixed column; row names budget off bodyAdvance, grid captions off bodySmallAdvance.
