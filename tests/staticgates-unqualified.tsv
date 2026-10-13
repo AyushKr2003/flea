@@ -1714,22 +1714,22 @@ ui/PreviewSwap.qml	267	root	Declared QML id; component context access is valid a
 ui/PreviewSwap.qml	268	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewSwap.qml	268	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewSwap.qml	270	root	Declared QML id; component context access is valid at runtime.
-ui/QuickLookPrepare.qml	90	proc	Quickshell type unresolved when its module is missing.
-ui/QuickLookPrepare.qml	90	proc	Quickshell type unresolved when its module is missing.
-ui/QuickLookPrepare.qml	90	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	91	proc	Quickshell type unresolved when its module is missing.
-ui/QuickLookPrepare.qml	114	root	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	91	proc	Quickshell type unresolved when its module is missing.
+ui/QuickLookPrepare.qml	91	root	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	92	proc	Quickshell type unresolved when its module is missing.
 ui/QuickLookPrepare.qml	115	root	Declared QML id; component context access is valid at runtime.
-ui/QuickLookPrepare.qml	119	sizer	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	116	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	120	sizer	Declared QML id; component context access is valid at runtime.
-ui/QuickLookPrepare.qml	122	root	Declared QML id; component context access is valid at runtime.
-ui/QuickLookPrepare.qml	122	sizer	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	121	sizer	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	123	root	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	123	sizer	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	124	root	Declared QML id; component context access is valid at runtime.
-ui/QuickLookPrepare.qml	141	root	Declared QML id; component context access is valid at runtime.
-ui/QuickLookPrepare.qml	164	root	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	125	root	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	142	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	165	root	Declared QML id; component context access is valid at runtime.
-ui/QuickLookPrepare.qml	202	root	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	166	root	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	203	root	Declared QML id; component context access is valid at runtime.
 ui/RailPlaces.qml	32	reload	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
 ui/RailPlaces.qml	33	dirs	Quickshell type unresolved when its module is missing.
 ui/RailPlaces.qml	33	root	Declared QML id; moved Home data updates the singleton from its FileView.
@@ -3281,16 +3281,16 @@ ui/PreviewSwap.qml	267	root	Declared QML id; component context access is valid a
 ui/PreviewSwap.qml	268	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewSwap.qml	268	root	Declared QML id; component context access is valid at runtime.
 ui/PreviewSwap.qml	270	root	Declared QML id; component context access is valid at runtime.
-ui/QuickLookPrepare.qml	90	root	Declared QML id; component context access is valid at runtime.
-ui/QuickLookPrepare.qml	114	root	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	91	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	115	root	Declared QML id; component context access is valid at runtime.
-ui/QuickLookPrepare.qml	122	root	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	116	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	123	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	124	root	Declared QML id; component context access is valid at runtime.
-ui/QuickLookPrepare.qml	141	root	Declared QML id; component context access is valid at runtime.
-ui/QuickLookPrepare.qml	164	root	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	125	root	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	142	root	Declared QML id; component context access is valid at runtime.
 ui/QuickLookPrepare.qml	165	root	Declared QML id; component context access is valid at runtime.
-ui/QuickLookPrepare.qml	202	root	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	166	root	Declared QML id; component context access is valid at runtime.
+ui/QuickLookPrepare.qml	203	root	Declared QML id; component context access is valid at runtime.
 ui/Row.qml	141	root	Declared QML id; component context access is valid at runtime.
 ui/Row.qml	142	root	Declared QML id; component context access is valid at runtime.
 ui/Row.qml	142	root	Declared QML id; component context access is valid at runtime.

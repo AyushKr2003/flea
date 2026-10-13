@@ -1,5 +1,6 @@
 .pragma library
 
+.import "Lists.js" as Lists
 .import "Kinds.js" as Kinds
 .import "ExtThumbs.js" as ExtThumbs
 .import "Contrast.js" as Contrast
@@ -102,7 +103,7 @@ function formulasIn(blocks, limit) {
             var b = list[i]
             if (!b)
                 continue
-            if (Array.isArray(b)) {
+            if (Lists.isList(b)) {
                 walk(b)
                 continue
             }

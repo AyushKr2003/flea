@@ -111,6 +111,7 @@ js/Input.js
 js/KeyName.js
 js/Keymap.js
 js/Kinds.js
+js/Lists.js
 js/LocalSend.js
 js/MakeDefault.js
 js/MarkdownPrepared.js
@@ -167,4 +168,4 @@ js/Trash.js
 js/TrashDates.js
 js/UiState.js
 js/Update.js
-bytes 1627754
+bytes 1628263

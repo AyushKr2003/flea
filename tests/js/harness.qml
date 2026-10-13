@@ -100,6 +100,7 @@ import "picker.js" as PickerSuite
 import "pickerpath.js" as PickerPathSuite
 import "previewkeys.js" as PreviewKeysSuite
 import "compare.js" as CompareSuite
+import "sequences.js" as SequencesSuite
 import "previewask.js" as PreviewAskSuite
 import "places.js" as PlacesSuite
 import "rail.js" as RailSuite
@@ -204,7 +205,7 @@ Item {
             ["phones", PhonesSuite],
             ["picker", PickerSuite],
             ["pickerpath", PickerPathSuite],
-            ["previewkeys", PreviewKeysSuite], ["compare", CompareSuite], ["previewask", PreviewAskSuite], ["mdprepared", MdPreparedSuite], ["previewswap", PreviewSwapSuite], ["quicklookrect", QuickLookRectSuite],
+            ["previewkeys", PreviewKeysSuite], ["compare", CompareSuite], ["sequences", SequencesSuite], ["previewask", PreviewAskSuite], ["mdprepared", MdPreparedSuite], ["previewswap", PreviewSwapSuite], ["quicklookrect", QuickLookRectSuite],
             ["protocols", ProtocolsSuite], ["railentries", RailEntriesSuite], ["railkeys", RailKeysSuite],
             ["recent", RecentSuite],
             ["recentmode", RecentModeSuite],
@@ -228,7 +229,7 @@ Item {
                 if (argv[suiteIndex] === "--") {
                     suiteIndex += 1
                 }
-                if (suiteIndex < argv.length) {
+                if (suiteIndex < argv.length && argv[suiteIndex].indexOf("--qt-version=") !== 0) {
                     only = argv[suiteIndex]
                     hasOnly = true
                 }
