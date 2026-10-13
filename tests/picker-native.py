@@ -504,7 +504,7 @@ def test_changed():
 
 def test_save():
     directory = Request("SP06-save-directory", "SaveFile", current_name=GLib.Variant("s", "folder")).opened()
-    directory.until("directory is not offered as a replaceable file", lambda state: not state["canAccept"] and not state["collision"] and "is a directory" in state["saveError"])
+    directory.until("directory is not offered as a replaceable file", lambda state: not state["canAccept"] and not state["collision"] and "A folder has this name; choose another name." in state["saveError"])
     directory.cancel()
     save = Request("SP06-save", "SaveFile", current_file=GLib.Variant("ay", os.fsencode(large / "zz-last.png") + b"\0")).opened()
     save.until("current_file collision outside initial window", lambda state: state["saveReady"] and state["collision"] and state["saveName"] == "zz-last.png")
@@ -550,7 +550,7 @@ def test_failure():
     guard(parent).chmod(0)
     try:
         denied.key("-k", "Return")
-        expected = f"Could not inspect {target}: permission denied"
+        expected = f"Could not inspect {target}: permission denied."
         refused = denied.until("kernel permission refusal is plain and retains the picker", lambda state:
                                not state["marksBusy"] and state["messageError"] and state["message"] == expected)
         check("refused cursor choice has no accepted URI", not refused["marks"] and denied.result is None, refused["marks"])
