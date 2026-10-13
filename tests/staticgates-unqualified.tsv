@@ -197,8 +197,8 @@ ui/ColumnsArea.qml	435	root	Declared QML id; component context access is valid a
 ui/ColumnsArea.qml	435	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnsArea.qml	437	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnsArea.qml	437	root	Declared QML id; component context access is valid at runtime.
-ui/CompareView.qml	245	root	Declared QML id; component context access is valid at runtime.
-ui/CompareView.qml	246	view	Declared QML id; component context access is valid at runtime.
+ui/CompareView.qml	228	root	Declared QML id; component context access is valid at runtime.
+ui/CompareView.qml	229	view	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	560	rows	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	562	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	563	root	Declared QML id; component context access is valid at runtime.
@@ -2321,8 +2321,8 @@ ui/ColumnsArea.qml	435	root	Declared QML id; component context access is valid a
 ui/ColumnsArea.qml	435	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnsArea.qml	437	root	Declared QML id; component context access is valid at runtime.
 ui/ColumnsArea.qml	437	root	Declared QML id; component context access is valid at runtime.
-ui/CompareView.qml	245	root	Declared QML id; component context access is valid at runtime.
-ui/CompareView.qml	246	view	Declared QML id; component context access is valid at runtime.
+ui/CompareView.qml	228	root	Declared QML id; component context access is valid at runtime.
+ui/CompareView.qml	229	view	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	560	rows	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	562	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	563	root	Declared QML id; component context access is valid at runtime.

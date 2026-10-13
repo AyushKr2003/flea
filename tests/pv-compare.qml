@@ -5,6 +5,7 @@ import Quickshell
 import "flea" as Flea
 import "flea/js/Compare.js" as Compare
 import "flea/js/Focus.js" as Focus
+import "flea/js/Icons.js" as Icons
 import "flea/js/Menu.js" as Menu
 import "flea/js/PreviewKeys.js" as PreviewKeys
 
@@ -65,6 +66,8 @@ ShellRoot {
     }
     function textsOf(row) { return row.children.filter(function (n) { return n.text !== undefined }) }
     function same(a, b) { return Qt.colorEqual(a, b) }
+    // A part of the shared button, found by the objectName ui/DialogButton.qml gives it.
+    function named(scope, name) { return root.descendants(scope).filter(function (n) { return n.objectName === name })[0] }
     function sentenceShown() {
         var shown = root.descendants(root.item()).filter(function (n) { return n.text !== undefined && n.visible && n.horizontalAlignment === Text.AlignHCenter })
         return shown.length === 1 ? shown[0].text : "(" + shown.length + " sentences)"
@@ -80,15 +83,16 @@ ShellRoot {
     }
 
     // Opens a pair and waits for its one ask; each step's checks run once its closure answers true.
-    function openPair(a, b) {
-        look.openCompare(a, b, "text-markdown")
+    function openPair(a, b, icon) {
+        look.openCompare(a, b, icon || "text-markdown")
         return function () { return stub.asked.length === root.expectedAsks }
     }
     property int expectedAsks: 0
 
-    function refusal(name, a, b, state, sentence, title) {
+    // icon and mark are given where the bar's mark is the point: a .log row's icon must draw the mark its row draws.
+    function refusal(name, a, b, state, sentence, title, icon, mark) {
         return [
-            function () { root.expectedAsks += 1; return root.openPair(a, b) },
+            function () { root.expectedAsks += 1; return root.openPair(a, b, icon) },
             function () {
                 root.check(name + " asks once for its open", [stub.asked.length, stub.asked[stub.asked.length - 1].a, stub.asked[stub.asked.length - 1].b], [root.expectedAsks, a, b])
                 root.check(name + " holds the card back until the answer", [look.revealed, look.lookEmptyFrames], [false, 0])
@@ -99,6 +103,7 @@ ShellRoot {
                 root.check(name + " says its sentence in the body", root.sentenceShown(), sentence)
                 root.check(name + " title names the two files and no count", root.item().barGeometry().title.text, title)
                 var g = root.item().barGeometry()
+                if (icon) root.check(name + " bar mark is the mark its row draws", [g.markName, Icons.glyphForRow(icon, 0o100644)], [mark, mark])
                 root.check(name + " has no Copy patch button and no rows", [g.copy.visible, root.rowItems().length], [false, 0])
                 var before = opener.copies.length
                 PreviewKeys.act("copyPatch", { preview: look })
@@ -137,8 +142,11 @@ ShellRoot {
             root.check("the title follows the mark by 9", g.title.x, g.mark.x + g.mark.width + 9)
             root.check("the title reads the board's count", g.title.text, "notes-a.md and notes-b.md · 12 lines differ")
             root.check("the title is the foreground", root.same(g.title.color, Flea.Theme.color.foreground), true)
-            root.check("Copy patch is 20 high with 8 either side of its label", [g.copy.height, g.copy.width - g.copyLabel.implicitWidth], [20, 2 * 8])
-            root.check("Copy patch has a 1 px muted frame and a foreground caption", [g.copy.border.width, root.same(g.copy.border.color, Flea.Theme.color.muted), root.same(g.copyLabel.color, Flea.Theme.color.foreground), g.copyLabel.font.pixelSize], [1, true, true, Flea.Theme.font.caption])
+            // The shared button: its frame is the board's 20 high, and its caption the board's 12, with the 1 px frame inside 8 either side.
+            var frame = root.named(g.copy, "buttonFrame"), caption = root.named(g.copy, "buttonLabel")
+            root.check("Copy patch is the shared strip button, a 20 high frame", frame.height, 20)
+            root.check("Copy patch has 8 either side of its caption inside a 1 px muted frame", [frame.width - caption.implicitWidth, frame.border.width, root.same(frame.border.color, Flea.Theme.color.muted)], [2 * 8 + 2, 1, true])
+            root.check("Copy patch has a foreground caption at the board's 12", [caption.text, root.same(caption.color, Flea.Theme.color.foreground), caption.font.pixelSize], ["Copy patch", true, Flea.Theme.font.caption])
             root.check("the close sits in its 24 slot, 9 after Copy patch, 14 from the edge", [g.close.width, g.close.x - (g.copy.x + g.copy.width), g.bar.width - (g.close.x + g.close.width)], [24, 9, 14])
             root.check("the body holds the hunk header and eighteen lines", rows.length, 19)
             var pitch = root.item().rowHeight
@@ -154,6 +162,14 @@ ShellRoot {
             root.check("the inks are the code renderer's red, green and cyan", [root.same(inks[1], Flea.Theme.color.foreground), root.same(inks[2], Flea.Theme.color.foreground), root.same(inks[6], Flea.Theme.color.foreground)], [false, false, false])
             root.check("a row is text alone, with no fill", rows.every(function (r) { return r.children.every(function (n) { return String(n).indexOf("Rectangle") < 0 }) }), true)
             root.check("the text is plain, whitespace kept", [removed[3].textFormat, added[3].text], [Text.PlainText, "Thumbnails stay cache-only on phones."])
+            // j and k, Down and Up, neither move the listing cursor nor swap either of the overlay's two files.
+            var keyRoot = { preview: look, cursorIndex: 0 }
+            PreviewKeys.act("cursorDown", keyRoot)
+            PreviewKeys.act("cursorUp", keyRoot)
+            root.check("j and k leave the cursor and both files alone", [keyRoot.cursorIndex, look.path, look.comparePath], [0, root.stubA, root.stubB])
+            // The diff scrolls by the text preview's own wheel handler: one FastScrollHandler parented to the list, not the bars' own.
+            var list = root.item().children.filter(function (n) { return n.contentItem !== undefined })[0]
+            root.check("the diff's wheel is the text preview's FastScrollHandler", root.descendants(root.item()).filter(function (n) { return n.objectName === "fleaScroll" && n.parent === list }).length, 1)
             // y and the button each copy the whole patch once, headers included.
             PreviewKeys.act("copyPatch", { preview: look })
             root.check("y copies the whole patch once", [opener.copies.length, opener.copies[0]], [1, root.stubPatch])
@@ -172,7 +188,7 @@ ShellRoot {
         }
     ], root.refusal("identical", "/w/notes-a.md", "/w/notes-b.md", "identical", "The two files are identical.", "notes-a.md and notes-b.md"),
        root.refusal("binary", "/w/shot-a.png", "/w/shot-b.png", "binary", "These files are binary, so there is nothing to compare.", "shot-a.png and shot-b.png"),
-       root.refusal("over", "/w/dump-a.log", "/w/dump-b.log", "over", "These files are over 1 MiB, too large to compare.", "dump-a.log and dump-b.log"),
+       root.refusal("over", "/w/dump-a.log", "/w/dump-b.log", "over", "These files are over 1 MiB, too large to compare.", "dump-a.log and dump-b.log", "text-x-generic", "file-text"),
        [
         function () {
             root.check("each open made exactly one ask", stub.asked.length, 4)

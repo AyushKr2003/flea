@@ -88,7 +88,7 @@ Item {
 
     // The render suite reads the bar's order and size off these, the way MarkdownPane hands its bar over.
     function barGeometry() {
-        return { bar: bar, mark: barMark, markName: barMark.name, title: barTitle, copy: copyButton, copyLabel: copyLabel, close: barClose, ready: root.answer !== "" }
+        return { bar: bar, mark: barMark, markName: barMark.name, title: barTitle, copy: copyButton, close: barClose, ready: root.answer !== "" }
     }
 
     onPathAChanged: root.fresh()
@@ -145,35 +145,18 @@ Item {
             elide: Text.ElideMiddle
         }
 
-        Rectangle {
+        // The strip's shared button, so its rest, hover, focus, press and disabled looks are the recipe every strip button draws.
+        Flea.DialogButton {
             id: copyButton
             visible: root.hasPatch
             anchors.right: barClose.left
             anchors.rightMargin: Theme.spacing.gap
             anchors.verticalCenter: parent.verticalCenter
-            height: root.boardPx(20)
-            width: copyLabel.implicitWidth + 2 * root.boardPx(8)
-            color: "transparent"
-            border.width: Theme.spacing.hairline
-            border.color: Theme.color.muted
-            Accessible.role: Accessible.Button
-            Accessible.name: copyLabel.text
-            Accessible.onPressAction: root.copyPatch()
-
-            Text {
-                id: copyLabel
-                anchors.centerIn: parent
-                text: "Copy patch"
-                color: Theme.color.foreground
-                font.family: Theme.font.family
-                font.pixelSize: Theme.font.caption
-                textFormat: Text.PlainText
-            }
-
-            TapHandler {
-                gesturePolicy: TapHandler.ReleaseWithinBounds
-                onTapped: root.copyPatch()
-            }
+            label: "Copy patch"
+            inStrip: true
+            // Compare.html pads the label 8 either side of its 1 px frame; the recipe's own padding is the gap.
+            horizontalPadding: root.boardPx(8)
+            onActivated: root.copyPatch()
         }
 
         Flea.ChromeButton {
@@ -297,6 +280,12 @@ Item {
                 textFormat: Text.PlainText
                 wrapMode: Text.NoWrap
             }
+        }
+
+        // The wheel and momentum are the text preview's own, so the diff takes the same notch as the code it sits beside.
+        Flea.FastScrollHandler {
+            parent: view
+            flickable: view
         }
 
         Flea.ViewportScrollBars {
