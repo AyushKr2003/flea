@@ -139,10 +139,10 @@ fn a_killed_tool_is_reported_as_killed_rather_than_as_a_bad_archive() {
     let killed = run_boxed_cancellable_capped("archive",
                            vec!["/usr/bin/sh".to_string(), "-c".to_string(), "kill -9 $$".to_string()],
                            d.path(), &mut work, &idle).unwrap_err();
-    assert!(killed.msg.contains("killed by signal SIGKILL (9)"), "a kill must name the signal: {}", killed.msg);
+    assert!(killed.msg.contains("stopped before it finished (signal SIGKILL)"), "a kill must name the signal: {}", killed.msg);
     assert!(!killed.msg.contains("failed"), "and must not read as the old empty-stderr fallback: {}", killed.msg);
     let exited = run_boxed_cancellable_capped("archive", vec!["/usr/bin/false".to_string()], d.path(), &mut work, &idle).unwrap_err();
-    assert!(exited.msg.contains("exited with status 1"), "an exit is reported as an exit: {}", exited.msg);
+    assert!(exited.msg.contains("could not finish (exit status 1)"), "an exit is reported as an exit: {}", exited.msg);
 }
 
 // The parser must cancel while a real jailed child holds stdout open after one bounded line.
@@ -190,7 +190,7 @@ fn the_archive_jail_has_no_cpu_cap_but_a_boxed_burner_is_stopped() {
     let burner = || vec!["/usr/bin/python3".to_string(), "-c".to_string(),
         "import resource,time\ns=time.time()\nx=0\nwhile True:\n x+=1\n if x%200000==0:\n  u=resource.getrusage(resource.RUSAGE_SELF)\n  if u.ru_utime+u.ru_stime>3: break\n  if time.time()-s>120: break".to_string()];
     let stopped = run_boxed_cancellable_capped_with_cpu("convert", burner(), d.path(), &mut work, &cancel, 1).unwrap_err();
-    assert!(stopped.msg.contains("killed by signal"),
+    assert!(stopped.msg.contains("stopped before it finished (signal"),
             "a boxed job past its bound must be stopped, not silent: {}", stopped.msg);
 }
 

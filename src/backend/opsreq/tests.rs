@@ -1,7 +1,7 @@
 // The opsreq test module, out of line so src/backend/opsreq.rs stays inside the file budget.
 use super::*;
 use crate::backend::testdir::TestDir;
-use crate::backend::undo::Journal;
+use crate::backend::undo::{self, Journal};
 use std::os::unix::fs::PermissionsExt;
 use std::sync::mpsc::{channel, Receiver};
 

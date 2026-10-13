@@ -1,7 +1,7 @@
 // The operations request layer: the response lines, and the one thread an operation runs on.
 use crate::backend::collide::{cancelled, Place, Policy, Skipping, CANCELLED};
 use crate::backend::ops;
-use crate::backend::undo::{self, Entry, ItemIdentity, Step};
+use crate::backend::undo::{Entry, ItemIdentity, Step};
 use crate::error::{from_io, io_message, FleaError};
 use crate::json::escape;
 use std::collections::HashMap;

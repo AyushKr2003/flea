@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 impl Session {
     // Patches the index for a backend write under the scope; false when outside it or its mount does not answer.
+    #[cfg(test)]
     pub(crate) fn patch_after_write(&mut self, path: &Path) -> bool {
         self.patch_after_writes(&[path.to_path_buf()])
     }

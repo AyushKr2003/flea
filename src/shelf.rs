@@ -222,7 +222,7 @@ impl Shelf {
         let held = self.held()?;
         let next = Json::Obj(vec![("items".to_string(), Json::Arr(change(held)))]);
         let written = uistore::replace(&self.pile, &jsondoc::render(&next));
-        uistore::unlock(&lock).map_err(|e| format!("{} could not be unlocked: {}", &self.pile_lock.display(), io_message(&e)))?;
+        uistore::unlock(&lock).map_err(|e| format!("{} could not be unlocked: {}", self.pile_lock.display(), io_message(&e)))?;
         written
     }
 

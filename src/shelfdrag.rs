@@ -83,7 +83,7 @@ impl Shelf {
             .unwrap_or(Json::Obj(Vec::new()));
         let next = change(&current)?;
         let written = uistore::replace(&self.drags, &jsondoc::render(&next));
-        uistore::unlock(&lock).map_err(|e| format!("{} could not be unlocked: {}", &self.lock.display(), io_message(&e)))?;
+        uistore::unlock(&lock).map_err(|e| format!("{} could not be unlocked: {}", self.lock.display(), io_message(&e)))?;
         written
     }
 }
