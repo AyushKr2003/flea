@@ -36,7 +36,7 @@ cap_raw_fixture() {
     fi
     # UTC is local to the launched case, so Modified has the board's exact text in every session timezone.
     TZ=UTC touch -d '2026-09-18 20:10:00' "$cap_raw_root/raw/"*.DNG || fail "raw: cannot stamp the fixture"
-    export TZ=UTC LC_ALL=C XDG_CACHE_HOME="$cap_raw_root/cache"
+    export TZ=UTC LC_ALL=C.UTF-8 XDG_CACHE_HOME="$cap_raw_root/cache"
 }
 
 cap_raw_launch() {
