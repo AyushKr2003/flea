@@ -54,7 +54,7 @@ fn rows_line_in(
     // Tags are read for exactly the rows a window emits, and never on a network or phone mount, where each read is a round trip.
     let tag_ok = !matches!(extclass::classify_in(base, body), "network" | "phone");
     // A type with no POSIX modes reports the mount's 0755 for every file, so its execute bits say nothing; Row.p keeps the reported mode.
-    let real_modes = mountinfo::mount_type_in(base, body).map_or(true, |fstype| mountinfo::modes_are_real(&fstype));
+    let real_modes = mountinfo::modes_are_real(base, body);
     // Clamped like stat_range, so a stale start cannot panic the backend.
     let n = metas.len().min(l.len().saturating_sub(start));
     // Distinct Kind strings this one response uses, so the per-row cost is an integer, not a repeated string.
@@ -65,6 +65,8 @@ fn rows_line_in(
             s.push(',');
         }
         let name = l.name(start + i);
+        // Search and listpaths names cross mounts; plain children share the window's mount without another lookup.
+        let real_modes = if name.contains('/') { mountinfo::modes_are_real(&base.join(name), body) } else { real_modes };
         let is_dir = l.is_dir(start + i);
         // Looked up once and shared with the icon and the Kind text, because it is the only per-row allocation here.
         let mime_name = mime.lookup(name);

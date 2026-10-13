@@ -8,9 +8,15 @@ pub(crate) fn mount_type_in(path: &Path, body: &str) -> Option<String> {
     mount_entry_in(path, body).map(|entry| entry.fstype)
 }
 
-// Types with no POSIX modes: FAT, exFAT and NTFS (fuseblk for ntfs-3g), and CIFS or SMB, which report a fixed file_mode.
-pub(crate) fn modes_are_real(fstype: &str) -> bool {
-    !matches!(fstype, "vfat" | "exfat" | "msdos" | "fat" | "fat12" | "fat16" | "fat32" | "ntfs" | "ntfs3" | "fuseblk" | "cifs" | "smb3" | "smbfs")
+// FAT and NTFS report fixed modes; CIFS and SMB3 keep file modes only with POSIX or unix extensions in their super options.
+pub(crate) fn modes_are_real(path: &Path, body: &str) -> bool {
+    match mount_type_in(path, body).as_deref() {
+        Some("cifs" | "smb3") => mount_options_in(path, body)
+            // Sample input: "rw,vers=3.1.1,cache=strict,posix,serverino" (CIFS super options).
+            .is_some_and(|options| options.split(',').any(|option| matches!(option, "posix" | "unix"))),
+        Some("vfat" | "exfat" | "msdos" | "fat" | "fat12" | "fat16" | "fat32" | "ntfs" | "ntfs3" | "fuseblk" | "smbfs") => false,
+        _ => true,
+    }
 }
 
 // Sample dev: makedev(8,17) is 0x811 and answers "8:17"; the glibc major/minor packing, see sys/sysmacros.h.
@@ -332,10 +338,27 @@ mod tests {
     #[test]
     fn modes_are_real_only_where_a_file_keeps_its_own_mode() {
         for fstype in ["ext4", "btrfs", "xfs", "tmpfs"] {
-            assert!(modes_are_real(fstype), "{fstype} stores POSIX modes");
+            let body = format!("1 0 8:1 / / rw - {fstype} /dev/a rw\n");
+            assert!(modes_are_real(Path::new("/file"), &body), "{fstype} stores POSIX modes");
         }
         for fstype in ["vfat", "exfat", "msdos", "fat", "fat12", "fat16", "fat32", "ntfs", "ntfs3", "fuseblk", "cifs", "smb3", "smbfs"] {
-            assert!(!modes_are_real(fstype), "{fstype} reports a mount default for every file, not the file's own mode");
+            let body = format!("1 0 8:1 / / rw - {fstype} /dev/a rw\n");
+            assert!(!modes_are_real(Path::new("/file"), &body), "{fstype} reports a mount default for every file, not the file's own mode");
+        }
+        assert!(modes_are_real(Path::new("/file"), "junk\n"), "an unknown mount preserves the reported mode");
+    }
+
+    #[test]
+    fn smb_modes_use_only_the_owning_mounts_super_options() {
+        for fstype in ["cifs", "smb3"] {
+            let body = format!("1 0 0:30 / / rw - {fstype} //server/root rw,posix\n\
+                                2 1 0:31 / /share rw,posix,unix - {fstype} //server/share rw\n\
+                                3 2 0:32 / /share/unix rw - {fstype} //server/unix rw,unix\n");
+            assert!(modes_are_real(Path::new("/file"), &body));
+            assert!(!modes_are_real(Path::new("/share/file"), &body), "raw or parent options cannot enable real modes");
+            assert!(modes_are_real(Path::new("/share/unix/file"), &body));
+            let stacked = format!("{body}4 1 0:33 / /share/unix rw - {fstype} //server/fixed rw\n");
+            assert!(!modes_are_real(Path::new("/share/unix/file"), &stacked), "the later mount wins the same depth");
         }
     }
 }

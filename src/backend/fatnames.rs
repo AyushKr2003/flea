@@ -163,7 +163,7 @@ fn rename_rows(paths: &[String], body: &str, mime: &super::mime::Db, icons: &sup
         }
         let (dir, mode) = std::fs::symlink_metadata(raw).map(|m| (m.is_dir(), m.mode())).unwrap_or((false, 0));
         // The mode is the source's own stat, so its execute bits count only where the source's mount keeps modes.
-        let real_modes = super::mountinfo::mount_type_in(Path::new(raw), body).map_or(true, |fstype| super::mountinfo::modes_are_real(&fstype));
+        let real_modes = super::mountinfo::modes_are_real(Path::new(raw), body);
         let mode = if real_modes { mode } else { mode & !0o111 };
         let new = sanitize(leaf);
         shown.push(format!(r#"{{"old":"{}","new":"{}","d":{},"i":"{}"}}"#,
