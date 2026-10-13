@@ -1210,6 +1210,21 @@ so a client matches the `token` of what it last sent and drops any other. At mos
 of a file are ever read, and `bat` runs in the same read-only jail as the other helpers, on the
 bytes the verdict was made on.
 
+### compare
+
+`{"c":"compare","token":<uint>,"a":"<string>","b":"<string>"}`
+
+Example: `{"c":"compare","token":3,"a":"/home/gm/notes-a.md","b":"/home/gm/notes-b.md"}`
+
+The unified diff of two regular files a client actually named, never a sweep; `a` is the first of the
+pair in the listing's order and `b` the second, and both are absolute. Either file over 1,048,576 bytes
+answers `over`, judged on both files before anything else; a NUL byte in the first 8,192 bytes of either
+answers `binary`; a path that is not absolute, not a regular file or not readable answers `failed`.
+Otherwise `/usr/bin/diff -u --label <a> --label <b> -- <a> <b>` runs once in the same read-only jail as
+the other helpers, with the two files bound read-only and nothing writable, so the patch names the real
+paths. Answers one `compare` line on a thread, and `token` echoes the request's so a client matches the
+one it last sent and drops any other.
+
 ### pdfcopy
 
 `{"c":"pdfcopy","id":<uint>,"slot":"<string>","path":"<string>"}`
@@ -1807,6 +1822,18 @@ a role from 0 to 6 then the run's text, in order, an empty line being an empty l
 returned are those asked for that exist. The roles are the foreground (0) and bat's ANSI colours
 31 to 36 in order: red, green, yellow, blue, magenta, cyan. A one-line `.json` file is formatted
 with `jq` first, so its `total` and lines are those of the formatted text.
+
+### compare
+
+`{"t":"compare","token":<uint>,"state":"<string>","patch":"<string>"}`
+
+Example: `{"t":"compare","token":3,"state":"diff","patch":"--- /a\n+++ /b\n@@ -1 +1 @@\n-x\n+y\n"}`
+
+The answer to one `compare` request, echoing its `token`. `state` is `diff` (`diff` exited 1 and `patch`
+holds what it printed, headers included), `identical` (it exited 0), `binary` (a NUL in the first 8,192
+bytes of either file), `over` (either file is over 1,048,576 bytes) or `failed` (a path that cannot be
+read as a regular file, any other exit, `diff` or the jail not starting, or a patch past 8 MiB). `patch`
+is the empty string in every state but `diff`.
 
 ### collisions
 

@@ -32,6 +32,9 @@ Item {
     readonly property bool isArchive: root.kind === "archive"
     // RenderedPreviews: a Markdown file keeps the text kind and draws its own bar and pane.
     readonly property bool isMarkdown: root.kind === "text" && Kinds.isMarkdown(root.path)
+    // Compare shows two files in this overlay: path is the first and comparePath the second, and one diff is asked per open.
+    readonly property bool isCompare: root.kind === "compare"
+    property string comparePath: ""
     // r flips the open Markdown Quick Look to Source; close() forgets it, and a move to another file keeps it.
     property bool markdownSource: false
     // The file whose first Markdown read may block the key, decided from its listing row before the path moves; "" when none may.
@@ -53,6 +56,7 @@ Item {
         if (root.isMedia) return mediaLoader.item
         if (root.isPdf) return pdfLoader.item
         if (root.isArchive) return archivePane
+        if (root.isCompare) return compareLoader.item
         if (root.kind === "text") return root.isMarkdown
             ? (markdownLoader.item ? markdownLoader.item.bodyItem : null) : textPane.bodyItem
         return null
@@ -83,6 +87,7 @@ Item {
         if (root.isPdf) return (pdfLoader.item && pdfLoader.item.failed) ? "This file could not be read." : "pdf"
         if (root.isImage) return imageLoader.item ? imageLoader.item.status : "loading"
         if (root.isArchive) return root.archiveMeta === null ? "loading" : (root.archiveFailed ? "This archive could not be read." : "archive")
+        if (root.isCompare) return compareLoader.item ? compareLoader.item.status : "loading"
         if (root.kind === "text") return root.isMarkdown
             ? (markdownLoader.item ? markdownLoader.item.status : "loading") : textPane.status
         return "This file cannot be previewed."
@@ -247,6 +252,21 @@ Item {
         root.load(newPath, newIcon, newSize, newKind, newThumb, root.pane ? root.pane.cursorIndex : -1)
     }
 
+    // The Compare overlay for two regular files; iconName is the first file's, which picks the bar's mark.
+    function openCompare(pathA, pathB, newIcon) {
+        followSettle.stop()
+        root.comparePath = pathB
+        root.iconName = newIcon || ""
+        root.path = pathA
+        root.size = 0
+        root.kindName = ""
+        root.kind = "compare"
+        root.active = true
+    }
+
+    // y: the patch goes to the clipboard; any other kind has none.
+    function copyPatch() { if (root.isCompare && compareLoader.item) compareLoader.item.copyPatch() }
+
     // Decided 2026-10-03: a Markdown Quick Look opens rendered, and r flips only the open one (no stored choice).
     function toggleMarkdownView() {
         if (root.isMarkdown) root.markdownSource = !root.markdownSource
@@ -312,6 +332,7 @@ Item {
         root.markdownSource = false
         root.markdownCloseFocus = false
         root.inlineMarkdownPath = ""
+        root.comparePath = ""
         mediaLoader.source = ""
         pdfLoader.source = ""
         imageLoader.source = ""
@@ -565,6 +586,23 @@ Item {
                     })
                     item.active = Qt.binding(function () { return root.isMarkdown })
                     item.closeFocused = Qt.binding(function () { return root.markdownCloseFocused })
+                    item.closeRequested.connect(root.close)
+                }
+            }
+
+            // A file-path Loader, so a window that never compares compiles none of it; the item asks its one diff on load.
+            Loader {
+                id: compareLoader
+                anchors.fill: parent
+                active: root.isCompare
+                source: "CompareView.qml"
+                onLoaded: {
+                    item.backend = Qt.binding(function () { return root.pane ? root.pane.backend : null })
+                    item.opener = Qt.binding(function () { return root.pane ? root.pane.opener : null })
+                    item.pathA = Qt.binding(function () { return root.path })
+                    item.pathB = Qt.binding(function () { return root.comparePath })
+                    item.iconName = Qt.binding(function () { return root.iconName })
+                    item.active = Qt.binding(function () { return root.active })
                     item.closeRequested.connect(root.close)
                 }
             }

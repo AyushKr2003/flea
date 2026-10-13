@@ -53,6 +53,8 @@ Item {
     property int selectionCount: 0
     // MenuAdditions040: Permissions takes the whole selection.
     property var selectionModes: []
+    // Compare: the marked rows' type bits, read once at menu open.
+    property var compareKinds: []
     // OpenWith.html's flyout rows, filled by ui/PaneMenuActions.qml when the registry answers.
     property var openWithApps: []
     property bool openWithLoaded: false
@@ -200,7 +202,7 @@ Item {
             openWithLoaded: root.openWithLoaded,
             rowMode: root.rowMode, selectionCount: root.selectionCount,
             rowIsSymlink: root.rowIsSymlink, selectionModes: root.selectionModes,
-            rowName: root.rowName, flashZipMember: root.flashZipMember,
+            rowName: root.rowName, flashZipMember: root.flashZipMember, compareKinds: root.compareKinds,
             hasShebang: root.rowHasShebang, cursorIsTarget: root.cursorIsTarget,
             scripts: Flea.Scripts.entries, localSendInstalled: root.localSend.installed, localSendPeers: root.localSend.peers, localSendChecking: view.localSendChecking,
             // The Menus settings section's stored set; ui/js/Menu.js applyHidden is what reads it.

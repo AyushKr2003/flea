@@ -31,7 +31,7 @@ src/backend/opsdispatch.rs 2257
 src/backend/opsreq.rs 615
 src/backend/opsreq/tests.rs 487
 src/backend/permissions.rs 699
-src/backend/run.rs 1092
+src/backend/run.rs 1095
 src/backend/run_session_tests.rs 525
 src/backend/ops.rs 423
 src/backend/thumbs.rs 466
@@ -43,7 +43,7 @@ src/backend/undo_tests.rs 423
 src/backend/undoshare.rs 414
 src/backend/undoshare_tests.rs 550
 src/backend/collide_replace_tests.rs 492
-src/backend/proto.rs 445
+src/backend/proto.rs 448
 src/backend/thumbworker.rs 962
 src/backend/trashbrowse.rs 778
 src/backend/trashdelete.rs 938
@@ -108,11 +108,11 @@ tests/search-live.qml 419
 tests/sidebar-flows.qml 473
 tests/touchpad.qml 756
 tests/xwsettings-tabs.qml 444
-ui/Backend.qml 560
+ui/Backend.qml 569
 ui/ChromeBar.qml 336
 ui/ColumnsArea.qml 539
 ui/ColumnPane.qml 438
-ui/ContextMenu.qml 751
+ui/ContextMenu.qml 753
 ui/ConvertDialog.qml 446
 ui/GridArea.qml 461
 ui/Ipc.qml 966
@@ -129,12 +129,12 @@ ui/NetworkDialog.qml 457
 ui/NetworkForm.qml 413
 ui/NetworkMounts.qml 901
 ui/OpenWithDialog.qml 613
-ui/Pane.qml 1180
+ui/Pane.qml 1183
 ui/PaneMenuActions.qml 490
 ui/PaneWire.qml 608
 ui/PermissionsDialog.qml 674
 ui/PickerWindow.qml 797
-ui/Preview.qml 739
+ui/Preview.qml 777
 ui/PreviewColumn.qml 586
 ui/PickerChrome.qml 426
 ui/DeviceMounts.qml 528
@@ -153,8 +153,8 @@ ui/js/Anchor.js 406
 ui/js/ColumnsCarry.js 102
 ui/js/Devices.js 383
 ui/js/Filter.js 268
-ui/js/Focus.js 449
-ui/js/Keymap.js 363
+ui/js/Focus.js 451
+ui/js/Keymap.js 364
 ui/js/Nav.js 324
 ui/js/Markdown.js 155
 ui/js/MdBlocks.js 444
@@ -163,7 +163,7 @@ ui/js/Markdown.js 155
 ui/js/MdDocument.js 341
 ui/js/MdLeaf.js 309
 ui/js/MdHtml.js 307
-ui/js/Menu.js 475
+ui/js/Menu.js 486
 ui/js/Drag.js 343
 ui/js/Ops.js 480
 ui/js/Search.js 359

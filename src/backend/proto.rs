@@ -54,6 +54,8 @@ pub enum Request {
     Shebang { path: String, id: usize },
     // The code preview's coloured lines for a file or a text the client holds; the wire lives in codereq.rs.
     Code(super::codereq::Ask),
+    // Two regular files answered with their unified diff, or the reason there is none; the wire lives in compare.rs.
+    Compare(super::compare::Ask),
     // One tag change across rows of the listing in force: add, remove, toggle or clear.
     SetTags { rows: Vec<usize>, op: String, tag: String },
     // Which of Flea's seven tags those rows all carry or some carry, read only; see docs/protocol.md "tagstates".
@@ -281,6 +283,7 @@ pub fn parse_request(line: &str) -> Request {
             id: field_usize(line, "id").unwrap_or(0),
         },
         Some("code") => Request::Code(super::codereq::Ask::parse(line)),
+        Some("compare") => Request::Compare(super::compare::Ask::parse(line)),
         Some("settags") => Request::SetTags {
             rows: field_usize_array(line, "rows"),
             op: field_str(line, "op").unwrap_or_default(),

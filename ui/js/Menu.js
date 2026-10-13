@@ -92,6 +92,8 @@ var INVENTORY = [
     // MenuAdditions rule 2: after Copy as, one row per executable in ~/.config/flea/scripts, and
     // absent rather than greyed when that directory is missing or holds none.
     ["runScript", "Run script", "terminal", "F", "inspect"],
+    // MenuAdditions040 specimen e: Compare sits before Add to Favorites, with no key, and is absent unless two regular files are marked.
+    ["compare", "Compare", "columns", "F", "inspect"],
     ["addFavourite", "Add to Favorites", "star", "FBP", "inspect"],
     ["tags", "Tags", "tag", "F", "inspect"],
     ["removeFavourite", "Remove from Favorites", "minus", "PR", "inspect"],
@@ -176,6 +178,8 @@ function availableEntry(e, p, kind) {
     }
     // Only a cursor-row script without any execute bit qualifies; its two-byte probe runs once at menu open.
     if (e.action === "makeExecutable" && !canMakeExecutable(p.rowMode, count, p.hasShebang, p.cursorIsTarget)) return false
+    // The kinds are read once at menu open and only the choice asks the backend for anything.
+    if (e.action === "compare" && !canCompare(p.compareKinds)) return false
     if (e.action === "runScript") {
         if (!(p.scripts || []).length) return false
         e.submenu = p.scripts.map(function (script) { return { id: script.id, label: script.label } })
@@ -308,6 +312,13 @@ function canMakeExecutable(mode, count, hasShebang, cursorIsTarget) {
     var bits = Number(mode) || 0
     if ((bits & Format.S_IFMT) !== Format.S_IFREG) return false
     return (bits & Format.ANY_EXECUTE_BIT) === 0
+}
+
+// Exactly two marked rows, both regular files once any symlink is followed; kinds holds each marked row's resolved file type bits.
+// Sample input: [0o100000, 0o100000] is true; [0o100000, 0o040000], [0o100000] and a link left at 0o120000 are false.
+function canCompare(kinds) {
+    if (!Array.isArray(kinds) || kinds.length !== 2) return false
+    return kinds.every(function (kind) { return ((Number(kind) || 0) & Format.S_IFMT) === Format.S_IFREG })
 }
 
 // The Copy as flyout: six leaves in board order, letters on keyHint.

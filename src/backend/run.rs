@@ -618,6 +618,8 @@ fn handle_line(
         }
         // Answered on a thread, since bat runs in a jail and a read on a hung mount never returns.
         Request::Code(ask) => super::codereq::spawn(ask, ops.tx.clone()),
+        // Answered on a thread: diff runs in a jail and a read on a hung mount never returns.
+        Request::Compare(ask) => super::compare::spawn(ask, ops.tx.clone()),
         tags @ (Request::SetTags { .. } | Request::TagStates { .. }) => super::tagsreq::handle(out, ops, st, tags),
         Request::Paths { rows } =>
             say(out, &paths_line(&resolve_rows(Vec::new(), &rows, &st.base, &st.listing))),
@@ -708,6 +710,7 @@ fn rows_needed(request: &Request) -> usize {
         // Lines, dialogs and the clipboard name paths or nothing, never a row index.
         Request::Shebang { .. }
         | Request::Code(_)
+        | Request::Compare(_)
         | Request::FsInfo
         | Request::Peek { .. }
         | Request::PdfCopy { .. }

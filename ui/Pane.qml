@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import "." as Flea
+import "js/Compare.js" as Compare
 import "js/DirSizes.js" as DirSizes
 import "js/Dropbox.js" as Dropbox
 import "js/ExtThumbs.js" as ExtThumbs
@@ -1037,6 +1038,8 @@ FocusScope {
         archiveName: root.cursorRow ? root.cursorRow.n : ""
         rowMode: root.menuPermissionRow ? root.menuPermissionRow.p : 0
         selectionCount: root.menuValuesLive ? Ops.targetIndices(root).length : 0
+        // Compare reads each marked row's type bits once the menu is live, and asks the backend nothing until the choice.
+        compareKinds: root.menuValuesLive ? Compare.kinds(Compare.markedRows(root)) : []
         cursorIsTarget: root.menuValuesLive && root.isSingleCursorTarget()
         openWithApps: menuActions.openWithApps
         openWithLoaded: menuActions.openWithLoaded
