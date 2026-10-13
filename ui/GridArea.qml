@@ -96,8 +96,8 @@ GridView {
         root.renameExtraHeight = height
     }
     readonly property int visibleTileRows: Math.max(1, Math.ceil(root.height / root.cellHeightPx))
-    onColumnsChanged: if (root.visible) settle.restart()
-    onVisibleTileRowsChanged: if (root.visible) settle.restart()
+    onColumnsChanged: if (root.visible) { settle.restart(); coalesce.restart() }
+    onVisibleTileRowsChanged: if (root.visible) { settle.restart(); coalesce.restart() }
 
     focus: true
     // Whichever view is up owns the keyboard, and Focus.handleKey is the one route all three take.
@@ -506,7 +506,7 @@ GridView {
     // Thumbs.viewport takes geometry and no thumb-specific state, so a tile row is handed to it the
     // same way a text row is; the answer is then multiplied out into item indices.
     function visibleRange() {
-        var view = Thumbs.viewport(root.contentY, root.cellHeightPx, root.visibleTileRows, root.tileRows)
+        var view = Thumbs.viewport(root.viewTop(), root.cellHeightPx, root.visibleTileRows, root.tileRows)
         return {
             first: view.first * root.columns,
             last: Math.min(root.pane.shownTotal - 1, (view.last + 1) * root.columns - 1)
@@ -584,8 +584,10 @@ GridView {
     function coversCursor(view) {
         var row = Math.floor(view / Math.max(1, root.columns))
         var top = row * root.cellHeightPx
-        return top < root.contentY + root.height && top + root.cellHeightPx > root.contentY
+        return top < root.viewTop() + root.height && top + root.cellHeightPx > root.viewTop()
     }
+    // The viewport's top in tile space: a column change re-flows the tiles and moves originY, so contentY alone reads the wrong row.
+    function viewTop() { return root.contentY - root.originY }
     // One more loop turn, with a deadlock guard that ends the hold rather than keeping it.
     function deferRestore() {
         if (!root.visible)
