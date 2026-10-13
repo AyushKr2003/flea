@@ -26,6 +26,7 @@ magick -size 32x32 xc:'#3412ab' "$test_root/outside.png" || exit 1
 magick -size 32x32 xc:'#ab1234' "$test_root/remote.png" || exit 1
 ln -s ../outside.png "$test_root/fixture/escape.png" || exit 1
 python3 tests/html-fixture.py "$test_root/fixture" || exit 1
+cp "$test_root/fixture/notes.md" "$test_root/fixture/other.md" || exit 1
 python3 tests/html-specimen.py "$test_root/specimen" || exit 1
 cp "$test_root/specimen/index.html" "$test_root/fixture/board.html" || exit 1
 mkdir -p "$test_root/cache #?"
@@ -33,7 +34,7 @@ export HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_CACHE_HOME="
 export XDG_RUNTIME_DIR="$test_root/runtime" FLEA_BIN="$bin" FLEA_PATH="$test_root/fixture"
 export HTML_UI="$test_root/config/flea" HTML_ROOT="$test_root" FLEA_REDUCED_MOTION=1
 python3 tests/html-engine.py "$bin" "$test_root" || exit 1
-for harness in html-source-refusals html-preview; do
+for harness in html-source-refusals html-auto-render html-preview; do
 cp "tests/$harness.qml" "$test_root/config/shell.qml" || exit 1
 log="$test_root/$harness.log"
 env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \

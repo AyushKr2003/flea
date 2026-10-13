@@ -74,7 +74,7 @@ QtObject {
             visible: column ? c.visible : root.look.revealedOpen, state: doc.status,
             lines: doc.sourceView && doc.sourceCode ? doc.sourceCode.total : doc.total,
             count: bar ? bar.lines.text : doc.lineLabel, mark: bar ? bar.markName : "html",
-            toggle: bar ? bar.segment !== null : false, file: doc.imageFile,
+            file: doc.imageFile,
             width: doc.renderedWidth, deviceWidth: doc.deviceWidth, y: doc.scrollY, zoom: doc.zoom,
             facts: column ? c.factsLine.kind + c.factsLine.tail : "", frame: root.fleaWindow.rectOf(column ? c.frameItem : doc) })
     }

@@ -18,17 +18,17 @@ cap_html_open() {
     dir=$(mktemp -d "$fixture_root/html.XXXXXXXX") || fail "HTML: cannot create specimen sandbox"
     : > "$dir/$SANDBOX_MARKER"
     python3 "$repo/tests/html-specimen.py" "$dir/page" || fail "HTML: specimen creation failed"
-    seed_ui_state "$dir/state" '{"keys":"default","view":"list","display":{"textSize":{"mode":14}},"preview":{"htmlView":"rendered","markdownView":"rendered"}}'
+    seed_ui_state "$dir/state" '{"keys":"default","view":"list","display":{"textSize":{"mode":14}}}'
     launch "$dir/page"
     wait_listing 1
     cap_resize 1100 700
     cap_unlock_still
     seek_row_named index.html
     key -k space >/dev/null
-    cap_html_expect false '.visible and .ready and .view == "rendered" and .lines == 61 and .count == "61 lines" and .mark == "html" and .toggle and (.file | length) > 0' "HTML renders with its bar"
+    cap_html_expect false '.visible and .ready and .view == "rendered" and .lines == 61 and .count == "61 lines" and .mark == "html" and (.file | length) > 0' "HTML renders with its bar"
     if [[ "$view" == source ]]; then
         key r >/dev/null
-        cap_html_expect false '.visible and .ready and .view == "source" and .lines == 61 and .toggle' "HTML Source draws all lines"
+        cap_html_expect false '.visible and .ready and .view == "source" and .lines == 61' "HTML Source draws all lines"
     fi
 }
 case_cap_html() {
@@ -42,17 +42,16 @@ case_cap_html_source() {
     cap_html_open source
     shot ql-html-source
     key -k Escape >/dev/null
-    key -k ctrl+2 >/dev/null
-    cap_html_expect true '.visible and .ready and .view == "source" and (.toggle | not)' "the column carries HTML Source"
-    shot cols-html-source
+    switch_view columns
+    cap_html_expect true '.visible and .ready and .view == "rendered"' "the column renders after Quick Look Source closes"
     kill_flea
 }
 case_cap_cols_html() {
     local menus_checks=0
     cap_html_open rendered
     key -k Escape >/dev/null
-    key -k ctrl+2 >/dev/null
-    cap_html_expect true '.visible and .ready and .view == "rendered" and .lines == 61 and (.toggle | not) and .facts == "HTML document · 1.6 kB · 61 lines"' "the tall column shows the board facts"
+    switch_view columns
+    cap_html_expect true '.visible and .ready and .view == "rendered" and .lines == 61 and .facts == "HTML document · 1.6 kB · 61 lines"' "the tall column shows the board facts"
     shot cols-html
     kill_flea
 }

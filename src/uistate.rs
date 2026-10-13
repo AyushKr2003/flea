@@ -449,25 +449,25 @@ mod tests {
         assert_eq!(merged.get("places").and_then(|p| p.get("newLeaf")).and_then(Json::as_f64), Some(7.0));
     }
 
-    // Each document kind stores its own view; loading and patching it preserve the other preview choices.
+    // Retired view keys load as unknown leaves, but cannot be patched into state.
     #[test]
-    fn stored_document_views_load_and_patch_independently() {
-        let merged = from_file(r#"{"preview":{"markdownView":"source","thumbSize":"large"},"view":"columns"}"#);
+    fn retired_document_views_load_but_patches_are_refused() {
+        let merged = from_file(r#"{"preview":{"markdownView":"source","htmlView":"source","thumbSize":"large"},"view":"columns"}"#);
         assert_eq!(merged.get("view").and_then(Json::as_str), Some("columns"));
         let preview = merged.get("preview").expect("preview");
         assert_eq!(preview.get("thumbSize").and_then(Json::as_str), Some("large"));
         assert_eq!(preview.get("markdownView").and_then(Json::as_str), Some("source"));
-        assert_eq!(preview.get("htmlView").and_then(Json::as_str), Some("rendered"));
-        for (leaf, other) in [("markdownView", "htmlView"), ("htmlView", "markdownView")] {
-            let patch = jsondoc::parse(&format!(r#"{{"preview":{{"{}":"source"}}}}"#, leaf)).expect("patch parses");
-            let next = patched(&from_file("{}"), &patch).expect("document view patch applies");
-            let views = next.get("preview").unwrap();
-            assert_eq!(views.get(leaf).and_then(Json::as_str), Some("source"));
-            assert_eq!(views.get(other).and_then(Json::as_str), Some("rendered"));
-            let loaded = from_file(&text(&next));
+        assert_eq!(preview.get("htmlView").and_then(Json::as_str), Some("source"));
+        let next = patched(&merged, &jsondoc::parse(r#"{"density":"tight"}"#).unwrap()).expect("unrelated patch applies");
+        let loaded = from_file(&text(&next));
+        for leaf in ["markdownView", "htmlView"] {
+            assert!(from_file("{}").get("preview").unwrap().get(leaf).is_none(), "fresh state has no {leaf}");
             assert_eq!(loaded.get("preview").unwrap().get(leaf).and_then(Json::as_str), Some("source"));
-            let bad = jsondoc::parse(&format!(r#"{{"preview":{{"{}":"unknown"}}}}"#, leaf)).unwrap();
-            assert!(patched(&next, &bad).unwrap_err().contains(leaf));
+            for value in ["source", "rendered", "unknown"] {
+                let patch = jsondoc::parse(&format!(r#"{{"preview":{{"{leaf}":"{value}"}}}}"#)).unwrap();
+                assert!(patched(&from_file("{}"), &patch).unwrap_err().contains(leaf));
+                assert!(patched(&loaded, &patch).unwrap_err().contains(leaf));
+            }
         }
         let unknown = jsondoc::parse(r#"{"preview":{"futureDocumentView":"source"}}"#).unwrap();
         assert!(patched(&merged, &unknown).unwrap_err().contains("futureDocumentView"));

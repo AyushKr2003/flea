@@ -387,11 +387,10 @@ QtObject {
             + 'property var facts: ({ TEXT: "text" })\n'
             + 'property bool active: false\nproperty string path: ""\nproperty int size: 0\n'
             + 'property int maxBytes: ' + defaultReaderLimitBytes + '\nproperty bool truncate: false\nproperty bool compact: false\nproperty bool externalScrollBars: false\nproperty string view: "rendered"\n'
-            + 'property var state: ({ documentView: function (kind) { return "rendered" } })\n'
             + 'property var seen: []\nreadonly property bool tooLarge:' + tooLarge + '\n'
             + 'readonly property string readerPath:' + readerPath + '\n'
             + 'onReaderPathChanged: seen.push(readerPath)\n'
-            + 'function apply() {' + callback.replace(/Facts\./g, "facts.").replace(/ViewState\./g, "state.")
+            + 'function apply() {' + callback.replace(/Facts\./g, "facts.")
             + '} }', gate.sandbox)
         // Evaluate the observer before installing bindings so intermediate reader paths are recorded.
         var initialPath = probe.readerPath
@@ -411,10 +410,10 @@ QtObject {
         var column = readSource("../ui/PreviewColumn.qml")
         var shipped = readerGate(source, column)
         check(shipped.guarded, "F47 oversized remote row never exposes FileView path")
-        // The column reads the remembered view for its own document kind.
+        // The column always requests rendered documents and reads no Quick Look flip or stored choice.
         var wiring = body(column.slice(column.indexOf("id: markdownLoader")), "onLoaded:")
-        check(wiring.indexOf("item.view") >= 0 && wiring.indexOf('ViewState.documentView(root.isHtmlRow ? "html" : "markdown")') >= 0,
-            "F51 the column reads each document kind's remembered view")
+        check(wiring.indexOf("item.view") < 0 && wiring.indexOf("markdownSource") < 0 && wiring.indexOf("ViewState") < 0,
+            "F51 the column sets no document view and reads no Quick Look flip or stored choice")
         check(shipped.allowed, "F47 allowed row exposes reader path")
         var unguardedPath = source.replace("(root.active && !root.tooLarge) ? root.path", "root.active ? root.path")
         check(unguardedPath !== source && !readerGate(unguardedPath, column).guarded,

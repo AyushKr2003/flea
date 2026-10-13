@@ -4,7 +4,6 @@ import QtQuick
 import QtTest
 import Quickshell
 import "flea" as Flea
-import "flea/js/Buttons.js" as Buttons
 import "flea/js/Focus.js" as Focus
 import "flea/js/Icons.js" as Icons
 import "markdown-render.js" as Checks
@@ -40,16 +39,10 @@ ShellRoot {
     readonly property int probeColumns: 4
     property int suiteBody: 0
     property bool larger: false
-    // The narrowest Quick Look the bar is held to, and the views the bar asked Quick Look for.
+    // The narrowest Quick Look the bar is held to.
     readonly property int quickLookMinWidth: 480
-    property var asked: []
     // What Focus.handleKey reads of a pane while Quick Look is open: the open Quick Look and a listing that owns nothing.
     readonly property var keyHost: ({ preview: quick, renameEditor: function () { return null } })
-
-    Connections {
-        target: quick.markdownShown
-        function onViewRequested(which) { shell.asked.push(which) }
-    }
 
     FontMetrics { id: listMetrics; font.family: Flea.Theme.font.family; font.pixelSize: Flea.Theme.font.body }
 
@@ -405,9 +398,7 @@ ShellRoot {
         var g = pane.barGeometry ? pane.barGeometry() : null
         var tokens = shell.barTokens()
         shell.check(Bar.barError(g, tokens), "Quick Look bar order")
-        var segHeight = g && g.rendered ? g.rendered.height : -1
-        shell.check(segHeight > 0 && segHeight < tokens.chromeHeight ? "" : "the segment is " + segHeight + " px tall in a " + tokens.chromeHeight + " px bar",
-            "Quick Look segment fits inside the bar")
+        shell.check(Bar.pressError(g.bar, g.close), "Quick Look close is the only bar control")
         shell.check(Bar.nameRoomError(longNamePane.barGeometry ? longNamePane.barGeometry() : null, tokens), "Quick Look name takes the freed room")
         shell.check(Bar.plainBarError(plainBar.geometry(), tokens), "Quick Look bar without the segment keeps its count one gap before close")
         shell.barSqueezed(tokens)
@@ -418,63 +409,46 @@ ShellRoot {
     function barTokens() {
         return { chromeMark: Flea.Theme.chromeMarkSize, padX: Flea.Theme.spacing.rowPaddingX, gap: Flea.Theme.spacing.gap,
             chromeHeight: Flea.Theme.chromeHeight, controlHeight: Flea.Theme.chromeControlHeight, hairline: Flea.Theme.spacing.hairline,
-            segmentGap: Flea.Theme.spacing.hairline * Buttons.SEGMENT_GAP, caption: Flea.Theme.font.caption,
+            caption: Flea.Theme.font.caption,
             markdownPath: Icons.pathFor("markdown"), foreground: String(Flea.Theme.color.foreground), muted: String(Flea.Theme.color.muted) }
     }
 
-    // A long name in a narrower bar: at 480 px the name elides and the whole segment still draws, and below that the count hides before the segment moves.
+    // At 480 px the long name elides; below that the count hides before close moves.
     function barSqueezed(tokens) {
         var was = Bar.fixedSizes(longNamePane.barGeometry())
         var wide = longNamePane.width
         longNamePane.width = shell.quickLookMinWidth
         shell.check(Bar.squeezeError(was, longNamePane.barGeometry(), tokens, false) || Bar.nameRoomError(longNamePane.barGeometry(), tokens),
-            "Quick Look bar at " + shell.quickLookMinWidth + " px keeps the whole segment clear of the name")
+            "Quick Look bar at " + shell.quickLookMinWidth + " px keeps close clear of the name")
         longNamePane.width = Bar.hidingWidth(was, tokens)
-        shell.check(Bar.squeezeError(was, longNamePane.barGeometry(), tokens, true), "Quick Look bar hides the count before it moves the segment")
+        shell.check(Bar.squeezeError(was, longNamePane.barGeometry(), tokens, true), "Quick Look bar hides the count before it moves close")
         longNamePane.width = wide
     }
 
-    function clickWord(cell) {
-        events.mouseClick(cell, cell.width / 2, cell.height / 2, Qt.LeftButton, Qt.NoModifier, 0)
-    }
-
-    // A pointer on the words, then a request, then r, then Tab, each read back off the drawn cells beside the body's own view.
+    // Plain labels cannot flip a view; r flips only the body, and Tab visits close alone.
     function barDriven(tokens) {
         var shown = quick.markdownShown
         var g = shown.barGeometry()
-        shell.asked = []
         keySink.forceActiveFocus()
-        function reads(view, asks, name) {
-            var why = shown.shownView === view && shell.asked.join() === asks ? Bar.inkError(shown.barGeometry(), view, tokens)
-                : "the body shows " + shown.shownView + " and was asked for [" + shell.asked.join() + "], want " + view + " and [" + asks + "]"
+        function reads(view, name) {
+            var why = shown.shownView === view ? Bar.barError(shown.barGeometry(), tokens)
+                : "the body shows " + shown.shownView + ", want " + view
             shell.check(why, name)
         }
-        reads("rendered", "", "bar at rest: Rendered shows and nothing was asked")
-        shell.clickWord(g.source)
-        reads("source", "source", "a click on Source shows source and asks once")
-        shell.clickWord(g.source)
-        reads("source", "source", "a second click on Source asks nothing")
-        shell.clickWord(g.rendered)
-        reads("rendered", "source,rendered", "a click on Rendered returns")
+        reads("rendered", "Quick Look starts rendered with no view control")
+        events.mouseClick(g.name, g.name.width / 2, g.name.height / 2, Qt.LeftButton, Qt.NoModifier, 0)
+        reads("rendered", "a click on the filename keeps rendered")
+        events.mouseClick(g.lines, g.lines.width / 2, g.lines.height / 2, Qt.LeftButton, Qt.NoModifier, 0)
+        reads("rendered", "a click on the count keeps rendered")
         events.keyClickChar("r", Qt.NoModifier, -1)
-        reads("source", "source,rendered", "the r key flips the words in the frame it flips the body")
+        reads("source", "r flips the body to Source and adds no bar control")
         events.keyClickChar("r", Qt.NoModifier, -1)
-        reads("rendered", "source,rendered", "the r key flips them back")
-        shell.asked = []
-        shown.viewRequested("rendered")
-        reads("rendered", "rendered", "a request for the view already shown leaves it")
-        shown.viewRequested("source")
-        reads("source", "rendered,source", "a request for the other view switches once")
-        shown.viewRequested("source")
-        reads("source", "rendered,source,source", "a repeated request leaves it")
-        shown.viewRequested("rendered")
-        reads("rendered", "rendered,source,source,rendered", "and a request for the first view returns")
-        shell.check(Bar.hoverError(g), "a word shows the pointing hand over it and no wash or frame")
+        reads("rendered", "r returns the body to rendered and adds no bar control")
         var rest = quick.markdownCloseFocused || shown.closeState().focused
         events.keyClick(Qt.Key_Tab, Qt.NoModifier, -1)
         var onClose = quick.markdownCloseFocused && shown.closeState().focused && shown.barGeometry().close.keyboardFocused
         shell.check(rest ? "the close mark held the keyboard before any Tab" : !onClose ? "Tab did not put the keyboard on the close mark"
-            : !keySink.activeFocus ? "Tab moved Qt focus off the key sink" : Bar.tabWalkError(g), "Tab lands on the close mark and the segment is not in the walk")
+            : !keySink.activeFocus ? "Tab moved Qt focus off the key sink" : Bar.tabWalkError(g), "Tab lands on close and no other bar item takes focus")
         events.keyClick(Qt.Key_Tab, Qt.NoModifier, -1)
         shell.check(quick.markdownCloseFocused || shown.closeState().focused ? "a second Tab left the keyboard on the close mark" : "", "a second Tab takes the keyboard off the close mark")
     }
@@ -908,9 +882,12 @@ ShellRoot {
         shell.savedState = Flea.ViewState.state
         shell.suiteBody = Flea.Theme.font.body
         shell.larger = true
-        Flea.ViewState.state = Object.assign({}, shell.savedState,
-            { display: { textSize: { mode: shell.suiteBody < 16 ? 16 : 20 } } })
         shell.armed = false
-        largerSettle.start()
+        // Native label and r events finish their queued layout before the next specimen replaces the state.
+        Qt.callLater(function () {
+            Flea.ViewState.state = Object.assign({}, shell.savedState,
+                { display: { textSize: { mode: shell.suiteBody < 16 ? 16 : 20 } } })
+            largerSettle.start()
+        })
     }
 }

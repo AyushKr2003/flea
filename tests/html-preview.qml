@@ -76,7 +76,7 @@ ShellRoot {
         case 0:
             if (!p || p.listInFlight || !p.storageKnown || p.total < 4) return
             root.check("listing builds no Quick Look or HTML surface", [l, root.replies], [null, 0])
-            root.check("both document kinds default rendered", [Flea.ViewState.documentView("html"), Flea.ViewState.documentView("markdown")], ["rendered", "rendered"])
+            root.check("neither document kind stores its view", [Flea.ViewState.preview.htmlView, Flea.ViewState.preview.markdownView], [undefined, undefined])
             root.keys = Qt.createQmlObject("import QtTest; TestEvent {}", p.listArea)
             root.open("index.html")
             root.next()
@@ -85,7 +85,7 @@ ShellRoot {
             if (!root.calm(l && l.active && d && d.contentReady && l.openState().landed)) return
             var g = l.markdownShown.barGeometry()
             root.check("HTML draws the page image and the shared bar", [l.isHtml, l.isCodeText, d.shownView, d.imageFile.length > 0, g.markName, g.name.text, g.lines.text, g.segment !== null],
-                [true, false, "rendered", true, "html", "index.html", "61 lines", true])
+                [true, false, "rendered", true, "html", "index.html", "61 lines", false])
             root.check("rendered frame uses device width", d.renderedWidth, d.deviceWidth)
             root.check("the HTML mark uses the approved shield path", Icons.pathFor("html"), "M4 2h16l-1.5 17L12 22l-6.5-3z M15.5 6.5h-7V11h7v5L12 17.5 8.5 16")
             root.shot(l.panesItem, "html-quicklook", function () {
@@ -125,7 +125,7 @@ ShellRoot {
             break
         case 5:
             if (!root.calm(c && c.visible && c.isHtmlRow && c.markdown && c.markdown.firstScreen && !c.textLoading)) return
-            root.check("column carries HTML Source without a toggle", [c.markdown.shownView, c.markdown.sourceCode.numbered, c.tallRow], ["source", true, true])
+            root.check("column renders HTML after Quick Look Source closes", [c.markdown.shownView, c.markdown.imageFile.length > 0, c.tallRow], ["rendered", true, true])
             root.check("column frame fills to the name and facts", c.frameItem.height > c.frameItem.width * 10 / 16, true)
             root.beforePage = c.markdown.viewport.contentY
             p.listArea.forceActiveFocus()
@@ -134,7 +134,7 @@ ShellRoot {
             break
         case 6:
             if (!root.calm(c && !c.textLoading && c.markdown.viewport.contentY > root.beforePage)) return
-            root.check("F pages HTML Source with the cursor unchanged", p.cursorIndex, root.cursorBefore)
+            root.check("F pages rendered HTML with the cursor unchanged", p.cursorIndex, root.cursorBefore)
             root.key("B")
             root.open("notes.md")
             root.next()
@@ -152,20 +152,20 @@ ShellRoot {
             root.next()
             break
         case 9:
-            if (!root.calm(d && d.sourceView && d.firstScreen)) return
-            root.check("HTML choice survives close and reopening", d.shownView, "source")
+            if (!root.calm(d && !d.sourceView && d.contentReady)) return
+            root.check("HTML opens rendered after Markdown Source closes", d.shownView, "rendered")
             root.key("r")
             root.next()
             break
         case 10:
-            if (!root.calm(d && !d.sourceView && d.contentReady)) return
-            root.check("HTML switching back does not change Markdown", Flea.ViewState.documentView("markdown"), "source")
+            if (!root.calm(d && d.sourceView && d.firstScreen)) return
+            root.check("HTML r changes only the open Quick Look", d.shownView, "source")
             root.press(Qt.Key_Space)
             root.next()
             break
         case 11:
             if (!root.calm(c && c.markdown && !c.markdown.sourceView && c.markdown.contentReady && !c.textLoading)) return
-            root.check("column draws rendered HTML under remembered mode", [c.markdown.shownView, c.markdown.total], ["rendered", 61])
+            root.check("column draws rendered HTML independently", [c.markdown.shownView, c.markdown.total], ["rendered", 61])
             root.shot(c, "html-column")
             root.next()
             break
@@ -180,12 +180,11 @@ ShellRoot {
             if (!root.calm(c && c.selectionCount === 2)) return
             root.check("HTML never paints over the multi-selection summary", [c.previewState, c.markdown === null], ["multi", true])
             p.clearSelection()
-            Flea.ViewState.setDocumentView("html", "source")
             p.setCursor(root.indexOf("long.html"))
             root.next()
             break
         case 14:
-            if (!root.calm(c && c.markdown && c.markdown.sourceCode && c.markdown.sourceCode.total === 800 && c.markdown.firstScreen && !c.textLoading)) return
+            if (!root.calm(c && c.markdown && c.markdown.total === 800 && c.markdown.contentReady && !c.textLoading)) return
             root.midBefore = c.swap.describe().midFrames
             root.beforePage = c.markdown.viewport.contentY
             root.key("F")
@@ -199,12 +198,14 @@ ShellRoot {
             break
         case 16:
             if (!root.calm(c && !c.textLoading && c.markdown.firstScreen && c.markdown.viewport.contentY > root.beforePage)) return
-            root.check("paging beyond held HTML Source draws no unfinished frame", c.swap.describe().midFrames - root.midBefore, 0)
+            root.check("paging rendered HTML draws no unfinished frame", c.swap.describe().midFrames - root.midBefore, 0)
             root.open("long.html")
             root.next()
             break
         case 17:
+            if (d && !d.sourceView && d.contentReady && l.openState().landed) { root.key("r"); return }
             if (!root.calm(d && d.sourceView && d.firstScreen && l.openState().landed)) return
+            root.check("long HTML Source keeps its gutter and whole-file count", [d.sourceCode.total, d.sourceCode.numbered], [800, true])
             d.viewport.positionViewAtIndex(40, ListView.Beginning)
             root.next()
             break
@@ -224,7 +225,6 @@ ShellRoot {
             if (!root.calm(d && !d.wrap && d.firstScreen)) return
             root.check("HTML Source unwrap preserves the first visible line", d.viewport.indexAt(0, d.viewport.contentY + 1), root.topBefore)
             root.press(Qt.Key_Space)
-            Flea.ViewState.setDocumentView("html", "rendered")
             root.open("board.html")
             root.next()
             break

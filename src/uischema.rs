@@ -48,8 +48,7 @@ pub const DEFAULTS: &str = r#"{
     "column": true, "loadOn": "automatic",
     "thumbnails": "media", "thumbSize": "medium",
     "thumbNetwork": false, "thumbPhone": false, "thumbUsb": true,
-    "ctrlZoom": true, "volume": 100, "width": 0, "wrap": false,
-    "markdownView": "rendered", "htmlView": "rendered"
+    "ctrlZoom": true, "volume": 100, "width": 0, "wrap": false
   },
   "previewFacts": "compact",
   "keys": "default",
@@ -161,8 +160,6 @@ pub const PREVIEW: &[(&str, Rule)] = &[
     ("width", Rule::Count(0.0, 100.0)),
     // Quick Look's w: wraps long lines in a code or text file; off until pressed.
     ("wrap", Rule::Bool),
-    ("markdownView", Rule::Word(&["rendered", "source"])),
-    ("htmlView", Rule::Word(&["rendered", "source"])),
 ];
 
 // mode is "system" or one stop, so there is nowhere to put a free number; see the handoff's Display row.
@@ -360,9 +357,10 @@ mod tests {
         assert_eq!(d.get("preview").and_then(|p| p.get("thumbNetwork")).and_then(Json::as_bool), Some(false));
         assert_eq!(d.get("preview").and_then(|p| p.get("thumbPhone")).and_then(Json::as_bool), Some(false));
         assert_eq!(d.get("preview").and_then(|p| p.get("thumbUsb")).and_then(Json::as_bool), Some(true));
-        // Rendered documents start rendered and remember their choices independently.
-        assert_eq!(d.get("preview").and_then(|p| p.get("markdownView")).and_then(Json::as_str), Some("rendered"));
-        assert_eq!(d.get("preview").and_then(|p| p.get("htmlView")).and_then(Json::as_str), Some("rendered"));
+        // Document view flips belong only to an open Quick Look.
+        for leaf in ["markdownView", "htmlView"] {
+            assert!(d.get("preview").expect("preview").get(leaf).is_none(), "{leaf} is not stored");
+        }
         // TallPreviews: the tall kinds show one compact facts line until `i` opens the full table.
         assert_eq!(d.get("previewFacts").and_then(Json::as_str), Some("compact"));
         assert_eq!(d.get("preview").and_then(|p| p.get("wrap")).and_then(Json::as_bool), Some(false));

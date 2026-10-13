@@ -46,8 +46,8 @@ Item {
     // Compare shows two files in this overlay: path is the first and comparePath the second, and one diff is asked per open.
     readonly property bool isCompare: root.kind === "compare"
     property string comparePath: ""
-    // Each document kind remembers its own view and shares it with the column.
-    readonly property bool markdownSource: ViewState.documentView(root.isHtml ? "html" : "markdown") === "source"
+    // r flips the open document Quick Look to Source; close() forgets it, and a move to another file keeps it.
+    property bool markdownSource: false
     // The file whose first Markdown read may block the key, decided from its listing row before the path moves; "" when none may.
     property string inlineMarkdownPath: ""
     // Tab put the keyboard on the bar's close mark, Markdown or code; a move off the text kinds or a close lets it go.
@@ -348,14 +348,9 @@ Item {
     // y: the patch goes to the clipboard; any other kind has none.
     function copyPatch() { if (root.isCompare && compareLoader.item) compareLoader.item.copyPatch() }
 
-    // The bar and r change the same remembered view for the current document kind.
+    // Document Quick Looks open rendered; r flips only the open one.
     function toggleMarkdownView() {
-        if (root.isDocument) root.setMarkdownView(root.markdownSource ? "rendered" : "source")
-    }
-
-    // A word of the Quick Look bar names the view it wants, so asking for the one already shown changes nothing.
-    function setMarkdownView(which) {
-        if (root.isDocument) ViewState.setDocumentView(root.isHtml ? "html" : "markdown", which)
+        if (root.isDocument) root.markdownSource = !root.markdownSource
     }
 
     function toggleMarkdownClose() {
@@ -427,6 +422,7 @@ Item {
         stripHideTimer.stop()
         root.active = false
         root.kind = ""
+        root.markdownSource = false
         root.markdownCloseFocus = false
         root.inlineMarkdownPath = ""
         root.comparePath = ""
@@ -798,7 +794,6 @@ Item {
                     item.backend = Qt.binding(function () { return root.pane ? root.pane.backend : null })
                     item.wrap = Qt.binding(function () { return ViewState.previewWrap })
                     item.closeRequested.connect(root.close)
-                    item.viewRequested.connect(root.setMarkdownView)
                 }
             }
 

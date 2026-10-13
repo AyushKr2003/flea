@@ -124,9 +124,10 @@ function run(check) {
     check("r maps to markdownView in the preview context",
         Keymap.lookupFor("default", 0, "r", Qt.NoModifier, "preview", "gui"), "markdownView")
     var quickSrc = Source.source("ui/Preview.qml")
-    check("Quick Look stores each document kind independently and close preserves the choice",
-        quickSrc.indexOf('ViewState.setDocumentView(root.isHtml ? "html" : "markdown", which)') >= 0
-            && Source.block(quickSrc, "function close()", "ui/Preview.qml").indexOf("markdownSource =") < 0, true)
+    check("Quick Look owns a transient source flip and close forgets it",
+        quickSrc.indexOf('property bool markdownSource: false') >= 0
+            && Source.block(quickSrc, "function close()", "ui/Preview.qml").indexOf("root.markdownSource = false") >= 0
+            && quickSrc.indexOf("ViewState.setDocumentView") < 0, true)
     check("r stays rename in the listing",
         Keymap.lookupFor("default", 0, "r", Qt.NoModifier, "listing", "gui"), "rename")
     // ButtonSystem040: Tab and Shift+Tab put the keyboard on the Markdown bar's close mark and take it off; Return or Space on it closes.

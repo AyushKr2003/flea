@@ -106,7 +106,7 @@ function act(action, root) {
     case "expand": root.preview.toggleExpand(); return
     // MediaMute rule 5: the flag is the preview's to flip, and it silences without pausing.
     case "mute": root.preview.toggleMute(); return
-    // r shares the bar's Rendered and Source choice for each document kind.
+    // r flips only the open document Quick Look between rendered and source.
     case "markdownView":
         if (root.preview.isDocument) root.preview.toggleMarkdownView()
         return

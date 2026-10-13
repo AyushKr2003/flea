@@ -66,7 +66,7 @@ src/tui/input.rs 455
 src/tui/model.rs 1268
 src/tui/mod.rs 419
 src/tui/render.rs 913
-src/uischema.rs 574
+src/uischema.rs 572
 src/uistate.rs 849
 src/uistore.rs 551
 src/vulkan.rs 751
@@ -99,7 +99,7 @@ tests/js/watch.js 541
 tests/js/xwwatch.js 299
 tests/js/tabs.js 798
 tests/js/search.js 336
-tests/js/previewkeys.js 327
+tests/js/previewkeys.js 328
 tests/button-members.qml 518
 tests/chromering.qml 413
 tests/columnrow-geom.qml 426
@@ -110,10 +110,10 @@ tests/gridmark.qml 419
 tests/columnsfilter.qml 402
 tests/columnsfolder.qml 400
 tests/quicklook-firstframe.qml 457
-tests/markdown-render.qml 916
+tests/markdown-render.qml 893
 tests/rename-cost.qml 482
 tests/markdown-linearity.qml 679
-tests/markdown-preview-state.qml 475
+tests/markdown-preview-state.qml 474
 tests/markdown-tables.qml 401
 tests/quicklook-firstframe.js 214
 tests/preview-settle-live.qml 532
@@ -159,8 +159,8 @@ ui/PaneMenuActions.qml 527
 ui/PaneWire.qml 602
 ui/PermissionsDialog.qml 658
 ui/PickerWindow.qml 812
-ui/Preview.qml 1012
-ui/PreviewColumn.qml 561
+ui/Preview.qml 1007
+ui/PreviewColumn.qml 559
 ui/DeviceMounts.qml 537
 ui/js/Facts.js 360
 ui/PreviewPdf.qml 482
@@ -175,7 +175,7 @@ ui/StatusBar.qml 477
 ui/Theme.qml 480
 ui/TrashView.qml 492
 ui/UnlockDialog.qml 450
-ui/ViewState.qml 555
+ui/ViewState.qml 549
 ui/WindowBody.qml 816
 ui/js/Anchor.js 379
 ui/js/ColumnsCarry.js 94

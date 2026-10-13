@@ -82,8 +82,7 @@ Item {
     // The canvas's frame is 16 by 10, the one proportion every state shares but a tall kind's, which fills the column down to the name.
     readonly property real frameRatio: 10 / 16
     readonly property bool tallRow: root.previewState !== Facts.MULTI && Facts.tall(root.rowState)
-    // Document rows carry the remembered view into the tall column frame; Quick Look owns its toggle.
-
+    // Document rows always render in the tall column frame, independently of Quick Look.
     readonly property bool isMarkdownRow: root.rowState === Facts.TEXT && root.row !== null
         && Kinds.isMarkdown(root.row.n)
     readonly property bool isHtmlRow: root.rowState === Facts.CODE && root.row !== null && Kinds.isHtml(root.row.n)
@@ -272,7 +271,6 @@ Item {
                     item.maxBytes = Qt.binding(function () { return root.textLimit })
                     item.active = Qt.binding(function () { return root.markdownActive })
                     item.truncate = Qt.binding(function () { return root.truncateText })
-                    item.view = Qt.binding(function () { return ViewState.documentView(root.isHtmlRow ? "html" : "markdown") })
                     item.compact = true
                     item.externalScrollBars = true
                 }

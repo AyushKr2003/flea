@@ -189,7 +189,7 @@ ShellRoot {
             root.awaiting = function () {
                 if (!root.calm(true)) return false
                 root.check("w on a Markdown Quick Look flips nothing", [Flea.ViewState.previewWrap, root.pv().isCodeText, root.savedWrap() !== "true"], [false, false, true])
-                root.check("and the Markdown bar still draws Rendered and Source", root.pv().markdownShown.barGeometry().segment !== null, true)
+                root.check("and the Markdown bar has no view control", root.pv().markdownShown.barGeometry().segment !== null, false)
                 return true
             }
         } else if (op.move !== undefined) {

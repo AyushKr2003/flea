@@ -15,7 +15,6 @@ Item {
     property bool wrap: false
     property bool closeFocused: false
     signal closeRequested
-    signal viewRequested(string view)
     readonly property var bodyItem: doc.bodyItem
     readonly property var document: doc
     readonly property string rawText: doc.sourceCode ? doc.sourceCode.lines.join("\n") : ""
@@ -39,11 +38,8 @@ Item {
         markName: "html"
         name: root.path.substring(root.path.lastIndexOf("/") + 1)
         countLabel: root.contentReady ? root.lineLabel : ""
-        views: true
-        view: root.shownView
         closeFocused: root.closeFocused
         onCloseRequested: root.closeRequested()
-        onViewRequested: function (which) { root.viewRequested(which) }
     }
     Flea.PreviewHtml {
         id: doc
