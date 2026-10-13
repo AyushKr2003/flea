@@ -128,7 +128,7 @@ ui/ColumnsArea.qml 547
 ui/ColumnPane.qml 450
 ui/ContextMenu.qml 781
 ui/ConvertDialog.qml 456
-ui/GridArea.qml 663
+ui/GridArea.qml 665
 ui/Ipc.qml 987
 tests/gridprebuild.qml 457
 tests/columnsprebuild.qml 416
