@@ -15561,6 +15561,7 @@ clipboard_wait() {
 . "$repo/tests/ui-captures-markdown.sh"
 . "$repo/tests/ui-captures-states.sh"
 . "$repo/tests/ui-captures-gridhover.sh"
+. "$repo/tests/ui-captures-gmlook.sh"
 # README retakes, one launch per frame at its own size, text size and fixture; 2560x1440 corner park, wait and retry bounds.
 readme_park_x=2559
 readme_park_y=1439
@@ -15910,6 +15911,7 @@ case_readme() {
 # Native items ui:capsweep and ui:capsweeplow run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline, ui:cap_markdown_fences and ui:cap_markdown_fences14, sourced above; so do cap_merge, cap_drops and cap_dropmods, sourced above, and cap_tags, sourced from ui-captures-tags.sh, and ui:cap_flasher and ui:cap_filter, sourced above; so do ui:cap_heldcolumns, ui:cap_sysrefusal, ui:cap_gridreveal, ui:cap_columnsrename and ui:cap_gridhover, sourced above; ui:cap_railmotion runs only by name, sourced from ui-railpointer.sh; ui:cap_mountfail runs only by name, sourced from ui-captures-mountfail.sh; ui:readme runs only by name, defined in this file.
 . "$repo/tests/ui-captures-sweep.sh"
 . "$repo/tests/ui-captures-collide.sh"
+# ui:cap_gm_rail and ui:cap_gm_nethold run only by name: native display, uinput holds and screenshots cannot run headless.
 declare -a wanted=("$@")
 [[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick shiftscroll querypaste viewrestart dd ddclick griddrop collide sortrestart foldersort duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer dualautohidereveal preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap searchnoblank lookopen transferlive recent middleclick opentab xwundo folderviews hiddenlast marqueemargin relstart userthumbnailer dualtab dualdivider)
 
