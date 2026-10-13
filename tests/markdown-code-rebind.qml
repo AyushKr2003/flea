@@ -18,6 +18,7 @@ ShellRoot {
     property int originalToken: 0
     property int sourceToken: 0
     property int sourceAsks: 0
+    property var sourceReply: null
 
     function log(text) { console.log("MARKDOWN_REBIND " + text) }
     function check(ok, text) {
@@ -134,15 +135,57 @@ ShellRoot {
                 if (source.token === 0 || backendA.replies.length === 0) return
                 shell.sourceToken = source.token
                 shell.sourceAsks = backendB.asks[source.slot] || 0
+                backendB.hold = true
                 source.backend = backendB
-                backendA.release()
                 shell.stage = 3
                 shell.ticks = 0
                 return
             }
-            if (shell.stage === 3 && shell.ticks >= 10) {
-                shell.log("CODELINES_HOLE oldToken=" + shell.sourceToken + " token=" + source.token
-                    + " B_asks=" + ((backendB.asks[source.slot] || 0) - shell.sourceAsks) + " firstScreen=" + source.firstScreen)
+            if (shell.stage === 3) {
+                var sourceAsked = (backendB.asks[source.slot] || 0) - shell.sourceAsks
+                if (backendB.replies.length === 0 && shell.ticks < 20) return
+                shell.log("CODELINES_HELD oldToken=" + shell.sourceToken + " token=" + source.token
+                    + " B_asks=" + sourceAsked + " firstScreen=" + source.firstScreen)
+                shell.check(sourceAsked === 1, "CodeLines backend handoff asks B exactly once")
+                if (backendB.replies.length === 0) {
+                    shell.check(false, "CodeLines receives B's own held engine reply")
+                    shell.finish()
+                    return
+                }
+                shell.sourceReply = backendB.replies[0]
+                shell.check(shell.sourceReply.token === source.token && source.token === shell.sourceToken,
+                    "CodeLines handoff exercises colliding real backend tokens")
+                backendA.release()
+                shell.stage = 4
+                shell.ticks = 0
+                return
+            }
+            if (shell.stage === 4) {
+                var dropped = source.token === shell.sourceReply.token && source.answer === "" && source.total === 0
+                    && source.asking !== null && Object.keys(source.held).length === 0 && !source.firstScreen
+                shell.log("CODELINES_LATE_A dropped=" + dropped + " held=" + Object.keys(source.held).length
+                    + " answer=" + JSON.stringify(source.answer) + " firstScreen=" + source.firstScreen)
+                shell.check(dropped, "CodeLines drops A's late reply while B's reply is held")
+                backendB.release()
+                shell.stage = 5
+                shell.ticks = 0
+                return
+            }
+            if (shell.stage === 5) {
+                var list = source.children.filter(function (child) { return typeof child.itemAtIndex === "function" })[0]
+                var row = list ? list.itemAtIndex(0) : null
+                if ((!source.firstScreen || !row) && shell.ticks < 20) return
+                var finalAsks = (backendB.asks[source.slot] || 0) - shell.sourceAsks
+                shell.log("CODELINES_DONE oldToken=" + shell.sourceToken + " token=" + source.token
+                    + " B_asks=" + finalAsks + " firstScreen=" + source.firstScreen)
+                shell.check(finalAsks === 1 && source.token === 0 && source.firstScreen,
+                    "CodeLines B reply releases the first screen without another ask")
+                var engineRuns = shell.sourceReply.lines[0]
+                var coloured = engineRuns && engineRuns.some(function (run, at) { return at % 2 === 0 && run > 0 })
+                var body = row ? row.children[1] : null
+                shell.check(coloured && source.answer === "styled" && JSON.stringify(source.rowAt(1)) === JSON.stringify(engineRuns)
+                    && body !== null && body.textFormat === Text.StyledText && body.text === CodeRuns.styled(engineRuns, source.inks),
+                    "B's engine colours reach the live CodeLines text")
                 shell.finish()
             }
         }

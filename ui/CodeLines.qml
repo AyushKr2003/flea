@@ -154,6 +154,12 @@ Item {
             Qt.callLater(root.ask)
     }
 
+    // A pane handoff keeps the engine capability, but disconnects the old backend's request.
+    function rebind() {
+        root.fresh()
+    }
+
+    onBackendChanged: root.rebind()
     onPathChanged: root.fresh()
     onTextChanged: root.fresh()
     onFromTextChanged: root.fresh()
