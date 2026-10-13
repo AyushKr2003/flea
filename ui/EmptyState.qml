@@ -113,6 +113,8 @@ Item {
     // Three beats per appearance, then the third phrase and the drawn mark rest (GM's ruling); a rotation kept a core 12% busy.
     readonly property int beatLimit: 3
     property int beats: 0
+    // Rest is no beat left with the fade stopped and the mark drawn whole; reduced motion and a fixed caption keep no beat, so the fade and the opacity gate those.
+    readonly property bool atRest: Theme.reducedMotion || (!fade.running && root.opacity === 1 && (root.caption.length > 0 || (root.beats >= root.beatLimit && heroMark.settled)))
     onVisibleChanged: root.beats = 0
 
     // root.visible mirrors the caller's listingState === "empty" gate, so the rotation timer stops once a real listing arrives.

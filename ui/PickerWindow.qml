@@ -755,7 +755,7 @@ ShellRoot {
                     pathBarOpen: chrome.editing, pathFieldText: chrome.jump ? chrome.jump.query : "",
                     jump: {open: !!jumpItem && jumpItem.shown, rows: jumpItem ? jumpItem.entries.length : 0, visibleRows: jumpVisible, contentY: jumpFrame ? jumpFrame.scrollY : 0, cursor: jumpItem ? jumpItem.cursor : -1, paths: jumpItem ? jumpItem.entries.map(function(entry) { return entry.path }) : []},
                     cursor: win.cursorIndex, cursorName: win.rowFor(win.cursorIndex) ? win.rowFor(win.cursorIndex).n : "",
-                    marks: win.marks, state: win.listingState, emptyHero: hero.visible, listingFailed: win.listingFailed, sortBy: backend.sortBy, sortDesc: backend.sortDesc, sortable: win.sortable, filter: win.filterIndex, history: win.history,
+                    marks: win.marks, state: win.listingState, emptyHero: hero.visible, emptyRest: hero.atRest, listingFailed: win.listingFailed, sortBy: backend.sortBy, sortDesc: backend.sortDesc, sortable: win.sortable, filter: win.filterIndex, history: win.history,
                     view: win.viewMode, thumbPending: Object.keys(win.thumbState.file).filter(function(index) { return win.thumbState.file[index] === null || win.thumbState.file[index] === "cache-asked" }).length,
                     marksBusy: win.markRequest > 0, saveBusy: win.saveRequest > 0, submitting: win.submitting, backendUnavailable: win.backendUnavailable,
                     canAccept: win.canAccept, saveReady: win.saveReady, collision: win.saveCollision,

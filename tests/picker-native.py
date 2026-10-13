@@ -360,6 +360,9 @@ class Request:
 
     def capture(self, label):
         self.window()
+        # An empty folder draws its hero beats after the listing is ready, so the shot waits for the rest first.
+        if self.state()["emptyHero"]:
+            self.until("empty hero is at rest", lambda state: state["emptyRest"])
         output = guard(root / f"{self.name}-{label}.png")
         if output.exists():
             raise AssertionError(f"screenshot would reuse {output}")
