@@ -15541,6 +15541,7 @@ clipboard_wait() {
 . "$repo/tests/ui-dirsortstale.sh"
 . "$repo/tests/ui-makedefault.sh"
 . "$repo/tests/ui-noblank.sh"
+. "$repo/tests/ui-colhold.sh"
 . "$repo/tests/ui-captures.sh"
 . "$repo/tests/ui-captures-flasher.sh"
 . "$repo/tests/ui-captures-archives.sh"

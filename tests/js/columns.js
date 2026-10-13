@@ -236,7 +236,7 @@ function runPeekPending(check) {
     check("the columns view tracks its own asks", area.indexOf("Columns.trackAsk(root.pending, sent)") >= 0, true)
     check("and stores only a reply it asked for", area.indexOf("if (!Columns.hasAsk(root.pending, sent)) return") >= 0, true)
     check("and drops the ask it stored", area.indexOf("Columns.dropAsk(root.pending, sent)") >= 0, true)
-    check("and forgets every ask with the listing", area.indexOf("root.pending = ({})") >= 0, true)
+    check("and takes only the landing's matching drawn-folder asks", area.indexOf("root.pending = kept.pending") >= 0, true)
     var orderBody = Source.slice(area, "onPeekOrderChanged", "onChildPathChanged")
     check("and re-asks the shown ancestors under the new key", orderBody.indexOf("refreshNeighbours") >= 0, true)
     var peekBody = Source.slice(area, "readonly property string peekOrder", "onPeekOrderChanged")
