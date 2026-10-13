@@ -265,7 +265,7 @@ mod tests {
     fn a_type_nothing_can_describe_reads_as_data_and_never_as_an_icon_name() {
         let mut l = Listing::new();
         l.push("thing.zzzznotreal", false);
-        let metas = vec![Meta { size: 1, mtime: 2, mode: 3, target_is_dir: false, target: String::new(), dev: 0 }];
+        let metas = vec![Meta { size: 1, mtime: 2, mode: 0o100644, target_is_dir: false, target: String::new(), dev: 0 }];
         let (mime, icons, aliases, thumbs, mut kinds) = dbs();
         let s = rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 0, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds);
         // No glob matches, so there is no type to describe. The icon ladder still falls to
