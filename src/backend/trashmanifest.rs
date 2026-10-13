@@ -2,7 +2,7 @@
 use std::fs::{File, OpenOptions};
 use std::os::unix::fs::{FileExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -32,6 +32,172 @@ impl Cancellation {
             Err("Trash request cancelled.".into())
         }
     }
+}
+
+// What a person is told about a Trash delete, restore or recovery: one sentence per outcome, never a failure's own text.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Op { Delete, Restore }
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Outcome {
+    // A check before anything moved found the Trash unlike its review, or a review record unreadable.
+    Changed,
+    ConfirmAgain,
+    NothingDeleted,
+    ItemChanged,
+    Damaged,
+    Kept(PathBuf),
+    Prepare(Op),
+    NoRecord(Op),
+    Stuck(Op, PathBuf),
+    StuckInTrash(Op, PathBuf),
+    StuckAtOriginal(PathBuf),
+    Partial(Op),
+    PartialAtOriginal,
+    InfoLeft(Op, PathBuf),
+    FolderLeft(Op, Option<PathBuf>),
+    RecordLeft(Option<Op>),
+    RecordUnconfirmed(Option<Op>),
+    ChildChanged,
+    ChildLeft,
+    Blocked,
+    OriginalChanged,
+    Held(PathBuf),
+    RecoveryUnreadable(PathBuf),
+    NothingMoved,
+    // The Trash listing could not be read, or its answer could not be made sense of.
+    Unreadable,
+    TookTooLong,
+    // A selection no longer matches the Trash: it changed, expired, or arrived without the identity that reviews it.
+    SelectionChanged,
+    // The Trash reports items that cannot be told apart. True when the ask was to select them, false once an action began.
+    Indistinct(bool),
+    // The Trash could not be checked against its backing store.
+    Unchecked(Op),
+    // A sentence another copy row owns, passed through whole.
+    Text(String),
+}
+
+// The detail goes to stderr, and in a test also to a list the test can read, since libtest drops stderr.
+pub fn log(line: &str) {
+    eprintln!("flea: {line}");
+    #[cfg(test)]
+    LOGGED.with(|lines| lines.borrow_mut().push(line.to_string()));
+}
+#[cfg(test)]
+thread_local! {
+    static LOGGED: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+#[cfg(test)]
+pub fn logged() -> Vec<String> {
+    LOGGED.with(|lines| lines.borrow().clone())
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Refusal { outcome: Outcome, detail: String, reason: String }
+impl Refusal {
+    pub fn new(outcome: Outcome, detail: impl Into<String>) -> Self {
+        Self { outcome, detail: detail.into(), reason: String::new() }
+    }
+    pub fn changed(detail: impl Into<String>) -> Self { Self::new(Outcome::Changed, detail) }
+    // An OS failure: the detail keeps the raw error, the sentence gets io_message's plain clause.
+    pub fn os(outcome: Outcome, what: &str, error: &std::io::Error) -> Self {
+        Self { outcome, detail: format!("{what}: {error}"), reason: crate::error::io_message(error) }
+    }
+    pub fn said(text: String) -> Self { Self { detail: text.clone(), outcome: Outcome::Text(text), reason: String::new() } }
+    pub fn because(mut self, reason: impl Into<String>) -> Self { self.reason = reason.into(); self }
+    // The same failure under the outcome of the step that met it, its cause carried into that sentence.
+    pub fn wrap(&self, outcome: Outcome) -> Self { Self { outcome, detail: self.detail.clone(), reason: self.cause() } }
+    pub fn outcome(&self) -> &Outcome { &self.outcome }
+    pub fn detail(&self) -> &str { &self.detail }
+    pub fn logged(self) -> Self {
+        log(&format!("Trash {:?}: {}", self.outcome, self.detail));
+        self
+    }
+    fn cause(&self) -> String {
+        if !self.reason.is_empty() { return self.reason.clone(); }
+        match &self.outcome {
+            Outcome::ChildChanged => "an item in the Trash changed".into(),
+            Outcome::ItemChanged => "the item changed".into(),
+            Outcome::Damaged => "the Trash record is damaged".into(),
+            Outcome::Text(text) => text.trim_end_matches('.').to_string(),
+            _ => "the contents changed".into(),
+        }
+    }
+    pub fn shown(&self) -> String {
+        use Op::{Delete, Restore};
+        let cause = self.cause();
+        let why = cause.trim_end_matches('.');
+        match &self.outcome {
+            Outcome::Changed => "The Trash changed, so nothing was done. Try again.".into(),
+            Outcome::ConfirmAgain => "The Trash changed, so nothing was done; confirm again.".into(),
+            Outcome::NothingDeleted => "The Trash changed, so nothing was deleted.".into(),
+            Outcome::ItemChanged => "The item changed after you confirmed, so nothing was deleted.".into(),
+            Outcome::Damaged => "The Trash record for this item is damaged, so nothing was restored.".into(),
+            Outcome::Kept(at) => format!("The Trash changed, so nothing was done. Kept items are in {}.", at.display()),
+            Outcome::Prepare(Delete) => format!("Could not prepare the deletion, so nothing was deleted: {why}."),
+            Outcome::Prepare(Restore) => format!("Could not prepare the restore, so nothing was restored: {why}."),
+            Outcome::NoRecord(Delete) => format!("Flea could not keep a record of this deletion, so nothing was deleted: {why}."),
+            Outcome::NoRecord(Restore) => format!("Flea could not keep a record of this restore, so nothing was restored: {why}."),
+            Outcome::Stuck(Delete, at) => format!("The deletion could not finish: {why}. The remaining items are kept at {}.", at.display()),
+            Outcome::Stuck(Restore, at) => format!("The restore could not finish: {why}. The remaining items are kept at {}.", at.display()),
+            Outcome::StuckInTrash(Delete, at) => format!("The deletion could not finish: {why}. The remaining items are kept in the Trash and at {}.", at.display()),
+            Outcome::StuckInTrash(Restore, at) => format!("The restore could not finish: {why}. The remaining items are kept in the Trash and at {}.", at.display()),
+            Outcome::StuckAtOriginal(at) => format!("The deletion could not finish: {why}. The remaining items are kept where they were and at {}.", at.display()),
+            Outcome::Partial(Delete) => format!("The item could not be fully deleted: {why}. What is left stays in the Trash, and a folder may be partly deleted."),
+            Outcome::Partial(Restore) => format!("The item could not be restored: {why}. It stays in the Trash."),
+            Outcome::PartialAtOriginal => format!("The item could not be fully deleted: {why}. What is left stays where it was, and a folder may be partly deleted."),
+            Outcome::InfoLeft(Delete, at) => format!("The item was deleted, but a Trash record at {} could not be removed: {why}.", at.display()),
+            Outcome::InfoLeft(Restore, at) => format!("The item was restored, but a Trash record at {} could not be removed: {why}.", at.display()),
+            Outcome::FolderLeft(Delete, Some(at)) => format!("The item was deleted, but Flea could not remove its temporary folder at {}: {why}.", at.display()),
+            Outcome::FolderLeft(Restore, Some(at)) => format!("The item was restored, but Flea could not remove its temporary folder at {}: {why}.", at.display()),
+            Outcome::FolderLeft(Delete, None) => format!("The item was deleted, but Flea could not remove its temporary folder: {why}."),
+            Outcome::FolderLeft(Restore, None) => format!("The item was restored, but Flea could not remove its temporary folder: {why}."),
+            Outcome::RecordLeft(Some(Delete)) => format!("The item was deleted, but Flea could not remove its recovery record: {why}."),
+            Outcome::RecordLeft(Some(Restore)) => format!("The item was restored, but Flea could not remove its recovery record: {why}."),
+            Outcome::RecordLeft(None) => format!("The interrupted operation was recovered, but Flea could not remove its recovery record: {why}."),
+            Outcome::RecordUnconfirmed(Some(Delete)) => format!("The item was deleted, but after removing its recovery record, Flea could not confirm the removal on disk: {why}."),
+            Outcome::RecordUnconfirmed(Some(Restore)) => format!("The item was restored, but after removing its recovery record, Flea could not confirm the removal on disk: {why}."),
+            Outcome::RecordUnconfirmed(None) => format!("The interrupted operation was recovered, but after removing its recovery record, Flea could not confirm the removal on disk: {why}."),
+            Outcome::ChildChanged => "An item in the Trash changed, so the rest was kept.".into(),
+            Outcome::ChildLeft => format!("Some items in the Trash folder could not be deleted: {why}."),
+            Outcome::Blocked => format!("The item could not be restored: {why}."),
+            Outcome::OriginalChanged => "The item's original folder changed; select it again.".into(),
+            Outcome::Held(at) => format!("Flea found an interrupted Trash operation; its items are kept at {}.", at.display()),
+            Outcome::RecoveryUnreadable(at) => format!("Flea could not read the recovery folder at {}: {why}; records not yet read were left in place.", at.display()),
+            Outcome::NothingMoved => "Flea found an interrupted Trash operation; nothing was moved.".into(),
+            Outcome::Unreadable => "The Trash could not be read.".into(),
+            Outcome::TookTooLong => "The Trash took too long to answer.".into(),
+            Outcome::SelectionChanged => "The Trash selection changed; select the items again.".into(),
+            Outcome::Indistinct(true) => "Items in this Trash cannot be told apart, so they cannot be selected.".into(),
+            Outcome::Indistinct(false) => "Items in this Trash cannot be told apart, so nothing was done.".into(),
+            Outcome::Unchecked(Delete) => "This Trash cannot be checked, so nothing can be deleted from it.".into(),
+            Outcome::Unchecked(Restore) => "This Trash cannot be checked, so nothing can be restored from it.".into(),
+            Outcome::Text(text) => text.clone(),
+        }
+    }
+}
+impl std::fmt::Display for Refusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(&self.shown()) }
+}
+// Callers that still speak String, the menu delete and the browser reply, get the shown sentence.
+impl From<Refusal> for String {
+    fn from(refusal: Refusal) -> String { refusal.shown() }
+}
+
+// `what` heads the detail the log keeps; the failure's own text follows it.
+pub trait Refuse<T>: Sized {
+    fn refuse(self, outcome: Outcome, what: &str) -> Result<T, Refusal>;
+    fn changed(self, what: &str) -> Result<T, Refusal> { self.refuse(Outcome::Changed, what) }
+}
+impl<T> Refuse<T> for Option<T> {
+    fn refuse(self, outcome: Outcome, what: &str) -> Result<T, Refusal> { self.ok_or_else(|| Refusal::new(outcome, what)) }
+}
+impl<T> Refuse<T> for Result<T, std::io::Error> {
+    fn refuse(self, outcome: Outcome, what: &str) -> Result<T, Refusal> { self.map_err(|e| Refusal::os(outcome, what, &e)) }
+}
+impl<T> Refuse<T> for Result<T, String> {
+    fn refuse(self, outcome: Outcome, what: &str) -> Result<T, Refusal> { self.map_err(|e| Refusal::new(outcome, format!("{what}: {e}"))) }
 }
 
 // PR 135, reverb256: the kernel does not sequence a flock release after close(2) completes, so a
@@ -184,6 +350,9 @@ impl Records {
         Ok(bytes)
     }
 }
+
+#[cfg(test)]
+mod refusal_tests;
 
 #[cfg(test)]
 mod tests {

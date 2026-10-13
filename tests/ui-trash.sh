@@ -992,8 +992,8 @@ case_trash() {
     trash_wait '.total == 1 and .selectedCount == 1 and (.busy == false)'
     [[ "$(ipc statusPrimary)" == 'Deleted 1 of 2 items · 1 failed' && "$(ipc statusError)" == true ]] \
         || fail "trash: partial deletion did not retain the named primary failure; observed primary [$(ipc statusPrimary)] error [$(ipc statusError)]"
-    # The locked directory cannot be moved into the quarantine, so src/backend/trashdelete.rs answers "Could not claim Trash item: <io_message>", and ui/TrashView.qml names the file before it.
-    [[ "$(ipc statusDetail)" == 'locked failed: Could not claim Trash item: permission denied' ]] \
+    # The locked directory cannot be moved into the quarantine, so src/backend/trashdelete.rs answers "Could not prepare the deletion, so nothing was deleted: <io_message>.", and ui/TrashView.qml names the file before it.
+    [[ "$(ipc statusDetail)" == 'locked failed: Could not prepare the deletion, so nothing was deleted: permission denied.' ]] \
         || fail "trash: partial deletion has no file-specific failure detail; observed [$(ipc statusDetail)]"
     trash_guard_store 1
     trash_shot trash-partial-failure

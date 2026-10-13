@@ -3,12 +3,12 @@ mod recovery;
 pub use recovery::{recover, recovery_root, RecoveryReport};
 use recovery::Recovery;
 
-use crate::backend::trashmanifest::{Cancellation, Manifest, Records};
+use crate::backend::trashmanifest::{Cancellation, Manifest, Op, Outcome, Records, Refusal, Refuse};
 use crate::json::{escape, field_str, field_usize};
 use crate::oflags::O_NOFOLLOW;
 use std::ffi::{CString, OsStr, OsString};
 use std::fs::{File, Metadata, OpenOptions};
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, ErrorKind, Read};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
@@ -56,16 +56,16 @@ impl Identity {
         format!("{},{},{},{},{},{}", self.dev, self.ino, self.size, self.mtime, self.nanos, self.mode)
     }
     // Sample identity: "2049,123,8,1788861600,0,33188".
-    fn from_saved(text: &str) -> Result<Self, String> {
+    fn from_saved(text: &str) -> Result<Self, Refusal> {
         let parts: Vec<_> = text.split(',').collect();
-        if parts.len() != 6 { return Err("Invalid Trash review identity.".into()); }
+        if parts.len() != 6 { return Err(Refusal::changed("Invalid Trash review identity.")); }
         Ok(Self {
-            dev: parts[0].parse().map_err(|_| "Invalid Trash device.")?,
-            ino: parts[1].parse().map_err(|_| "Invalid Trash inode.")?,
-            size: parts[2].parse().map_err(|_| "Invalid Trash size.")?,
-            mtime: parts[3].parse().map_err(|_| "Invalid Trash mtime.")?,
-            nanos: parts[4].parse().map_err(|_| "Invalid Trash nanoseconds.")?,
-            mode: parts[5].parse().map_err(|_| "Invalid Trash mode.")?,
+            dev: parts[0].parse().ok().changed("Invalid Trash device.")?,
+            ino: parts[1].parse().ok().changed("Invalid Trash inode.")?,
+            size: parts[2].parse().ok().changed("Invalid Trash size.")?,
+            mtime: parts[3].parse().ok().changed("Invalid Trash mtime.")?,
+            nanos: parts[4].parse().ok().changed("Invalid Trash nanoseconds.")?,
+            mode: parts[5].parse().ok().changed("Invalid Trash mode.")?,
         })
     }
     fn of(meta: &Metadata) -> Self {
@@ -101,13 +101,13 @@ impl Node {
         bytes
     }
     // Sample record: seven little-endian u64 fields followed by the raw relative filename bytes.
-    fn decode(bytes: &[u8]) -> Result<Self, String> {
+    fn decode(bytes: &[u8]) -> Result<Self, Refusal> {
         const HEADER: usize = 7 * 8;
-        if bytes.len() < HEADER { return Err("Truncated Trash node review.".into()); }
+        if bytes.len() < HEADER { return Err(Refusal::changed("Truncated Trash node review.")); }
         let number = |index: usize| u64::from_le_bytes(bytes[index * 8..(index + 1) * 8].try_into().unwrap());
         let relative = PathBuf::from(OsString::from_vec(bytes[HEADER..].to_vec()));
         if relative.components().any(|part| !matches!(part, std::path::Component::Normal(_))) {
-            return Err("Invalid relative Trash review path.".into());
+            return Err(Refusal::changed("Invalid relative Trash review path."));
         }
         Ok(Self {
             relative,
@@ -120,26 +120,27 @@ impl Node {
     fn deletion_identity_matches(&self, current: &Identity) -> bool {
         self.identity.matches_survivor(current)
     }
-    fn claim_remove(&self, parent: &File, name: &OsStr, quarantine: &File, record_offset: u64) -> Result<(), String> {
-        if !self.deletion_identity_matches(&identity(&fd_path(parent, name))?) {
-            return Err("Trash child changed; remaining data was preserved.".into());
+    fn claim_remove(&self, parent: &File, name: &OsStr, quarantine: &File, record_offset: u64) -> Result<(), Refusal> {
+        if !self.deletion_identity_matches(&identity(&fd_path(parent, name)).changed("Trash child unreadable")?) {
+            return Err(Refusal::new(Outcome::ChildChanged, "Trash child changed; remaining data was preserved."));
         }
         let claimed = format!("entry-{}", record_offset);
         let claimed = OsStr::new(&claimed);
-        rename(parent, name, quarantine, claimed)?;
+        rename(parent, name, quarantine, claimed).map_err(|reason| Refusal::new(Outcome::ChildLeft, "Trash child could not be claimed").because(reason))?;
         let path = fd_path(quarantine, claimed);
         let removal = (|| {
-            if !self.deletion_identity_matches(&identity(&path)?) {
-                return Err("Trash child changed while being claimed.".into());
+            if !self.deletion_identity_matches(&identity(&path).changed("Claimed Trash child unreadable")?) {
+                return Err(Refusal::new(Outcome::ChildChanged, "Trash child changed while being claimed."));
             }
             if self.directory() {
                 // remove_dir refuses arrivals absent from the snapshot instead of deleting them recursively.
-                std::fs::remove_dir(&path).map_err(|e| format!("Trash directory has surviving items: {}", e))
-            } else { std::fs::remove_file(&path).map_err(|e| e.to_string()) }
+                std::fs::remove_dir(&path).refuse(Outcome::ChildLeft, "Trash directory has surviving items")
+            } else { std::fs::remove_file(&path).refuse(Outcome::ChildLeft, "Trash child could not be removed") }
         })();
         if let Err(error) = removal {
-            if rename(quarantine, claimed, parent, name).is_err() {
-                return Err(format!("{}. A changed child remains in the recovery directory.", error));
+            // A child that cannot go back stays in the quarantine, where remove_empty finds it; the reason it could not is logged.
+            if let Err(reason) = rename(quarantine, claimed, parent, name) {
+                Refusal::new(Outcome::ChildLeft, format!("Trash child could not be put back: {reason}")).logged();
             }
             return Err(error);
         }
@@ -156,24 +157,24 @@ pub struct Reviewed {
 }
 
 // Open one ancestor at a time; neither deep paths nor substituted symlinks need recursive traversal.
-fn parent_at(base: &File, root: &OsStr, relative: &Path) -> Result<(File, OsString), String> {
+fn parent_at(base: &File, root: &OsStr, relative: &Path) -> Result<(File, OsString), Refusal> {
     if relative.as_os_str().is_empty() {
-        return Ok((base.try_clone().map_err(|e| e.to_string())?, root.to_os_string()));
+        return Ok((base.try_clone().changed("Could not duplicate a Trash handle")?, root.to_os_string()));
     }
     let mut directory = open_dir(&fd_path(base, root))?;
-    let parent = relative.parent().ok_or("Missing Trash review parent.")?;
+    let parent = relative.parent().changed("Missing Trash review parent.")?;
     for component in parent.components() {
-        let std::path::Component::Normal(name) = component else { return Err("Invalid Trash review parent.".into()); };
+        let std::path::Component::Normal(name) = component else { return Err(Refusal::changed("Invalid Trash review parent.")); };
         directory = open_dir(&fd_path(&directory, name))?;
     }
-    Ok((directory, relative.file_name().ok_or("Missing Trash review name.")?.to_os_string()))
+    Ok((directory, relative.file_name().changed("Missing Trash review name.")?.to_os_string()))
 }
-fn matches(tree: &Records, base: &File, root: &OsStr, cancel: &Cancellation) -> Result<bool, String> {
+fn matches(tree: &Records, base: &File, root: &OsStr, cancel: &Cancellation) -> Result<bool, Refusal> {
     #[cfg(test)]
     MATCH_WALKS.with(|walks| walks.set(walks.get() + 1));
     let mut offset = tree.start();
-    while let Some(bytes) = tree.next(&mut offset)? {
-        cancel.check()?;
+    while let Some(bytes) = tree.next(&mut offset).changed("Trash review unreadable")? {
+        cancel.check().map_err(Refusal::said)?;
         let node = Node::decode(&bytes)?;
         let Ok((parent, name)) = parent_at(base, root, &node.relative) else { return Ok(false); };
         let path = fd_path(&parent, &name);
@@ -181,9 +182,9 @@ fn matches(tree: &Records, base: &File, root: &OsStr, cancel: &Cancellation) -> 
         if node.directory() {
             let directory = open_dir(&path)?;
             let mut children = 0;
-            for entry in std::fs::read_dir(fd_path(&directory, OsStr::new("."))).map_err(|e| e.to_string())? {
-                cancel.check()?;
-                entry.map_err(|e| e.to_string())?;
+            for entry in std::fs::read_dir(fd_path(&directory, OsStr::new("."))).changed("Could not read a Trash folder")? {
+                cancel.check().map_err(Refusal::said)?;
+                entry.changed("Could not read a Trash folder entry")?;
                 children += 1;
             }
             if children != node.children || identity(&path).ok().as_ref() != Some(&node.identity) { return Ok(false); }
@@ -192,19 +193,23 @@ fn matches(tree: &Records, base: &File, root: &OsStr, cancel: &Cancellation) -> 
     Ok(true)
 }
 
-fn open_dir(path: &Path) -> Result<File, String> {
+fn open_dir(path: &Path) -> Result<File, Refusal> {
     OpenOptions::new()
         .read(true)
         .custom_flags(O_NOFOLLOW | O_DIRECTORY)
         .open(path)
-        .map_err(|e| format!("Could not open the Trash folder {}: {}", path.display(), e))
+        .map_err(|e| Refusal::os(Outcome::Changed, &format!("Could not open Trash folder {}", path.display()), &e))
 }
 fn fd_path(file: &File, name: &OsStr) -> PathBuf {
     PathBuf::from(format!("/proc/self/fd/{}", file.as_raw_fd())).join(name)
 }
+// The error is io_message's plain clause, so each caller can say it under the outcome of its own step.
 fn rename(from: &File, old: &OsStr, to: &File, new: &OsStr) -> Result<(), String> {
-    let old = CString::new(old.as_bytes()).map_err(|_| "Invalid Trash filename.")?;
-    let new = CString::new(new.as_bytes()).map_err(|_| "Invalid quarantine filename.")?;
+    rename_claim(from, old, to, new).map_err(|(_, reason)| reason)
+}
+fn rename_claim(from: &File, old: &OsStr, to: &File, new: &OsStr) -> Result<(), (ErrorKind, String)> {
+    let old = CString::new(old.as_bytes()).map_err(|_| (ErrorKind::InvalidInput, "Invalid Trash filename.".into()))?;
+    let new = CString::new(new.as_bytes()).map_err(|_| (ErrorKind::InvalidInput, "Invalid quarantine filename.".into()))?;
     if unsafe {
         renameat2(
             from.as_raw_fd(),
@@ -218,74 +223,78 @@ fn rename(from: &File, old: &OsStr, to: &File, new: &OsStr) -> Result<(), String
         let error = std::io::Error::last_os_error();
         // A kernel without the flag answers EINVAL or EOPNOTSUPP, so the path fallback moves it.
         return match error.raw_os_error() {
-            Some(EINVAL) | Some(EOPNOTSUPP) => rename_by_path(from, &old, to, &new),
-            _ => Err(crate::error::io_message(&error)),
+            Some(EINVAL) | Some(EOPNOTSUPP) => rename_by_path(from, &old, to, &new).map_err(|e| (e.kind(), crate::error::io_message(&e))),
+            _ => Err((error.kind(), crate::error::io_message(&error))),
         };
     }
     Ok(())
 }
 
 // The fd rename above names no path, so the fallback resolves both ends through this process's own descriptor table.
-fn rename_by_path(from: &File, old: &CString, to: &File, new: &CString) -> Result<(), String> {
+fn rename_by_path(from: &File, old: &CString, to: &File, new: &CString) -> std::io::Result<()> {
     let from_path = PathBuf::from(format!("/proc/self/fd/{}", from.as_raw_fd())).join(OsStr::from_bytes(old.as_bytes()));
     let to_path = PathBuf::from(format!("/proc/self/fd/{}", to.as_raw_fd())).join(OsStr::from_bytes(new.as_bytes()));
-    crate::backend::renamecompat::rename_noreplace(&from_path, &to_path).map_err(|e| crate::error::io_message(&e))
+    crate::backend::renamecompat::rename_noreplace(&from_path, &to_path)
 }
-fn identity(path: &Path) -> Result<Identity, String> {
-    path.symlink_metadata()
-        .map(|m| Identity::of(&m))
-        .map_err(|e| e.to_string())
+fn identity(path: &Path) -> std::io::Result<Identity> {
+    path.symlink_metadata().map(|m| Identity::of(&m))
+}
+// A review that cannot be stored refuses the deletion before it starts, whatever the disk said.
+fn stored<T>(result: Result<T, String>, what: &str) -> Result<T, Refusal> {
+    result.refuse(Outcome::Prepare(Op::Delete), what).map_err(|refusal| refusal.because("the review could not be saved"))
 }
 
 fn snapshot_tree(path: &Path, payload: &Identity, manifest: &mut Manifest, scratch: &Path,
-    cancel: &Cancellation) -> Result<(Records, u64), String> {
-        let files = open_dir(path.parent().ok_or("Missing Trash parent.")?)?;
-        let name = path.file_name().ok_or("Missing Trash filename.")?;
-        let mut queue = Manifest::new(scratch)?;
-        queue.append(&Node { relative: PathBuf::new(), identity: payload.clone(), children: 0 }.encode())?;
+    cancel: &Cancellation) -> Result<(Records, u64), Refusal> {
+        let files = open_dir(path.parent().changed("Missing Trash parent.")?)?;
+        let name = path.file_name().changed("Missing Trash filename.")?;
+        let mut queue = stored(Manifest::new(scratch), "Could not start the Trash review")?;
+        stored(queue.append(&Node { relative: PathBuf::new(), identity: payload.clone(), children: 0 }.encode()), "Could not write the Trash review")?;
         let start = manifest.len();
         let mut cursor = 0;
         let mut bytes = 0u64;
-        while let Some(record) = queue.records().next(&mut cursor)? {
-            cancel.check()?;
+        while let Some(record) = stored(queue.records().next(&mut cursor), "Could not read the Trash review")? {
+            cancel.check().map_err(Refusal::said)?;
             let mut node = Node::decode(&record)?;
             let (parent, entry_name) = parent_at(&files, name, &node.relative)?;
             let path = fd_path(&parent, &entry_name);
-            if identity(&path)? != node.identity { return Err("Trash changed while reviewing its contents.".into()); }
+            if identity(&path).changed("Trash item unreadable while reviewing")? != node.identity {
+                return Err(Refusal::changed("Trash changed while reviewing its contents."));
+            }
             if node.directory() {
                 let directory = open_dir(&path)?;
-                if Identity::of(&directory.metadata().map_err(|e| e.to_string())?) != node.identity {
-                    return Err("Trash directory changed while reviewing it.".into());
+                if Identity::of(&directory.metadata().changed("Trash folder unreadable while reviewing")?) != node.identity {
+                    return Err(Refusal::changed("Trash directory changed while reviewing it."));
                 }
-                for entry in std::fs::read_dir(fd_path(&directory, OsStr::new("."))).map_err(|e| e.to_string())? {
-                    cancel.check()?;
-                    let child_name = entry.map_err(|e| e.to_string())?.file_name();
+                for entry in std::fs::read_dir(fd_path(&directory, OsStr::new("."))).changed("Could not read a Trash folder")? {
+                    cancel.check().map_err(Refusal::said)?;
+                    let child_name = entry.changed("Could not read a Trash folder entry")?.file_name();
                     let child = Node { relative: node.relative.join(&child_name),
-                        identity: identity(&fd_path(&directory, &child_name))?, children: 0 };
-                    queue.append(&child.encode())?;
+                        identity: identity(&fd_path(&directory, &child_name)).changed("Trash item unreadable while reviewing")?, children: 0 };
+                    stored(queue.append(&child.encode()), "Could not write the Trash review")?;
                     node.children += 1;
                 }
-                if Identity::of(&directory.metadata().map_err(|e| e.to_string())?) != node.identity {
-                    return Err("Trash directory changed while reviewing it.".into());
+                if Identity::of(&directory.metadata().changed("Trash folder unreadable while reviewing")?) != node.identity {
+                    return Err(Refusal::changed("Trash directory changed while reviewing it."));
                 }
             } else {
-                bytes = bytes.checked_add(node.identity.size).ok_or("Trash byte total exceeds the supported range.")?;
+                bytes = bytes.checked_add(node.identity.size).changed("Trash byte total exceeds the supported range.")?;
             }
-            manifest.append(&node.encode())?;
+            stored(manifest.append(&node.encode()), "Could not write the Trash review")?;
         }
-        let tree = manifest.range(start, manifest.len())?;
+        let tree = stored(manifest.range(start, manifest.len()), "Could not read the Trash review")?;
         if identity(path).ok().as_ref() != Some(payload) || !matches(&tree, &files, name, cancel)? {
-            return Err("Trash changed while reviewing its contents.".into());
+            return Err(Refusal::changed("Trash changed while reviewing its contents."));
         }
         Ok((tree, bytes))
 }
-fn remove_tree(tree: &Records, quarantine: &File, refused: &str) -> Result<(), String> {
+fn remove_tree(tree: &Records, quarantine: &File, refused: Refusal) -> Result<(), Refusal> {
     // matches() counts children: identity alone is blind to a same-tick arrival that keeps size and mtime.
     if !matches(tree, quarantine, OsStr::new("payload"), &Cancellation::default())? {
-        return Err(refused.into());
+        return Err(refused);
     }
     let mut offset = tree.end();
-    while let Some(bytes) = tree.previous(&mut offset)? {
+    while let Some(bytes) = tree.previous(&mut offset).changed("Trash review unreadable")? {
         let node = Node::decode(&bytes)?;
         let (parent, child_name) = parent_at(quarantine, OsStr::new("payload"), &node.relative)?;
         node.claim_remove(&parent, &child_name, quarantine, offset - tree.start())?;
@@ -295,7 +304,8 @@ fn remove_tree(tree: &Records, quarantine: &File, refused: &str) -> Result<(), S
 
 
 // Sample .trashinfo: "[Trash Info]\nPath=/original/photo%20one.jpg\nDeletionDate=2026-09-08T10:00:00\n".
-fn original_path(metadata: &File, trash_root: &Path) -> Result<PathBuf, String> {
+// Every refusal here is a damaged record, since a metadata file that parses badly was never the user's change.
+fn original_path(metadata: &File, trash_root: &Path) -> Result<PathBuf, Refusal> {
     // Linux absolute paths passed to the restore syscall cannot exceed PATH_MAX bytes.
     const PATH_MAX: u64 = 4096;
     const MAX_ENCODED_PATH: u64 = PATH_MAX * 3;
@@ -306,37 +316,53 @@ fn original_path(metadata: &File, trash_root: &Path) -> Result<PathBuf, String> 
     loop {
         let mut line = String::new();
         let bytes = reader.by_ref().take(MAX_ENCODED_PATH + PATH_PREFIX_BYTES + 1).read_line(&mut line)
-            .map_err(|e| format!("Could not parse Trash metadata: {}", e))?;
+            .refuse(Outcome::Damaged, "Could not parse Trash metadata")?;
         if bytes == 0 { break; }
         if !line.ends_with('\n') && bytes as u64 == MAX_ENCODED_PATH + PATH_PREFIX_BYTES + 1 {
-            return Err("Trash metadata contains a line longer than the supported filesystem path.".into());
+            return Err(Refusal::new(Outcome::Damaged, "Trash metadata contains a line longer than the supported filesystem path."));
         }
         let line = line.trim_end_matches(['\r', '\n']);
         if line.starts_with('[') { section = line == "[Trash Info]"; continue; }
         if !section { continue; }
         if let Some(value) = line.strip_prefix("Path=") {
-            if original.is_some() { return Err("Trash metadata contains duplicate original paths.".into()); }
+            if original.is_some() { return Err(Refusal::new(Outcome::Damaged, "Trash metadata contains duplicate original paths.")); }
             let decoded = PathBuf::from(crate::paths::percent_decode(value));
             if decoded.as_os_str().is_empty() || decoded.components().any(|part| matches!(part, std::path::Component::ParentDir)) {
-                return Err("Trash metadata contains an invalid original path.".into());
+                return Err(Refusal::new(Outcome::Damaged, "Trash metadata contains an invalid original path."));
             }
             let path = if decoded.is_absolute() { decoded } else {
                 let volume = if trash_root.file_name().and_then(OsStr::to_str).map(|name| name.starts_with(".Trash-")).unwrap_or(false) {
                     trash_root.parent()
                 } else if trash_root.parent().and_then(Path::file_name) == Some(OsStr::new(".Trash")) {
                     trash_root.parent().and_then(Path::parent)
-                } else { None }.ok_or("Relative Trash original path has no supported volume root.")?;
+                } else { None }.refuse(Outcome::Damaged, "Relative Trash original path has no supported volume root.")?;
                 volume.join(decoded)
             };
-            if path.file_name().is_none() { return Err("Trash original path names a filesystem root.".into()); }
+            if path.file_name().is_none() { return Err(Refusal::new(Outcome::Damaged, "Trash original path names a filesystem root.")); }
             original = Some(path);
         }
     }
-    original.ok_or("Trash metadata has no original path.".into())
+    original.refuse(Outcome::Damaged, "Trash metadata has no original path.")
+}
+
+// Completed steps distinguish a record still held from a removal whose durability could not be confirmed.
+fn finish(journal: Recovery, op: Op, done: bool) -> Result<(), Refusal> {
+    journal.complete().map_err(|refusal| {
+        let effect = done.then_some(op);
+        let outcome = match refusal.outcome() {
+            Outcome::RecordUnconfirmed(_) => Outcome::RecordUnconfirmed(effect),
+            _ => Outcome::RecordLeft(effect),
+        };
+        refusal.wrap(outcome)
+    })
+}
+// After rollback the original refusal stands; only the record cleanup failure is logged here.
+fn settle(journal: Recovery, op: Op) {
+    if let Err(left) = finish(journal, op, false) { left.logged(); }
 }
 
 impl Reviewed {
-    pub fn inspect(path: PathBuf, gio_identity: &str) -> Result<Self, String> {
+    pub fn inspect(path: PathBuf, gio_identity: &str) -> Result<Self, Refusal> {
         if !path.is_absolute()
             || path
                 .parent()
@@ -344,24 +370,24 @@ impl Reviewed {
                 .and_then(|s| s.to_str())
                 != Some("files")
         {
-            return Err("Trash provider did not supply a supported backing path.".into());
+            return Err(Refusal::changed("Trash provider did not supply a supported backing path."));
         }
         let name = path
             .file_name()
             .and_then(|s| s.to_str())
-            .ok_or("Trash filename is not valid text.")?;
+            .changed("Trash filename is not valid text.")?;
         let root = path
             .parent()
             .and_then(Path::parent)
-            .ok_or("Trash root is missing.")?;
+            .changed("Trash root is missing.")?;
         let info = root.join("info").join(format!("{}.trashinfo", name));
-        let payload = identity(&path)?;
+        let payload = identity(&path).changed("Trash item unreadable")?;
         if gio_identity != format!("l{}:{}", payload.dev, payload.ino) {
-            return Err("Trash identity changed while reading it.".into());
+            return Err(Refusal::changed("Trash identity changed while reading it."));
         }
-        let info_meta = info.symlink_metadata().map_err(|e| e.to_string())?;
+        let info_meta = info.symlink_metadata().changed("Trash metadata unreadable")?;
         if !info_meta.is_file() {
-            return Err("Trash metadata is not a regular file.".into());
+            return Err(Refusal::changed("Trash metadata is not a regular file."));
         }
         Ok(Self {
             path,
@@ -371,28 +397,31 @@ impl Reviewed {
             tree: None,
         })
     }
-    pub fn snapshot(&mut self, manifest: &mut Manifest, scratch: &Path, cancel: &Cancellation) -> Result<u64, String> {
+    pub fn snapshot(&mut self, manifest: &mut Manifest, scratch: &Path, cancel: &Cancellation) -> Result<u64, Refusal> {
         self.tree = None;
-        let (tree, bytes) = snapshot_tree(&self.path, &self.payload, manifest, scratch, cancel)?;
-        if !self.unchanged() { return Err("Trash changed while reviewing its contents.".into()); }
+        let (tree, bytes) = snapshot_tree(&self.path, &self.payload, manifest, scratch, cancel).map_err(Refusal::logged)?;
+        if !self.unchanged() { return Err(Refusal::changed("Trash changed while reviewing its contents.").logged()); }
         self.tree = Some(tree);
         Ok(bytes)
     }
-    pub fn saved(&self) -> Result<String, String> {
-        let tree = self.tree.as_ref().ok_or("Trash contents have not been reviewed.")?;
+    pub fn saved(&self) -> Result<String, Refusal> {
+        let tree = self.tree.as_ref().changed("Trash contents have not been reviewed.").map_err(Refusal::logged)?;
+        let (path, info) = self.path.to_str().zip(self.info.to_str())
+            .changed("Trash path is not valid text.").map_err(Refusal::logged)?;
         Ok(format!(r#"{{"path":"{}","info":"{}","payload":"{}","metadata":"{}","start":{},"end":{}}}"#,
-            escape(self.path.to_str().ok_or("Trash path is not valid text.")?),
-            escape(self.info.to_str().ok_or("Trash metadata path is not valid text.")?),
-            self.payload.saved(), self.metadata.saved(), tree.start(), tree.end()))
+            escape(path), escape(info), self.payload.saved(), self.metadata.saved(), tree.start(), tree.end()))
     }
-    pub fn from_saved(text: &str, manifest: &Manifest) -> Result<Self, String> {
+    pub fn from_saved(text: &str, manifest: &Manifest) -> Result<Self, Refusal> {
+        Self::read_saved(text, manifest).map_err(Refusal::logged)
+    }
+    fn read_saved(text: &str, manifest: &Manifest) -> Result<Self, Refusal> {
         Ok(Self {
-            path: PathBuf::from(field_str(text, "path").ok_or("Missing Trash review path.")?),
-            info: PathBuf::from(field_str(text, "info").ok_or("Missing Trash review metadata path.")?),
-            payload: Identity::from_saved(&field_str(text, "payload").ok_or("Missing Trash review identity.")?)?,
-            metadata: Identity::from_saved(&field_str(text, "metadata").ok_or("Missing Trash metadata identity.")?)?,
-            tree: Some(manifest.range(field_usize(text, "start").ok_or("Missing Trash review start.")? as u64,
-                field_usize(text, "end").ok_or("Missing Trash review end.")? as u64)?),
+            path: PathBuf::from(field_str(text, "path").changed("Missing Trash review path.")?),
+            info: PathBuf::from(field_str(text, "info").changed("Missing Trash review metadata path.")?),
+            payload: Identity::from_saved(&field_str(text, "payload").changed("Missing Trash review identity.")?)?,
+            metadata: Identity::from_saved(&field_str(text, "metadata").changed("Missing Trash metadata identity.")?)?,
+            tree: Some(manifest.range(field_usize(text, "start").changed("Missing Trash review start.")? as u64,
+                field_usize(text, "end").changed("Missing Trash review end.")? as u64).changed("Invalid Trash review range")?),
         })
     }
     pub fn bytes(&self, deadline: std::time::Instant) -> crate::backend::dirsize::DirSize {
@@ -420,11 +449,13 @@ impl Reviewed {
         identity(&self.path).ok().as_ref() == Some(&self.payload)
             && identity(&self.info).ok().as_ref() == Some(&self.metadata)
     }
-    pub fn contents_unchanged(&self, cancel: &Cancellation) -> Result<bool, String> {
+    pub fn contents_unchanged(&self, cancel: &Cancellation) -> Result<bool, Refusal> {
         if !self.unchanged() { return Ok(false); }
         let Some(tree) = &self.tree else { return Ok(true); };
-        let files = open_dir(self.path.parent().ok_or("Missing Trash parent.")?)?;
-        matches(tree, &files, self.path.file_name().ok_or("Missing Trash filename.")?, cancel)
+        (|| {
+            let files = open_dir(self.path.parent().changed("Missing Trash parent.")?)?;
+            matches(tree, &files, self.path.file_name().changed("Missing Trash filename.")?, cancel)
+        })().map_err(Refusal::logged)
     }
     pub fn selection_identity(&self) -> String {
         // This ephemeral value is compared within one backend session, never parsed or persisted.
@@ -436,56 +467,59 @@ impl Reviewed {
             && self.payload.mode & 0o170000 == other.payload.mode & 0o170000
             && self.metadata.dev == other.metadata.dev && self.metadata.ino == other.metadata.ino
     }
-    pub fn delete(&self, recovery_root: &Path) -> Result<(), String> {
+    pub fn delete(&self, recovery_root: &Path) -> Result<(), Refusal> {
         self.delete_after(recovery_root, || {})
     }
-    fn delete_after(&self, recovery_root: &Path, before_claim: impl FnOnce()) -> Result<(), String> {
+    fn delete_after(&self, recovery_root: &Path, before_claim: impl FnOnce()) -> Result<(), Refusal> {
         self.delete_with(recovery_root, before_claim, |_| {})
     }
-    fn delete_with(&self, recovery_root: &Path, before_claim: impl FnOnce(), before_remove: impl FnOnce(&Path)) -> Result<(), String> {
-        let tree = self.tree.as_ref().ok_or("Trash contents have not been reviewed.")?;
-        self.with_claimed("Deletion", recovery_root, None, before_claim, |quarantine| {
+    fn delete_with(&self, recovery_root: &Path, before_claim: impl FnOnce(), before_remove: impl FnOnce(&Path)) -> Result<(), Refusal> {
+        let tree = self.tree.as_ref().changed("Trash contents have not been reviewed.").map_err(Refusal::logged)?;
+        self.with_claimed(Op::Delete, recovery_root, None, before_claim, |quarantine| {
             before_remove(&fd_path(quarantine, OsStr::new("payload")));
-            remove_tree(tree, quarantine, "Trash contents changed; no deletion attempted.")
+            remove_tree(tree, quarantine, Refusal::new(Outcome::NothingDeleted, "Trash contents changed; no deletion attempted."))
         })
     }
-    pub fn restore(&self, original: &Path, recovery_root: &Path) -> Result<(), String> {
+    pub fn restore(&self, original: &Path, recovery_root: &Path) -> Result<(), Refusal> {
         self.restore_after(original, recovery_root, || {})
     }
-    fn restore_after(&self, original: &Path, recovery_root: &Path, before_claim: impl FnOnce()) -> Result<(), String> {
-        self.with_claimed("Restore", recovery_root, Some(original), before_claim, |quarantine| {
+    fn restore_after(&self, original: &Path, recovery_root: &Path, before_claim: impl FnOnce()) -> Result<(), Refusal> {
+        self.with_claimed(Op::Restore, recovery_root, Some(original), before_claim, |quarantine| {
             let metadata = crate::backend::regfile::open_if_regular(&fd_path(quarantine, OsStr::new("metadata")), O_NOFOLLOW)
-                .map_err(|e| format!("Could not read claimed Trash metadata: {}", e))?;
-            if Identity::of(&metadata.metadata().map_err(|e| e.to_string())?) != self.metadata {
-                return Err("Trash metadata changed after being claimed.".into());
+                .map_err(|e| Refusal::changed(format!("Could not read claimed Trash metadata: {}", e)))?;
+            if Identity::of(&metadata.metadata().changed("Claimed Trash metadata unreadable")?) != self.metadata {
+                return Err(Refusal::changed("Trash metadata changed after being claimed."));
             }
-            let destination = original_path(&metadata, self.path.parent().and_then(Path::parent).ok_or("Missing Trash root.")?)?;
-            if destination != original || Identity::of(&metadata.metadata().map_err(|e| e.to_string())?) != self.metadata {
-                return Err("The item's original folder changed; select it again.".into());
+            let destination = original_path(&metadata, self.path.parent().and_then(Path::parent).changed("Missing Trash root.")?)?;
+            if destination != original || Identity::of(&metadata.metadata().changed("Claimed Trash metadata unreadable")?) != self.metadata {
+                return Err(Refusal::new(Outcome::OriginalChanged, "The Trash item's original location changed; refresh the selection."));
             }
-            let destination_parent = destination.parent().ok_or("Original parent is missing.")?.canonicalize()
-                .map_err(|e| format!("Could not open original location {}: {}", destination.display(), e))?;
-            let destination_directory = open_dir(&destination_parent)?;
+            let destination_parent = destination.parent().changed("Original parent is missing.")?.canonicalize()
+                .map_err(|e| Refusal::os(Outcome::Blocked, &format!("Could not open original location {}", destination.display()), &e))?;
+            let destination_directory = open_dir(&destination_parent).map_err(|refusal| refusal.wrap(Outcome::Blocked))?;
             rename(quarantine, OsStr::new("payload"), &destination_directory,
-                destination.file_name().ok_or("Original filename is missing.")?)
-                .map_err(|error| format!("Could not restore {} without overwriting: {}", destination.display(), error))
+                destination.file_name().changed("Original filename is missing.")?)
+                .map_err(|reason| Refusal::new(Outcome::Blocked, format!("Could not restore {} without overwriting: {}", destination.display(), reason)).because(reason))
         })
     }
-    fn with_claimed(&self, operation: &str, recovery_root: &Path, destination: Option<&Path>, before_claim: impl FnOnce(), perform: impl FnOnce(&File) -> Result<(), String>) -> Result<(), String> {
-        let files = open_dir(self.path.parent().ok_or("Missing Trash parent.")?)?;
-        let infos = open_dir(self.info.parent().ok_or("Missing Trash metadata parent.")?)?;
+    fn with_claimed(&self, op: Op, recovery_root: &Path, destination: Option<&Path>, before_claim: impl FnOnce(), perform: impl FnOnce(&File) -> Result<(), Refusal>) -> Result<(), Refusal> {
+        self.claimed(op, recovery_root, destination, before_claim, perform).map_err(Refusal::logged)
+    }
+    fn claimed(&self, op: Op, recovery_root: &Path, destination: Option<&Path>, before_claim: impl FnOnce(), perform: impl FnOnce(&File) -> Result<(), Refusal>) -> Result<(), Refusal> {
+        let files = open_dir(self.path.parent().changed("Missing Trash parent.")?)?;
+        let infos = open_dir(self.info.parent().changed("Missing Trash metadata parent.")?)?;
         let name = self
             .path
             .file_name()
-            .ok_or("Invalid Trash filename.")?;
+            .changed("Invalid Trash filename.")?;
         let info_name = self
             .info
             .file_name()
-            .ok_or("Invalid Trash metadata name.")?;
-        if identity(&fd_path(&files, name))? != self.payload
-            || identity(&fd_path(&infos, info_name))? != self.metadata
+            .changed("Invalid Trash metadata name.")?;
+        if identity(&fd_path(&files, name)).changed("Trash item unreadable")? != self.payload
+            || identity(&fd_path(&infos, info_name)).changed("Trash metadata unreadable")? != self.metadata
         {
-            return Err("The Trash item changed; confirm again.".into());
+            return Err(Refusal::new(Outcome::ConfirmAgain, "Trash item changed; confirm again."));
         }
         let quarantine_name = format!(
             ".flea-delete-{}-{}",
@@ -496,25 +530,32 @@ impl Reviewed {
         std::fs::DirBuilder::new()
             .mode(0o700)
             .create(&quarantine_path)
-            .map_err(|e| format!("Could not create Trash quarantine: {}", crate::error::io_message(&e)))?;
-        let quarantine = open_dir(&quarantine_path)?;
+            .map_err(|e| Refusal::os(Outcome::Prepare(op), "Could not create Trash quarantine", &e))?;
+        let quarantine = open_dir(&quarantine_path).map_err(|refusal| refusal.wrap(Outcome::Prepare(op)))?;
         let recovery = self.path.parent().unwrap().join(&quarantine_name);
         let mut journal = match Recovery::begin(recovery_root, &self.path, &files, &self.payload,
             Some((&self.info, &self.metadata, &infos)), &recovery, &quarantine,
             if destination.is_some() { None } else { self.tree.as_ref() }, destination) {
             Ok(journal) => journal,
-            Err(error) => { let _ = std::fs::remove_dir(&quarantine_path); return Err(error); }
+            Err(error) => { let _ = std::fs::remove_dir(&quarantine_path); return Err(error.wrap(Outcome::NoRecord(op))); }
         };
         before_claim();
         if let Err(error) = rename(&files, name, &quarantine, OsStr::new("payload")) {
-            if journal.remove_empty(&quarantine_path, &quarantine, &files).is_ok() { journal.complete()?; }
-            return Err(format!("Could not claim Trash item: {}", error));
+            match journal.remove_empty(&quarantine_path, &quarantine, &files) {
+                Ok(()) => settle(journal, op),
+                Err(left) => { left.logged(); }
+            }
+            return Err(Refusal::new(Outcome::Prepare(op), format!("Could not claim Trash item: {}", error)).because(error));
         }
-        let info_claim = rename(&infos, info_name, &quarantine, OsStr::new("metadata"));
+        let info_claim = rename_claim(&infos, info_name, &quarantine, OsStr::new("metadata"));
         let checked = identity(&fd_path(&quarantine, OsStr::new("payload"))).ok().as_ref() == Some(&self.payload)
             && info_claim.is_ok()
             && identity(&fd_path(&quarantine, OsStr::new("metadata"))).ok().as_ref() == Some(&self.metadata);
         if !checked {
+            let refused = match &info_claim {
+                Err((ErrorKind::NotFound, _)) | Ok(()) => Refusal::new(Outcome::ConfirmAgain, "Trash changed; no operation attempted. Confirm again."),
+                Err((_, reason)) => Refusal::new(Outcome::Prepare(op), format!("Could not claim Trash metadata: {reason}")).because(reason.clone()),
+            };
             let payload_back = rename(&quarantine, OsStr::new("payload"), &files, name);
             let info_back = if info_claim.is_ok() {
                 rename(&quarantine, OsStr::new("metadata"), &infos, info_name)
@@ -522,44 +563,39 @@ impl Reviewed {
                 Ok(())
             };
             if payload_back.is_err() || info_back.is_err() {
-                return Err(format!(
-                    "Trash changed; no operation attempted. Recover preserved items from {}.",
-                    recovery.display()
-                ));
+                return Err(refused.wrap(Outcome::Kept(recovery.clone())));
             }
-            if journal.remove_empty(&quarantine_path, &quarantine, &files).is_ok() { journal.complete()?; }
-            return Err(
-                "Trash changed; no operation attempted. Review a fresh confirmation.".into(),
-            );
+            match journal.remove_empty(&quarantine_path, &quarantine, &files) {
+                Ok(()) => settle(journal, op),
+                Err(left) => { left.logged(); }
+            }
+            return Err(refused);
         }
         let removal = perform(&quarantine);
         if let Err(error) = removal {
             let payload_back = rename(&quarantine, OsStr::new("payload"), &files, name);
             let info_back = rename(&quarantine, OsStr::new("metadata"), &infos, info_name);
             if payload_back.is_err() || info_back.is_err() {
-                return Err(format!(
-                    "{} failed: {}. Remaining items are preserved at {}.",
-                    operation, error,
-                    recovery.display()
-                ));
+                return Err(error.wrap(Outcome::Stuck(op, recovery)));
             }
             if journal.remove_empty(&quarantine_path, &quarantine, &files).is_err() {
-                return Err(format!("{} failed: {}. Remaining data is preserved in Trash and at {}.", operation, error, recovery.display()));
+                return Err(error.wrap(Outcome::StuckInTrash(op, recovery)));
             }
-            journal.complete()?;
-            return Err(format!("{} failed: {}. The surviving item remains in Trash{}.", operation, error, if operation == "Deletion" { "; a directory may be partly deleted" } else { "" }));
+            settle(journal, op);
+            // A refusal that is a whole sentence already says what was done: nothing was deleted, or nothing was restored.
+            let whole = match (op, error.outcome()) {
+                (_, Outcome::NothingDeleted) => true,
+                (Op::Restore, Outcome::Blocked) => false,
+                (Op::Restore, _) => true,
+                _ => false,
+            };
+            return Err(if whole { error } else { error.wrap(Outcome::Partial(op)) });
         }
-        std::fs::remove_file(fd_path(&quarantine, OsStr::new("metadata"))).map_err(|e| {
-            format!(
-                "{} completed; metadata cleanup failed at {}: {}",
-                operation, recovery.display(),
-                e
-            )
-        })?;
+        std::fs::remove_file(fd_path(&quarantine, OsStr::new("metadata")))
+            .map_err(|e| Refusal::os(Outcome::InfoLeft(op, recovery.clone()), "Trash metadata cleanup after completion", &e))?;
         journal.remove_empty(&quarantine_path, &quarantine, &files)
-            .map_err(|e| format!("{} completed; empty quarantine cleanup failed: {}", operation, e))?;
-        journal.complete()?;
-        Ok(())
+            .map_err(|e| e.wrap(Outcome::FolderLeft(op, Some(recovery.clone()))))?;
+        finish(journal, op, true)
     }
 }
 
@@ -571,61 +607,73 @@ pub struct PathReview {
 }
 impl PathReview {
     pub fn prepare(path: PathBuf, manifest: &mut Manifest, scratch: &Path,
-        cancel: &Cancellation) -> Result<(Self, u64), String> {
+        cancel: &Cancellation) -> Result<(Self, u64), Refusal> {
         if !path.is_absolute() || path.file_name().is_none() {
-            return Err("Permanent deletion requires an absolute item path; filesystem roots are refused.".into());
+            return Err(Refusal::changed("Permanent deletion requires an absolute item path; filesystem roots are refused.").logged());
         }
-        let payload = identity(&path)?;
-        let (tree, bytes) = snapshot_tree(&path, &payload, manifest, scratch, cancel)?;
+        let payload = identity(&path).changed("Item unreadable").map_err(Refusal::logged)?;
+        let (tree, bytes) = snapshot_tree(&path, &payload, manifest, scratch, cancel).map_err(Refusal::logged)?;
         Ok((Self { path, payload, tree }, bytes))
     }
-    pub fn unchanged(&self, cancel: &Cancellation) -> Result<bool, String> {
+    pub fn unchanged(&self, cancel: &Cancellation) -> Result<bool, Refusal> {
         if identity(&self.path).ok().as_ref() != Some(&self.payload) { return Ok(false); }
-        let parent = open_dir(self.path.parent().ok_or("Missing deletion parent.")?)?;
-        matches(&self.tree, &parent, self.path.file_name().ok_or("Missing deletion filename.")?, cancel)
+        (|| {
+            let parent = open_dir(self.path.parent().changed("Missing deletion parent.")?)?;
+            matches(&self.tree, &parent, self.path.file_name().changed("Missing deletion filename.")?, cancel)
+        })().map_err(Refusal::logged)
     }
-    pub fn delete(&self, recovery_root: &Path) -> Result<(), String> {
+    pub fn delete(&self, recovery_root: &Path) -> Result<(), Refusal> {
         self.delete_after(recovery_root, || {})
     }
-    fn delete_after(&self, recovery_root: &Path, before_claim: impl FnOnce()) -> Result<(), String> {
-        let parent_path = self.path.parent().ok_or("Missing deletion parent.")?;
+    fn delete_after(&self, recovery_root: &Path, before_claim: impl FnOnce()) -> Result<(), Refusal> {
+        self.removed(recovery_root, before_claim).map_err(Refusal::logged)
+    }
+    fn removed(&self, recovery_root: &Path, before_claim: impl FnOnce()) -> Result<(), Refusal> {
+        let op = Op::Delete;
+        let parent_path = self.path.parent().changed("Missing deletion parent.")?;
         let parent = open_dir(parent_path)?;
-        let name = self.path.file_name().ok_or("Missing deletion filename.")?;
-        if identity(&fd_path(&parent, name))? != self.payload {
-            return Err("Item changed; review a fresh deletion confirmation.".into());
+        let name = self.path.file_name().changed("Missing deletion filename.")?;
+        if identity(&fd_path(&parent, name)).changed("Item unreadable")? != self.payload {
+            return Err(Refusal::new(Outcome::ItemChanged, "Item changed; confirm again."));
         }
         let quarantine_name = format!(".flea-delete-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
         let quarantine_path = fd_path(&parent, OsStr::new(&quarantine_name));
         std::fs::DirBuilder::new().mode(0o700).create(&quarantine_path)
-            .map_err(|e| format!("Could not create deletion quarantine: {}", crate::error::io_message(&e)))?;
-        let quarantine = open_dir(&quarantine_path)?;
+            .map_err(|e| Refusal::os(Outcome::Prepare(op), "Could not create deletion quarantine", &e))?;
+        let quarantine = open_dir(&quarantine_path).map_err(|refusal| refusal.wrap(Outcome::Prepare(op)))?;
         let recovery = parent_path.join(&quarantine_name);
         let mut journal = match Recovery::begin(recovery_root, &self.path, &parent, &self.payload,
             None, &recovery, &quarantine, Some(&self.tree), None) {
             Ok(journal) => journal,
-            Err(error) => { let _ = std::fs::remove_dir(&quarantine_path); return Err(error); }
+            Err(error) => { let _ = std::fs::remove_dir(&quarantine_path); return Err(error.wrap(Outcome::NoRecord(op))); }
         };
         before_claim();
         if let Err(error) = rename(&parent, name, &quarantine, OsStr::new("payload")) {
-            if journal.remove_empty(&quarantine_path, &quarantine, &parent).is_ok() { journal.complete()?; }
-            return Err(format!("Could not claim item for deletion: {}", error));
+            match journal.remove_empty(&quarantine_path, &quarantine, &parent) {
+                Ok(()) => settle(journal, op),
+                Err(left) => { left.logged(); }
+            }
+            return Err(Refusal::new(Outcome::Prepare(op), format!("Could not claim item for deletion: {}", error)).because(error));
         }
-        let removal = remove_tree(&self.tree, &quarantine, "Item changed after confirmation; no deletion attempted.");
+        let removal = remove_tree(&self.tree, &quarantine, Refusal::new(Outcome::ItemChanged, "Item changed after confirmation; no deletion attempted."));
         if let Err(error) = removal {
             if rename(&quarantine, OsStr::new("payload"), &parent, name).is_err() {
-                return Err(format!("Deletion failed: {}. Recover preserved items from {}.", error, recovery.display()));
+                return Err(error.wrap(Outcome::Stuck(op, recovery)));
             }
             if journal.remove_empty(&quarantine_path, &quarantine, &parent).is_err() {
-                return Err(format!("Deletion failed: {}. Remaining data is preserved at the original path and {}.", error, recovery.display()));
+                return Err(error.wrap(Outcome::StuckAtOriginal(recovery)));
             }
-            journal.complete()?;
-            return Err(format!("Deletion failed: {}. Surviving data remains at the original path; a directory may be partly deleted.", error));
+            settle(journal, op);
+            return Err(if error.outcome() == &Outcome::ItemChanged { error } else { error.wrap(Outcome::PartialAtOriginal) });
         }
-        journal.remove_empty(&quarantine_path, &quarantine, &parent).map_err(|e| format!("Payload deleted; empty quarantine cleanup failed: {}", e))?;
-        journal.complete()?;
-        Ok(())
+        journal.remove_empty(&quarantine_path, &quarantine, &parent).map_err(|e| e.wrap(Outcome::FolderLeft(op, Some(recovery.clone()))))?;
+        finish(journal, op, true)
     }
 }
+
+#[cfg(test)]
+#[path = "trashdelete/refusal_tests.rs"]
+mod refusal_tests;
 
 #[cfg(test)]
 mod tests {
@@ -748,7 +796,8 @@ mod tests {
         let refused = reviewed.delete(d.path());
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
         // ui/TrashView.qml puts "<name> failed: " before this, so the name is the view's and the reason is io_message's for EACCES.
-        assert_eq!(refused, Err("Could not claim Trash item: permission denied".to_string()));
+        assert_eq!(refused.map_err(|error| error.shown()),
+            Err("Could not prepare the deletion, so nothing was deleted: permission denied.".to_string()));
         assert_eq!(std::fs::read_to_string(path.join("child.txt")).unwrap(), "survive");
     }
     #[test]
