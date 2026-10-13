@@ -1337,6 +1337,8 @@ window's write keeps what another wrote since its read. A null `folderSorts` or
 or re-view moves its folder to the newest end of its map. Past either folder map's 500 cap
 the oldest entries go and the newest stay.
 
+With per-folder sorting enabled, Downloads, Pictures and Videos open in Modified order, newest first, unless their folderSorts entry chooses another order. These paths use user-dirs.dirs under XDG_CONFIG_HOME (or ~/.config), with the conventional XDG names for missing roles; a role pointing at Home is excluded. Browser listings, column peeks and the file chooser resolve the same defaults without storing an entry or using a slot in the 500-folder cap. Explicit Name ascending remains a stored choice. Turning per-folder sorting off uses the global order instead. Other folders and the terminal interface retain their existing sort behavior.
+
 **The window's read is the settled file, and not a raw one.** `main()` calls `Store::settle` before
 it hands off to `qs`: an empty patch through the same lock and the same per-key validation, so
 whenever that settle succeeded on a document it could read, a value a hand edit left in a key this
@@ -2661,6 +2663,10 @@ for the tile's own faces. A pooled tile's Loader is active only for the row reco
 record clears when the edit leaves that row or the tile is reused, so a pooled tile never builds an editor.
 
 ## File budget
+
+The shared XDG directory reader is `ui/UserDirs.qml`, 25 lines, replacing the rail and picker readers; `ui/js/UserDirs.js` holds the existing parser without importing menu code. `ui/ColumnsArea.qml` moves from 572 to 576 lines for re-asking drawn columns when those directories change. The first-frame unit inventory adds UserDirs.qml and js/UserDirs.js and its summed source ceiling is 1,629,678 bytes, re-derived from the listed files with their current byte counts.
+`tests/columnsfilter.qml` moves from 402 to 403 lines for the backend stub's codeResult signal, matching the Markdown preview connection.
+`ui/PickerWindow.qml` moves from 812 to 813 lines for resolving each requested folder's sort while keeping the held rows' sort mark stable between requests.
 
 COPY-TRASH on the 0.3.11 stage moves the `src/backend/trashbrowse.rs` ceiling from 900 to 1025 (`wc -l`) for the approved typed refusals, per-item damaged-record failures and backward target naming, retaining the stage's newest-first listing and membership checks.
 The same port moves `src/backend/trashdelete.rs` from 938 to 965 (`wc -l`) for the approved outcome wrappers and cleanup logging, with the failed child put-back logging credited once to this port.

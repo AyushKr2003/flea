@@ -1,7 +1,6 @@
 pragma Singleton
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import "js/Icons.js" as Icons
 import "js/Places.js" as Places
 
@@ -9,7 +8,7 @@ import "js/Places.js" as Places
 QtObject {
     id: root
     readonly property var settings: ViewState.state.places || ({})
-    property string dirsText: ""
+    readonly property string dirsText: UserDirs.body
     readonly property var homeEntries: root.settings.showHome === false ? []
         : Places.homeEntries(Quickshell.env("HOME"), root.dirsText, Icons.sidebarGlyphFor)
     readonly property var favouriteEntries: Places.storedEntries(Favourites.records, Quickshell.env("HOME")).map(function (entry) {
@@ -23,14 +22,5 @@ QtObject {
     function entries() {
         return root.homeEntries.slice(0, 1).concat(root.recentEntries,
             root.homeEntries.slice(1), root.trashEntries, root.favouriteEntries)
-    }
-    property FileView userDirs: FileView {
-        id: dirs
-        path: Quickshell.env("HOME") + "/.config/user-dirs.dirs"
-        watchChanges: true
-        printErrors: false
-        onFileChanged: reload()
-        onLoaded: root.dirsText = dirs.text()
-        onLoadFailed: root.dirsText = ""
     }
 }

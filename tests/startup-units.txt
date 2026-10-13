@@ -70,6 +70,7 @@ TransferCard.qml
 TrashHost.qml
 TrashMonitor.qml
 UpdateCheck.qml
+UserDirs.qml
 ViewState.qml
 ViewportScrollBar.qml
 WindowBody.qml
@@ -167,4 +168,5 @@ js/Trash.js
 js/TrashDates.js
 js/UiState.js
 js/Update.js
-bytes 1627609
+js/UserDirs.js
+bytes 1629678

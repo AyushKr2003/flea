@@ -94,7 +94,7 @@ Item {
     }
 
     // The folder order a column asks under, read from the state Backend.peek reads when it sends.
-    function orderOf(path) { return Carry.orderOf(ViewState.state, path, root.keep.drawn) }
+    function orderOf(path) { return Carry.orderOf(ViewState.state, path, root.keep.drawn, UserDirs.newestFolders) }
 
     // A read of peeked that a binding re-evaluates when a peek lands; peekVersion is the trigger.
     function rowsFor(path) { return Carry.rowsFor(root.peeked, root.peekKey(path), path, root.peekVersion) }
@@ -309,6 +309,10 @@ Item {
     Connections {
         target: ViewState
         function onStateChanged() { if (root.visible) root.keep.drawn.forEach(function (path) { root.ask(path) }) }
+    }
+    Connections {
+        target: UserDirs
+        function onNewestFoldersChanged() { if (root.visible) root.keep.drawn.forEach(function (path) { root.ask(path) }) }
     }
     // The rows/cursor move can early-return on values this binding had not settled yet, so its own change re-moves with fresh ones.
     onChildPathChanged: { preview.askCursorThumb(); root.refreshNeighbours(); root.moveThird() }

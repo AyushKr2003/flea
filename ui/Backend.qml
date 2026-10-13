@@ -162,7 +162,7 @@ Item {
     function resetSort(path) {
         // Read once per listing, so browsing never writes; only Sort.resort does.
         var order = FolderSorts.orderFor(ViewState.state.folderSorts, path,
-                                         ViewState.state.sort, ViewState.state.rememberSort !== false)
+                                         ViewState.state.sort, ViewState.state.rememberSort !== false, UserDirs.newestFolders)
         root.sortBy = order.key === "date" ? "mtime" : order.key
         root.sortDesc = order.reverse === true
     }
@@ -366,7 +366,7 @@ Item {
     // A read-only look elsewhere; Tab passes hiddenLast false, other callers keep the listing order, and only a column passes keep, the directories drawn, and its folder's own remembered order.
     function peek(path, first, hidden, hiddenLast, keep) {
         var last = hiddenLast === undefined ? ViewState.state.hiddenLast === true : hiddenLast === true
-        var order = FolderSorts.peekOrder(ViewState.state.folderSorts, path, ViewState.state.rememberSort, keep)
+        var order = FolderSorts.peekOrder(ViewState.state.folderSorts, path, ViewState.state.rememberSort, keep, UserDirs.newestFolders, ViewState.state.sort)
         root.send({ c: "peek", path: path, first: first, hidden: hidden, hiddenLast: last, watch: Array.isArray(keep), keep: keep, by: order.by, desc: order.desc })
     }
 
