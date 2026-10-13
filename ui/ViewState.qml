@@ -170,6 +170,8 @@ QtObject {
     readonly property var preview: root.state.preview || ({})
     readonly property bool previewColumn: root.preview.column !== false
     readonly property bool previewAutomatic: root.preview.loadOn !== "manual"
+    // `previewFacts` in src/uischema.rs: the tall kinds' one compact line, or the full table `i` opens.
+    readonly property string previewFacts: root.state.previewFacts === "full" ? "full" : "compact"
     readonly property string thumbnailMode: root.preview.thumbnails || "media"
     readonly property string thumbnailSize: root.preview.thumbSize || "medium"
     // Huge 192 and Largest 256 decode nothing new: the shared cache already holds 256.

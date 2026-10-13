@@ -20,8 +20,8 @@ Item {
     // Retained for its callers; over-limit rows are refused, never truncated, so it reads nothing.
     property bool truncate: false
     readonly property bool tooLarge: root.size > root.maxBytes
-    // More than a small frame can show is wasted work, so only this many are ever built into rows.
-    readonly property int maxLines: 14
+    // More than the frame can show is wasted work, so only as many lines as its height holds are ever built into rows.
+    readonly property int maxLines: Math.max(1, Math.floor((root.height - 2 * Theme.spacing.gap) / Math.ceil(lineMetrics.lineSpacing)))
 
     readonly property string shownText: file.text()
     readonly property var lines: {
@@ -94,5 +94,11 @@ Item {
                 }
             }
         }
+    }
+
+    FontMetrics {
+        id: lineMetrics
+        font.family: Theme.font.family
+        font.pixelSize: Theme.font.caption
     }
 }

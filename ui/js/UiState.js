@@ -43,7 +43,7 @@ function favouritesAfter(records, operation) {
 
 // Per-window keys name where a window is rather than how Flea behaves, so no window ever takes them from the file.
 var WINDOW_KEYS = ["view", "pickerView", "columnWidths", "dual", "lastPath", "lastTabs",
-                   "trashSweptOn", "stateVersion", "sort"]
+                   "trashSweptOn", "stateVersion", "sort", "previewFacts"]
 
 function isWindowKey(key) {
     return WINDOW_KEYS.indexOf(key) >= 0
