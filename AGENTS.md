@@ -4119,6 +4119,10 @@ The join of that Tab ring with the Dual Tab walk keeps one ring in `ui/js/Focus.
 
 The refused-stop wording moves one ceiling, re-derived with `wc -l`: `src/backend/menu_registry.rs` 569 to 570 for the test-only `REFUSED_KILL` errno hook in `terminate`, which lets the wording test drive a refused stop through `Registry::cancel` without sending a signal.
 
+The KI-232 power-off fix moves two ceilings, each re-derived with `wc -l`: `ui/js/Devices.js` 391 to 397 for
+`powerOffQueue` reading the last listing, hidden partitions included, and `tests/js/devices.js` 363 to 365 for its pins.
+`ui/DeviceMounts.qml` stays at 537.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

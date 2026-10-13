@@ -289,7 +289,7 @@ Item {
         root.quiesce(e.path)
         root.armEject(e)
         root._powerOffDisk = disk
-        root._powerOffQueue = Devices.powerOffQueue(root.entries, disk)
+        root._powerOffQueue = Devices.powerOffQueue(root._listing, disk)
         root._powerSectors = ""
         root.message(Format.fill(Mounts.WORDS.ejecting, e.label), false)
         root.powerOffNext()
@@ -304,10 +304,10 @@ Item {
             ejectProcess.running = true
             return
         }
-        var device = root._powerOffQueue[0]
+        var leg = root._powerOffQueue[0]
         root._powerOffQueue = root._powerOffQueue.slice(1)
         root._unmountErr = ""
-        unmountProcess.command = ["gio", "mount", "-u", Devices.mountpointOf(root.entries, device)]
+        unmountProcess.command = ["gio", "mount", "-u", leg.path]
         unmountProcess.running = true
     }
 

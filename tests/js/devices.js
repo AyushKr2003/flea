@@ -285,15 +285,17 @@ function run(check) {
     check("a killed gio never starts it", Devices.mountTimerStart(137), false)
 
     // Defect 9: a power-off unmounts every mounted volume on the disk before stopping it.
-    var vols = [{ kind: "volume", device: "/dev/sda1", path: "/run/media/u/a", mounted: true },
-                { kind: "volume", device: "/dev/sda2", path: "/run/media/u/b", mounted: true },
-                { kind: "volume", device: "/dev/sdb1", path: "/run/media/u/c", mounted: true },
-                { kind: "volume", device: "/dev/sda3", path: "", mounted: false }]
-    check("both mounted volumes on the disk queue", Devices.powerOffQueue(vols, "/dev/sda").join(","), "/dev/sda1,/dev/sda2")
-    check("the other disk queues nothing", Devices.powerOffQueue(vols, "/dev/sdb").join(","), "/dev/sdb1")
-    check("no entries queue nothing", Devices.powerOffQueue(null, "/dev/sda").join(","), "")
-    check("a mountpoint comes from the last listing", Devices.mountpointOf(vols, "/dev/sda2"), "/run/media/u/b")
-    check("an unlisted device has no mountpoint", Devices.mountpointOf(vols, "/dev/sdz9"), "")
+    var vols = JSON.stringify({ blockdevices: [
+        { name: "sda", path: "/dev/sda", mountpoints: [null], type: "disk", children: [
+            { name: "sda1", path: "/dev/sda1", label: "EFI", mountpoints: ["/run/media/u/EFI"], fstype: "vfat", type: "part", parttype: "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" },
+            { name: "sda2", path: "/dev/sda2", label: "DATA", mountpoints: ["/run/media/u/DATA"], fstype: "hfsplus", type: "part" },
+            { name: "sda3", path: "/dev/sda3", label: null, mountpoints: [null], fstype: "vfat", type: "part" },
+            { name: "sda4", path: "/dev/sda4", label: null, mountpoints: ["/boot"], fstype: "vfat", type: "part" } ] },
+        { name: "sdb", path: "/dev/sdb", mountpoints: ["/run/media/u/c"], type: "disk" }] })
+    check("both mounted volumes on the disk queue, the hidden ESP too", Devices.powerOffQueue(vols, "/dev/sda").map(function (q) { return q.device }).join(","), "/dev/sda1,/dev/sda2")
+    check("a queued leg carries its mountpoint from the listing", Devices.powerOffQueue(vols, "/dev/sda")[1].path, "/run/media/u/DATA")
+    check("the other disk queues only its own", Devices.powerOffQueue(vols, "/dev/sdb").map(function (q) { return q.device }).join(","), "/dev/sdb")
+    check("no listing queues nothing", Devices.powerOffQueue(null, "/dev/sda").length, 0)
     // The eject chain watches the disk's write counter, so a flushing leg restarts its deadline.
     check("a disk path answers its sysfs block name", Devices.sysBase("/dev/sda"), "sda")
     check("an nvme disk answers whole", Devices.sysBase("/dev/nvme0n1"), "nvme0n1")
