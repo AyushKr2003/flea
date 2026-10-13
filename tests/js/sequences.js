@@ -33,6 +33,7 @@ function run(plain) {
     var message = fixture.message
     console.log("sequence signal: Array.isArray=" + Array.isArray(message.kinds)
         + ", every=" + typeof message.kinds.every + ", concat=" + JSON.stringify([].concat(message.kinds)))
+    // Sample input: '--qt-version=6.12.0', appended by tests/js.sh from qml6 --version.
     var qtVersion = ""
     var argv = Qt.application.arguments
     for (var a = 0; a < argv.length; a++)

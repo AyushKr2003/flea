@@ -20,7 +20,11 @@ if ! command -v qml6 >/dev/null; then
 fi
 
 # Read the runtime used below, so the sequence suite checks the shape required by that Qt version.
-qml_version=$(QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic qml6 --version) || exit 1
+if ! qml_version=$(QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic qml6 --version); then
+  echo "FAIL: qml6 --version exited non-zero, so the Qt version for tests/js/sequences.js is unknown" >&2
+  exit 1
+fi
+# Sample input: 'Qml Runtime 6.12.0'. The version is the last word.
 qt_version=${qml_version##* }
 
 run() {
