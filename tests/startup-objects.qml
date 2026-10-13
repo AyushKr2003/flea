@@ -138,7 +138,11 @@ ShellRoot {
         body.item.currentPane.listArea.forceActiveFocus()
         var focused = host.Window.window.activeFocusItem
         if (!focused) return root.finish(false, "early menu focus control did not focus the listing")
-        if (root.earlyMenu === "warming") host.prewarm()
+        if (root.earlyMenu === "warming") {
+            host.prewarm()
+            if (host.status !== Loader.Loading || host.item !== null)
+                return root.finish(false, "warming menu leg did not start an in-flight Loader")
+        }
         host.openBackground(Qt.point(50, 50))
         var menu = host.item
         if (!menu || menu.parent !== host.parent || menu.identitySource !== body.item.currentPane
