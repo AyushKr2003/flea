@@ -4,7 +4,7 @@ import Quickshell
 
 ShellRoot {
     id: root
-    readonly property int startupObjectLimit: 628
+    readonly property int startupObjectLimit: 583
     readonly property int sectorsWrittenField: 6
     readonly property int deadlineProbeMs: 1200
     readonly property int sectorChangeDelayMs: 600
@@ -12,8 +12,11 @@ ShellRoot {
     readonly property int reloadWaitMs: 2000
     // The hang leg's backend never answers, so the pane turns "waiting" after Startup.LISTING_WAIT_MS (10 s).
     readonly property bool hang: Quickshell.env("STARTUP_OBJECTS_HANG") === "1"
+    readonly property string earlyMenu: Quickshell.env("STARTUP_OBJECTS_MENU_EARLY")
     property bool finished: false
     property bool answered: false
+    property bool coldReadChecked: false
+    property var menuWarmFocus: null
     property int stableSamples: 0
     property int lastTotal: -1
     property int phase: 0
@@ -108,8 +111,71 @@ ShellRoot {
             if (next.length !== 1 || next[0] !== reader)
                 return finish(false, "a later chain rebuilt the reader")
             device._powerOffDisk = ""
+            root.phase = 6
+        } else if (phase === 6) {
+            var host = body.item.currentPane.menuHost
+            if (!host.ready) return
+            var menu = host.item
+            if (host.Window.window.activeFocusItem !== root.menuWarmFocus)
+                return finish(false, "idle menu warming changed the focused item")
+            if ((census().counts.ContextMenu || 0) !== 1)
+                return finish(false, "post-frame warming did not build exactly one context menu")
+            menu.openBackground(Qt.point(50, 50))
+            menu.close()
+            menu.openBackground(Qt.point(60, 60))
+            menu.close()
+            if (host.item !== menu || (census().counts.ContextMenu || 0) !== 1)
+                return finish(false, "context menu reopen rebuilt the warmed root")
+            console.log("STARTUP_OBJECTS MENU cold=0 warm=1 reopen=1 ready=" + host.status)
             finish(true, "total=" + lastTotal + " limit=" + startupObjectLimit + " reader=0->1 retained=1 reload=ok deadline=ok")
         }
+    }
+
+    function earlyDemand() {
+        var host = body.item.currentPane.menuHost
+        if (!host.Window.window) return
+        if (host.item) return root.finish(false, "early menu leg already warmed")
+        body.item.currentPane.listArea.forceActiveFocus()
+        var focused = host.Window.window.activeFocusItem
+        if (!focused) return root.finish(false, "early menu focus control did not focus the listing")
+        if (root.earlyMenu === "warming") {
+            host.prewarm()
+            if (host.status !== Loader.Loading || host.item !== null)
+                return root.finish(false, "warming menu leg did not start an in-flight Loader")
+        }
+        host.openBackground(Qt.point(50, 50))
+        var menu = host.item
+        if (!menu || menu.parent !== host.parent || menu.identitySource !== body.item.currentPane
+                || menu.focusOwner !== body.item.currentPane.listArea)
+            return root.finish(false, "early menu demand lost its parent or live inputs")
+        var oldZipMember = body.item.currentPane.flashZipMember
+        body.item.currentPane.flashZipMember = "startup-menu-binding"
+        if (menu.flashZipMember !== "startup-menu-binding")
+            return root.finish(false, "early menu demand lost a live input binding")
+        body.item.currentPane.flashZipMember = oldZipMember
+        if (menu.focusHolder !== focused)
+            return root.finish(false, "early menu construction changed the focus return target")
+        host.close()
+        if (host.Window.window.activeFocusItem !== focused)
+            return root.finish(false, "early menu close did not restore focus")
+        host.openBackground(Qt.point(60, 60))
+        host.close()
+        if (!menu || host.item !== menu || host.status !== Loader.Ready
+                || (root.census().counts.ContextMenu || 0) !== 1)
+            return root.finish(false, "early menu demand did not retain one ready root")
+        var originalParent = host.parent
+        var secondParent = Qt.createQmlObject('import QtQuick; Item { anchors.fill: parent }', originalParent, "menu-parent-check")
+        host.parent = secondParent
+        var followed = menu.parent === secondParent
+        host.parent = originalParent
+        followed = followed && menu.parent === originalParent
+        secondParent.destroy()
+        if (!followed) return root.finish(false, "loaded menu parent did not follow host parent")
+        if (host.item !== menu || host.status !== Loader.Ready
+                || (root.census().counts.ContextMenu || 0) !== 1)
+            return root.finish(false, "reparenting the host lost the ready menu root")
+        console.log("STARTUP_OBJECTS PARENT follows=1")
+        return root.finish(true, "early-menu=" + root.earlyMenu + " ready=1 retained=1")
     }
 
     Connections {
@@ -127,6 +193,7 @@ ShellRoot {
             source: "file://" + Quickshell.env("STARTUP_OBJECTS_UI") + "/WindowBody.qml"
             onLoaded: {
                 item.host = window
+                if (root.earlyMenu) return
                 var early = {
                     none: "the body has no IPC seam Loader",
                     active: "the IPC seam Loader was active before the first listing answered",
@@ -144,6 +211,7 @@ ShellRoot {
         running: true
         onTriggered: {
             if (root.finished || !body.item) return
+            if (root.earlyMenu) { root.earlyDemand(); return }
             if (root.phase > 0) { root.checkDemand(); return }
             var pane = body.item.currentPane
             // Until the first listing answers, every sample must find the seam unbuilt; the hang leg loads for 10 s.
@@ -157,6 +225,19 @@ ShellRoot {
                 return
             }
             if (pane.listInFlight || pane.listingState !== "ready" || pane.total !== 3 || root.seamState() !== "built") return
+            if (!root.coldReadChecked) {
+                var host = pane.menuHost
+                if (host.item) return root.finish(false, "the context menu was built before cold menu reads")
+                pane.listArea.forceActiveFocus()
+                root.menuWarmFocus = pane.Window.window.activeFocusItem
+                if (!root.menuWarmFocus) return root.finish(false, "menu warm focus control did not focus the listing")
+                host.close()
+                host.refreshProviderRows()
+                host.providersSettled()
+                host.listingContext("", true)
+                root.coldReadChecked = true
+                if (host.item) return root.finish(false, "a cold menu read or provider reply built its visual")
+            }
             var sample = root.census()
             root.stableSamples = sample.total === root.lastTotal ? root.stableSamples + 1 : 0
             root.lastTotal = sample.total
@@ -165,6 +246,8 @@ ShellRoot {
             var names = Object.keys(sample.counts).sort()
             for (var i = 0; i < names.length; i++)
                 console.log("STARTUP_OBJECTS TYPE " + names[i] + " " + sample.counts[names[i]])
+            if ((sample.counts.ContextMenu || 0) !== 0)
+                return root.finish(false, "the context menu was built before the startup cut")
             if (sample.total > root.startupObjectLimit)
                 return root.finish(false, "total=" + sample.total + " limit=" + root.startupObjectLimit)
             var rows = sample.objects.filter(function (object) {

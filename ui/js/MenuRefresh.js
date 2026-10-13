@@ -1,30 +1,21 @@
 .pragma library
+.import "MenuContext.js" as MenuContext
 
 // What a provider refresh does to an open menu: the answers it draws, whether a rebuild changes anything, where the cursor lands.
 
 // The provider inputs off ui/ContextMenu.qml's own properties; the peers are the service's, not gated by the row.
 function live(menu) {
-    return { refreshing: menu.providersRefreshing === true,
-             taildropInstalled: menu.taildropInstalled === true, taildropPeers: menu.taildropPeers || [],
-             dropboxInstalled: menu.dropboxInstalled === true, dropboxPath: menu.dropboxPath || "",
-             localSendChecking: menu.localSend.checking === true, localSendAnswered: menu.localSend.answeredOnce === true }
+    return MenuContext.live(menu)
 }
 
 // A finished refresh's answer, which the menu keeps drawing while the next refresh runs behind it.
 function settle(answer) {
-    return { taildrop: { installed: answer.taildropInstalled, peers: answer.taildropPeers },
-             dropbox: { installed: answer.dropboxInstalled, path: answer.dropboxPath } }
+    return MenuContext.settle(answer)
 }
 
 // A kept answer for the same install state stands in while a refresh runs, e.g. now { refreshing: true, taildropPeers: [], dropboxPath: "", ... }.
 function providerView(known, now) {
-    var taildrop = now.refreshing && known && known.taildrop.installed === now.taildropInstalled ? known.taildrop : null
-    var dropbox = now.refreshing && known && known.dropbox.installed === now.dropboxInstalled ? known.dropbox : null
-    return { taildropPeers: taildrop ? taildrop.peers : now.taildropPeers,
-             taildropRefreshing: now.refreshing && !taildrop,
-             dropboxPath: dropbox ? dropbox.path : now.dropboxPath,
-             dropboxRefreshing: now.refreshing && !dropbox,
-             localSendChecking: now.localSendChecking && !now.localSendAnswered }
+    return MenuContext.providerView(known, now)
 }
 
 // Whether a rebuilt inventory is exactly what is drawn, so an answer that changed nothing resets no row.

@@ -4,6 +4,7 @@ import "." as Flea
 import "js/Keymap.js" as Keymap
 import "js/LockedMenu.js" as LockedMenu
 import "js/Menu.js" as Menu
+import "js/MenuContext.js" as MenuContext
 import "js/MenuFit.js" as MenuFit
 import "js/MenuRefresh.js" as MenuRefresh
 
@@ -189,44 +190,10 @@ Item {
         return Menu.listingEntries(root.listingContext(flyoutAction, includeHidden))
     }
     function listingContext(flyoutAction, includeHidden) {
-        var view = MenuRefresh.providerView(root.lastProviderAnswer, MenuRefresh.live(root))
-        return {
-            showHidden: root.showHidden,
-            hasRow: root.hasRow,
-            rowInDropbox: root.rowInDropbox,
-            dropboxPath: view.dropboxPath,
-            dropboxInstalled: root.dropboxInstalled,
-            dropboxReason: root.dropboxReason, dropboxCode: root.dropboxCode,
-            taildropPeers: root.rowIsFile ? view.taildropPeers : [],
-            taildropInstalled: root.taildropInstalled,
-            taildropReason: root.taildropReason, taildropCode: root.taildropCode,
-            taildropRefreshing: view.taildropRefreshing, dropboxRefreshing: view.dropboxRefreshing,
-            archiveFormats: root.archiveFormats,
-            rowIsFile: root.rowIsFile,
-            rowIsArchive: root.rowIsArchive,
-            archiveName: root.archiveName,
-            rowIsImage: root.rowIsImage,
-            canConvert: root.canConvert,
-            canExtract: root.canExtract,
-            clipboardAvailable: root.clipboardAvailable,
-            clipboardWatchFailed: root.clipboardWatchFailed,
-            canTrash: root.canTrash,
-            canLink: root.canLink,
-            tagSubmenu: root.tagSubmenu,
-            dirWritable: root.dirWritable,
-            openWithApps: root.openWithApps,
-            openWithLoaded: root.openWithLoaded,
-            rowMode: root.rowMode, selectionCount: root.selectionCount,
-            rowIsSymlink: root.rowIsSymlink, selectionModes: root.selectionModes,
-            rowName: root.rowName, flashZipMember: root.flashZipMember, compareKinds: root.compareKinds,
-            hasShebang: root.rowHasShebang, cursorIsTarget: root.cursorIsTarget,
-            scripts: Flea.Scripts.entries, localSendInstalled: root.localSend.installed, localSendPeers: root.localSend.peers, localSendChecking: view.localSendChecking,
-            // The Menus settings section's stored set; ui/js/Menu.js applyHidden is what reads it.
-            hiddenActions: includeHidden === true ? [] : ViewState.menuHidden.filter(function(id) { return id !== flyoutAction }),
-            // ExtThumbs: the class row's presence and label read these, never "this drive".
-            storageClass: root.storageClass, thumbPreview: ViewState.preview,
-            updateVersion: UpdateCheck.menuVersion, hasFolderSort: root.hasFolderSort
-        }
+        return MenuContext.listingContext(root, flyoutAction, includeHidden, {
+            scripts: Flea.Scripts.entries, hiddenActions: ViewState.menuHidden,
+            thumbPreview: ViewState.preview, updateVersion: UpdateCheck.menuVersion
+        })
     }
 
     // The row item at an index, for ui/Ipc.qml: a driven test clicks a menu row without deriving its geometry from a row count the Menus settings can now change under it.
@@ -490,21 +457,7 @@ Item {
 
     // Rebuild only to validate; rows stay fixed while the menu is open under the pointer.
     function validateChoice(action, subId, includeHidden) {
-        var identityChanged = !root.forRail && !root.forHeader && root.hasRow
-                              && root.openedIdentity !== root.selectionIdentity()
-        root.preparing = true
-        var live = root.buildEntries(subId && Menu.flyoutEntries(action).length ? action : "", includeHidden)
-        root.preparing = false
-        for (var i = 0; !identityChanged && i < live.length; i++) {
-            var entry = live[i]
-            if (entry.action !== action || entry.disabled === true) continue
-            if (!subId) return true
-            var sub = entry.submenu || []
-            for (var j = 0; j < sub.length; j++)
-                if (sub[j].id === subId && sub[j].disabled !== true) return true
-        }
-        root.refuseLone(identityChanged ? "moved" : "unavailable")
-        return false
+        return MenuContext.validateChoice(root, action, subId, includeHidden)
     }
 
     // Offsets are summed, not multiplied; a lone flyout stands at the top.

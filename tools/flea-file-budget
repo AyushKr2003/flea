@@ -80,7 +80,7 @@ tests/js/mdstructure.js 655
 tests/js/keymap.js 366
 tests/js/focus.js 843
 tests/js/mounts.js 349
-tests/js/menu.js 596
+tests/js/menu.js 669
 tests/js/nav.js 478
 tests/js/rail.js 471
 tests/js/picker.js 377
@@ -131,7 +131,7 @@ ui/Backend.qml 597
 ui/ChromeBar.qml 352
 ui/ColumnsArea.qml 572
 ui/ColumnPane.qml 450
-ui/ContextMenu.qml 784
+ui/ContextMenu.qml 737
 ui/ConvertDialog.qml 456
 ui/GridArea.qml 665
 ui/Ipc.qml 985
@@ -153,7 +153,7 @@ ui/NetworkDialog.qml 435
 ui/NetworkForm.qml 426
 ui/NetworkMounts.qml 913
 ui/OpenWithDialog.qml 613
-ui/Pane.qml 1233
+ui/Pane.qml 1234
 ui/PaneMenuActions.qml 527
 ui/PaneWire.qml 602
 ui/PermissionsDialog.qml 658
