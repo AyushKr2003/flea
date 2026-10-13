@@ -1,5 +1,6 @@
 .pragma library
 .import "Format.js" as Format
+.import "Facts.js" as Facts
 
 // The Properties card's Size and Contains lines for a folder: the walk's floor while it counts, the whole once it is done.
 var TAIL = " · counting…"
@@ -114,12 +115,30 @@ function taken(stamp) {
     return m && m[1] !== "0000" ? m[1] + "-" + m[2] + "-" + m[3] + " " + m[4] + ":" + m[5] : ""
 }
 
-// The pairs a facts reply adds between Size and Modified, in the board's order and only for what the file has.
-function extraPairs(reply) {
+// Empty strings, zero ISO and zero rationals are absent; present deferred EXIF fields win a disagreement.
+function mergePhoto(photo, reply) {
+    var p = photo || {}, r = reply || {}
+    return {
+        make: r.make || p.make || "",
+        model: r.model || p.model || "",
+        lens: r.lens || p.lens || "",
+        shutter: ratio(r.shutter) > 0 ? r.shutter : p.exp,
+        fnumber: ratio(r.fnumber) > 0 ? r.fnumber : p.fnum,
+        iso: r.iso > 0 ? r.iso : p.iso,
+        taken: r.taken || p.taken || ""
+    }
+}
+
+// One merged photo, formatted once in the existing card language; codecs and bit rate stay with the facts reply.
+function extraPairs(reply, photo) {
     if (!reply || !reply.ok)
         return []
+    var merged = mergePhoto(photo, reply)
+    var shown = photo ? Facts.photoFacts(Object.assign({}, merged, {exp: merged.shutter, fnum: merged.fnumber})) : {
+        camera: camera(merged.make, merged.model), lens: merged.lens,
+        exposure: exposure(merged.shutter, merged.fnumber, merged.iso), taken: taken(merged.taken)
+    }
     return [["Codecs", codecs(reply.vcodec, reply.acodec)], ["Bit rate", bitRate(reply.bps)],
-            ["Camera", camera(reply.make, reply.model)], ["Lens", reply.lens || ""],
-            ["Exposure", exposure(reply.shutter, reply.fnumber, reply.iso)], ["Taken", taken(reply.taken)]]
+            ["Camera", shown.camera], ["Lens", shown.lens], ["Exposure", shown.exposure], ["Taken", shown.taken]]
         .filter(function (pair) { return pair[1] !== "" })
 }

@@ -92,4 +92,9 @@ function run(check) {
     check("a photo with no lens leaves no empty pair", labels({ok: true, make: "FUJIFILM", model: "X100V", shutter: [1, 500], fnumber: [56, 10], iso: 160, taken: "2026:01:02 03:04:05"}), "Camera,Exposure,Taken")
     same("a file with no facts adds nothing", [labels({ok: true}), labels(undefined), labels({})], ["", "", ""])
     check("a refused facts reply adds nothing", labels({ok: false, error: "Menu selection expired; reopen the menu."}), "")
+    var immediate = {make: "Canon", model: "Canon EOS R6", lens: "RF35mm F1.8 MACRO IS STM", exp: [1, 2], fnum: [4, 1], iso: 400, taken: "2026:09:12 18:31:07"}
+    var absent = {ok: true, make: "", model: "", lens: "", shutter: [0, 0], fnumber: [1, 0], iso: 0, taken: ""}
+    same("absent deferred fields preserve immediate photo values and exposure language", PropertyFacts.extraPairs(absent, immediate),
+         [["Camera", "Canon EOS R6"], ["Lens", "RF35mm F1.8 MACRO IS STM"], ["Exposure", "0.5 s · f/4 · ISO 400"], ["Taken", "2026-09-12 18:31"]])
+    same("deferred-only photos retain their existing exposure language", PropertyFacts.extraPairs({ok: true, shutter: [1, 2]}), [["Exposure", "1/2 s"]])
 }

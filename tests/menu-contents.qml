@@ -322,9 +322,10 @@ ShellRoot {
                 shell.check("the photo value is foreground at the body size on a muted caption label",
                     [shell.pair("Camera").color, shell.pair("Camera").font.pixelSize, shell.labelOf("Camera").color, shell.labelOf("Camera").font.pixelSize],
                     [Flea.Theme.color.foreground, Flea.Theme.font.body, Flea.Theme.color.muted, Flea.Theme.font.caption])
-                shell.feed(shell.factsReply(12, {make: "Other", shutter: [1, 4], iso: 100}));
+                shell.feed(shell.factsReply(12, {make: shell.photo.make, model: shell.photo.model, lens: shell.photo.lens, shutter: shell.photo.exp, fnumber: shell.photo.fnum, iso: shell.photo.iso, taken: shell.photo.taken}))
                 shell.check("a deferred facts reply keeps each photo pair once", shell.names(), shell.photoFile)
-                shell.check("the initial photo keeps its approved exposure wording after deferred facts", shell.line("Exposure"), "1/250 s \u00b7 f/2.8 \u00b7 ISO 400")
+                shell.check("equal immediate and deferred facts keep every approved value once", ["Camera", "Lens", "Exposure", "Taken"].map(shell.line),
+                    ["Canon EOS R6", "RF35mm F1.8 MACRO IS STM", "1/250 s \u00b7 f/2.8 \u00b7 ISO 400", "2026-09-12 18:31"])
                 shell.check("a file asks for no count", shell.sent.filter(function (m) { return m.op === "contents" && m.id === 12 }).length, 0)
             },
             function () {
@@ -349,7 +350,30 @@ ShellRoot {
             }
         ]
     }
-    function buildPlan() { shell.plan = shell.folderSteps().concat(shell.otherSteps()).concat(shell.factSteps()).concat(shell.photoSteps()) }
+    function mergedPhotoSteps() {
+        return [function () {
+            var cases = [
+                ["partial ISO", {iso: 400}, {shutter: [1, 250], fnumber: [28, 10], iso: 400},
+                    [["Exposure", "1/250 s \u00b7 f/2.8 \u00b7 ISO 400"]]],
+                ["partial camera", {make: "Canon", iso: 400}, {make: "Canon", model: "Canon EOS R6", shutter: [1, 250], fnumber: [28, 10], iso: 400},
+                    [["Camera", "Canon EOS R6"], ["Exposure", "1/250 s \u00b7 f/2.8 \u00b7 ISO 400"]]],
+                ["complementary fields", {make: "Canon", lens: shell.photo.lens, exp: [1, 250], taken: shell.photo.taken}, {model: "Canon EOS R6", fnumber: [28, 10], iso: 400},
+                    [["Camera", "Canon EOS R6"], ["Lens", shell.photo.lens], ["Exposure", "1/250 s \u00b7 f/2.8 \u00b7 ISO 400"], ["Taken", "2026-09-12 18:31"]]],
+                ["conflicting fields", shell.photo, {make: "SONY", model: "ILCE-7M4", lens: "FE 35mm F1.8", shutter: [1, 500], fnumber: [4, 1], iso: 800, taken: "2026:10:12 09:15:00"},
+                    [["Camera", "SONY ILCE-7M4"], ["Lens", "FE 35mm F1.8"], ["Exposure", "1/500 s \u00b7 f/4 \u00b7 ISO 800"], ["Taken", "2026-10-12 09:15"]]]
+            ]
+            cases.forEach(function (test) {
+                dialog.open("properties", 15, "/fixture", parking)
+                shell.feed(shell.filed(15, "/fixture/shot.CR3", {photo: test[1]}))
+                shell.feed(shell.factsReply(15, test[2]))
+                var observed = ["Camera", "Lens", "Exposure", "Taken"].filter(function (name) { return shell.pair(name) !== null }).map(function (name) { return [name, shell.line(name)] })
+                shell.check(test[0] + " merges photo fields before formatting", observed, test[3])
+                shell.check(test[0] + " draws each pair once in board order", shell.names(), shell.plainFile.slice(0, 3).concat(test[3].map(function (pair) { return pair[0] })).concat(shell.plainFile.slice(3)))
+                dialog.close()
+            })
+        }]
+    }
+    function buildPlan() { shell.plan = shell.folderSteps().concat(shell.otherSteps()).concat(shell.factSteps()).concat(shell.photoSteps()).concat(shell.mergedPhotoSteps()) }
 
     Timer {
         interval: 16

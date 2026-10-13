@@ -1,7 +1,6 @@
 import QtQuick
 import qs.Commons
 import "." as Flea
-import "js/Facts.js" as Facts
 import "js/Format.js" as Format
 import "js/PropertyFacts.js" as PropertyFacts
 import "js/Tags.js" as Tags
@@ -32,14 +31,10 @@ FocusScope {
     readonly property bool inputAction: action === "newFile" || action === "moveTo" || action === "copyTo"
     readonly property bool deletionActive: action === "deletePermanently" && committing
     readonly property bool canSubmit: !busy && inputAction && field.text.length > 0
-    // Raw.html and Properties040: a photo's Camera, Lens, Exposure and Taken, the ones its EXIF names, sit before Modified.
-    readonly property var photo: Facts.photoFacts(facts.photo)
-    readonly property var photoPairs: [["Camera", photo.camera], ["Lens", photo.lens], ["Exposure", photo.exposure], ["Taken", photo.taken]]
-        .map(function (pair) { return pair[1] ? pair : root.extraPairs.find(function (extra) { return extra[0] === pair[0] }) || pair })
-        .filter(function (pair) { return pair[1].length > 0 })
     // The lines that change in place while the folder counts; the model names them and is not rebuilt as the count moves.
     readonly property var liveLines: facts.ok ? ({size: PropertyFacts.size(facts.bytes, walk), contains: PropertyFacts.contains(walk)}) : ({})
-    readonly property var extraPairs: PropertyFacts.extraPairs(extra)
+    // Raw.html and Properties040: a photo's Camera, Lens, Exposure and Taken, the ones its EXIF names, sit before Modified.
+    readonly property var extraPairs: PropertyFacts.extraPairs(Object.assign({ok: root.facts.ok}, root.extra), root.facts.photo)
     readonly property string title: ({moveTo: "Move to", copyTo: "Copy to", properties: "Properties", newFile: "New file", deletePermanently: "Delete permanently"})[action] || ""
     // The card and its scrim step aside for the confirmation, and stay aside while it fades out with a closing dialog.
     readonly property bool cardShown: !confirmation.opened && (root.opened || !confirmation.visible)
@@ -314,8 +309,7 @@ FocusScope {
                         ["Type", root.facts.kind],
                         ["Size", "", "size"],
                         ...(root.facts.directory ? [["Contains", "", "contains"]] : []),
-                        ...(root.extraPairs || []).filter(function (pair) { return !(root.photoPairs || []).some(function (photo) { return photo[0] === pair[0] }) }),
-                        ...(root.photoPairs || []),
+                        ...(root.extraPairs || []),
                         // A foreign word stays untouched and shows here, so a tag another app set is visible.
                         ...((root.facts.tags || []).length > 0 ? [["Tags", (root.facts.tags || []).join(", ")]] : []),
                         ["Modified", Format.date(root.facts.modified)],
