@@ -125,9 +125,11 @@ function lookup(event, root) {
     // The zoom keys reach a PDF or an image, 0 reaches an image only (keys.toml binds it in that context), and e expands a PDF only. l is h's forward: page, else enter or preview.
     if (action === "zoomOut" || action === "zoomIn" || action === "zoomFit" || action === "expand")
         return (root.preview && root.preview.active && (root.preview.isPdf || (root.preview.isImage && action !== "expand"))) ? action : ""
-    // w wraps a code or text Quick Look and means nothing on any other kind.
+    // w wraps code, text and Markdown Source; other preview kinds keep no wrap action.
     if (action === "toggleWrap")
-        return (root.preview && root.preview.active && root.preview.isCodeText) ? action : ""
+        return (root.preview && root.preview.active && (root.preview.isCodeText
+            || (root.preview.isMarkdown && root.preview.markdownShown
+                && root.preview.markdownShown.shownView === "source"))) ? action : ""
     if (action === "pageForward") {
         if (root.preview && root.preview.active)
             return root.preview.isPdf ? action : ""

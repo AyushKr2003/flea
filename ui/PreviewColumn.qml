@@ -279,6 +279,13 @@ Item {
                     item.compact = true
                 }
             }
+            // The Markdown reader takes the pane's backend once loaded, so its Source and fences colour through the engine.
+            Binding {
+                target: markdownLoader.item
+                property: "backend"
+                value: root.pane ? root.pane.backend : null
+                when: markdownLoader.status === Loader.Ready
+            }
             // The PDF's own page, which is the frame's whole content for that state. QtPdf is
             // reached only through this Loader, so a folder with no PDF in it never opens one.
             Flickable {

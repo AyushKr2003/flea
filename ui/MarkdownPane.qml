@@ -12,6 +12,9 @@ Item {
     property int maxBytes: 1048576
     property bool truncate: false
     property string blockPath: ""
+    // The backend that colours Source and the fences, and the wrap Quick Look's w keeps for Source.
+    property var backend: null
+    property bool wrap: false
 
     // The keyboard is on the close mark; Quick Look's key handler owns the walk, as the PDF viewer's controls do.
     property bool closeFocused: false
@@ -71,6 +74,9 @@ Item {
         maxBytes: root.maxBytes
         truncate: root.truncate
         blockPath: root.blockPath
+        backend: root.backend
+        slot: "look"
+        wrap: root.wrap
         shareParse: true
         // The page is the chrome surface, so code sits on the window colour (md_rendered code_bg).
         codeSurface: Theme.color.background

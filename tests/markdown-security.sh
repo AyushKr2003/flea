@@ -165,6 +165,7 @@ for tag_name in DROP_CONTENT_NAMES:
 defs = []
 # Front matter and display math lines reach the screen as code, so an image written there must stay literal text.
 lines = ["---", f"title: ![front]({H}/frontmatter/x.png)", f"[front]({H}/frontmatter/link.png)", "---", "", "# Security corpus", ""]
+lines.extend(["```", "<b>x</b> <img src=x> &amp;", "```", ""])
 contexts = [
     ("alone", lambda s: [s, ""]),
     ("quote", lambda s: ["> " + s, ""]),

@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell.Io
 import "." as Flea
+import "js/CodeRuns.js" as CodeRuns
 import "js/Markdown.js" as Markdown
 import "js/MarkdownPrepared.js" as Prepared
 
@@ -62,6 +63,32 @@ Item {
     // The preview column sets the document one token under Quick Look's body (RenderedPreviews 13 against 14).
     property bool compact: false
     readonly property int bodyPx: root.compact ? Theme.font.bodySmall : Theme.font.body
+    // Code colours use this backend; Quick Look and the column name their requests separately.
+    property var backend: null
+    // The backend ask slot of this pane: the column is compact, and Quick Look keeps its own.
+    property string slot: root.compact ? "column" : "look"
+    // w wraps Source lines the way the code view wraps them.
+    property bool wrap: false
+    readonly property var inks: CodeRuns.inks(Theme.palette, Theme.fallbackColor, String(Theme.color.foreground))
+    // Pending fence replies and a sequence for unique slots within this pane.
+    property int fenceWaits: 0
+    property int fenceSeq: 0
+    property var fenceReplies: ({})
+    function fenceSlot(fence) {
+        root.fenceSeq += 1
+        var slot = root.slot + ":fence:" + root.fenceSeq
+        root.fenceReplies[slot] = fence
+        return slot
+    }
+    function fenceWaiting(delta) {
+        root.fenceWaits = Math.max(0, root.fenceWaits + delta)
+    }
+    Connections {
+        target: root.backend
+        function onCodeResult(message) {
+            for (var slot in root.fenceReplies) root.fenceReplies[slot].answered(message)
+        }
+    }
     // The faint rule wash the Quick Look bar's bottom hairline draws, shared by the table's header and row rules.
     readonly property real ruleOpacity: 0.12
     function headingPx(level) {
@@ -71,7 +98,7 @@ Item {
     readonly property bool tooDeep: root.blockList.length === 1 && root.blockList[0].type === "deep"
     readonly property string shownView: root.tooDeep ? Markdown.SOURCE : root.view
     readonly property Item noticeItem: sourceList.noticeItem
-    readonly property Item sourceItem: sourceList
+    readonly property Item sourceItem: sourceList.list
     // Only the active file in Rendered view may request figures.
     readonly property bool figuresArmed: root.active && root.shownView !== Markdown.SOURCE
     // A parsed document that may ask for figures starts the helper at once, so it is warm when the first one is asked for.
@@ -123,19 +150,24 @@ Item {
     // Keep this many pixels of blocks warm beyond the visible ListView window.
     readonly property int blockCachePixels: 600
     readonly property bool blocksReady: root.appliedSeq === root.parseSeq && !root.parsing
-    readonly property bool loading: root.active && !root.readFailed && !root.tooLarge && root.parseError === ""
-        && (!file.loaded || !root.blocksReady)
+    readonly property bool sourceRefused: root.shownView === Markdown.SOURCE && sourceList.refused
+    readonly property bool loading: root.active && !root.sourceRefused && !root.readFailed && !root.tooLarge && root.parseError === ""
+        && (!file.loaded || !root.blocksReady || root.coloursWaiting)
     readonly property string status: {
+        if (root.sourceRefused) return sourceList.status
         if (root.tooLarge) return "This file is too large to preview."
         if (root.readFailed || root.parseError !== "") return "This file could not be read."
-        return root.blocksReady && file.loaded ? "ready" : "loading"
+        return root.blocksReady && file.loaded && !root.coloursWaiting ? "ready" : "loading"
     }
     readonly property string lineLabel: Markdown.countLine(Markdown.lineCount(root.rawText))
     // The bar's line count reads only once there is a file behind it, never "0 lines" first.
     readonly property bool contentReady: file.loaded && root.blocksReady
-        && !root.tooLarge && !root.readFailed && root.parseError === ""
+        && !root.sourceRefused && !root.tooLarge && !root.readFailed && root.parseError === ""
+    // Visible Source rows and fences hold the first screen until their colours arrive.
+    readonly property bool sourceWaiting: root.shownView === Markdown.SOURCE && !sourceList.firstScreen
+    readonly property bool coloursWaiting: root.fenceWaits > 0 || root.sourceWaiting
     // A first screen is drawn: blocks are in the list, the head of a parse still running or a whole list, and the swap counts either as shown.
-    readonly property bool firstScreen: file.loaded && root.parseError === "" && root.blockList.length > 0
+    readonly property bool firstScreen: root.sourceRefused || (file.loaded && root.parseError === "" && root.blockList.length > 0 && !root.coloursWaiting)
     // True when the reader has settled with nothing to put in the frame, the way PreviewLines.blank reads.
     readonly property bool blank: root.tooLarge
         || (root.active && !root.readFailed && file.loaded && root.rawText.length === 0)
@@ -148,7 +180,7 @@ Item {
     // The first live table drawn wider than the document, which Quick Look's IPC reads for the sideways capture.
     function tableScroller() { return tableRoute.scrollers.filter(function (s) { return s })[0] || null }
     // The offset the wheel moved, in whichever view shows, for Quick Look's IPC.
-    readonly property real scrollY: root.shownView === Markdown.SOURCE ? sourceList.contentY : body.contentY
+    readonly property real scrollY: root.shownView === Markdown.SOURCE ? (root.sourceItem !== null ? root.sourceItem.contentY : 0) : body.contentY
     // The render suite reads live delegate geometry; only visible blocks plus the cache exist, so offscreen blocks answer null.
     function blockItem(i) {
         var kids = body.contentItem.children
@@ -183,7 +215,7 @@ Item {
             imgW: fig.fitWidth, imgH: fig.fitHeight }
     }
     readonly property real flickContentHeight: sourceList.visible
-        ? sourceList.contentHeight : body.contentHeight
+        ? (root.sourceItem !== null ? root.sourceItem.contentHeight : 0) : body.contentHeight
 
     visible: root.active
 
@@ -537,22 +569,30 @@ Item {
     // Warming both view heights prevents a contentHeight binding loop on Rendered/Source changes.
     onViewChanged: {
         body.contentHeight
-        sourceList.contentHeight
+        if (root.sourceItem !== null)
+            root.sourceItem.contentHeight
     }
 
-    // Only the shown Source (a too-deep one too) lays out text, a few chunks at a time: an unseen 1 MiB Source held the UI thread 100 ms.
+    // Only the shown Source (a too-deep one too) asks for lines, a screen at a time: an unseen 1 MiB Source held the UI thread 100 ms.
     Flea.MarkdownSource {
         id: sourceList
         anchors.fill: parent
-        visible: (!root.tooLarge && !root.readFailed && root.parseError === "")
-            && root.shownView === Markdown.SOURCE
+        visible: root.shownView === Markdown.SOURCE && (root.parseError === "" || root.sourceRefused)
         text: root.shownView === Markdown.SOURCE ? root.rawText : ""
+        path: root.path
+        truncate: root.truncate
+        backend: root.backend
+        slot: root.slot
+        active: root.active && root.shownView === Markdown.SOURCE
+            && (file.loaded || root.tooLarge || root.readFailed || (sourceList.engine && !root.truncate))
+        tooLarge: root.tooLarge
+        readFailed: root.readFailed
+        wrap: root.wrap
         notice: root.tooDeep ? Markdown.deepNotice() : ""
         insetX: root.insetX
         insetY: root.insetY
         blockGap: root.blockGap
         bodyPx: root.bodyPx
-        cachePixels: root.blockCachePixels
     }
 
     // Render only visible blocks and a bounded cache, even for a 1 MiB document.
@@ -615,7 +655,7 @@ Item {
 
     Text {
         anchors.centerIn: parent
-        visible: root.tooLarge || root.readFailed || root.parseError !== ""
+        visible: !root.sourceRefused && (root.tooLarge || root.readFailed || root.parseError !== "")
         text: root.status
         color: Theme.color.muted
         font.family: Theme.font.family

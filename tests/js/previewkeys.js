@@ -273,18 +273,19 @@ function runImageZoom(check) {
     check("the widened e row is gone again", Keymap.PRESET_KEYS.indexOf(wide), -1)
 }
 
-// PV-BAT3: w wraps a code or text Quick Look and means nothing to any other kind; the choice is ui.json's, so the action stores nothing here.
+// w wraps code, text and Markdown Source; the remembered choice belongs to ui.json.
 function runWrapKeys(check) {
     var w = { key: 0, text: "w", modifiers: Qt.NoModifier }
     function pane(preview) { return { focusView: "list", viewMode: "list", searchMode: "", recentMode: "", preview: preview } }
     function open(kind) {
         return { active: true, isMedia: kind === "audio" || kind === "video", isPdf: kind === "pdf",
-            isCodeText: kind === "code" || kind === "text", isMarkdown: kind === "markdown" }
+            isCodeText: kind === "code" || kind === "text", isMarkdown: kind === "markdown" || kind === "markdown-source",
+            markdownShown: { shownView: kind === "markdown-source" ? "source" : "rendered" } }
     }
     var kept = Keymap.preset
     for (var preset of ["default", "vim", "mac", "windows"]) {
         Keymap.setPreset(preset)
-        for (var kind of ["code", "text"])
+        for (var kind of ["code", "text", "markdown-source"])
             check(preset + ": w reaches a " + kind + " Quick Look", Focus.lookup(w, pane(open(kind))), "toggleWrap")
         for (var other of ["markdown", "pdf", "image", "archive", "audio", "video"])
             check(preset + ": w reaches nothing on a " + other + " Quick Look", Focus.lookup(w, pane(open(other))), "")
@@ -297,7 +298,12 @@ function runWrapKeys(check) {
     PreviewKeys.act("toggleWrap", wrapped)
     check("the toggleWrap action asks the Quick Look to flip the wrap", wrapped.preview.toggled, 1)
     var quickSrc = Source.source("ui/Preview.qml")
-    check("the flip is ui.json's preview.wrap and only a code or text Quick Look writes it",
-        quickSrc.indexOf("if (root.isCodeText) ViewState.changeLeaf(\"preview\", { wrap: !ViewState.previewWrap })") >= 0, true)
+    var toggle = new Function("root", "ViewState", Source.block(quickSrc, "function toggleWrap()", "ui/Preview.qml"))
+    for (var kind of ["code", "text", "markdown-source", "markdown", "pdf", "image", "archive", "audio", "video"]) {
+        var changes = []
+        toggle(open(kind), { previewWrap: false, changeLeaf: function (leaf, patch) { changes.push([leaf, patch.wrap]) } })
+        check(kind + ": only a wrappable Quick Look writes preview.wrap", JSON.stringify(changes),
+            ["code", "text", "markdown-source"].indexOf(kind) >= 0 ? '[["preview",true]]' : "[]")
+    }
     check("the pane draws the remembered wrap", quickSrc.indexOf("wrap: ViewState.previewWrap") >= 0, true)
 }

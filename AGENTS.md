@@ -4123,6 +4123,10 @@ The office preview queue records one ceiling, re-derived with `wc -l`: `src/back
 
 The code column reload guard records one ceiling, re-derived with `wc -l`: `tests/code-column.qml` crosses the hard cap at 411 for the listing guard check, which counts the code asks and queued loads made while the reload's listing is out, and the fixture restore that lets both harness runs share one fixture; recorded rather than split because both pin the same reload.
 
+The Markdown Source and fence colours move four ceilings, each re-derived with `wc -l`: `ui/PreviewColumn.qml` 608 to 615 for the backend binding beside its loader, `ui/PreviewMarkdown.qml` 625 to 661 for the pane slots, shared fence reply routing, first-screen waits and Source wiring, `ui/Preview.qml` 915 to 917 for the Markdown backend and wrap bindings, and `tests/preview-layout-loop.qml` 400 to 406 for the per-line Source geometry checks. Source uses one `Flea.CodeLines`, built on the first active Source view, in `ui/MarkdownSource.qml` (135 lines); fence colours use the shared code-run formatter in `ui/MarkdownBlockView.qml` (307 lines, above its soft budget only); only viewport fences hold the first screen, while cached fences still ask ahead. The Source wrap key moves two further ceilings, from `wc -l`: `ui/js/Focus.js` 487 to 489 for the Source-only dispatch guard, and `tests/js/previewkeys.js` 303 to 309 for four preset checks and the actual wrap handler over every preview kind.
+
+The mdsrc2 refusal repair moves `ui/PreviewMarkdown.qml` from 661 to 665 lines for Source refusal readiness and reader-state forwarding, and records `tests/markdown-code.qml` at 426 for real oversized, permission-denied and binary Source checks, including visible text bounds. Both ceilings come from `wc -l`. `ui/CodeRefusal.qml` shares Quick Look's existing refusal strings, mark and geometry with Source; `ui/PreviewText.qml` shrinks to 117 lines and `ui/MarkdownSource.qml` is 155.
+
 ## The key table is generated
 
 `keys.toml` at the repository root is the single source of truth for every binding.

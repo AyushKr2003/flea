@@ -18,6 +18,8 @@ Item {
     property bool wrap: false
     // True when the view scrolls under the wheel; the preview column's frame does not.
     property bool scrolls: false
+    // A Component the list draws above its first line and scrolls with the rows; null for none.
+    property Component header: null
     property real pixelSize: Theme.font.caption
     // The most lines drawn, 0 for every line of the file.
     property int limit: 0
@@ -177,6 +179,7 @@ Item {
         interactive: root.scrolls
         boundsBehavior: Flickable.StopAtBounds
         model: root.shown
+        header: root.header
         onContentYChanged: Qt.callLater(root.ask)
         onHeightChanged: Qt.callLater(root.ask)
 
