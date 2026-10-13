@@ -46,6 +46,7 @@ PhoneMounts.qml
 PrebuildDriver.qml
 RailHeading.qml
 RailPlaces.qml
+RailTrashRow.qml
 RenameField.qml
 ResizeHandle.qml
 Row.qml
@@ -165,6 +166,7 @@ js/Thumbs.js
 js/Transfer.js
 js/Trash.js
 js/TrashDates.js
+js/TrashDrop.js
 js/UiState.js
 js/Update.js
-bytes 1627609
+bytes 1633559

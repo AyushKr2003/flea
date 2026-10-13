@@ -471,7 +471,7 @@ function run(check) {
         special.backend.dirDev = 56
         var specialWire = Drag.mimeFor(special, [2], true, false)[Drag.ROWS_MIME]
         check(pathBytes[b][0] + " source round-trips through marker", Drag.markerSource(specialWire), special.path)
-        check(pathBytes[b][0] + " source keeps seven marker fields", specialWire.split("\n").length, 7)
+        check(pathBytes[b][0] + " source keeps eight marker fields", specialWire.split("\n").length, 8)
         check(pathBytes[b][0] + " source encodes its path field", specialWire.split("\n")[3], encodeURIComponent(special.path))
         var foreignSpecial = "other-flea" + specialWire.substring(specialWire.indexOf("\n"))
         var specialRequests = []

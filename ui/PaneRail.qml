@@ -1,6 +1,7 @@
 import QtQuick
 import "." as Flea
 import "js/Focus.js" as Focus
+import "js/Drag.js" as DragOps
 import "js/Eject.js" as Eject
 import "js/RailKeys.js" as RailKeys
 import "js/RailMenu.js" as RailMenu
@@ -64,7 +65,8 @@ Item {
     property bool edgeShown: false
     // The Sidebar is built by the first strip entry or Tab and then kept, so later reveals spawn nothing and keep cursor and scroll.
     property bool built: false
-    readonly property bool pointerWanted: root.edgeShown || root.over || root.menuHere || root.releasing
+    readonly property bool dragHere: dragReveal.containsDrag || (rail.item !== null && rail.item.trashDragOver)
+    readonly property bool pointerWanted: root.edgeShown || root.over || root.menuHere || root.releasing || root.dragHere
     readonly property bool focusWanted: root.pane !== null && root.pane.focusView === Focus.RAIL
     readonly property bool wanted: root.pointerWanted || root.focusWanted
     // 0 withdrawn to 1 shown; the rail's x follows it, and a reversal starts from where it stands.
@@ -116,6 +118,17 @@ Item {
                 else dwell.restart()
             }
         }
+    }
+
+    // Below the rail, so the Trash row's own drop area answers first; taking nothing here keeps a
+    // drop on the overlay rail from falling through to whatever listing row lies under it.
+    DropArea {
+        id: dragReveal
+        anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+        width: Math.max(strip.width, rail.width)
+        enabled: root.overlay
+        keys: [DragOps.ROWS_MIME]
+        onDropped: function (drop) { drop.accepted = false }
     }
 
     Loader {
