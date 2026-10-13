@@ -74,12 +74,20 @@ Item {
     // Starts a view of a new file or text; the first ask waits for the end of the turn so one change of several properties asks once.
     function fresh() {
         root.reset()
-        if (!root.active)
+        if (!root.active) {
+            askTimer.stop()
             return
+        }
         if (!root.engine && root.fromText && root.text !== null)
             root.answerPlain()
         else
-            Qt.callLater(root.ask)
+            root.schedule()
+    }
+
+    // The owned timer coalesces asks and is destroyed with the reader, including a pending ask during a preview handoff.
+    function schedule() {
+        if (root.active)
+            askTimer.restart()
     }
 
     // Sample input: "a\nb\n" holds only lines 1 and 2, as [0, "a"] and [0, "b"], matching the engine's terminal-newline rule.
@@ -152,7 +160,7 @@ Item {
         root.stamp += 1
         // Binary, large and failed are the file's whole answer: nothing more is asked of it until the view starts a new one.
         if (root.settled)
-            Qt.callLater(root.ask)
+            root.schedule()
     }
 
     // A pane handoff keeps the engine capability, but disconnects the old backend's request.
@@ -166,7 +174,9 @@ Item {
     onFromTextChanged: root.fresh()
     onActiveChanged: root.fresh()
     onEngineChanged: root.fresh()
-    onLimitChanged: Qt.callLater(root.ask)
+    onLimitChanged: root.schedule()
+
+    Timer { id: askTimer; interval: 0; onTriggered: root.ask() }
 
     Connections {
         target: root.engine ? root.backend : null
@@ -189,8 +199,8 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
         model: root.shown
         header: root.header
-        onContentYChanged: Qt.callLater(root.ask)
-        onHeightChanged: Qt.callLater(root.ask)
+        onContentYChanged: root.schedule()
+        onHeightChanged: root.schedule()
 
         delegate: Item {
             id: line

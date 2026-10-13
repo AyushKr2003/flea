@@ -38,14 +38,16 @@ Item {
     readonly property bool fontFailed: root.isFont && fontLoader.item !== null && fontLoader.item.failed
     // RenderedPreviews: a Markdown file keeps the text kind and draws its own bar and pane.
     readonly property bool isMarkdown: root.kind === "text" && Kinds.isMarkdown(root.path)
+    readonly property bool isHtml: root.kind === "text" && Kinds.isHtml(root.path)
+    readonly property bool isDocument: root.isMarkdown || root.isHtml
     // Code and plain text share ui/PreviewText.qml; every text kind draws the Quick Look bar.
-    readonly property bool isCodeText: root.kind === "text" && !root.isMarkdown
+    readonly property bool isCodeText: root.kind === "text" && !root.isDocument
     readonly property bool hasBar: root.kind === "text"
     // Compare shows two files in this overlay: path is the first and comparePath the second, and one diff is asked per open.
     readonly property bool isCompare: root.kind === "compare"
     property string comparePath: ""
-    // r flips the open Markdown Quick Look to Source; close() forgets it, and a move to another file keeps it.
-    property bool markdownSource: false
+    // Each document kind remembers its own view and shares it with the column.
+    readonly property bool markdownSource: ViewState.documentView(root.isHtml ? "html" : "markdown") === "source"
     // The file whose first Markdown read may block the key, decided from its listing row before the path moves; "" when none may.
     property string inlineMarkdownPath: ""
     // Tab put the keyboard on the bar's close mark, Markdown or code; a move off the text kinds or a close lets it go.
@@ -66,12 +68,12 @@ Item {
         if (root.isPdf) return pdfLoader.item
         if (root.isArchive) return archivePane
         if (root.isCompare) return compareLoader.item
-        if (root.kind === "text") return root.isMarkdown
+        if (root.kind === "text") return root.isDocument
             ? (markdownLoader.item ? markdownLoader.item.bodyItem : null) : textPane.bodyItem
         return null
     }
     function mediaLoaded() { return mediaLoader.item !== null }
-    function textShown() { return root.isMarkdown
+    function textShown() { return root.isDocument
         ? (markdownLoader.item ? markdownLoader.item.rawText : "") : textPane.shownText() }
     function markdownView() { return root.markdownShown ? root.markdownShown.shownView : "" }
     function markdownCloseState() { return JSON.stringify(root.markdownShown ? root.markdownShown.closeState() : {}) }
@@ -98,7 +100,7 @@ Item {
         if (root.isImage) return imageLoader.item ? imageLoader.item.status : "loading"
         if (root.isArchive) return root.archiveMeta === null ? "loading" : (root.archiveFailed ? "This archive could not be read." : "archive")
         if (root.isCompare) return compareLoader.item ? compareLoader.item.status : "loading"
-        if (root.kind === "text") return root.isMarkdown
+        if (root.kind === "text") return root.isDocument
             ? (markdownLoader.item ? markdownLoader.item.status : "loading") : textPane.status
         if (root.isFont) return fontLoader.item ? fontLoader.item.status : "loading"
         return "This file cannot be previewed."
@@ -107,7 +109,7 @@ Item {
     // An interim cache thumbnail shown counts as whole, never as a half-built frame.
     readonly property bool lookReady: !root.active || PreviewSwap.lookReady(root.status, root.isPdf,
         root.pdfItem !== null && root.pdfItem.shownPage >= 0 && root.pdfItem.opened === root.path, root.pdfItem !== null && root.pdfItem.failed,
-        root.interimShown, (root.isMarkdown && markdownLoader.item !== null && markdownLoader.item.firstScreen)
+        root.interimShown, (root.isDocument && markdownLoader.item !== null && markdownLoader.item.firstScreen)
         || (root.isCodeText && textPane.firstScreen)) && !root.sizeWait
     // The cached thumbnail held at open, drawn under the full decode at the final rect; the stamp retires a stale one.
     property string interimThumb: ""
@@ -174,7 +176,7 @@ Item {
     // The memory suite asserts both Markdown loader items are null without a Markdown file.
     readonly property var markdownItem: markdownLoader.item
     // The open Markdown document, null unless Quick Look shows one; the guarded readers share this null.
-    readonly property var markdownShown: root.active && root.isMarkdown ? markdownLoader.item : null
+    readonly property var markdownShown: root.active && root.isDocument ? markdownLoader.item : null
     // Exposes the eager panes for the live swap gate, so it can pin the wiring.
     readonly property var panesItem: panes
     // Synchronous: a local source: URL answers item on the same call that sets active.
@@ -318,8 +320,8 @@ Item {
     // The PDF viewer's three actions come through this file, so ui/js/Focus.js never learns a Loader item answers them.
     function turnPage(delta) { if (root.isPdf && pdfLoader.item) pdfLoader.item.turn(delta) }
 
-    function zoomBy(steps) { if (root.isPdf && pdfLoader.item) pdfLoader.item.zoomBy(steps); else if (root.isImage && imageLoader.item) imageLoader.item.zoomBy(steps) }
-    function zoomFit() { if (root.isImage && imageLoader.item) imageLoader.item.zoomFit() }
+    function zoomBy(steps) { if (root.isPdf && pdfLoader.item) pdfLoader.item.zoomBy(steps); else if (root.isImage && imageLoader.item) imageLoader.item.zoomBy(steps); else if (root.isHtml && root.markdownShown) root.markdownShown.zoomBy(steps) }
+    function zoomFit() { if (root.isImage && imageLoader.item) imageLoader.item.zoomFit(); else if (root.isHtml && root.markdownShown) root.markdownShown.zoomFit() }
 
     function toggleExpand() { if (root.isPdf && pdfLoader.item) pdfLoader.item.toggleExpand() }
 
@@ -346,14 +348,14 @@ Item {
     // y: the patch goes to the clipboard; any other kind has none.
     function copyPatch() { if (root.isCompare && compareLoader.item) compareLoader.item.copyPatch() }
 
-    // Decided 2026-10-03: a Markdown Quick Look opens rendered, and r flips only the open one (no stored choice).
+    // The bar and r change the same remembered view for the current document kind.
     function toggleMarkdownView() {
-        if (root.isMarkdown) root.markdownSource = !root.markdownSource
+        if (root.isDocument) root.setMarkdownView(root.markdownSource ? "rendered" : "source")
     }
 
     // A word of the Quick Look bar names the view it wants, so asking for the one already shown changes nothing.
     function setMarkdownView(which) {
-        if (root.isMarkdown) root.markdownSource = which === "source"
+        if (root.isDocument) ViewState.setDocumentView(root.isHtml ? "html" : "markdown", which)
     }
 
     function toggleMarkdownClose() {
@@ -362,7 +364,7 @@ Item {
 
     // w wraps the open code or text Quick Look, and a Markdown Source; ui.json keeps the choice for the next one.
     function toggleWrap() {
-        if (root.isCodeText || (root.isMarkdown && root.markdownShown && root.markdownShown.shownView === "source")) ViewState.changeLeaf("preview", { wrap: !ViewState.previewWrap })
+        if (root.isCodeText || (root.isDocument && root.markdownShown && root.markdownShown.shownView === "source")) ViewState.changeLeaf("preview", { wrap: !ViewState.previewWrap })
     }
 
     // The picture is taken now, so the settled load below changes the panes under it.
@@ -425,7 +427,6 @@ Item {
         stripHideTimer.stop()
         root.active = false
         root.kind = ""
-        root.markdownSource = false
         root.markdownCloseFocus = false
         root.inlineMarkdownPath = ""
         root.comparePath = ""
@@ -778,8 +779,8 @@ Item {
                 anchors.fill: parent
                 // The pane lies inside the surface's own frame, as the column's does; media fills it on purpose.
                 anchors.margins: Theme.spacing.hairline
-                active: root.isMarkdown
-                source: "MarkdownPane.qml"
+                active: root.isDocument
+                source: root.isHtml ? "HtmlPane.qml" : "MarkdownPane.qml"
                 onLoaded: {
                     item.blockPath = Qt.binding(function () { return root.inlineMarkdownPath })
                     item.path = Qt.binding(function () { return root.path })
@@ -792,7 +793,7 @@ Item {
                         return root.pane ? (root.pane.storageClass === "network"
                             || root.pane.storageClass === "phone") : false
                     })
-                    item.active = Qt.binding(function () { return root.isMarkdown })
+                    item.active = Qt.binding(function () { return root.isDocument })
                     item.closeFocused = Qt.binding(function () { return root.markdownCloseFocused })
                     item.backend = Qt.binding(function () { return root.pane ? root.pane.backend : null })
                     item.wrap = Qt.binding(function () { return ViewState.previewWrap })

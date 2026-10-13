@@ -380,17 +380,18 @@ QtObject {
         var readerPath = expression(body(markdownSource, "function pointFile()"), /\n\s*var want =([^\n]*)/)
         // The loader gate the callback binds: PreviewColumn's shipped expression over a remote Markdown row.
         var active = new Function("item", "Facts", "return" + expression(columnSource, /readonly property bool markdownActive:([^\n]*)/))(
-            { visible: true, manualHold: false, rowState: "text", isMarkdownRow: true }, { TEXT: "text" })
+            { visible: true, manualHold: false, rowState: "text", isMarkdownRow: true, isDocumentRow: true, isHtmlRow: false, selectionCount: 1 }, { TEXT: "text" })
         var probe = Qt.createQmlObject('import QtQuick\nQtObject {\n'
             + 'id: item\nproperty var root: ({ path: "/remote/A.md", row: { s: ' + remoteRowBytes + ' }, '
-            + 'markdownActive: ' + active + ', textLimit: ' + remoteLimitBytes + ', truncateText: true })\n'
+            + 'markdownActive: ' + active + ', textLimit: ' + remoteLimitBytes + ', truncateText: true, isHtmlRow: false })\n'
             + 'property var facts: ({ TEXT: "text" })\n'
             + 'property bool active: false\nproperty string path: ""\nproperty int size: 0\n'
-            + 'property int maxBytes: ' + defaultReaderLimitBytes + '\nproperty bool truncate: false\nproperty bool compact: false\n'
+            + 'property int maxBytes: ' + defaultReaderLimitBytes + '\nproperty bool truncate: false\nproperty bool compact: false\nproperty bool externalScrollBars: false\nproperty string view: "rendered"\n'
+            + 'property var state: ({ documentView: function (kind) { return "rendered" } })\n'
             + 'property var seen: []\nreadonly property bool tooLarge:' + tooLarge + '\n'
             + 'readonly property string readerPath:' + readerPath + '\n'
             + 'onReaderPathChanged: seen.push(readerPath)\n'
-            + 'function apply() {' + callback.replace(/Facts\./g, "facts.")
+            + 'function apply() {' + callback.replace(/Facts\./g, "facts.").replace(/ViewState\./g, "state.")
             + '} }', gate.sandbox)
         // Evaluate the observer before installing bindings so intermediate reader paths are recorded.
         var initialPath = probe.readerPath
@@ -410,10 +411,10 @@ QtObject {
         var column = readSource("../ui/PreviewColumn.qml")
         var shipped = readerGate(source, column)
         check(shipped.guarded, "F47 oversized remote row never exposes FileView path")
-        // Decided 2026-10-03: the column never draws Source, so its wiring names no view and reads no stored choice.
+        // The column reads the remembered view for its own document kind.
         var wiring = body(column.slice(column.indexOf("id: markdownLoader")), "onLoaded:")
-        check(wiring.indexOf("item.view") < 0 && wiring.indexOf("markdownView") < 0 && wiring.indexOf("ViewState") < 0,
-            "F51 the column Markdown wiring sets no view and reads no stored choice")
+        check(wiring.indexOf("item.view") >= 0 && wiring.indexOf('ViewState.documentView(root.isHtmlRow ? "html" : "markdown")') >= 0,
+            "F51 the column reads each document kind's remembered view")
         check(shipped.allowed, "F47 allowed row exposes reader path")
         var unguardedPath = source.replace("(root.active && !root.tooLarge) ? root.path", "root.active ? root.path")
         check(unguardedPath !== source && !readerGate(unguardedPath, column).guarded,

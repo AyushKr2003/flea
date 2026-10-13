@@ -63,6 +63,21 @@ QtObject {
     }
     function previewKind(): string { return root.look.kind }
     function previewState(): string { return root.look.status }
+    function htmlState(column: bool): string {
+        var c = column && root.pane ? root.pane.previewColumnItem : null
+        var pane = column ? (c && c.isHtmlRow ? c.markdown : null)
+            : root.look.kind === "text" && root.look.isHtml ? root.look.markdownShown : null
+        var doc = pane ? (column ? pane : pane.document) : null
+        if (!doc) return "{}"
+        var bar = column ? null : pane.barGeometry()
+        return JSON.stringify({ path: doc.path, view: doc.shownView, ready: doc.firstScreen,
+            visible: column ? c.visible : root.look.revealedOpen, state: doc.status,
+            lines: doc.sourceView && doc.sourceCode ? doc.sourceCode.total : doc.total,
+            count: bar ? bar.lines.text : doc.lineLabel, mark: bar ? bar.markName : "html",
+            toggle: bar ? bar.segment !== null : false, file: doc.imageFile,
+            width: doc.renderedWidth, deviceWidth: doc.deviceWidth, y: doc.scrollY, zoom: doc.zoom,
+            facts: column ? c.factsLine.kind + c.factsLine.tail : "", frame: root.fleaWindow.rectOf(column ? c.frameItem : doc) })
+    }
     // Read the Compare pane and its real controls only after Quick Look has built it.
     function compareState(): string {
         var look = root.look

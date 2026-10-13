@@ -25,6 +25,8 @@ CodeRefusal 1.0 CodeRefusal.qml
 PreviewLines 1.0 PreviewLines.qml
 PreviewScroll 1.0 PreviewScroll.qml
 PreviewMarkdown 1.0 PreviewMarkdown.qml
+PreviewHtml 1.0 PreviewHtml.qml
+HtmlPane 1.0 HtmlPane.qml
 MarkdownSource 1.0 MarkdownSource.qml
 MarkdownRemote 1.0 MarkdownRemote.qml
 QuickLookBar 1.0 QuickLookBar.qml

@@ -185,6 +185,12 @@ QtObject {
     function setPreviewWidth(percent) { root.changeLeaf("preview", { width: percent }) }
     // Quick Look's w: long lines wrap in a code or text file; off until pressed, and remembered.
     readonly property bool previewWrap: root.preview.wrap === true
+    function documentView(kind) { return root.preview[kind + "View"] === "source" ? "source" : "rendered" }
+    function setDocumentView(kind, view) {
+        var patch = {}
+        patch[kind + "View"] = view === "source" ? "source" : "rendered"
+        root.changeLeaf("preview", patch)
+    }
     readonly property string density: root.state.density || "compact"
     readonly property string addressBar: root.state.addressBar || "breadcrumb"
     readonly property bool hyprlandIcons: root.display.hyprlandIcons === true

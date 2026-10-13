@@ -56,6 +56,9 @@ if ! command -v qs >/dev/null; then
     exit 1
 fi
 
+export FLEA_BIN=${FLEA_BIN:-$PWD/target/debug/flea}
+[ -x "$FLEA_BIN" ] || { echo "FAIL markdown-render: no backend for remembered view state"; exit 1; }
+
 python3 tests/markdown-gates.py || exit 1
 
 test_root="$FIXTURE_ROOT/flea-markdown-render-$$"

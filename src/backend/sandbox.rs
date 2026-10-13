@@ -135,6 +135,8 @@ pub fn wrap_compile(inner: &[String], ro_binds: &[&Path], writable: &Path) -> Ve
     wrap_extra(inner, ro_binds, Some(writable))
 }
 
+pub use super::htmlsandbox::wrap_html;
+
 fn wrap_extra(inner: &[String], ro_binds: &[&Path], writable: Option<&Path>) -> Vec<String> {
     let head_and_binds = READONLY_PREFIX_ARGS + ro_binds.len() * READONLY_BIND_ARGS + usize::from(writable.is_some()) * READONLY_BIND_ARGS;
     let mut a: Vec<String> = Vec::with_capacity(inner.len() + BWRAP_FLAGS.len() + head_and_binds);

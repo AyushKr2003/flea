@@ -15559,6 +15559,7 @@ clipboard_wait() {
 . "$repo/tests/ui-columns-background.sh"
 . "$repo/tests/ui-colwatch.sh"
 . "$repo/tests/ui-captures-markdown.sh"
+. "$repo/tests/ui-captures-html.sh"
 . "$repo/tests/ui-captures-states.sh"
 . "$repo/tests/ui-captures-gridhover.sh"
 # README retakes, one launch per frame at its own size, text size and fixture; 2560x1440 corner park, wait and retry bounds.

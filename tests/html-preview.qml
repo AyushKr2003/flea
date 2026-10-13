@@ -1,0 +1,281 @@
+import QtQuick
+import Quickshell
+import "flea" as Flea
+import "flea/js/Icons.js" as Icons
+
+ShellRoot {
+    id: root
+    property int phase: 0
+    property int failures: 0
+    property int checks: 0
+    property var keys: null
+    property double started: Date.now()
+    property double calmAt: 0
+    property bool finished: false
+    property bool ticking: false
+    property bool capturePending: false
+    property int replies: 0
+    property int beforeResize: 0
+    property real beforePage: 0
+    property int cursorBefore: -1
+    property int midBefore: 0
+    property int topBefore: 0
+    function pane() { return body.item ? body.item.currentPane : null }
+    function look() { return root.pane() ? root.pane().preview : null }
+    function doc() { return root.look() && root.look().markdownShown ? root.look().markdownShown.document : null }
+    function column() { return root.pane() ? root.pane().previewColumnItem : null }
+    function check(name, got, want) {
+        root.checks++
+        var pass = JSON.stringify(got) === JSON.stringify(want)
+        if (!pass) root.failures++
+        console.warn("HTML_PREVIEW " + (pass ? "PASS " : "FAIL ") + name + " got=" + JSON.stringify(got) + " want=" + JSON.stringify(want))
+    }
+    function calm(ok) {
+        if (!ok) { root.calmAt = 0; return false }
+        if (!root.calmAt) root.calmAt = Date.now()
+        return Date.now() - root.calmAt > 300
+    }
+    function next() { root.phase++; root.started = Date.now(); root.calmAt = 0 }
+    function key(text) { root.keys.keyClickChar(text, Qt.NoModifier, -1) }
+    function press(key) { root.keys.keyClick(key, Qt.NoModifier, -1) }
+    function indexOf(name) {
+        for (var i = 0; i < root.pane().total; i++)
+            if (root.pane().rowFor(i).n === name) return i
+        return -1
+    }
+    function open(name) {
+        root.pane().setCursor(root.indexOf(name))
+        root.pane().listArea.forceActiveFocus()
+        root.press(Qt.Key_Space)
+    }
+    function shot(item, name, after) {
+        var output = Quickshell.env("FLEA_CI_SUITE_LOGS") || Quickshell.env("HTML_ROOT")
+        root.capturePending = true
+        item.grabToImage(function (image) {
+            root.check(name + " image saved", image.saveToFile(output + "/" + name + ".png"), true)
+            if (typeof after === "function") after()
+            root.capturePending = false
+        })
+    }
+    function finish() {
+        if (root.finished) return
+        root.finished = true
+        console.warn("HTML_PREVIEW DONE " + root.checks + " checks, " + root.failures + " failed")
+        quit.start()
+    }
+    function tick() {
+        var p = root.pane(), l = root.look(), d = root.doc(), c = root.column()
+        if (Date.now() - root.started > 25000) {
+            root.check("phase " + root.phase + " completes (look=" + (l ? l.status : "none") + ", column=" + (c ? c.previewState : "none")
+                + ", widths=" + (d ? d.renderedWidth + "/" + d.deviceWidth : "none") + ", window=" + window.width + "/" + window.implicitWidth
+                + ", replies=" + root.replies + "/" + root.beforeResize + ")", "timeout", "done")
+            root.finish()
+            return
+        }
+        switch (root.phase) {
+        case 0:
+            if (!p || p.listInFlight || !p.storageKnown || p.total < 4) return
+            root.check("listing builds no Quick Look or HTML surface", [l, root.replies], [null, 0])
+            root.check("both document kinds default rendered", [Flea.ViewState.documentView("html"), Flea.ViewState.documentView("markdown")], ["rendered", "rendered"])
+            root.keys = Qt.createQmlObject("import QtTest; TestEvent {}", p.listArea)
+            root.open("index.html")
+            root.next()
+            break
+        case 1:
+            if (!root.calm(l && l.active && d && d.contentReady && l.openState().landed)) return
+            var g = l.markdownShown.barGeometry()
+            root.check("HTML draws the page image and the shared bar", [l.isHtml, l.isCodeText, d.shownView, d.imageFile.length > 0, g.markName, g.name.text, g.lines.text, g.segment !== null],
+                [true, false, "rendered", true, "html", "index.html", "61 lines", true])
+            root.check("rendered frame uses device width", d.renderedWidth, d.deviceWidth)
+            root.check("the HTML mark uses the approved shield path", Icons.pathFor("html"), "M4 2h16l-1.5 17L12 22l-6.5-3z M15.5 6.5h-7V11h7v5L12 17.5 8.5 16")
+            root.shot(l.panesItem, "html-quicklook", function () {
+                root.cursorBefore = p.cursorIndex
+                root.key("j")
+                root.key("+")
+                root.next()
+            })
+            break
+        case 2:
+            if (!root.calm(d && d.scrollY > 0 && d.zoom > 1)) return
+            root.check("j scrolls rendered HTML without moving the cursor", p.cursorIndex, root.cursorBefore)
+            root.check("plus zooms on the preview ladder", d.zoom, 1.25)
+            root.key("0")
+            root.key("k")
+            root.beforeResize = root.replies
+            viewportHost.width = 1220
+            viewportHost.width = 1260
+            viewportHost.width = 1240
+            root.next()
+            break
+        case 3:
+            if (!root.calm(d && d.contentReady && d.renderedWidth === d.deviceWidth && root.replies > root.beforeResize)) return
+            root.check("resize burst renders only the settled width", root.replies - root.beforeResize, 1)
+            root.check("zero restores fit", d.zoom, 1)
+            root.key("r")
+            root.next()
+            break
+        case 4:
+            if (!root.calm(d && d.shownView === "source" && d.firstScreen)) return
+            root.check("r draws the shipped code renderer with all 61 lines", [d.sourceCode.total, d.sourceCode.numbered, l.markdownShown.barGeometry().lines.text], [61, true, "61 lines"])
+            root.shot(l.panesItem, "html-source", function () {
+                root.press(Qt.Key_Space)
+                p.chooseView("columns")
+                root.next()
+            })
+            break
+        case 5:
+            if (!root.calm(c && c.visible && c.isHtmlRow && c.markdown && c.markdown.firstScreen && !c.textLoading)) return
+            root.check("column carries HTML Source without a toggle", [c.markdown.shownView, c.markdown.sourceCode.numbered, c.tallRow], ["source", true, true])
+            root.check("column frame fills to the name and facts", c.frameItem.height > c.frameItem.width * 10 / 16, true)
+            root.beforePage = c.markdown.viewport.contentY
+            p.listArea.forceActiveFocus()
+            root.key("F")
+            root.next()
+            break
+        case 6:
+            if (!root.calm(c && !c.textLoading && c.markdown.viewport.contentY > root.beforePage)) return
+            root.check("F pages HTML Source with the cursor unchanged", p.cursorIndex, root.cursorBefore)
+            root.key("B")
+            root.open("notes.md")
+            root.next()
+            break
+        case 7:
+            if (!root.calm(l && l.isMarkdown && l.markdownShown && l.markdownShown.firstScreen)) return
+            root.check("Markdown remains rendered after HTML chose Source", l.markdownShown.shownView, "rendered")
+            root.key("r")
+            root.next()
+            break
+        case 8:
+            if (!root.calm(l.markdownShown.shownView === "source" && l.markdownShown.firstScreen)) return
+            root.press(Qt.Key_Space)
+            root.open("index.html")
+            root.next()
+            break
+        case 9:
+            if (!root.calm(d && d.sourceView && d.firstScreen)) return
+            root.check("HTML choice survives close and reopening", d.shownView, "source")
+            root.key("r")
+            root.next()
+            break
+        case 10:
+            if (!root.calm(d && !d.sourceView && d.contentReady)) return
+            root.check("HTML switching back does not change Markdown", Flea.ViewState.documentView("markdown"), "source")
+            root.press(Qt.Key_Space)
+            root.next()
+            break
+        case 11:
+            if (!root.calm(c && c.markdown && !c.markdown.sourceView && c.markdown.contentReady && !c.textLoading)) return
+            root.check("column draws rendered HTML under remembered mode", [c.markdown.shownView, c.markdown.total], ["rendered", 61])
+            root.shot(c, "html-column")
+            root.next()
+            break
+        case 12:
+            if (!root.calm(true)) return
+            p.selection.only(root.indexOf("notes.md"))
+            p.selection.toggle(root.indexOf("index.html"))
+            p.selectionVersion++
+            root.next()
+            break
+        case 13:
+            if (!root.calm(c && c.selectionCount === 2)) return
+            root.check("HTML never paints over the multi-selection summary", [c.previewState, c.markdown === null], ["multi", true])
+            p.clearSelection()
+            Flea.ViewState.setDocumentView("html", "source")
+            p.setCursor(root.indexOf("long.html"))
+            root.next()
+            break
+        case 14:
+            if (!root.calm(c && c.markdown && c.markdown.sourceCode && c.markdown.sourceCode.total === 800 && c.markdown.firstScreen && !c.textLoading)) return
+            root.midBefore = c.swap.describe().midFrames
+            root.beforePage = c.markdown.viewport.contentY
+            root.key("F")
+            root.next()
+            break
+        case 15:
+            if (!root.calm(c && !c.textLoading && c.markdown.firstScreen && c.markdown.viewport.contentY > root.beforePage)) return
+            root.beforePage = c.markdown.viewport.contentY
+            root.key("F")
+            root.next()
+            break
+        case 16:
+            if (!root.calm(c && !c.textLoading && c.markdown.firstScreen && c.markdown.viewport.contentY > root.beforePage)) return
+            root.check("paging beyond held HTML Source draws no unfinished frame", c.swap.describe().midFrames - root.midBefore, 0)
+            root.open("long.html")
+            root.next()
+            break
+        case 17:
+            if (!root.calm(d && d.sourceView && d.firstScreen && l.openState().landed)) return
+            d.viewport.positionViewAtIndex(40, ListView.Beginning)
+            root.next()
+            break
+        case 18:
+            if (!root.calm(d && d.firstScreen)) return
+            root.topBefore = d.viewport.indexAt(0, d.viewport.contentY + 1)
+            root.key("w")
+            root.next()
+            break
+        case 19:
+            if (!root.calm(d && d.wrap && d.firstScreen)) return
+            root.check("HTML Source wrap preserves the first visible line", d.viewport.indexAt(0, d.viewport.contentY + 1), root.topBefore)
+            root.key("w")
+            root.next()
+            break
+        case 20:
+            if (!root.calm(d && !d.wrap && d.firstScreen)) return
+            root.check("HTML Source unwrap preserves the first visible line", d.viewport.indexAt(0, d.viewport.contentY + 1), root.topBefore)
+            root.press(Qt.Key_Space)
+            Flea.ViewState.setDocumentView("html", "rendered")
+            root.open("board.html")
+            root.next()
+            break
+        case 21:
+            if (!root.calm(d && !d.sourceView && d.contentReady && l.openState().landed)) return
+            root.check("the board specimen has the whole-file bar count", l.markdownShown.barGeometry().lines.text, "61 lines")
+            root.shot(l.panesItem, "html-board-quicklook", function () {
+                root.press(Qt.Key_Space)
+                root.next()
+            })
+            break
+        case 22:
+            if (!root.calm(c && c.markdown && !c.markdown.sourceView && c.markdown.contentReady && !c.textLoading)) return
+            root.check("the board specimen has the exact compact facts", c.factsLine.kind + c.factsLine.tail, "HTML document · 1.6 kB · 61 lines")
+            root.shot(c, "html-board-column")
+            root.next()
+            break
+        case 23:
+            if (!root.calm(true)) return
+            root.finish()
+        }
+    }
+    FloatingWindow {
+        id: window
+        implicitWidth: 1200
+        implicitHeight: 760
+        Item {
+            id: viewportHost
+            width: window.width
+            height: window.height
+            Loader {
+                id: body
+                anchors.fill: parent
+                source: "file://" + Quickshell.env("HTML_UI") + "/WindowBody.qml"
+                onLoaded: item.host = window
+            }
+        }
+    }
+    Connections {
+        target: root.pane() ? root.pane().backend : null
+        function onHtmlResult(message) { if (message.slot === "look" && message.state === "ready") root.replies++ }
+    }
+    Timer { id: quit; interval: 100; onTriggered: Qt.exit(root.failures > 0 ? 1 : 0) }
+    Timer {
+        interval: 20
+        running: true
+        repeat: true
+        onTriggered: {
+            if (root.finished || root.ticking || root.capturePending) return
+            root.ticking = true
+            try { root.tick() } finally { root.ticking = false }
+        }
+    }
+}

@@ -1251,6 +1251,27 @@ so a client matches the `token` of what it last sent and drops any other. At mos
 of a file are ever read, and `bat` runs in the same read-only jail as the other helpers, on the
 bytes the verdict was made on.
 
+### html
+
+`{"c":"html","token":<uint>,"slot":"<string>","path":"<absolute path>","width":<uint>,"cancel":<bool>}`
+
+Example: `{"c":"html","token":3,"slot":"look","path":"/home/gm/index.html","width":984}`.
+
+Renders the single page a client is previewing, never a listing. Width is the frame's device
+width, clamped to 1 through 4096 pixels. The page must be a readable regular file at most
+1,048,576 bytes. A newer request in the same slot cancels the older helper and suppresses its
+reply. `cancel:true` ends that slot without opening a page. HTML and code slots are independent.
+
+The qml6 helper runs offscreen in its own bwrap namespace with network unshared, a 30-second
+CPU limit, and a 15-second wall deadline. Chromium needs large virtual reservations, so this
+helper has no address-space limit. Its profile is off the record, JavaScript is disabled, and
+navigation to another page is refused. Only the page folder is bound as /page, read-only; a
+content security policy restricts subresources to that folder and embedded data images/fonts.
+The one writable bind is a private helper directory under the thumbnail cache. All helper
+files are created exclusively. The PNG is at most 8000 pixels tall and cached by canonical
+path, size, nanosecond mtime, and width. The companion cache uses the preview-cache bounds
+of 4096 files and 512 MiB, with a 60-second reader grace and one scan per 32 publications.
+
 ### compare
 
 `{"c":"compare","token":<uint>,"a":"<string>","b":"<string>"}`
@@ -1929,6 +1950,18 @@ a role from 0 to 6 then the run's text, in order, an empty line being an empty l
 returned are those asked for that exist. The roles are the foreground (0) and bat's ANSI colours
 31 to 36 in order: red, green, yellow, blue, magenta, cyan. A one-line `.json` file is formatted
 with `jq` first, so its `total` and lines are those of the formatted text.
+
+### html
+
+`{"t":"html","token":<uint>,"slot":"<string>","state":"<string>","file":"<PNG path>","total":<uint>,"width":<uint>,"title":"<string>"}`
+
+Example: `{"t":"html","token":3,"slot":"look","state":"ready","file":"/cache/thumbnails/flea-html/a.png","total":61,"width":984,"title":"Local page"}`.
+
+The answer to the latest request in one HTML slot. State is `ready`, `failed`, or `cancelled`;
+only `ready` names a PNG and a whole-file line count. Failure uses the existing unreadable-file
+frame. Width is the render width, not a CSS zoom. Title is the helper's observed static page
+title on a new render and empty on a cache hit. The client matches token and slot, and drops
+replies after closing or switching to Source.
 
 ### compare
 

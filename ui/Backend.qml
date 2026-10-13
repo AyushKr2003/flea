@@ -100,6 +100,7 @@ Item {
     property int metaToken: 0
     // The coloured lines of one slot's file or text, answered late with the token askCode returned.
     signal codeResult(var message)
+    signal htmlResult(var message)
     property int codeToken: 0
     // The unified diff of two files, or the reason there is none, answered late with the token askCompare returned.
     signal compareResult(var message)
@@ -350,6 +351,12 @@ Item {
     function askCode(slot, source, first, count) {
         root.codeToken += 1
         root.send(Object.assign({ c: "code", token: root.codeToken, slot: slot, first: first, count: count }, source))
+        return root.codeToken
+    }
+
+    function askHtml(slot, path, width, cancel) {
+        root.codeToken += 1
+        root.send({ c: "html", token: root.codeToken, slot: slot, path: path, width: width, cancel: cancel })
         return root.codeToken
     }
 

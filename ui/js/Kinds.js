@@ -54,6 +54,8 @@ function isMarkdown(name) {
     return false
 }
 
+function isHtml(name) { return /\.(html|htm)$/i.test(String(name)) }
+
 // TrueType, OpenType and collections (font/ttf, font/otf, font/collection); the backend checks the MIME type again.
 var FONT_EXTENSIONS = [".ttf", ".otf", ".ttc"]
 

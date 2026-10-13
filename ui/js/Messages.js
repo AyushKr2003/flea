@@ -101,6 +101,8 @@ function route(root, message) {
         root.meta(message.row, message.w, message.h, message.orient || 1, message.ms, message.rate, message.entries, message.unpacked, message.afailed, message.names, message.lines, message.partial, message.lfailed === true, message.target, message.targetdir, message.owner || "")
     } else if (message.t === "code") {
         root.codeResult(message)
+    } else if (message.t === "html") {
+        root.htmlResult(message)
     } else if (message.t === "compare") {
         root.compareResult(message)
     } else if (message.t === "shebang") {
