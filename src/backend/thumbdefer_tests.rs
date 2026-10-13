@@ -10,7 +10,7 @@ use crate::backend::testdir::TestDir;
 use crate::backend::thumbcache::Cache;
 use crate::backend::run::forget_rows;
 use crate::backend::thumbdefer::MAX_DEFERRED;
-use crate::backend::thumbreq::{cancel_row, report_done, thumb_rows};
+use crate::backend::thumbreq::{cancel_all, cancel_row, report_done, thumb_rows};
 use crate::backend::thumbs::{Done, Outcome, Pool, MAX_QUEUE};
 use std::path::PathBuf;
 use crate::backend::thumbspec::Thumbnailers;
@@ -140,6 +140,64 @@ fn a_cancelled_row_still_waiting_for_room_is_taken_back() {
     assert!(st.asked.iter().all(|(_, r)| *r != MAX_QUEUE + 5), "and its mapping is gone");
     assert_eq!(pool.pending(), MAX_QUEUE, "the pool keeps its full queue");
     assert_eq!(st.deferred.take_all().len(), 9, "the other waiting rows stay waiting");
+}
+
+#[test]
+fn a_pool_row_cancel_admits_the_oldest_deferred_job_without_a_report() {
+    let d = TestDir::new("thumbdefercancelpump");
+    let tb = tables();
+    let (mut st, pool, cache) = harness(&d);
+    let count = MAX_QUEUE + 10;
+    listed(&d, &mut st, count);
+    let rows: Vec<usize> = (0..count).collect();
+    let mut out = Vec::new();
+    thumb_rows(&mut out, &rows, &mut st, &tb, &pool, &cache, false);
+    assert_eq!(pool.pending(), MAX_QUEUE, "the pool is full before the queued row is cancelled");
+    let oldest = d.join(&format!("img-{MAX_QUEUE:03}.jpg"));
+    cancel_row(&mut out, &mut st, &pool, 0);
+    assert_eq!(pool.pending(), MAX_QUEUE, "cancellation immediately gives the free slot to a waiting row");
+    assert!(out.is_empty(), "cancelling a row writes no answer and no completion has been delivered");
+    assert_eq!(st.outstanding, count - 1, "only the cancelled job leaves the outstanding count");
+    assert!(st.asked.iter().all(|(_, row)| *row != 0), "the cancelled row loses its mapping");
+    assert!(st.asked.iter().any(|(path, row)| *path == oldest && *row == MAX_QUEUE), "the admitted row keeps its mapping");
+    let admitted = pool.cancel(&oldest);
+    assert_eq!(admitted.len(), 1, "the oldest waiting job is now in the pool");
+    assert_eq!(admitted[0].path, oldest);
+    let waiting = st.deferred.take_all();
+    assert_eq!(waiting.len(), 9, "the deferred queue is one job shorter");
+    assert!(waiting.iter().all(|job| job.path != oldest), "the admitted job no longer waits");
+    assert_eq!(waiting[0].path, d.join(&format!("img-{:03}.jpg", MAX_QUEUE + 1)), "the next oldest row stays at the FIFO head");
+}
+
+#[test]
+fn cancel_all_forgets_deferred_rows_before_any_later_report() {
+    let d = TestDir::new("thumbdefercancelall");
+    let tb = tables();
+    let (mut st, pool, cache) = harness(&d);
+    let count = MAX_QUEUE + 10;
+    listed(&d, &mut st, count);
+    let rows: Vec<usize> = (0..count).collect();
+    let mut out = Vec::new();
+    thumb_rows(&mut out, &rows, &mut st, &tb, &pool, &cache, false);
+    assert_eq!(pool.pending(), MAX_QUEUE, "the request leaves ten rows waiting beyond the pool");
+    let cancelled = d.join(&format!("img-{MAX_QUEUE:03}.jpg"));
+    cancel_all(&mut st, &pool);
+    assert_eq!(pool.pending(), 0, "cancel-all clears the pool");
+    assert_eq!(st.asked.len(), 0, "no queued or deferred job stays mapped after cancel-all");
+    assert_eq!(st.outstanding, 0, "queued and deferred jobs release their accounting");
+    assert!(out.is_empty(), "cancel-all writes no answer");
+    // Leave the deferred queue untouched before this report, so a leftover job would be submitted by the real pump.
+    report_done(&mut out, &mut st, &pool, Done {
+        path: cancelled,
+        result: Outcome::Ready(d.join("cache/cancelled.png")),
+        ms: 0.0,
+        trace: None,
+    });
+    assert_eq!(pool.pending(), 0, "a later report admits no cancelled deferred job");
+    assert!(out.is_empty(), "a cancelled row emits no thumbed line on a later report: {}", String::from_utf8_lossy(&out));
+    assert!(st.asked.is_empty(), "no mapping is recreated by the report");
+    assert_eq!(st.outstanding, 0, "the late report leaves no outstanding work");
+    assert!(st.deferred.take_all().is_empty(), "no deferred job survived cancel-all");
 }
 
 // Past the deferred cap a row is answered empty at once, so the wait is bounded whatever a client asks.

@@ -2684,9 +2684,11 @@ catcher outcome decision using the existing insertion math. Geometry query plumb
 lives in `ui/TabDragGeometry.qml`, below the soft budget; no global limit changes.
 
 The deferred-row queue moves one ceiling: `src/backend/thumbreq.rs` 448 to 454 for the `queue_row`, `cancel_row` and
-`report_done` bookkeeping, then to 457 for pumping before the cap check and passing the wire to the shared pump.
+`report_done` bookkeeping, then to 457 for pumping before the cap check and passing the wire to the shared pump, then to 464 for `cancel_all`, the
+cancel-everything arm the dispatcher and its regression share.
 `src/backend/thumbdefer.rs` is 93 lines for the FIFO, returned-job accounting and its forced stale-room regression;
-`src/backend/thumbdefer_tests.rs` is 215 for the request, cancellation and freed-room regressions. The `State` field
+`src/backend/thumbdefer_tests.rs` is 273 for the request, cancellation and freed-room regressions, with a queued-row cancel
+that admits the oldest waiting row at once and a cancel-everything that takes every waiting row. The `State` field
 adds 2 lines to `src/backend/state.rs`; the `run.rs` call sites are net-zero lines. All counts are re-derived with `wc -l`.
 The Quick Look volume track moves four ceilings, each re-derived with `wc -l`: `src/uischema.rs` 502 to 503 for the
 `preview.volume` default and its `Count(0, 100)` rule, `src/uistate.rs` 674 to 704 for the two tests that pin a stored level

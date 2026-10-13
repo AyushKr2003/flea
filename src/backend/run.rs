@@ -24,7 +24,7 @@ use crate::backend::state::{Held, State, Tables};
 use crate::backend::searchreq::{collapse_query_burst, emit_session_answer, finish_search, is_search_query_line,
     op_tag_paths, op_write_paths, searchclosed_line, searchopened_line, step_search};
 use crate::backend::thumbcache::{default_root, Cache};
-use crate::backend::thumbreq::{cancel_row, forget_one, report_done, thumb_rows};
+use crate::backend::thumbreq::{cancel_all, cancel_row, report_done, thumb_rows};
 use crate::backend::thumbs::{Done, Pool};
 use crate::backend::thumbwrite::sweep_own_temps;
 use crate::backend::unmount::leave_mount;
@@ -516,10 +516,7 @@ fn handle_line(
         }
         Request::ThumbCancel { rows } => {
             if rows.is_empty() {
-                // An empty rows cancels everything queued, and every job it drops has to leave the map with it; see AGENTS.md "Thumbnail requests".
-                for job in pool.cancel_all().into_iter().chain(st.deferred.take_all()) {
-                    forget_one(st, &job.path);
-                }
+                cancel_all(st, pool);
             } else {
                 for row in &rows {
                     cancel_row(out, st, pool, *row);

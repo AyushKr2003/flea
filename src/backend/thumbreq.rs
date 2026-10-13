@@ -145,6 +145,13 @@ fn queue_row(
     super::thumbdefer::pump(out, st, pool);
 }
 
+// A job already inside a worker keeps its mapping; every queued or waiting job leaves with its cancellation.
+pub(crate) fn cancel_all(st: &mut State, pool: &Pool) {
+    for job in pool.cancel_all().into_iter().chain(st.deferred.take_all()) {
+        forget_one(st, &job.path);
+    }
+}
+
 // A job already inside a worker cannot be cancelled, so its row stays mapped until it reports.
 pub(crate) fn cancel_row(out: &mut impl Write, st: &mut State, pool: &Pool, row: usize) {
     let at = match st.asked.iter().position(|(_, r)| *r == row) {
