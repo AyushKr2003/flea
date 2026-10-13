@@ -104,6 +104,7 @@ GridTile 1.0 GridTile.qml
 GridArea 1.0 GridArea.qml
 Header 1.0 Header.qml
 Ipc 1.0 Ipc.qml
+IpcControls 1.0 IpcControls.qml
 IpcMenuState 1.0 IpcMenuState.qml
 IpcPreviewState 1.0 IpcPreviewState.qml
 List 1.0 List.qml

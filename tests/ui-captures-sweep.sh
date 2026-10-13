@@ -2,6 +2,8 @@
 
 # Seconds one IPC poll waits for its state, used by the two polling helpers below.
 sweep_wait_seconds=30
+# Eight wheel notches reach the two-page PDF stack's end at the capture window size.
+sweep_pdf_end_notches=8
 
 # Every capture asserts the effective text size, parsed theme and fresh PNG dimensions.
 sweep_shot() {
@@ -106,24 +108,21 @@ sweep_view_states() {
     sweep_shot "$surface-hidden"
 }
 
-# Views: List, default and larger Grid tiles, three Columns at rest and a deep path.
-sweep_views() {
-    local size path deep="$sweep_root/views/projects/release/candidate/deep"
+# The views tree: two documents and a dotfile at the top and at a deep path.
+sweep_views_fixture() {
+    local path deep="$sweep_root/views/projects/release/candidate/deep"
     mkdir -p "$deep"
     for path in "$sweep_root/views" "$deep"; do
         printf 'Release notes\n' > "$path/a.txt"
         printf 'Second document\n' > "$path/b.txt"
         printf 'Hidden configuration\n' > "$path/.hidden.txt"
     done
-    sweep_launch "$sweep_root/views"
-    sweep_wait viewMode list
-    sweep_view_states list 3
-    for size in medium large; do
-        sweep_launch "$sweep_root/views" "$(jq -cn --arg size "$size" '{view:"grid",preview:{thumbSize:$size}}')"
-        sweep_wait viewMode grid
-        menus_expect uiSettings ".preview.thumbSize == \"$size\"" "Grid $size thumbnail size loaded"
-        sweep_view_states "grid-$size" 3
-    done
+}
+
+# Columns at rest and a deep path, with selections, cut marks and visible dotfiles.
+sweep_columns() {
+    local deep="$sweep_root/views/projects/release/candidate/deep"
+    sweep_views_fixture
     sweep_launch "$sweep_root/views" '{"view":"columns"}'
     sweep_wait viewMode columns
     sweep_wait columnCount 3
@@ -133,6 +132,22 @@ sweep_views() {
     sweep_wait columnCount 3
     sweep_view_states columns-deep 2
     kill_flea
+}
+
+# Views: List, default and larger Grid tiles, three Columns at rest and a deep path.
+sweep_views() {
+    local size
+    sweep_views_fixture
+    sweep_launch "$sweep_root/views"
+    sweep_wait viewMode list
+    sweep_view_states list 3
+    for size in medium large; do
+        sweep_launch "$sweep_root/views" "$(jq -cn --arg size "$size" '{view:"grid",preview:{thumbSize:$size}}')"
+        sweep_wait viewMode grid
+        menus_expect uiSettings ".preview.thumbSize == \"$size\"" "Grid $size thumbnail size loaded"
+        sweep_view_states "grid-$size" 3
+    done
+    sweep_columns
 }
 
 # Preview fixtures reuse the suites' media, PDF, text and audio generators, plus a real alpha PNG.
@@ -189,8 +204,9 @@ sweep_previews() {
         fi
         sweep_shot "column-$tag-$state"
         if [[ "$tag" == pdf ]]; then
-            permissions_point "$(ipc columnChevronCentre right)"
-            sweep_wait columnPdfPage 1
+            capmarkdown_column_pointer sweep-pdf-page-turn
+            omarchy-drive scroll down "$sweep_pdf_end_notches" >/dev/null || fail 'capsweep: the PDF stack wheel failed'
+            pdf_expect false '.pages == 2 and .scrollY > 0 and (.landed | index(1) != null)' 'sweep second stacked page decoded after scrolling'
             sweep_shot column-pdf-page-turn
         fi
         key -k Space >/dev/null
@@ -395,7 +411,7 @@ sweep_dialogs() {
 
 # Settings: every live rail page once, plus the keymap sheet filtered by a typed query.
 sweep_settings() {
-    local section
+    local section sweep_sections
     sweep_launch "$sweep_root/views"
     settings_open_key
     sweep_wait settingsOpen true
@@ -514,8 +530,12 @@ sweep_desktop_shot() {
 # Current palette or Cool Dawn runs through the same cases and an isolated child HOME.
 sweep_run() {
     local sweep_theme="$1" sweep_root="$fixture_root/capsweep-$1" sweep_real_bin="$flea_bin" sweep_home
-    local real_foreground="$real_foreground" flea_bin="$flea_bin" evidence_dir="$evidence_dir/$1" menus_checks=0 picker_wait_seconds=180
-    local -a sweep_sections
+    # A section run names its evidence for its sections at the pinned size, apart from the theme runs.
+    local sweep_evidence="${2:-$1}"
+    [[ -n "${2:-}" ]] && sweep_evidence="${sweep_evidence}14"
+    local real_foreground="$real_foreground" flea_bin="$flea_bin" evidence_dir="$evidence_dir/$sweep_evidence" menus_checks=0 picker_wait_seconds=180
+    local -a sweep_sections=(${2:-views previews menus dialogs settings windows picker})
+    local section
     sandbox_make "$sweep_root"
     sweep_home="$sweep_root/home"
     fixture_home_make "$sweep_home"
@@ -532,15 +552,24 @@ sweep_run() {
     { printf '#!/usr/bin/env bash\n'; printf 'exec env HOME=%q %q "$@"\n' "$sweep_home" "$sweep_real_bin"; } > "$flea_bin"
     chmod +x "$flea_bin"
     printf 'SWEEP_THEME %s textSize=14 seam=display.textSize childHome=%s\n' "$sweep_theme" "$sweep_home"
-    sweep_views
-    sweep_previews
-    sweep_menus
-    sweep_dialogs
-    sweep_settings
-    sweep_windows
-    FLEA_BIN="$sweep_real_bin" FLEA_UI="$flea_ui" timeout "$picker_wait_seconds" python3 "$repo/tests/ui-captures-sweep-picker.py" "$sweep_root/picker" "$sweep_home" "$evidence_dir" \
-        || fail "capsweep: picker sweep failed, status $?"
-    cat "$evidence_dir/picker-backend.log" >> "$run_log"
+    for section in "${sweep_sections[@]}"; do
+        case "$section" in
+            views) sweep_views ;;
+            columns) sweep_columns ;;
+            previews) sweep_previews ;;
+            menus) sweep_menus ;;
+            dialogs) sweep_dialogs ;;
+            settings) sweep_settings ;;
+            windows) sweep_windows ;;
+            picker) ;;
+            *) fail "capsweep: no section named $section" ;;
+        esac
+    done
+    if [[ " ${sweep_sections[*]} " == *" picker "* ]]; then
+        FLEA_BIN="$sweep_real_bin" FLEA_UI="$flea_ui" timeout "$picker_wait_seconds" python3 "$repo/tests/ui-captures-sweep-picker.py" "$sweep_root/picker" "$sweep_home" "$evidence_dir" \
+            || fail "capsweep: picker sweep failed, status $?"
+        cat "$evidence_dir/picker-backend.log" >> "$run_log"
+    fi
     printf 'SWEEP_TOTAL %s %s shots\n' "$sweep_theme" "$(wc -l < "$evidence_dir/manifest.tsv")"
 }
 
@@ -549,6 +578,9 @@ case_capsweep() { sweep_run current; }
 
 # Cool Dawn repeats the entire native sweep without editing the user's theme or text setting.
 case_capsweeplow() { sweep_run cool-dawn; }
+
+# Columns only at size 14 on the live theme, for one native columns specimen.
+case_cap_columns14() { sweep_run current columns; }
 
 # Quick Look on an STL keeps the seeded cache thumbnail as its picture, at text size 14, with no thumbnailer run; a second STL whose thumbnail is still being made waits on the loading state and ends on the thumbnail.
 case_capsweepstl() {

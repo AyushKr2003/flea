@@ -4,7 +4,8 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
 scratch=$(mktemp -d)
 [[ "$scratch" == /*/* ]] || { printf 'FAIL: scratch path is not absolute\n' >&2; exit 1; }
-trap 'rm -rf -- "$scratch"' EXIT
+: > "$scratch/.flea-test-sandbox"
+trap '[[ -n "$scratch" && "$scratch" == /*/* && -f "$scratch/.flea-test-sandbox" ]] && rm -rf -- "$scratch"' EXIT
 cd "$repo"
 bash -n tests/ui.sh tests/ui-captures-sweep.sh
 python3 - <<'PY'
@@ -23,7 +24,7 @@ definitions = set(re.findall(r'^(\w+)\(\)', driver, re.M))
 for source in sources:
     # Sample input: sweep_shot() {
     definitions.update(re.findall(r'^(\w+)\(\)', (root / source).read_text(), re.M))
-assert {"case_capsweep", "case_capsweeplow"} <= definitions
+assert {"case_capsweep", "case_capsweeplow", "case_cap_columns14"} <= definitions
 # Sample input: function themeLoaded(): bool { return Theme.ready }
 readers = set(re.findall(r'function (\w+)\(', (root / "ui/Ipc.qml").read_text()))
 # Sample input: sweep_wait previewOpen true

@@ -100,9 +100,9 @@ pinned=tests/startup-units.txt
 grep -aq 'STARTUP_OBJECTS TOTAL' "$log" || { printf 'FAIL startup-objects: log %s has no STARTUP_OBJECTS TOTAL line to cut the units at\n' "$log"; exit 1; }
 # Sample line: Error loading "file:///home/gm/flea/ui/Row.qml" from disk cache: <reason>, kept only before the TOTAL line since the probe's Quick Look and power-off legs follow it.
 seen=$(sed -n '1,/STARTUP_OBJECTS TOTAL/p' "$log" | grep -aoE 'Error loading "file://[^"]*/ui/[^"]+" from disk cache' | sed -E 's|.*/ui/([^"]+)".*|\1|' | sort -u)
-for cold in CardScroll.qml ContextMenu.qml LocalSendMark.qml MenuEdgeFade.qml MenuRow.qml TailscaleMark.qml js/LockedMenu.js js/MenuFit.js js/MenuRefresh.js; do
+for cold in CardScroll.qml ContextMenu.qml IpcControls.qml LocalSendMark.qml MenuEdgeFade.qml MenuRow.qml TailscaleMark.qml js/ControlReader.js js/LockedMenu.js js/MenuFit.js js/MenuRefresh.js; do
     if printf '%s\n' "$seen" | grep -Fxq "$cold"; then
-        printf 'FAIL startup-objects: menu unit %s loaded before the startup cut\n' "$cold"
+        printf 'FAIL startup-objects: demand-only unit %s loaded before the startup cut\n' "$cold"
         exit 1
     fi
 done

@@ -216,6 +216,20 @@ BODY="$test_root/locked.json" RC=32 "$shim" --bytes --json -o "$cols" > "$test_r
 check "failed: the real exit status comes back" "$?" 32
 check "failed: a failed JSON call is byte-equal" "$(cmp -s "$test_root/locked.json" "$test_root/failed.out" && echo same)" same
 
+# Second device for the internal row: renamed only, rm stays false on itself and its children.
+jq '.blockdevices += [{name: "loop2", path: "/dev/loop2", label: null, mountpoints: [null], rm: false, tran: null, size: 33554432, type: "loop", model: null, fstype: "crypto_LUKS", fsver: "2", parttypename: null, parttype: null, pttype: null, partn: null, uuid: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", children: [{name: "luks-aaaa", path: "/dev/mapper/luks-aaaa", label: "S1INT", mountpoints: [null], rm: false, tran: null, size: 16777216, type: "crypt", model: null, fstype: "vfat", parttypename: null, parttype: null, pttype: null, partn: null, uuid: "AAAA-BBBB"}]}]' "$test_root/locked.json" > "$test_root/two.json" || exit 1
+shim2_dir="$test_root/shim2"
+cap_unlock_lsblk_shim "$shim2_dir" /dev/loop0 "$fake" /dev/loop2 || { echo "FAIL: the shim for /dev/loop0 with /dev/loop2 was not written"; exit 1; }
+shim2="$shim2_dir/lsblk"
+out2=$(BODY="$test_root/two.json" "$shim2" --bytes --json -o "$cols")
+check "two: exit status" "$?" 0
+check "two: loop0 is listed as cap-loop0 and removable" "$(jq -c '.blockdevices[] | select(.path == "/dev/loop0") | [.name, .rm]' <<< "$out2")" '["cap-loop0",true]'
+check "two: loop2 is renamed to cap-loop2" "$(jq -r '.blockdevices[] | select(.path == "/dev/loop2") | .name' <<< "$out2")" 'cap-loop2'
+check "two: loop2 keeps rm false" "$(jq -r '.blockdevices[] | select(.path == "/dev/loop2") | .rm' <<< "$out2")" 'false'
+check "two: loop2 child keeps its name" "$(jq -r '.blockdevices[] | select(.path == "/dev/loop2") | .children[0].name' <<< "$out2")" 'luks-aaaa'
+check "two: loop2 child keeps rm false" "$(jq -r '.blockdevices[] | select(.path == "/dev/loop2") | .children[0].rm' <<< "$out2")" 'false'
+check "two: loop2 keeps its FSVER" "$(jq -r '.blockdevices[] | select(.path == "/dev/loop2") | .fsver' <<< "$out2")" '2'
+
 # Only a whole loop device takes the shim, and only over an absolute real lsblk.
 for dev in /dev/sda1 /dev/loop0p1 /dev/mapper/luks-6f1c2a7e loop0; do
     cap_unlock_lsblk_shim "$test_root/refused" "$dev" "$fake"
@@ -224,6 +238,11 @@ done
 cap_unlock_lsblk_shim "$test_root/refused" /dev/loop0 real-lsblk
 check "the shim refuses a relative real lsblk" "$?" 1
 check "a refused shim writes nothing" "$(test -e "$test_root/refused" && echo written)" ""
+for dev2 in /dev/sda1 /dev/loop0p1 /dev/mapper/luks-6f1c2a7e loop2 /dev/loop0; do
+    cap_unlock_lsblk_shim "$test_root/refused2" /dev/loop0 "$fake" "$dev2"
+    check "the shim refuses DEV2 $dev2" "$?" 1
+done
+check "a refused DEV2 shim writes nothing" "$(test -e "$test_root/refused2" && echo written)" ""
 
 # The passphrase file is owner-only whether it is new or a leftover of a looser mode (umask alone does not narrow an existing file).
 keyfile="$test_root/key"
