@@ -1,14 +1,14 @@
 .pragma library
 
-// Sample input: XDG_DOWNLOAD_DIR="$HOME/Photo\"Inbox".
+// Sample input: XDG_DOWNLOAD_DIR="$HOME/Photo\"Inbox" # local inbox
 function parseLine(line, home) {
-    var kv = String(line || "").match(/^\s*XDG_([A-Z]+)_DIR\s*=(.*)$/)
+    var kv = String(line || "").match(/^[ \t]*XDG_([A-Z]+)_DIR[ \t]*=([\s\S]*)$/)
     if (!kv)
         return null
-    var value = kv[2].match(/^\s*"(\$HOME(?=\/|"))?((?:\\["\\$`]|[^"\\$`])*)"\s*$/)
+    var value = kv[2].match(/^[ \t]*"(\$HOME(?=\/|"))?((?:\\[\s\S]|[^"\\])*)"/)
     var path = null
-    if (value) {
-        path = (value[1] ? home : "") + value[2].replace(/\\(["\\$`])/g, "$1")
+    if (value && (value[1] || value[2].charAt(0) === "/")) {
+        path = (value[1] ? home : "") + value[2].replace(/\\([\s\S])/g, "$1")
         path = path.replace(/\/+$/, "")
         if (path.charAt(0) !== "/")
             path = null
