@@ -3046,8 +3046,10 @@ The old rule that every consumer imports the wire layer from `proto` alone went 
 literal-database `dbs()` helper moved with `rows_line` unchanged; the request and one-line
 response tests stayed.
 
-`src/backend/rows.rs` is 251 lines by `wc -l`, one over the soft budget and well under the
-hard cap: 88 are `rows_line` and its Kind dictionary, the other 163 the test module. It is
+`src/backend/rows.rs` is 175 lines by `wc -l`, under the soft budget: `rows_line`, its Kind dictionary and the
+execute-bit mount decision. Its serialiser tests live in `src/backend/rows_tests.rs` (255 lines) and its mount tests in
+`src/backend/rows_mount_tests.rs`, sibling files the module names with `#[path]`, since the two merged row fields took
+the file past the 400-line hard cap with its tests inline. It is
 one job: serialise one window of rows, with the per-response dictionary that sends each
 distinct Kind string once and an integer per row. `kind_for` lives here because the
 dictionary is its only caller.
