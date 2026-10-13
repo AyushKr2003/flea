@@ -252,6 +252,17 @@ ui/ContextMenu.qml	689	root	Declared QML id; component context access is valid a
 ui/ContextMenu.qml	690	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	690	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	691	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	589	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	590	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	591	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	594	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	595	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	596	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	684	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	685	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	688	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	689	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	690	root	Declared QML id; component context access is valid at runtime.
 ui/DefaultClaim.qml	95	root	Declared QML id; component context access is valid at runtime.
 ui/DefaultClaim.qml	112	root	Declared QML id; component context access is valid at runtime.
 ui/DeviceMounts.qml	420	root	Declared QML id; component context access is valid at runtime.
@@ -2167,17 +2178,6 @@ ui/boot/tabtearoff.qml	39	modelData	Declared QML property; enclosing component c
 ui/boot/tabtearoff.qml	39	modelData	Declared QML property; enclosing component context supplies it.
 ui/boot/tabtearoff.qml	45	modelData	Declared QML property; enclosing component context supplies it.
 ui/boot/tabtearoff.qml	45	modelData	Declared QML property; enclosing component context supplies it.
-ui/ContextMenu.qml	587	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	588	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	589	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	592	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	593	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	594	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	682	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	683	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	686	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	687	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	688	root	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	303	body	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	306	root	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	308	root	Declared QML id; component context access is valid at runtime.
@@ -2413,26 +2413,27 @@ ui/ColumnsArea.qml	446	root	Declared QML id; component context access is valid a
 ui/CompareView.qml	236	root	Declared QML id; component context access is valid at runtime.
 ui/CompareView.qml	237	view	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	587	rows	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	589	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	590	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	590	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	591	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	592	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	594	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	595	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	596	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	597	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	597	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	601	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	603	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	668	peers	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	685	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	686	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	690	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	691	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	589	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	590	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	591	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	594	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	595	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	596	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	684	root	Declared QML id; component context access is valid at runtime.
+ui/ContextMenu.qml	685	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	688	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	689	root	Declared QML id; component context access is valid at runtime.
 ui/ContextMenu.qml	690	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	690	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	691	root	Declared QML id; component context access is valid at runtime.
 ui/FactsTable.qml	28	root	Declared QML id; component context access is valid at runtime.
 ui/FactsTable.qml	34	root	Declared QML id; component context access is valid at runtime.
 ui/FactsTable.qml	35	modelData	Declared QML property; enclosing component context supplies it.
@@ -3621,17 +3622,6 @@ ui/boot/tabtearoff.qml	43	root	Declared QML id; component context access is vali
 ui/boot/tabtearoff.qml	45	modelData	Declared QML property; enclosing component context supplies it.
 ui/boot/tabtearoff.qml	45	modelData	Declared QML property; enclosing component context supplies it.
 ui/boot/tabtearoff.qml	45	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	587	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	588	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	589	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	592	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	593	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	594	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	682	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	683	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	686	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	687	root	Declared QML id; component context access is valid at runtime.
-ui/ContextMenu.qml	688	root	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	303	body	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	306	root	Declared QML id; component context access is valid at runtime.
 ui/ConvertDialog.qml	308	root	Declared QML id; component context access is valid at runtime.

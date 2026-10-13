@@ -3,7 +3,7 @@
 import QtQuick
 import Quickshell
 import "flea" as Flea
-import "flea/js/Compare.js" as Compare
+import "flea/js/Ops.js" as Ops
 import "flea/js/Focus.js" as Focus
 import "flea/js/Icons.js" as Icons
 import "flea/js/Menu.js" as Menu
@@ -240,8 +240,8 @@ ShellRoot {
     // The menu's Compare choice, from the rows the pane reads to the open overlay, through the same Menu and Focus code the pane runs.
     function menuChoice(selected) {
         menuPane.selected = selected
-        var picked = Compare.markedRows(menuPane)
-        var entries = Menu.listingEntries({ hasRow: true, selectionCount: selected.length, rowMode: 0o100644, hiddenActions: [], compareKinds: Compare.kinds(picked) })
+        var picked = Ops.markedRows(menuPane)
+        var entries = Menu.listingEntries({ hasRow: true, selectionCount: selected.length, rowMode: 0o100644, hiddenActions: [], compareKinds: Ops.kinds(picked) })
         return entries.filter(function (e) { return e.action === "compare" })[0] || null
     }
     function wiring() {
@@ -289,6 +289,7 @@ ShellRoot {
         property int compareToken: 0
         signal compareResult(var message)
         signal meta(int row, int w, int h, int orient, real durationMs, int sampleRate, int entries, real unpacked, bool archiveFailed, var names, real lines, bool partial, bool linesFailed, string target, bool targetDir, string owner)
+        signal metaResult(var message)
         function askCompare(a, b) {
             stub.compareToken += 1
             stub.asked.push({ token: stub.compareToken, a: a, b: b })
@@ -318,6 +319,8 @@ ShellRoot {
         property var opener: opener
         property int cursorIndex: 0
         property string storageClass: "local"
+        property bool listInFlight: false
+        property var thumbState: ({})
         signal rowsChanged()
         property var listArea: QtObject { function forceActiveFocus() {} }
     }

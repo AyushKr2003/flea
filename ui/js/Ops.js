@@ -7,6 +7,7 @@
 .import "ClipSelection.js" as ClipSelection
 .import "Filter.js" as Filter
 .import "Format.js" as Format
+.import "Menu.js" as Menu
 .import "Transfer.js" as Transfer
 .import "Status.js" as Status
 .import "Search.js" as Search
@@ -210,6 +211,43 @@ function sayNoTarget(pane) {
 function targetIndices(pane) {
     var picked = pane.selectedIndices()
     return picked.length > 0 ? picked : (Filter.cursorShown(pane) ? [pane.cursorIndex] : [])
+}
+
+// The marked indices in listing order, which makes the first the pair's file a and the second its file b.
+function markedIndices(pane) {
+    return targetIndices(pane).slice().sort(function (a, b) { return a - b })
+}
+
+function markedRows(pane) {
+    return markedIndices(pane).map(function (index) { return pane.rowFor(index) })
+}
+
+// Each row's own type bits; a row carries no target's type, so a link stays a link and Menu.canCompare leaves it out.
+function kinds(rowList) {
+    return rowList.map(function (row) { return row ? Number(row.p) || 0 : 0 })
+}
+
+// A ready matching snapshot wins over held modes that may predate an external replacement.
+function menuKinds(pane) {
+    var picked = markedRows(pane)
+    var snapshot = pane.menuActions
+    return snapshot && snapshot.ready && snapshot.identity === pane.menuSelectionIdentity()
+        && snapshot.selectedKinds.length === picked.length ? snapshot.selectedKinds : kinds(picked)
+}
+
+// The choice uses the menu's validated paths, reordered like the marked indices; unvalidated choices can only use held rows.
+function open(pane, paths) {
+    var indices = markedIndices(pane)
+    var picked = indices.map(function (index) { return pane.rowFor(index) })
+    if (!Menu.canCompare(menuKinds(pane))) return
+    if (paths && paths.length === indices.length) {
+        var original = targetIndices(pane)
+        paths = indices.map(function (index) { return paths[original.indexOf(index)] })
+    } else {
+        paths = targetPaths(pane, indices)
+    }
+    if (paths.length !== 2 || paths.some(function (path) { return typeof path !== "string" || path.charAt(0) !== "/" })) return
+    pane.quickLook().openCompare(paths[0], paths[1], picked[0] ? picked[0].i : "text-x-generic")
 }
 
 // Only rows inside the held window can be named as a path, so the caller sends indices instead and

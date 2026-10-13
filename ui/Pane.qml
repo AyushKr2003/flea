@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell
 import "." as Flea
-import "js/Compare.js" as Compare
 import "js/DirSizes.js" as DirSizes
 import "js/Dropbox.js" as Dropbox
 import "js/ExtThumbs.js" as ExtThumbs
@@ -1087,7 +1086,7 @@ FocusScope {
         rowMode: root.menuPermissionRow ? root.menuPermissionRow.p : 0
         selectionCount: root.menuValuesLive ? Ops.targetIndices(root).length : 0
         // Held kinds answer at once; the menu snapshot carries kinds for marks outside the window.
-        compareKinds: root.menuValuesLive ? Compare.menuKinds(root) : []
+        compareKinds: root.menuValuesLive ? Ops.menuKinds(root) : []
         cursorIsTarget: root.menuValuesLive && root.isSingleCursorTarget()
         openWithApps: menuActions.openWithApps
         openWithLoaded: menuActions.openWithLoaded

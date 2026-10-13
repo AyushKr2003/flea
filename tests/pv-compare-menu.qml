@@ -1,7 +1,7 @@
 //@ pragma ShellId flea-pv-compare-menu-test
 import QtQuick
 import Quickshell
-import "flea/js/Compare.js" as Compare
+import "flea/js/Ops.js" as Ops
 
 // The real pane, menu snapshot and Compare activation over marks farther apart than one held window.
 ShellRoot {
@@ -90,8 +90,8 @@ ShellRoot {
             menu.refreshProviderRows()
             check("inspected links hide Compare over held regular rows", row(), null)
             check("Quick Look is unbuilt before the refused choice", body.item.quickLook === null, true)
-            Compare.open(p, [fixture + "/f0000.txt", fixture + "/f0001.txt"])
-            check("inspected links block Compare.open over held regular rows", [body.item.quickLook !== null, !!(body.item.quickLook && body.item.quickLook.active)], [false, false])
+            Ops.open(p, [fixture + "/f0000.txt", fixture + "/f0001.txt"])
+            check("inspected links block Ops.open over held regular rows", [body.item.quickLook !== null, !!(body.item.quickLook && body.item.quickLook.active)], [false, false])
             menu.close()
             advance()
             return

@@ -1,5 +1,6 @@
 .import "../../ui/js/Compare.js" as Compare
 .import "../../ui/js/Menu.js" as Menu
+.import "../../ui/js/Ops.js" as Ops
 .import "../../ui/js/Keymap.js" as Keymap
 .import "../../ui/js/PreviewKeys.js" as PreviewKeys
 .import "../../ui/js/Focus.js" as Focus
@@ -40,12 +41,12 @@ function run(plain) {
         menuSelectionIdentity: function () { return "wide" },
         menuActions: { ready: true, identity: "wide", selectedKinds: [REG, REG] },
         quickLook: function () { return { openCompare: function (a, b, icon) { opened.push([a, b, icon]) } } } }
-    check("marks more than one held window apart still show Compare", Menu.canCompare(Compare.menuKinds(wide)), true)
-    Compare.open(wide, ["/wide/b.txt", "/wide/a.txt"])
+    check("marks more than one held window apart still show Compare", Menu.canCompare(Ops.menuKinds(wide)), true)
+    Ops.open(wide, ["/wide/b.txt", "/wide/a.txt"])
     check("validated paths outside the window open in listing order", opened.map(function (pair) { return pair.slice(0, 2) }), [["/wide/a.txt", "/wide/b.txt"]])
     wide.menuActions.identity = "retired"
-    check("an old snapshot cannot supply an unheld kind", Menu.canCompare(Compare.menuKinds(wide)), false)
-    Compare.open(wide, ["/wide/b.txt", "/wide/a.txt"])
+    check("an old snapshot cannot supply an unheld kind", Menu.canCompare(Ops.menuKinds(wide)), false)
+    Ops.open(wide, ["/wide/b.txt", "/wide/a.txt"])
     check("an old snapshot cannot open Compare", opened.length, 1)
 
     var shown = actions([REG, REG])
