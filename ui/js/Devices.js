@@ -297,8 +297,7 @@ function powerOffDisk(device) {
     return bare ? text : ""
 }
 
-// Autoclear can detach or reuse a loop during unmount; detach only the same non-empty backing file afterward.
-// A failed unmount exits 1 after detach is tried; a failed detach of our loop exits detachFailedExit.
+// With another partition mounted, loop-delete only marks autoclear and that mount keeps reading (measured in 0.3.10).
 // Sample input: {device: "/dev/loop0p1", path: "/run/media/u/ISO", loop: true} answers the sh chain on /dev/loop0.
 var detachFailedExit = 3
 function ejectCommand(e) {
@@ -309,10 +308,11 @@ function ejectCommand(e) {
     if (!loop)
         return ["gio", "mount", "-u", path]
     var loopDisk = "/dev/" + loop[1]
-    return ["sh", "-c", 'before=$(cat -- "$3" 2>/dev/null); status=0; gio mount -u "$1" || status=1; '
+    return ["sh", "-c", 'autoclear=$(cat -- "$4" 2>/dev/null) || autoclear=; before=$(cat -- "$3" 2>/dev/null); '
+            + 'status=0; gio mount -u "$1" || status=1; if [ "$autoclear" != 0 ]; then exit "$status"; fi; ' // Autoclear 1 detaches at the kernel's last close; unreadable values are left alone.
             + 'after=$(cat -- "$3" 2>/dev/null); if [ -n "$before" ] && [ "$after" = "$before" ]; then '
             + 'udisksctl loop-delete --no-user-interaction -b "$2" || exit ' + detachFailedExit + '; fi; exit "$status"',
-            "sh", path, loopDisk, "/sys/block/" + loop[1] + "/loop/backing_file"]
+            "sh", path, loopDisk, "/sys/block/" + loop[1] + "/loop/backing_file", "/sys/block/" + loop[1] + "/loop/autoclear"]
 }
 
 // The sysfs block name for a disk path, so the eject chain can watch its write counter.

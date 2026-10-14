@@ -33,10 +33,11 @@ function run(check) {
     // -e hangs indefinitely on a loop volume (measured live), because it never carries a Drive
     // object the way a real disk's partition does, and gio's eject path waits on one regardless.
     check("the mounted loop partition is marked loop for eject to route around", iso[1].loop, true)
-    // Eject unmounts it and then detaches its loop device, which -u alone left attached.
+    // Eject unmounts it, then detaches only when the loop was not already set to autoclear.
     var loopEject = Devices.ejectCommand(iso[1])
     check("a loop row's eject uses a shell with argument-only paths", loopEject.slice(0, 2).join(" "), "sh -c")
     check("a loop row passes its validated backing-file path as argument 3", loopEject[6], "/sys/block/loop0/loop/backing_file")
+    check("a loop row passes its validated autoclear path as argument 4", loopEject[7], "/sys/block/loop0/loop/autoclear")
     console.log("LOOP_EJECT_COMMAND " + JSON.stringify(loopEject))
     check("a failed detach exits with its own code, apart from a failed unmount", Devices.detachFailedExit, 3)
     check("a loop row's eject passes the mountpoint and the loop device as arguments",
@@ -51,7 +52,7 @@ function run(check) {
             var device = "/dev/loop" + number
             check("eject keeps the exact loop number for " + device + suffix,
                   Devices.ejectCommand({ device: device + suffix, path: "/m", loop: true }).slice(5).join("|"),
-                  device + "|/sys/block/loop" + number + "/loop/backing_file")
+                  device + "|/sys/block/loop" + number + "/loop/backing_file|/sys/block/loop" + number + "/loop/autoclear")
         }
     }
 
@@ -75,6 +76,8 @@ function run(check) {
     check("exit 1 with the mount kept reports still mounted", ejectMessage(1, kept), "OMARCHY_202608 is still mounted; close what is using it.|true")
     check("exit 0 with the mount gone reports ejected without an unplug line", ejectMessage(0, gone), "Ejected OMARCHY_202608.|false")
     check("exit 0 with the mount kept never reports success", ejectMessage(0, kept), "OMARCHY_202608 is still mounted; close what is using it.|true")
+    var otherPartition = kept.replace('loop0p1', 'loop0p2')
+    check("exit 0 with another partition mounted reports only the target ejected", ejectMessage(0, otherPartition), "Ejected OMARCHY_202608.|false")
 
     // With unmounted volumes shown, a loop device's unmounted partition stays out even when it
     // has a filesystem to browse: only the partition gio mounted is a row.
