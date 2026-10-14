@@ -15546,6 +15546,7 @@ clipboard_wait() {
 . "$repo/tests/ui-captures-archives.sh"
 . "$repo/tests/ui-captures-unlock.sh"
 . "$repo/tests/ui-captures-compare.sh"
+. "$repo/tests/ui-captures-raw.sh"
 . "$repo/tests/ui-captures-mountfail.sh"
 . "$repo/tests/ui-captures-runfile.sh"
 . "$repo/tests/ui-captures-merge.sh"
@@ -15908,6 +15909,7 @@ case_readme() {
 }
 
 # Native items ui:capsweep, ui:capsweeplow and ui:cap_columns14 run only by name, outside the default wanted list; so do ui:cap_markdown, ui:cap_markdown_kinds, ui:cap_markdown_tables, ui:cap_markdown_picline, ui:cap_markdown_fences and ui:cap_markdown_fences14, sourced above; so do cap_merge, cap_drops and cap_dropmods, sourced above, and cap_tags, sourced from ui-captures-tags.sh, and ui:cap_flasher and ui:cap_filter, sourced above; so do ui:cap_archives_format_live and ui:cap_archives_format_kanagawa, sourced above; so do ui:cap_heldcolumns, ui:cap_sysrefusal, ui:cap_gridreveal, ui:cap_columnsrename and ui:cap_gridhover, sourced above; ui:cap_railmotion runs only by name, sourced from ui-railpointer.sh; ui:cap_mountfail runs only by name, sourced from ui-captures-mountfail.sh; ui:readme runs only by name, defined in this file.
+# ui:cap_raw_grid, ui:cap_raw_columns, ui:cap_raw_quicklook and ui:cap_raw_properties run only by name, sourced from ui-captures-raw.sh.
 . "$repo/tests/ui-captures-sweep.sh"
 # Native items ui:cap_cohesion, ui:cap_cohesion_live, ui:cap_cohesion_gruvbox, ui:cap_cohesion_latte, ui:cap_cohesion_kanagawa, ui:cap_listfocus, ui:cap_cohesion_kgprim and ui:cap_cohesion_pdfmarks run only by name, sourced from ui-captures-cohesion.sh.
 . "$repo/tests/ui-captures-cohesion.sh"
