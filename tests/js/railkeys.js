@@ -53,10 +53,10 @@ function run(check) {
     var emptyRail = { entries: [], cursorIndex: 0 }
     RailKeys.act("cursorLast", railPane(), emptyRail)
     check("and an empty rail has no last row to reach", emptyRail.cursorIndex, 0)
-    // A pointer press hid the keyboard frame; the next rail key is the keyboard's and shows it again.
+    // A pointer press hid the keyboard highlight; the next rail key is the keyboard's and shows it again.
     var pressedRail = { entries: [1, 2, 3], cursorIndex: 0, pointerFocus: true }
     RailKeys.act("cursorDown", railPane(), pressedRail)
-    check("a rail key after a pointer press shows the frame again", pressedRail.pointerFocus, false)
+    check("a rail key after a pointer press shows the highlight again", pressedRail.pointerFocus, false)
 
     // #181: opening a rail row hands focus to the folder it opened, and an empty rail opens nothing.
     var opening = railPane()
@@ -192,11 +192,11 @@ function run(check) {
     check("ctrl e on a phone unmounts it rather than opening it",
           onPhone.sidebar.released.join(","), "unmountPhone:mtp://Google_Pixel_7_1A2B/")
 
-    // The frame draws only while the keyboard holds the rail; Trash lights by Places.heldBy, so no row is special.
+    // The keyboard highlight draws only while the keyboard holds the rail; Trash keeps its current-place identity.
     check("an unfocused rail with no menu draws no cursor", RailKeys.cursorDrawn(false, false, false), false)
     check("a focused rail draws its cursor", RailKeys.cursorDrawn(true, false, false), true)
-    check("a right click's open rail menu draws no frame on its row", RailKeys.cursorDrawn(false, true, false), false)
-    check("a keyboard-opened rail menu draws no frame on its row", RailKeys.cursorDrawn(true, true, false), false)
-    check("a pointer press on a focused rail draws no frame", RailKeys.cursorDrawn(true, false, true), false)
+    check("a right click's open rail menu draws no keyboard highlight on its row", RailKeys.cursorDrawn(false, true, false), false)
+    check("a keyboard-opened rail menu draws no keyboard highlight on its row", RailKeys.cursorDrawn(true, true, false), false)
+    check("a pointer press on a focused rail draws no keyboard highlight", RailKeys.cursorDrawn(true, false, true), false)
     check("a missing menu is not an open one", RailKeys.cursorDrawn(true, undefined, false), true)
 }

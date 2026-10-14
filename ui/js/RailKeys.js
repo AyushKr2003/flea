@@ -26,7 +26,7 @@ function messaged(sidebar, isError) {
     if (isError && sidebar) sidebar.focusOnOpen = false
 }
 
-// The keyboard cursor draws its own frame only while the keyboard holds the rail: not under an open rail menu, and not after a pointer press until a rail key; the lit place is Places.heldBy's, Trash included.
+// The keyboard cursor takes the rail's highlight only while the keyboard holds it, never under an open rail menu or after a pointer press until a rail key.
 function cursorDrawn(focused, menuOpen, pointerFocus) {
     return Boolean(focused && !menuOpen && !pointerFocus)
 }
@@ -50,7 +50,7 @@ function markKey(event, root, sidebar) {
 
 // The rail answers ten of the key table's action names and ignores the rest while it has focus; event is the key itself, for the ones the table does not name.
 function act(action, root, sidebar, event) {
-    // Any other rail key ends a mount-first open's claim on the focus, and shows the keyboard frame a pointer press hid.
+    // Any other rail key ends a mount-first open's claim on focus and restores the keyboard highlight a pointer press hid.
     sidebar.focusOnOpen = false
     sidebar.pointerFocus = false
     if (markKey(event, root, sidebar)) return

@@ -2472,7 +2472,7 @@ The Trash strip's Empty Trash is the one button, not a second recipe (decided 20
 buttons were found drawing differently). `ui/TrashView.qml` instantiates `Flea.DialogButton` with `destructive: true` and
 `inStrip: true`: the host's height (`Theme.chromeHeight` for the press area, `Theme.chromeControlHeight` for the frame,
 centred in the strip less its rule) at caption size, a muted frame that never changes, the error label, hover 8% and
-press 14% of the ink with the 0.96 press, keyboard focus as its own frame in one foreground hairline, 0.55 when
+press 14% of the ink with whole pixel insets on frame and wash only, keyboard focus as its own frame in one foreground hairline, 0.55 when
 disabled, and Tab in the focus chain. The strip's former own control, whose frame rose to the ink and whose focus was a wash, is deleted.
 `tests/button-system.sh` pins the ladder in five states against a destructive dialog button, plus the sweep table of
 the `ui/` files that declare the Button accessible role and draw a `border.width` (the control, the ruled set members,
@@ -2490,6 +2490,10 @@ half; a slower start meets the outer `timeout` instead. In `tests/ui-trash.sh` e
 `ipc trashEmptyState` (`hovered|focused|pressed|available`), and the case hands the pointer and the keyboard back
 afterwards: `ipc trashFocusListing` releases the strip button before forcing the view, because a focus scope forced alone
 returns to its last child, and `tests/button-system.qml` drives that same body headless.
+
+A held `DialogButton` keeps its native label untransformed. Its frame and wash inset each side by `Math.round(size * (1 - Buttons.PRESS_SCALE) / 2)`, independently for width and height, with int properties animated over `Buttons.PRESS_MS` using `Easing.OutCubic`. The pressed wash and inset draw only while the held point is inside the press area; dragging off returns to rest and dragging back presses again. Reduced motion draws the wash without the inset. `ChromeButton` keeps its existing scale because its mark uses `Shape.CurveRenderer`. `tests/button-press.qml` pins mapped label geometry and whole pixel frame geometry at rest, during animation and held, plus drag-off, drag-back and reduced motion at text sizes 12 and 14.
+
+The rail has one filled row and accent edge: `Sidebar.highlightedIndex` chooses `cursorIndex` while `cursorDrawn`, otherwise `litIndex`. No rail row draws a keyboard cursor frame. Trash takes `Style.selectedAccentFill` and an accent glyph with its label in the foreground; other highlighted rows take `Style.selectedFill` while focused and `Style.normalFill` otherwise. `SidebarRow.lit` remains current-place identity for IPC, separate from `highlighted`; `Places.heldBy`, `settleLit`, open-menu suppression and the eject mark's brightening and focus frame keep their rules.
 
 Focus on a button or mark is its own frame, never a ring and never an accent line. `ui/ChromeButton.qml` draws one
 `Theme.spacing.hairline` square frame in `Theme.color.foreground` for the keyboard on every mark, the window chrome's,
@@ -4180,6 +4184,8 @@ The Markdown Source merge records these current counts and ceilings for Markdown
 Source uses one `Flea.CodeLines`, built on the first active Source view, in `ui/MarkdownSource.qml` (155 lines). Fence colours use the shared code-run formatter in `ui/MarkdownBlockView.qml` (315 lines); a backend change resets the fence's request state and asks again. Only viewport fences hold the first screen, while cached fences still ask ahead. `ui/CodeLines.qml` (229 lines) calls its fresh/reset/ask path when the backend changes, dropping the disconnected backend's token and held rows before asking the new backend. Its plain fallback omits the terminal empty row, matching the engine. `ui/CodeRefusal.qml` (52 lines) shares Quick Look's refusal strings, mark and geometry with Source; `ui/PreviewText.qml` is 117 lines. These counts also come from `wc -l` and stay below the hard cap.
 
 After the Markdown Source merge, the current count and ceiling of `tests/markdown-code.qml` are 477 lines, re-derived with `wc -l`, for real oversized, permission-denied and binary Source checks with visible text bounds, engine-reply and colour checks on every presented frame, per-slot ask evidence, and the named unknown-language reply delay with its reason. `tests/markdown-code-rebind.qml` (198 lines, from `wc -l`) keeps live fence and CodeLines views across two real backends, requires exactly one new-backend ask for CodeLines, drops the old backend's late reply despite colliding tokens, and checks that engine colours draw and release the first screen. The Source roundtrip proves the terminal newline byte and the absence of an extra row.
+
+The gmfix rail and held-button repair moves three ceilings, re-derived with `wc -l`: `ui/Sidebar.qml` 713 to 721 for the single highlighted index and its separate current-place and visual bindings; `tests/sidebar-flows.qml` 687 to 691 for the fill, accent edge, Trash ink and unfocused recipe checks; and `tests/button-members.qml` 518 to 523 for the whole pixel press height, frame settling and save-review fixture. `tests/startup-units.txt` retains its 169 units and moves its bytes line from 1,628,263 to 1,629,710, the `wc -c` sum with the frame-only button animation and the rail highlight bindings and comments; no new first-frame unit is imported, and `startupObjectLimit` stays 583.
 
 ## The key table is generated
 
