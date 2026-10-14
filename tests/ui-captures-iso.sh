@@ -60,7 +60,7 @@ SH
             iso_session_incomplete=true
             status=0
             answer=$(XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" HYPRLAND_INSTANCE_SIGNATURE="$HYPRLAND_INSTANCE_SIGNATURE" \
-                timeout "$dispatch_timeout_s" hyprctl dispatch "hl.dsp.exec_cmd(\"/bin/bash '$job/run.sh'\")" 2>&1) || status=$?
+                timeout "$dispatch_timeout_s" /bin/bash "$repo/tests/lib/hypr-dispatch.sh" session_exec_script "$job/run.sh" 2>&1) || status=$?
             if [[ "$status" != 0 || "$answer" != ok ]]; then
                 printf 'cap_iso: session dispatch failed: %s (exit %s)\n' "$answer" "$status" >&2
                 [[ "$status" != 0 ]] || status=125

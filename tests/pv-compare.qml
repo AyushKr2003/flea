@@ -145,7 +145,7 @@ ShellRoot {
             // The shared button: its frame is the board's 20 high, and its caption the board's 12, with the 1 px frame inside 8 either side.
             var frame = root.named(g.copy, "buttonFrame"), caption = root.named(g.copy, "buttonLabel")
             root.check("Copy patch is the shared strip button, a 20 high frame", frame.height, 20)
-            root.check("Copy patch has 8 either side of its caption inside a 1 px muted frame", [frame.width - caption.implicitWidth, frame.border.width, root.same(frame.border.color, Flea.Theme.color.muted)], [2 * 8 + 2, 1, true])
+            root.check("Copy patch keeps 8 either side of its caption and rounds its 1 px muted frame", [g.copy.width - caption.implicitWidth, frame.width, frame.border.width, root.same(frame.border.color, Flea.Theme.color.muted)], [2 * 8 + 2, Math.round(caption.implicitWidth + 2 * 8 + 2), 1, true])
             root.check("Copy patch has a foreground caption at the board's 12", [caption.text, root.same(caption.color, Flea.Theme.color.foreground), caption.font.pixelSize], ["Copy patch", true, Flea.Theme.font.caption])
             root.check("the close sits in its 24 slot, 9 after Copy patch, 14 from the edge", [g.close.width, g.close.x - (g.copy.x + g.copy.width), g.bar.width - (g.close.x + g.close.width)], [24, 9, 14])
             root.check("the body holds the hunk header and eighteen lines", rows.length, 19)

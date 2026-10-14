@@ -28,7 +28,7 @@ PLACEMENT_WIDTH = 1000
 PLACEMENT_HEIGHT = 720
 SHARED_HELPER_FILE = "tests/lib/hypr-dispatch.sh"
 OPERATIONS = ("window_focus", "window_float", "window_resize", "window_move", "window_resize_absolute",
-              "window_move_absolute", "cursor_move")
+              "window_move_absolute", "cursor_move", "session_exec_script")
 ENTRY_POINTS = tuple("hypr_" + operation for operation in OPERATIONS)
 LUA_PREFIX = "hl." + "dsp."
 FAKE = r'''#!/usr/bin/env bash
@@ -239,9 +239,12 @@ def main():
                       rc == 1 and output == refusal(operation, arguments, "ok", FAILED_COMMAND_STATUS)
                       and calls == [case["text"]], output)
             invalid = [arguments[:-1], arguments + ["extra"]]
-            if operation != "cursor_move":
+            if operation not in ("cursor_move", "session_exec_script"):
                 invalid.extend([bad, *arguments[1:]] for bad in
                                ("flea", "abc", '0xab"c', "0xab}c", "address:0xabc", "", "0Xabc", "0x"))
+            if operation == "session_exec_script":
+                invalid.extend([bad] for bad in ("", "run.sh", "./run.sh", "/tmp/a b.sh", "/tmp/a'bad.sh",
+                               '/tmp/a"bad.sh', "/tmp/a;exit.sh", "/tmp/$(id).sh", "/tmp/`id`.sh", "/tmp/a\nb.sh"))
             integer_start = 0 if operation == "cursor_move" else 1
             if operation in ("window_resize", "window_move", "window_resize_absolute", "window_move_absolute", "cursor_move"):
                 for index in range(integer_start, len(arguments)):
