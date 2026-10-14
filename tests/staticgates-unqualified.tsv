@@ -3277,11 +3277,6 @@ ui/PickerPlaces.qml	83	rail	Declared QML id; component context access is valid a
 ui/PickerPlaces.qml	83	rail	Declared QML id; component context access is valid at runtime.
 ui/PickerPlaces.qml	83	root	Declared QML id; component context access is valid at runtime.
 ui/PickerPlaces.qml	84	rail	Declared QML id; component context access is valid at runtime.
-ui/PickerPlaces.qml	83	rail	Declared QML id; component context access is valid at runtime.
-ui/PickerPlaces.qml	83	root	Declared QML id; component context access is valid at runtime.
-ui/PickerPlaces.qml	84	rail	Declared QML id; component context access is valid at runtime.
-ui/PickerPlaces.qml	83	root	Declared QML id; component context access is valid at runtime.
-ui/PickerPlaces.qml	84	rail	Declared QML id; component context access is valid at runtime.
 ui/PickerPlaces.qml	85	root	Declared QML id; component context access is valid at runtime.
 ui/PickerWindow.qml	740	win	Declared QML id; component context access is valid at runtime.
 ui/PickerWindow.qml	741	places	Declared QML id; component context access is valid at runtime.
