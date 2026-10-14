@@ -43,6 +43,7 @@ Column {
         model: root.entries
         delegate: SidebarRow {
             lit: index + root.base === root.sidebar.litIndex
+            highlighted: index + root.base === root.sidebar.highlightedIndex
             cursor: root.sidebar.cursorDrawn && index + root.base === root.sidebar.cursorIndex
             focused: root.sidebar.focused
             tagMark: markComponent

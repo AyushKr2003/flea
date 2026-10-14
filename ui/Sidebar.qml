@@ -20,9 +20,9 @@ Item {
     property bool trashActive: false
     // Set by Enter on a row that mounts first, so the open that lands afterwards takes focus into the folder.
     property bool focusOnOpen: false
-    // Right Arrow from a row that releases puts the keyboard on its eject mark; the cursor row draws the frame, and a move, a lost focus or a vanished mark ends it.
+    // Right Arrow from a row that releases puts the keyboard on its eject mark; a move, a lost focus or a vanished mark ends its frame.
     property bool markFocused: false
-    // A pointer press on a focused rail hides the keyboard frame until the next rail key, as a focus ring shows only for the keyboard.
+    // A pointer press on a focused rail returns the highlight to the current place until the next rail key.
     property bool pointerFocus: false
     onFocusedChanged: if (!root.focused) { root.markFocused = false; root.pointerFocus = false }
     // ui/Pane.qml's one ui/ContextMenu.qml, handed in rather than built here: a second instance in
@@ -32,8 +32,9 @@ Item {
     property var cursorEntries: []
     // The row that holds what the rail pane shows. It is settled only once no listing is out, so it moves in the frame the listing swaps.
     property int litIndex: -1
-    // The menu sets cursorIndex on open, so Escape out of it leaves the cursor on its row; the frame stays off while that menu is open.
+    // The menu sets cursorIndex on open; the keyboard highlight stays off while that menu is open.
     readonly property bool cursorDrawn: RailKeys.cursorDrawn(root.focused, root.menu && root.menu.opened && root.menu.forRail, root.pointerFocus)
+    readonly property int highlightedIndex: root.cursorDrawn ? root.cursorIndex : root.litIndex
     function settleLit() {
         var pane = root.navigationPane
         if (pane === null || pane.listInFlight)
@@ -501,6 +502,7 @@ Item {
                 model: root.homeLead
                 delegate: SidebarRow {
                     lit: index === root.litIndex
+                    highlighted: index === root.highlightedIndex
                     cursor: root.cursorDrawn && index === root.cursorIndex
                     focused: root.focused
                     onActivated: function (idx) { root.activate(idx) }
@@ -513,6 +515,7 @@ Item {
                 model: root.recentEntries
                 delegate: SidebarRow {
                     lit: index + root.homeLead.length === root.litIndex
+                    highlighted: index + root.homeLead.length === root.highlightedIndex
                     cursor: root.cursorDrawn && index + root.homeLead.length === root.cursorIndex
                     focused: root.focused
                     onActivated: function (idx) { root.activate(idx + root.homeLead.length) }
@@ -524,6 +527,7 @@ Item {
                 model: root.homeRest
                 delegate: SidebarRow {
                     lit: index + root.homeLead.length + root.recentEntries.length === root.litIndex
+                    highlighted: index + root.homeLead.length + root.recentEntries.length === root.highlightedIndex
                     cursor: root.cursorDrawn && index + root.homeLead.length + root.recentEntries.length === root.cursorIndex
                     focused: root.focused
                     onActivated: function (idx) { root.activate(idx + root.homeLead.length + root.recentEntries.length) }
@@ -536,6 +540,7 @@ Item {
                 model: root.trashEntries
                 delegate: SidebarRow {
                     lit: index + root.homeLead.length + root.recentEntries.length + root.homeRest.length === root.litIndex
+                    highlighted: index + root.homeLead.length + root.recentEntries.length + root.homeRest.length === root.highlightedIndex
                     cursor: root.cursorDrawn && index + root.homeLead.length + root.recentEntries.length + root.homeRest.length === root.cursorIndex
                     focused: root.focused
                     onActivated: function (idx) { root.activate(idx + root.homeLead.length + root.recentEntries.length + root.homeRest.length) }
@@ -554,6 +559,7 @@ Item {
                 model: root.userFavouriteEntries
                 delegate: SidebarRow {
                     lit: index + root.homeLead.length + root.recentEntries.length + root.homeRest.length + root.trashEntries.length === root.litIndex
+                    highlighted: index + root.homeLead.length + root.recentEntries.length + root.homeRest.length + root.trashEntries.length === root.highlightedIndex
                     cursor: root.cursorDrawn && index + root.homeLead.length + root.recentEntries.length + root.homeRest.length + root.trashEntries.length === root.cursorIndex
                     focused: root.focused
                     // The rail's own reorder drag, persisted through the favourites store.
@@ -620,6 +626,7 @@ Item {
                 model: root.networkEntries
                 delegate: SidebarRow {
                     lit: index + root.placesEntries.length === root.litIndex
+                    highlighted: index + root.placesEntries.length === root.highlightedIndex
                     cursor: root.cursorDrawn && index + root.placesEntries.length === root.cursorIndex
                     markFocused: root.markFocused && cursor
                     focused: root.focused
@@ -650,6 +657,7 @@ Item {
                 model: root.deviceEntries
                 delegate: SidebarRow {
                     lit: index + root.placesEntries.length + root.networkEntries.length === root.litIndex
+                    highlighted: index + root.placesEntries.length + root.networkEntries.length === root.highlightedIndex
                     cursor: root.cursorDrawn && index + root.placesEntries.length + root.networkEntries.length === root.cursorIndex
                     markFocused: root.markFocused && cursor
                     focused: root.focused

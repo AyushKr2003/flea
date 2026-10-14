@@ -100,7 +100,7 @@ tests/js/xwwatch.js 299
 tests/js/tabs.js 798
 tests/js/search.js 336
 tests/js/previewkeys.js 320
-tests/button-members.qml 520
+tests/button-members.qml 525
 tests/chromering.qml 413
 tests/columnrow-geom.qml 426
 tests/dialog-board.qml 663
@@ -125,7 +125,7 @@ tests/js/runfile.js 313
 tests/ring-bounds.qml 710
 tests/menu-fit.qml 448
 tests/search-live.qml 417
-tests/sidebar-flows.qml 687
+tests/sidebar-flows.qml 691
 tests/touchpad.qml 882
 tests/xwsettings-tabs.qml 379
 ui/Backend.qml 597
@@ -171,7 +171,7 @@ tests/markdown-code.qml 477
 ui/Row.qml 496
 ui/SettingsPanel.qml 547
 ui/SettingsRow.qml 409
-ui/Sidebar.qml 713
+ui/Sidebar.qml 721
 ui/StatusBar.qml 477
 ui/Theme.qml 480
 ui/TrashView.qml 492

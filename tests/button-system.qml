@@ -23,7 +23,7 @@ ShellRoot {
     readonly property int parkY: 50
     readonly property int releaseOutside: -40
     readonly property int noDelay: 0
-    // Quiet ticks (the press scale unchanged) before a state is read; a count of frames, never time.
+    // Quiet ticks with unchanged frame size before a state is read; a count of frames, never time.
     readonly property int settleTicks: 4
     readonly property int tickMs: 16
     readonly property int outerTimeoutS: Number(Quickshell.env("BUTTONSYS_TIMEOUT_S")) || 60
@@ -46,8 +46,8 @@ ShellRoot {
     property int activations: 0
     property int step: 0
     property int quiet: 0
-    property real lastScaleA: -1
-    property real lastScaleB: -1
+    property real lastFrameSizeA: -1
+    property real lastFrameSizeB: -1
     property bool acted: false
     property var script: []
     // The root every path this run touches must lie under, and the ops the strip sent to the backend this run never has.
@@ -146,11 +146,13 @@ ShellRoot {
     readonly property var dlg: dialog
 
     function settled() {
-        var a = shell.strip.scale
-        var b = shell.dlg.scale
-        var same = a === shell.lastScaleA && b === shell.lastScaleB
-        shell.lastScaleA = a
-        shell.lastScaleB = b
+        var frameA = shell.find(shell.strip, "buttonFrame")
+        var a = frameA.width + frameA.height
+        var frameB = shell.find(shell.dlg, "buttonFrame")
+        var b = frameB.width + frameB.height
+        var same = a === shell.lastFrameSizeA && b === shell.lastFrameSizeB
+        shell.lastFrameSizeA = a
+        shell.lastFrameSizeB = b
         shell.quiet = same ? shell.quiet + 1 : 0
         return shell.quiet >= shell.settleTicks
     }
@@ -235,8 +237,8 @@ ShellRoot {
         shell.check("no state holds a ring item", shell.states.map(function (state) { return s[state].ringItem }), shell.states.map(function () { return false }))
         shell.check("every state lays the wash one hairline inside the frame", shell.states.map(function (state) { return s[state].washInset }),
                     shell.states.map(function () { return Flea.Theme.spacing.hairline }))
-        shell.check("pressed: the wash is 14% of the ink and the control takes the 0.96 press", [Math.abs(s.pressed.washAlpha - shell.rulingPress) < shell.alphaEpsilon, s.pressed.scale], [true, shell.rulingPressScale])
-        shell.check("rest: no press scale", s.rest.scale, 1)
+        shell.check("pressed: the wash is 14% of the ink and the native label stays unscaled", [Math.abs(s.pressed.washAlpha - shell.rulingPress) < shell.alphaEpsilon, s.pressed.scale], [true, 1])
+        shell.check("rest: the label stays unscaled", s.rest.scale, 1)
         shell.check("disabled: 0.55 opacity and no wash", [s.disabled.opacity, s.disabled.washAlpha], [shell.rulingDisabled, 0])
         shell.check("rest: full opacity", s.rest.opacity, 1)
     }
@@ -345,7 +347,7 @@ ShellRoot {
         steps.push({ name: "compare", act: function () {}, record: function () {
             shell.check("strip: the harness drove an available control", view.emptyItem.available, true)
             shell.check("the harness draws at the reference text size", Flea.Theme.baseSize, shell.pinnedSize)
-            shell.check("the harness runs with motion on, so the press scale is drawn", Flea.Theme.reducedMotion, false)
+            shell.check("the harness runs with motion on, so the frame shrink is drawn", Flea.Theme.reducedMotion, false)
             for (var i = 0; i < shell.states.length; i++) shell.compare(shell.states[i])
             shell.ruling()
             shell.geometry()

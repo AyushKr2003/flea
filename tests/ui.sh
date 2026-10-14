@@ -15578,6 +15578,7 @@ clipboard_wait() {
 . "$repo/tests/ui-captures-markdown.sh"
 . "$repo/tests/ui-captures-states.sh"
 . "$repo/tests/ui-captures-gridhover.sh"
+. "$repo/tests/ui-captures-gmlook.sh"
 # README retakes, one launch per frame at its own size, text size and fixture; 2560x1440 corner park, wait and retry bounds.
 readme_park_x=2559
 readme_park_y=1439
@@ -15932,6 +15933,7 @@ case_readme() {
 # Native items ui:cap_b72, ui:cap_b72_live, ui:cap_b72_gruvbox and ui:cap_b72_kanagawa run only by name, like the cohesion kit above.
 . "$repo/tests/ui-captures-b72.sh"
 . "$repo/tests/ui-captures-collide.sh"
+# ui:cap_gm_rail and ui:cap_gm_nethold run only by name: native display, uinput holds and screenshots cannot run headless.
 declare -a wanted=("$@")
 [[ ${#wanted[@]} -eq 0 ]] && wanted=(cursor scroll scrollbar terminal open rows click clickedge ctrlclick shiftscroll querypaste viewrestart dd ddclick griddrop collide sortrestart foldersort duallaunch dirsortstale editplace mute placemenu runscript unmounted sidebar menu background hidden xwsettings selection watch xwwatch reload optical select colour lifted icons thumbs hashcache stale nosweep oem header columnresize columnautofit overflow focus railpointer dualautohidereveal preview pdffocus network netmark networkauth networktimeout gvfs sharebrowser unmount phones trasharm eject poweroff rename renamefirst renamelife renamefar taildrop providers grid columns columnsbackground operations tabs tabdrag openterminal makeexec renderer settings makedefault scrolllane clickthrough wheelunder overlays views formats previewviews reclick colroot colwatch hangshare hanglisting hanginspect openwithdesign noblank previewswap searchnoblank lookopen transferlive recent middleclick opentab xwundo folderviews hiddenlast marqueemargin relstart userthumbnailer dualtab dualdivider)
 

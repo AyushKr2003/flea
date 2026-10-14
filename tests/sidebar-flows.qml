@@ -4,11 +4,13 @@ import QtTest
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import "flea" as Flea
 import "flea/js/Filter.js" as Filter
 import "flea/js/Format.js" as Format
 import "flea/js/Search.js" as Search
 import "sidebar-flows-extra.js" as Extra
+import "sidebar-flows-palette.js" as PaletteFlow
 
 // The real pane owns every tested property. TestEvent delivers keys to its real focused item.
 ShellRoot {
@@ -143,19 +145,19 @@ ShellRoot {
             modelData: ({ label: "Home", path: "/home", group: "home", kind: "home", glyph: "house" })
         }
     }
-    // What a rail row draws: the lit fill, the lit accent edge and the keyboard cursor's own frame, read from the tree.
+    // What a rail row draws: one highlight fill and accent edge, with no keyboard frame.
     function railLook(row) {
-        var look = { fill: false, edge: false, frame: false }
+        var look = { fill: false, edge: false, frame: false, color: "transparent" }
         for (var i = 0; i < row.children.length; i++) {
             var c = row.children[i]
             if (c.color === undefined || c.border === undefined || !c.visible) continue
             if (c.color.a === 0) look.frame = look.frame || (c.width < row.width && c.height === row.height)
             else if (c.width === Flea.Theme.spacing.hairline * 2) look.edge = true
-            else if (c.width === row.width && c.opacity === 1) look.fill = true
+            else if (c.width === row.width && c.opacity === 1) { look.fill = true; look.color = c.color }
         }
         return look
     }
-    // Which rail rows draw the lit look and which the cursor frame, by entry index.
+    // Which rail rows draw each highlight part, by entry index.
     function railLit() { return root.railIndices("fill") }
     function railIndices(what) {
         var out = []
@@ -452,29 +454,7 @@ ShellRoot {
             var rail = pane.sidebar
             check("lit-place: the landed Recent listing lights the Recent row", rail.litIndex, root.railRecent)
             check("lit-place: the rows follow the lit place", root.railLit(), [root.railRecent])
-            rail.cursorIndex = root.railHome
-            pane.focusView = "rail"
-            check("lit-place: a focused rail draws the cursor frame on the cursor row, apart from the lit one", [root.railIndices("frame"), root.railLit()], [[root.railHome], [root.railRecent]])
-            rail.cursorIndex = root.railTrash
-            check("lit-place: the cursor on Trash, not lit, draws its frame and the IPC does not read it as current", [root.railIndices("frame"), root.railLit(), root.ipc(true).trashRail().current], [[root.railTrash], [root.railRecent], false])
-            rail.cursorIndex = root.railRecent
-            check("lit-place: the cursor on the lit row draws both", [root.railIndices("frame"), root.railLit()], [[root.railRecent], [root.railRecent]])
-            // A real press through the rail's PointHandler, released past the drag threshold so the row's tap never fires.
-            var litRow = rail.railItemFor(root.railRecent)
-            driver.mousePress(litRow, litRow.width / 2, litRow.height / 2, Qt.LeftButton, Qt.NoModifier, 1)
-            check("lit-place: a pointer press on the focused rail hides the frame and keeps the lit place", [rail.pointerFocus, root.railIndices("frame"), root.railLit()], [true, [], [root.railRecent]])
-            driver.mouseMove(litRow, litRow.width * 3, litRow.height / 2, 1, Qt.LeftButton, Qt.NoModifier)
-            driver.mouseRelease(litRow, litRow.width * 3, litRow.height / 2, Qt.LeftButton, Qt.NoModifier, 1)
-            rail.pointerFocus = false
-            // Trash always offers its menu, where Home's rows sit behind the Places menu switch.
-            rail.openRailMenu(root.railTrash, Qt.point(40, 80))
-            check("lit-place: a rail menu open on a row draws no frame there", [rail.menu.opened, rail.cursorIndex, root.railIndices("frame")], [true, root.railTrash, []])
-            rail.menu.close()
-            check("lit-place: closing the menu gives the focused rail its frame back on the menu's row", root.railIndices("frame"), [root.railTrash])
-            pane.focusView = "list"
-            check("lit-place: giving the rail's focus up takes the frame away and leaves the lit place", [root.railIndices("frame"), root.railLit()], [[], [root.railRecent]])
-            pane.closeRecent()
-            return true
+            return PaletteFlow.litPlace(root, pane, Flea.Theme, Style, Commons.Color, driver)
         },
         function () {
             if (!ready(fixture)) return false
@@ -487,7 +467,7 @@ ShellRoot {
             check("lit-place: an open Trash lights the Trash row alone, and the IPC reads it as current with the list holding focus", [pane.sidebar.litIndex, root.railLit(), root.ipc(true).trashRail().current], [root.railTrash, [root.railTrash], true])
             pane.sidebar.cursorIndex = root.railHome
             pane.focusView = "rail"
-            check("lit-place: an open Trash with the rail cursor off it is still current over the IPC", [root.railIndices("frame"), root.railLit(), root.ipc(true).trashRail().current], [[root.railHome], [root.railTrash], true])
+            check("lit-place: an open Trash with the rail cursor off it is still current over the IPC", [root.railIndices("frame"), root.railLit(), root.ipc(true).trashRail().current], [[], [root.railHome], true])
             pane.focusView = "list"
             pane.trash.close()
             return true

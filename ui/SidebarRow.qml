@@ -11,8 +11,9 @@ Item {
 
     required property int index
     required property var modelData
-    // The place the pane stands in: the fill and the accent edge. The keyboard cursor is a separate frame and moves on its own.
+    // Current-place identity stays separate from the keyboard's visual highlight, including over IPC.
     property bool lit: false
+    property bool highlighted: root.lit
     property bool cursor: false
     property bool focused: false
     // The keyboard is on this row's eject mark, which then draws its own frame in the foreground at its hit box.
@@ -76,7 +77,7 @@ Item {
     // The rail rounds nothing: a lit place is the list row's square full-bleed fill, see ui/Row.qml.
     Rectangle {
         anchors.fill: parent
-        color: root.lit
+        color: root.highlighted
             ? (root.modelData.kind === "trash" ? Style.selectedAccentFill : root.focused ? Style.selectedFill : Style.normalFill)
             : "transparent"
     }
@@ -89,18 +90,8 @@ Item {
         opacity: Theme.washHover
     }
 
-    // The keyboard cursor's own frame: foreground, a hairline inside the row, clear of the rail's edge rule on its right.
     Rectangle {
-        visible: root.cursor
-        width: parent.width - Theme.spacing.hairline - Theme.chromeControlInset
-        height: parent.height
-        color: "transparent"
-        border.width: Theme.spacing.hairline
-        border.color: Theme.color.foreground
-    }
-
-    Rectangle {
-        visible: root.lit
+        visible: root.highlighted
         width: Theme.spacing.hairline * 2
         height: parent.height
         color: Theme.color.accent
@@ -126,7 +117,7 @@ Item {
         id: glyphMark
         Glyph {
             name: root.modelData.glyph
-            color: root.lit && root.modelData.kind === "trash" ? Theme.color.accent : Theme.color.foreground
+            color: root.highlighted && root.modelData.kind === "trash" ? Theme.color.accent : Theme.color.foreground
         }
     }
 

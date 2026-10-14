@@ -85,13 +85,15 @@ ShellRoot {
         ]
     }
 
-    // A is one ladder (hover 8% and press 14% inside the frame, press scales, disabled dims); focus is the control's own frame, no control holds a ring, and focus moves nothing. A picker answer keeps the control height and body size, its frame inside the answer row's insets.
+    // A is one ladder (hover 8% and press 14% inside the frame, only the frame and wash shrink, disabled dims); focus is the control's own frame, no control holds a ring, and focus moves nothing. A picker answer keeps the control height and body size, its frame inside the answer row's insets.
     function ladder(key, ink, frame, focusFrame, sizes) {
         var r = shell.readings[key]
         var wantSizes = sizes || [shell.rulingHeight, shell.rulingHeight, Flea.Theme.font.body]
         for (var i = 0; i < shell.states.length; i++) {
             var state = shell.states[i]
-            shell.check(key + " " + state + ": outer height, frame height and label size", [r[state].outerHeight, r[state].frameHeight, r[state].labelSize], wantSizes)
+            var drawnSizes = wantSizes.slice()
+            if (state === "pressed") drawnSizes[1] -= 2 * Math.round(drawnSizes[1] * (1 - shell.rulingPressScale) / 2)
+            shell.check(key + " " + state + ": outer height, frame height and label size", [r[state].outerHeight, r[state].frameHeight, r[state].labelSize], drawnSizes)
             var off = state === "disabled"
             var want = off ? Probe.rgba(Flea.Theme.color.mutedFrame) : state === "focus" ? focusFrame : frame
             shell.check(key + " " + state + ": the frame is one hairline in " + (off ? "muted" : state === "focus" ? "the focus frame" : frame), [r[state].frameColor, r[state].frameWidth], [want, Flea.Theme.spacing.hairline])
@@ -99,8 +101,8 @@ ShellRoot {
             shell.check(key + " " + state + ": the wash lies inside the frame at its width, so the frame never changes",
                         [r[state].washInsetX, r[state].washInsetY, r[state].washShrink], [r[state].frameWidth, r[state].frameWidth, 2 * r[state].frameWidth])
         }
-        shell.check(key + ": hover lays 8% of the ink and press 14% with the 0.96 scale",
-                    [shell.near(r.hover.washAlpha, shell.rulingHover), shell.near(r.pressed.washAlpha, shell.rulingPress), r.pressed.scale], [true, true, shell.rulingPressScale])
+        shell.check(key + ": hover lays 8% of the ink and press 14% with an unscaled label",
+                    [shell.near(r.hover.washAlpha, shell.rulingHover), shell.near(r.pressed.washAlpha, shell.rulingPress), r.pressed.scale], [true, true, 1])
         shell.check(key + ": no state holds a ring item, focus draws its own frame",
                     [r.rest.ringItem, r.hover.ringItem, r.pressed.ringItem, r.focus.ringItem, r.disabled.ringItem], [false, false, false, false, false])
         shell.check(key + ": focus moves nothing, the control, its frame and its label sit where they rest",
@@ -190,6 +192,7 @@ ShellRoot {
         property color edge: "#444444"
         property var marks: []
         property bool canAccept: true
+        property bool collisionReview: false
         property var history: ["/a"]
         property bool backendUnavailable: false
         property bool submitting: false
@@ -215,8 +218,10 @@ ShellRoot {
     function pressOn(item) { var c = shell.centre(item); driver.mousePress(item, c.x, c.y, Qt.LeftButton, Qt.NoModifier, shell.noDelay) }
     function releaseOff(item) { driver.mouseRelease(item, shell.releaseOutside, shell.releaseOutside, Qt.LeftButton, Qt.NoModifier, shell.noDelay) }
     function settled(item) {
-        var same = item.scale === shell.lastScale
-        shell.lastScale = item.scale
+        var frame = Probe.find(item, "buttonFrame")
+        var size = frame ? frame.width + frame.height : item.scale
+        var same = size === shell.lastScale
+        shell.lastScale = size
         shell.quiet = same ? shell.quiet + 1 : 0
         return shell.quiet >= shell.settleTicks
     }
@@ -468,7 +473,7 @@ ShellRoot {
         steps = steps.concat(shell.seriesFor("plain", plain, function (on) { plain.available = on }, function () { return shell.plains }))
         steps.push({ item: parking, name: "check", act: function () {}, record: function () {
             shell.check("the harness draws at the reference text size", Flea.Theme.baseSize, shell.pinnedSize)
-            shell.check("the harness runs with motion on, so the press scale is drawn", Flea.Theme.reducedMotion, false)
+            shell.check("the harness runs with motion on, so the frame shrink is drawn", Flea.Theme.reducedMotion, false)
             var muted = Probe.rgba(Flea.Theme.color.muted)
             var mutedFrame = Probe.rgba(Flea.Theme.color.mutedFrame)
             shell.ladder("member", muted, mutedFrame, Probe.rgba(Flea.Theme.color.accent))

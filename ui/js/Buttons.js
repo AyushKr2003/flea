@@ -15,7 +15,7 @@ var WASH_HOVER = 0.08
 var WASH_PRESS = 0.14
 // A primary's resting accent wash, at the press wash's weight.
 var WASH_PRIMARY = WASH_PRESS
-// The pressed shrink every tappable mark takes, and how long it eases.
+// Chrome marks scale by this factor; dialog buttons inset only their frame and wash by whole pixels.
 var PRESS_SCALE = 0.96
 var PRESS_MS = 150
 
