@@ -9,27 +9,27 @@ import sys
 ASPECT_TOLERANCE = 0.02
 # The sampled pixel must be nearly opaque, so a half-faded frame never passes.
 OPAQUE_ALPHA = 240
-# The fixture page is flat (35, 69, 188); a drawn page lands within 12 per channel after RHI blending.
+# The fixture page is flat (35, 69, 188); a drawn page lands within 11 per channel after RHI blending.
 PAGE_RGB = (35, 69, 188)
-PAGE_TOLERANCE = 12
+PAGE_TOLERANCE = 11
 # The cleared card shows the canvas (16, 19, 21) within 3 per channel.
 CANVAS_RGB = (16, 19, 21)
 CANVAS_TOLERANCE = 3
 
 
 def check(png, state, phase):
-    # Sample input: frame "40 40 300 200", window 380x280; p{20,20} samples PNG pixel (60,60) at scale 1.
     # Sample input: magick identify -format '%w %h' prints "380 280".
     width, height = map(int, subprocess.check_output(['magick', 'identify', '-format', '%w %h', str(png)], text=True).split())
     scale = width / state['window']['width']
     assert abs(height / state['window']['height'] - scale) < ASPECT_TOLERANCE, 'capture and window aspect differ'
+    # Sample input: frame "40 40 300 200", window 380x280; p{20,20} samples PNG pixel (60,60) at scale 1.
     x, y, w, h = map(float, state['frame'].split())
     assert w > 20 and h > 20, 'card sample is outside the card'
     px, py = math.floor((x + 20) * scale), math.floor((y + 20) * scale)
     assert 0 <= px < width and 0 <= py < height, 'card sample is outside the capture'
     rgba = subprocess.check_output(['magick', str(png), '-crop', '1x1+%s+%s' % (px, py), '+repage', '-depth', '8', 'rgba:-'])
     assert len(rgba) == 4, 'card sample is not one RGBA pixel'
-    painted = rgba[3] > OPAQUE_ALPHA and max(abs(rgba[i] - PAGE_RGB[i]) for i in range(3)) < PAGE_TOLERANCE
+    painted = rgba[3] > OPAQUE_ALPHA and max(abs(rgba[i] - PAGE_RGB[i]) for i in range(3)) <= PAGE_TOLERANCE
     if phase == 'ready':
         assert painted, 'ready page texture missing at card p{20,20}'
         return 'HTML_CLIP PASS ready page pixels at card p{20,20}'
