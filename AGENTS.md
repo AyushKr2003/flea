@@ -1111,6 +1111,8 @@ The land235r4 Trash backend guard and rail drag hold retain the first-frame unit
 
 The land235r5 catcher name retains 587 startup objects and the same 169 first-frame units. The `wc -c` sum over `tests/startup-units.txt` moves from 1,630,730 to 1,630,763 bytes. Both unqualified-read profiles retain their allowance counts and reasons at the source positions shifted by the name.
 
+The 0.3.11 stage join of the rail highlight fix and Drag to Trash keeps both first-frame additions, the shared XDG reader and the Trash row, in one inventory of 172 units; the `wc -c` sum over `tests/startup-units.txt` is 1,639,271 bytes, re-derived from the merged files. The rail Trash row carries the same `highlighted` binding as every other rail row.
+
 **Qt never caches a Quickshell config.** Quickshell serves its config through its own `qs:@/qs/`
 URL scheme (`src/core/rootwrapper.cpp`, intercepted in `src/core/qsintercept.cpp`) and Qt's QML
 disk cache accepts local files only. Run any launch with
