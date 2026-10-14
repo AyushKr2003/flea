@@ -4,6 +4,7 @@ import "js/ControlReader.js" as ControlReader
 // Installed only in the capture fixture's UI copy; observes real handlers, clipped targets and filter-menu rows without changing rendering.
 QtObject {
     function read(quick, top, kinds, alias): string {
+        // Sample input, ControlReader.read's JSON: {"focus":{"kind":"DialogButton","via":"owner"},"controls":[{"kind":"DialogButton","name":"Open","x":900,"y":612,"w":96,"h":32}]}
         var state = JSON.parse(ControlReader.read(quick, top, kinds, alias))
         var menus = JSON.parse(ControlReader.read(quick, top, /^(MenuRow)_QML/, {})).controls
         for (var m = 0; m < menus.length; m++) {
@@ -13,6 +14,7 @@ QtObject {
         }
         function handler(item, name) {
             var data = item.data || []
+            // Sample input: String(data[i]) === "QQuickTapHandler(0x55d0c8a1b2c0)"
             for (var i = 0; i < data.length; i++)
                 if (data[i] && String(data[i]).indexOf(name) === 0) return data[i]
             return null
@@ -20,6 +22,7 @@ QtObject {
         function describe(item, entry) {
             var left = 0, up = 0, right = top.width, bottom = top.height, surface = ""
             for (var owner = item; owner; owner = owner.parent) {
+                // Sample input: String(owner) === "SettingsPanel_QML_214(0x55d0c8a1b2c0)"
                 var match = String(owner).match(/^(PermissionsDialog|NetworkDialog|SettingsPanel|ContextMenu|Preview|PreviewColumn|KeymapSheet|OpenWithDialog|ConvertDialog|MenuActionDialog|CollideConfirm|TrashConfirm|TrashView|TransferCard)_QML/)
                 if (!surface && match) surface = match[1]
                 if (owner.clip) {
@@ -50,6 +53,7 @@ QtObject {
         }
         function walk(item) {
             if (!item || !item.visible || item.opacity <= 0) return
+            // Sample input: String(item) === "DialogButton_QML_88(0x55d0c8a1b2c0)", or "MenuRow_QML_40(0x55d0c8a1b2c0)"
             var point = item.mapToItem(null, 0, 0), name = String(item)
             var match = name.match(kinds), menu = name.indexOf("MenuRow_QML") === 0
             if (match || menu) {

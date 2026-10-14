@@ -195,6 +195,15 @@ cap_unlock_unmount_in_use() {
     fi
     rail_idx=$(jq -r .key <<< "$row")
     mounted_label=$(jq -er '.value.label | select(length > 0)' <<< "$row") || fail "cap_unlock: the mounted S1LUKS row has no name"
+    # DeviceMounts.qml:231,500 passes the mounted row's label to Devices.js:344, not the locked container's label.
+    busy_status="$mounted_label is busy; close what is using it and try again."
+    # The open-file leg can leave this same sentence standing, so Escape clears it and only a new one counts.
+    for _attempt in 1 2 3 4; do
+        [[ "$(ipc statusPrimary 2>/dev/null)" == "$busy_status" ]] || break
+        key -k Escape >/dev/null
+        settle
+    done
+    [[ "$(ipc statusPrimary 2>/dev/null)" != "$busy_status" ]] || fail "cap_unlock: the earlier busy sentence never cleared"
     ( cd -- "$mount" && exec sleep 60 ) &
     holder=$!
     for _attempt in $(seq 1 40); do
@@ -206,8 +215,6 @@ cap_unlock_unmount_in_use() {
     settle
     menu_seek "$unmount_label"
     key -k Return >/dev/null
-    # DeviceMounts.qml:231,500 passes the mounted row's label to Devices.js:344, not the locked container's label.
-    busy_status="$mounted_label is busy; close what is using it and try again."
     end=$((SECONDS + 25))
     while (( SECONDS < end )); do
         status=$(ipc statusPrimary 2>/dev/null || printf "")
