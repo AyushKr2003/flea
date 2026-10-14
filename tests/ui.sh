@@ -15074,10 +15074,19 @@ case_formats() {
     [[ "$(ipc columnPdfPages)" == "2" && "$(ipc columnPdfPage)" == "0" ]] || fail "formats: manual.pdf shows $(ipc columnPdfPages) pages, page $(ipc columnPdfPage)"
     lit=$(column_frame_lit manual-p1)
     (( lit > 200 )) || fail "formats: manual.pdf's first page painted $lit lit pixels"
-    # The column is a continuous stack: scroll to its second page, then prove the end refuses more scrolling.
+    # The column is a continuous stack: scroll to its second page, wheel to its bottom, then prove the end refuses more.
     capmarkdown_column_pointer formats-pdf-page-turn
     omarchy-drive scroll down 8 >/dev/null || fail 'formats: the PDF stack wheel failed'
     pdf_expect false '.pages == 2 and .scrollY > 0 and (.landed | index(1) != null)' 'formats second stacked page decoded after scrolling'
+    # The bottom is reached once the last page's box ("x y w h") ends inside the frame's box.
+    pdf_bottom='(.lastPage | test("^[0-9-]+ [0-9-]+ [0-9]+ [0-9]+$")) and ((.lastPage | split(" ") | map(tonumber)) as $p | (.frame | split(" ") | map(tonumber)) as $f | $p[1] + $p[3] <= $f[1] + $f[3] + 1)'
+    for _attempt in 1 2 3 4 5 6; do
+        jq -e "$pdf_bottom" <<< "$(ipc pdfState false)" >/dev/null 2>&1 && break
+        omarchy-drive scroll down 8 >/dev/null || fail 'formats: the PDF stack bottom wheel failed'
+        settle
+    done
+    jq -e "$pdf_bottom" <<< "$(ipc pdfState false)" >/dev/null 2>&1 \
+        || fail "formats: the PDF stack never reached its bottom, $(ipc pdfState false)"
     p1=$(ipc pdfState false | jq -r '.scrollY')
     omarchy-drive scroll down 8 >/dev/null || fail 'formats: the PDF stack end wheel failed'
     settle

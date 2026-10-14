@@ -1,8 +1,7 @@
 .pragma library
 
 // Where each dialog's fields, buttons and check boxes lie in the 1000 x 650 test window on the 0.3.10 stage (Open With and Convert hold their status slot), before any ring room.
-// Sample input: "stop 12 new file" reads field, Cancel and Create as "x,y,width,height" strings in tree order.
-// The save field follows 6b1824a75: row padding, caption line then gap, full width less both pads, and the control height with the hitMin floor.
+// Sample input: "stop 12 new file" reads field, Cancel and Create as "x,y,width,height" strings in tree order; the save field follows 6b1824a75.
 var PINS = ({
     "stop 12 new file": ["field 276.00,325.00,449.00,26.00",
         "DialogButton 594.75,359.00,61.13,26.00",

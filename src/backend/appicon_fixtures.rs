@@ -7,6 +7,7 @@ pub(super) fn checked(dir: &TestDir, seven: &str, with_icon: bool) -> Vec<u8> {
     } else {
         ("without-dir-icon.sqfs", include_bytes!("../../tests/fixtures/appimage-icon/without-dir-icon.sqfs"))
     };
+    // Sample input: "63842e22e89a6640cd356bb8f1be86cfb29a5bae416089484339326676774a53  with-dir-icon.sqfs"
     let expected = include_str!("../../tests/fixtures/appimage-icon/SHA256SUMS").lines()
         .find_map(|line| line.split_once("  ").filter(|(_, file)| *file == name).map(|(hash, _)| hash))
         .expect("fixture has no SHA-256 pin");

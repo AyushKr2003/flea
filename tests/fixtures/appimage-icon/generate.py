@@ -7,6 +7,9 @@ from pathlib import Path
 import struct
 import zlib
 
+# struct.calcsize("<5I6H8Q"): file data starts right after the superblock.
+SUPERBLOCK_SIZE = 96
+
 
 def chunk(kind, data):
     return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
@@ -39,7 +42,7 @@ def squashfs(with_link):
         if kind == 3:
             inodes.extend(struct.pack("<II", 1, len(payload)) + payload)
         else:
-            inodes.extend(struct.pack("<IIIII", 96 + len(data), 0xFFFFFFFF, 0, len(payload), 0x1000000 | len(payload)))
+            inodes.extend(struct.pack("<IIIII", SUPERBLOCK_SIZE + len(data), 0xFFFFFFFF, 0, len(payload), 0x1000000 | len(payload)))
             data.extend(payload)
         encoded = name.encode("ascii")
         directory.extend(struct.pack("<HhHH", offset, number - 1, kind, len(encoded) - 1) + encoded)
@@ -47,7 +50,7 @@ def squashfs(with_link):
     inode_count = len(entries) + 1
     inodes.extend(struct.pack("<HHHHII", 1, 0o755, 0, 0, 0, inode_count))
     inodes.extend(struct.pack("<IIHHI", 0, 2, len(directory) + 3, 0, inode_count + 1))
-    inode_start = 96 + len(data)
+    inode_start = SUPERBLOCK_SIZE + len(data)
     inode_block = metadata(inodes)
     directory_start = inode_start + len(inode_block)
     directory_block = metadata(directory)
@@ -61,6 +64,7 @@ def squashfs(with_link):
     superblock = struct.pack("<5I6H8Q", 0x73717368, inode_count, 0, 131072, 0,
         1, 17, flags, 1, 4, 0, root_inode, bytes_used, id_index, invalid,
         inode_start, directory_start, id_start, invalid)
+    assert len(superblock) == SUPERBLOCK_SIZE
     return superblock + data + inode_block + directory_block + id_block + struct.pack("<Q", id_start)
 
 
