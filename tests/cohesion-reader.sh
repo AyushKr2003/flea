@@ -90,11 +90,12 @@ leg() {
     shift 4
     mkdir -p "$config" || return 1
     ln -s "$ui" "$config/flea"
-    headless_commons "$probe" "$config/Commons"
+    headless_commons "$probe" "$config/Commons" || exit 1
     ln -s "$(readlink -f ui/boot/Ui)" "$config/Ui"
     # The window loads its tab catcher from the shell directory, so the probe ships it as the product does.
     ln -s "$PWD/ui/boot/fleatab.qml" "$config/fleatab.qml"
     cp "$shell" "$config/shell.qml"
+    cp tests/button-probe.js "$config/button-probe.js" || return 1
     env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLEA_SELECT \
         HOME="$probe/home" XDG_STATE_HOME="$probe/state" XDG_CONFIG_HOME="$config" \
         XDG_DATA_HOME="$probe/data" XDG_CACHE_HOME="$probe/cache" XDG_RUNTIME_DIR="$probe/runtime" \
@@ -134,3 +135,58 @@ fi
 grep -q 'COHCAPTURE FAIL an asleep PDF bar cannot expose without a wheel' "$probe/no-wheel.log" \
     || { cat "$probe/no-wheel.log"; printf 'FAIL cohesion-reader: the no-wheel control failed for another reason\n'; exit 1; }
 printf 'cohesion-reader capture-no-wheel: the asleep PDF was refused before any press\n'
+for mutant in root-scale no-inset; do
+    cp -a "$probe/capture-ui" "$probe/$mutant-ui" || exit 1
+    python3 - "$probe" "$mutant" <<'PY' || exit 1
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+assert root.is_absolute() and (root / '.flea-test-sandbox').is_file()
+mutant = sys.argv[2]
+assert mutant in ('root-scale', 'no-inset')
+path = root / f'{mutant}-ui/DialogButton.qml'
+assert path.resolve().is_relative_to(root.resolve())
+source = path.read_text()
+if mutant == 'root-scale':
+    anchor = '    id: root\n'
+    assert source.count(anchor) == 1
+    source = source.replace(anchor, anchor + '    scale: tap.pressed && root.available && !Theme.reducedMotion ? Buttons.PRESS_SCALE : 1\n', 1)
+else:
+    for axis, span in (('X', 'width'), ('Y', 'height')):
+        anchor = f'property int inset{axis}: root.pressShown && !Theme.reducedMotion ? Math.round(box.{span} * (1 - Buttons.PRESS_SCALE) / 2) : 0'
+        assert source.count(anchor) == 1
+        source = source.replace(anchor, f'property int inset{axis}: 0', 1)
+path.write_text(source)
+PY
+    control_log="$probe/$mutant.control.log"
+    control_status=0
+    leg "capture-$mutant" COHCAPTURE tests/cohesion-capture-reader.qml "$probe/$mutant-ui" > "$control_log" 2>&1 || control_status=$?
+    if [ -n "${FLEA_CI_SUITE_LOGS:-}" ]; then
+        cp "$control_log" "$FLEA_CI_SUITE_LOGS/cohesion-reader-$mutant.control.log" || exit 1
+    fi
+    root_failed=$(grep -cF 'COHCAPTURE FAIL press keeps the root unscaled and coordinate signature stable' "$control_log" || true)
+    fixed_failed=$(grep -cF 'COHCAPTURE FAIL a press keeps the hit box and coordinate signature fixed' "$control_log" || true)
+    caption_failed=$(grep -cF 'COHCAPTURE FAIL a press keeps the caption geometry fixed' "$control_log" || true)
+    local_failed=$(grep -cF 'COHCAPTURE FAIL only the frame takes the exact whole-pixel press inset' "$control_log" || true)
+    # Both sides' assertions remain exact. Root scaling can also lose exact local coordinates
+    # through inverse-transform rounding, so count that named geometry failure when it occurs.
+    expected_failed=3; expected_root=0; expected_fixed=0; expected_caption=0; expected_local=1
+    if [ "$mutant" = root-scale ]; then
+        expected_failed=$((5 + local_failed)); expected_root=1; expected_fixed=1; expected_caption=1
+        expected_local=$local_failed
+    fi
+    if [ "$control_status" -ne 1 ] || ! grep -qF "COHCAPTURE DONE checks=23 failed=$expected_failed" "$control_log" \
+        || [ "$root_failed" -ne "$expected_root" ] \
+        || [ "$fixed_failed" -ne "$expected_fixed" ] \
+        || [ "$caption_failed" -ne "$expected_caption" ] \
+        || [ "$local_failed" -ne "$expected_local" ] \
+        || [ "$local_failed" -gt 1 ] \
+        || ! grep -qF 'COHCAPTURE FAIL press insets only the frame on whole pixels' "$control_log" \
+        || ! grep -qF 'COHCAPTURE FAIL press insets only the wash on whole pixels' "$control_log" \
+        || grep -qE 'TypeError|ReferenceError|ERROR|Cannot assign|Insufficient arguments' "$control_log"; then
+        cat "$control_log"
+        printf 'FAIL cohesion-reader %s mutant did not fail only its geometry checks\n' "$mutant"
+        exit 1
+    fi
+    printf 'COHCAPTURE CONTROL %s rejected checks=23 failed=%s exit=%s\n' "$mutant" "$expected_failed" "$control_status"
+done

@@ -24,7 +24,7 @@ if source.count(stopped) != 1:
 path.write_text(source.replace(stopped, 'onStopped: Qt.exit(0)'))
 PYCODE
 [ "$?" -eq 0 ] || exit 1
-headless_commons "$test_root"
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui"
 cp tests/picker-hunt.qml "$test_root/config/shell.qml"
 cp tests/picker-focus-helper.py "$test_root/focus-backend"

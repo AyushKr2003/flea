@@ -169,7 +169,7 @@ pane_leg() {
     local view=$1 probe="$work/pane-$1" out noisy
     leg_dirs "pane-$view" || { bad "pane $view: the probe directories could not be made"; return; }
     ln -s "$PWD/ui" "$probe/config/flea"
-    headless_commons "$work" "$probe/config/Commons"
+    headless_commons "$work" "$probe/config/Commons" || exit 1
     ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui"
     cp tests/heldlisting.qml "$probe/config/shell.qml"
     out=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \

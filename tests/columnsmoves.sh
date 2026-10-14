@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Drives every column move, no-carry navigation, superseding landing, and real cap and loading minimum offscreen.
+. "$(dirname "$0")/headless-commons.sh"
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -11,7 +12,7 @@ trap 'sandbox_remove "$root"' EXIT
 mkdir -p "$root/config" "$root/home" "$root/state" "$root/cache" "$root/runtime" || exit 1
 chmod 700 "$root/runtime" || exit 1
 ln -s "$PWD/ui" "$root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$root/config/Commons" || exit 1
+headless_commons "$root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$root/config/Ui" || exit 1
 cp tests/columnsmoves.qml "$root/config/shell.qml" || exit 1
 cp tests/columnsframes.js "$root/config/columnsframes.js" || exit 1
@@ -64,7 +65,7 @@ path.write_text(source)
 PY
     [ "$?" -eq 0 ] || exit 1
     ln -s "$leg/ui" "$leg/config/flea" || exit 1
-    ln -s "$(readlink -f ui/boot/Commons)" "$leg/config/Commons" || exit 1
+    headless_commons "$leg" || exit 1
     ln -s "$(readlink -f ui/boot/Ui)" "$leg/config/Ui" || exit 1
     cp tests/columnsmoves.qml "$leg/config/shell.qml" || exit 1
     cp tests/columnsframes.js "$leg/config/columnsframes.js" || exit 1

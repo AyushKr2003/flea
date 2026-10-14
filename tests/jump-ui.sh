@@ -43,7 +43,7 @@ done
 
 # The real ui/ as the module under test, and the Omarchy modules its qs.* imports resolve to at the config root.
 cp -a ui "$fixture/flea"
-headless_commons "$fixture" "$fixture/Commons"
+headless_commons "$fixture" "$fixture/Commons" || exit 1
 ln -s "$(readlink -f ui/Ui)" "$fixture/Ui"
 cp tests/jump-ui.qml "$fixture/shell.qml"
 

@@ -12,7 +12,7 @@ trap 'sandbox_remove "$test_root"' EXIT
 mkdir -p "$test_root"/{config,fixture,home,state,cache,data,runtime,tmp}
 chmod 700 "$test_root/runtime"
 ln -s "$PWD/ui" "$test_root/config/flea"
-headless_commons "$test_root"
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui"
 cp tests/quicklook-tablewarm.qml "$test_root/config/shell.qml"
 printf '# note\n\nA plain note with **bold** and `code`.\n' > "$test_root/fixture/note.md"

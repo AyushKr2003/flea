@@ -41,7 +41,7 @@ probe() {
     local name=$1 ui=$2 config="$test_root/config-$1"
     mkdir -p "$config" || return 1
     ln -s "$ui" "$config/flea" || return 1
-    headless_commons "$test_root" "$config/Commons" || return 1
+    headless_commons "$test_root" "$config/Commons" || exit 1
     ln -s "$(readlink -f ui/boot/Ui)" "$config/Ui" || return 1
     cp tests/fontpane.qml "$config/shell.qml" || return 1
     cp "$test_root/colors-dark.toml" "$palette/theme/colors.toml" || return 1

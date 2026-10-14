@@ -71,7 +71,7 @@ chmod 700 "$probe/bin/lsblk" "$probe/bin/gio" || exit 1
 env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state \
     '{"preview":{"column":false,"thumbnails":"off"},"updates":{"autoCheck":false}}' >/dev/null || exit 1
 ln -s "$PWD/ui" "$probe/config/flea"
-headless_commons "$probe"
+headless_commons "$probe" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui"
 ln -s "$PWD/ui/boot/fleatab.qml" "$probe/config/fleatab.qml"
 cp tests/hidden-release.qml "$probe/config/shell.qml"

@@ -22,7 +22,7 @@ def object_body(source, name):
     for at in range(start + 1, len(code)):
         depth += (code[at] == '{') - (code[at] == '}')
         if depth == 0:
-            return code[start + 1:at]
+            return source[start + 1:at]
     raise ValueError(f'{name} has no closing brace')
 
 
@@ -35,9 +35,24 @@ def members(source):
         depth += (char == '{') - (char == '}')
     # Sample input: property bool saving: false; Item { property bool child: false } declares only saving on the owner.
     properties = re.finditer(r'\bproperty\s+\w+\s+(\w+)\s*:', code)
-    # Sample input: function accept() {}; Item { function child() {} } declares only accept on the owner.
-    functions = re.finditer(r'\bfunction\s+(\w+)\s*\(', code)
-    return {m[1] for group in (properties, functions) for m in group if depths[m.start()] == 0}
+    declared = {m[1] for m in properties if depths[m.start()] == 0}
+    previous = None
+    # Sample input: helper: /* note */ function accept() {} has ':' before function; a quoted value remains one token.
+    tokens = re.finditer(r'''//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\w+|[^\s]''', source, re.S)
+    for token in tokens:
+        if token[0].startswith(('//', '/*')):
+            continue
+        boundary = previous is None or previous[0] in (';', '}')
+        if previous is not None and '\n' in source[previous.end():token.start()]:
+            boundary |= previous[0] not in (':', '=', ',', '(', '[', '?', '+', '-', '*', '/', '%', '&', '|', '^', '!', '~', '<', '>', '.',
+                                            'return', 'throw', 'new', 'void', 'typeof', 'delete', 'yield', 'await', 'in', 'instanceof')
+        if token[0] == 'function' and boundary and depths[token.start()] == 0:
+            # Sample input: function accept() {} starts a statement; property var helper: function accept() {} does not.
+            match = re.match(r'function\s+(\w+)\s*\(', code[token.start():])
+            if match:
+                declared.add(match[1])
+        previous = token
+    return declared
 
 
 def contract(owner, harness, readers):
@@ -61,6 +76,9 @@ def controls():
     mock = 'QtObject { id: mockPicker; property bool saving: false; function accept() {} }'
     readers = {'control.qml': 'enabled: root.picker.saving; onClicked: root.picker.accept()'}
     assert contract(owner, mock, readers) == {'saving', 'accept'}
+    literal_owner = owner.replace('function accept()', 'property string label: "ok" // note\nfunction accept()')
+    literal_mock = mock.replace('function accept()', 'property string label: "ok" // note\nfunction accept()')
+    assert contract(literal_owner, literal_mock, readers) == {'saving', 'accept'}
     for declaration in ('property bool saving: false', 'function accept() {}'):
         for replacement in ('Item { ' + declaration + ' }', '// ' + declaration + '\n', '/* ' + declaration + ' */'):
             for subject in ('owner', 'mock'):
@@ -70,7 +88,19 @@ def controls():
                 except ValueError:
                     continue
                 raise AssertionError(f'{subject} accepted a child or commented declaration: {replacement}')
-    print('FRAMEGAP PICKER_CONTROLS 12 missing root declarations rejected')
+    expressions = ('property var helper: function accept() {}', 'property var helper:\nfunction accept() {}',
+                   'property var helper: (\nfunction accept() {})', 'property var helper: /* note */\nfunction accept() {}')
+    for expression in expressions:
+        for subject in ('owner', 'mock'):
+            try:
+                contract(owner.replace('function accept() {}', expression) if subject == 'owner' else owner,
+                         mock.replace('function accept() {}', expression) if subject == 'mock' else mock, readers)
+            except ValueError as error:
+                assert 'accept' in str(error), error
+                continue
+            raise AssertionError(f'{subject} accepted a named function expression as a method: {expression}')
+    assert members('property string label: "ok" // note\nfunction accept() {}') == {'label', 'accept'}
+    print('FRAMEGAP PICKER_CONTROLS 12 missing root declarations and 8 named function expressions rejected')
 
 
 if __name__ == '__main__':

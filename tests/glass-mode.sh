@@ -95,8 +95,9 @@ STUB
     env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state \
         '{"preview":{"thumbnails":"off"},"updates":{"autoCheck":false}}' >/dev/null \
         || { setup_failed "$name" "$bin --ui-state failed"; return 1; }
-    ln -s "$PWD/ui" "$probe/config/flea" && headless_commons "$probe" \
-        && ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui" && cp tests/glass-mode.qml "$probe/config/shell.qml" \
+    ln -s "$PWD/ui" "$probe/config/flea" || { setup_failed "$name" "linking the probe's UI failed"; return 1; }
+    headless_commons "$probe" || exit 1
+    ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui" && cp tests/glass-mode.qml "$probe/config/shell.qml" \
         || { setup_failed "$name" "linking the probe's shell directory failed"; return 1; }
     local log="$probe/qs.log" tick sig=()
     if [[ "$mode" == socket ]]; then

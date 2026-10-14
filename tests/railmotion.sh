@@ -43,7 +43,7 @@ printf '{"blockdevices":[]}\n'
 SH
 chmod 700 "$probe/bin/lsblk" || exit 1
 ln -s "$PWD/ui" "$probe/config/flea"
-headless_commons "$probe"
+headless_commons "$probe" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui"
 ln -s "$PWD/ui/boot/fleatab.qml" "$probe/config/fleatab.qml"
 cp tests/railmotion.qml "$probe/config/shell.qml"

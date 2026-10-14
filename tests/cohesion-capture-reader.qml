@@ -5,6 +5,7 @@ import QtTest
 import "flea" as Flea
 import "flea/js/Buttons.js" as Buttons
 import "flea/js/Scroll.js" as Scroll
+import "button-probe.js" as Probe
 
 // Real controls exercise the capture-only reader, including geometry while pressed and an item outside its clipping parent.
 ShellRoot {
@@ -17,6 +18,9 @@ ShellRoot {
     property var restLabel: null
     property double pressSince: 0
     property var reader: null
+    property var restFrame: null
+    property var restWash: null
+    property double pressedAt: 0
     property double wakeAt: 0
     readonly property int wakeWaitMs: 3000
     property double hoverAt: 0
@@ -50,12 +54,21 @@ ShellRoot {
         }
         return null
     }
+    function box(item) {
+        var a = item.mapToItem(window.contentItem, 0, 0)
+        var b = item.mapToItem(window.contentItem, item.width, item.height)
+        return [a.x, a.y, b.x - a.x, b.y - a.y]
+    }
+    function insetBox(before, x, y) { return [before[0] + x, before[1] + y, before[2] - 2 * x, before[3] - 2 * y] }
     function report() {
         timer.running = false
         console.log("COHCAPTURE DONE checks=" + root.checks + " failed=" + root.failures.length)
         Quickshell.execDetached(["kill", String(Quickshell.processId)])
     }
-    Component.onCompleted: root.reader = Qt.createComponent("flea/IpcControls.qml").createObject(root)
+    Component.onCompleted: {
+        Flea.Theme.reducedMotion = false
+        root.reader = Qt.createComponent("flea/IpcControls.qml").createObject(root)
+    }
 
     FloatingWindow {
         id: window
@@ -109,22 +122,38 @@ ShellRoot {
                 root.check(!!choice && choice.value === "1" && choice.focused, "the filter menu row reports its caption, action and cursor")
                 var hint = state.controls.find(function(c) { return c.kind === "SettingsRow" })
                 root.check(!!hint && !hint.hoverLive && !hint.pressLive, "an informational settings row has no live hover or press target")
+                var frame = Probe.find(button, "buttonFrame"), wash = Probe.find(button, "buttonWash")
+                root.check(!!frame && !!wash, "the button exposes its actual frame and wash")
+                if (!frame || !wash) { root.report(); return }
+                root.restFrame = root.box(frame)
+                root.restWash = root.box(wash)
+                root.pressedAt = Date.now()
                 driver.mousePress(stage, root.rest.targetX, root.rest.targetY, Qt.LeftButton, Qt.NoModifier, 0)
                 root.pressSince = Date.now()
                 root.stage = 1
                 return
             }
             if (root.stage === 1) {
-                if (Date.now() - root.pressSince < Buttons.PRESS_MS) return
+                // Both press clocks must settle, including the unit's extra timer interval.
+                if (Date.now() - root.pressSince < Buttons.PRESS_MS
+                    || Date.now() - root.pressedAt < Buttons.PRESS_MS + timer.interval) return
                 var held = root.control(root.read(), "Press")
                 root.check(held.pressed, "a held press is read from the actual button")
                 root.check([held.x, held.y, held.w, held.h, held.targetX, held.targetY].join() ===
                     [root.rest.x, root.rest.y, root.rest.w, root.rest.h, root.rest.targetX, root.rest.targetY].join(), "a press keeps the hit box and coordinate signature fixed")
+                root.check(button.scale === 1 && held.x === root.rest.x && held.y === root.rest.y
+                    && held.w === root.rest.w && held.h === root.rest.h, "press keeps the root unscaled and coordinate signature stable")
                 var insetX = Flea.Theme.reducedMotion ? 0 : Math.round(button.width * (1 - Buttons.PRESS_SCALE) / 2)
                 var insetY = Flea.Theme.reducedMotion ? 0 : Math.round(button.frameHeight * (1 - Buttons.PRESS_SCALE) / 2)
                 root.check(root.rect(root.named(button, "buttonFrame"), button).join() ===
                     [insetX, button.frameY + insetY, Math.round(button.width) - 2 * insetX, Math.round(button.frameHeight) - 2 * insetY].join(), "only the frame takes the exact whole-pixel press inset")
                 root.check(root.rect(root.named(button, "buttonLabel"), stage).join() === root.restLabel.join(), "a press keeps the caption geometry fixed")
+                var frame = Probe.find(button, "buttonFrame"), wash = Probe.find(button, "buttonWash")
+                root.check(JSON.stringify(root.box(frame)) === JSON.stringify(root.insetBox(root.restFrame, insetX, insetY)),
+                    "press insets only the frame on whole pixels")
+                root.check(JSON.stringify(root.box(wash)) === JSON.stringify(root.insetBox(root.restWash, insetX, insetY)),
+                    "press insets only the wash on whole pixels")
+                root.check(Math.abs(wash.color.a - Buttons.WASH_PRESS) < 0.002, "the inset wash draws the actual press ink")
                 root.check(held.x <= root.rest.targetX && root.rest.targetX < held.x + held.w
                     && held.y <= root.rest.targetY && root.rest.targetY < held.y + held.h, "the original hit point still identifies the held control")
                 button.x += 1

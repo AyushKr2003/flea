@@ -62,7 +62,7 @@ XML
 env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state \
     '{"preview":{"column":false,"thumbnails":"off"},"updates":{"autoCheck":false}}' >/dev/null || exit 1
 ln -s "$PWD/ui" "$probe/config/flea"
-headless_commons "$probe"
+headless_commons "$probe" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui"
 # The window loads its tab catcher from the shell directory, so the probe ships it as the product does.
 ln -s "$PWD/ui/boot/fleatab.qml" "$probe/config/fleatab.qml"
@@ -127,7 +127,7 @@ for variant in normalfill green mutant trashrow; do
     else
         ln -s "$PWD/ui" "$config/flea" || exit 1
     fi
-    ln -s "$(readlink -f ui/boot/Commons)" "$config/Commons" || exit 1
+    headless_commons "$probe" "$config/Commons" || exit 1
     ln -s "$(readlink -f ui/boot/Ui)" "$config/Ui" || exit 1
     cp tests/rail-highlight.qml "$config/shell.qml" || exit 1
     cp tests/sidebar-flows-palette.js "$config/sidebar-flows-palette.js" || exit 1
