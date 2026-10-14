@@ -1,17 +1,37 @@
 // The source and its existing chunk buffer, kept apart from the destination writer.
 use std::fs::File;
 use std::io::{self, Read};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 // Linux FUSE_SUPER_MAGIC includes GVFS and MTP mounts, even when reached through a symlinked parent.
 const FUSE_MAGIC: i64 = 0x65735546;
-// The transfer checks Cancel at least every 25 ms while the source worker is inside a read.
+// Worker reads poll Cancel every 25 ms; synchronous cleanup still waits for an unresponsive destination device.
 const CANCEL_POLL: Duration = Duration::from_millis(25);
+// Four workers bound the threads, source descriptors and chunk buffers retained by cancelled FUSE reads.
+const MAX_READ_WORKERS: usize = 4;
+static LIVE_READ_WORKERS: AtomicUsize = AtomicUsize::new(0);
 // Local sources keep the original chunk sizes and direct read, with no channel or extra data copy.
 pub(super) const CHUNK: usize = 256 * 1024;
 const SMALL_CHUNK: usize = 8 * 1024;
+
+struct WorkerSlot;
+
+impl WorkerSlot {
+    fn claim() -> Option<WorkerSlot> {
+        LIVE_READ_WORKERS.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |live| {
+            if live < MAX_READ_WORKERS { Some(live + 1) } else { None }
+        }).ok().map(|_| WorkerSlot)
+    }
+}
+
+impl Drop for WorkerSlot {
+    fn drop(&mut self) {
+        LIVE_READ_WORKERS.fetch_sub(1, Ordering::Relaxed);
+    }
+}
 
 struct PendingRead {
     request: Sender<Vec<u8>>,
@@ -19,20 +39,46 @@ struct PendingRead {
 }
 
 impl PendingRead {
-    fn start(mut reader: impl Read + Send + 'static) -> io::Result<PendingRead> {
+    fn start(file: File) -> Result<PendingRead, File> {
+        #[cfg(test)]
+        let stand_in = TEST_READER.with(|slot| slot.borrow_mut().take());
+        let Some(slot) = WorkerSlot::claim() else { return Err(file); };
+        // The handoff keeps the original descriptor available if spawning fails, without a duplicate descriptor.
+        let held = Arc::new(Mutex::new(Some(file)));
+        let worker = Arc::clone(&held);
         let (request, buffers) = mpsc::channel::<Vec<u8>>();
         let (answers, result) = mpsc::channel();
         // The worker owns only the source and one moved buffer, never a destination descriptor or path.
-        std::thread::Builder::new().name("flea-copy-read".into()).spawn(move || {
+        let spawned = spawn_reader(move || {
+            // Declared first so the slot outlives source close and every chunk buffer, including on unwind.
+            let _slot = slot;
+            let reader = worker.lock().unwrap().take().unwrap();
+            #[cfg(test)]
+            let reader: Box<dyn Read + Send> = stand_in.unwrap_or_else(|| Box::new(reader));
+            let mut reader = reader;
             while let Ok(mut buffer) = buffers.recv() {
                 let answer = reader.read(&mut buffer);
                 if answers.send((buffer, answer)).is_err() {
                     break;
                 }
             }
-        })?;
-        Ok(PendingRead { request, result })
+        });
+        match spawned {
+            Ok(_) => Ok(PendingRead { request, result }),
+            Err(_) => {
+                let file = held.lock().unwrap().take().unwrap();
+                Err(file)
+            }
+        }
     }
+}
+
+fn spawn_reader(work: impl FnOnce() + Send + 'static) -> io::Result<std::thread::JoinHandle<()>> {
+    #[cfg(test)]
+    if TEST_SPAWN_FAILURE.with(|slot| slot.replace(false)) {
+        return Err(io::ErrorKind::Other.into());
+    }
+    std::thread::Builder::new().name("flea-copy-read".into()).spawn(work)
 }
 
 enum Source {
@@ -47,14 +93,14 @@ pub(super) struct Reader {
 
 impl Reader {
     pub(super) fn new(file: File, size: u64, magic: Option<i64>) -> io::Result<Reader> {
+        let isolated = magic == Some(FUSE_MAGIC);
         #[cfg(test)]
-        let stand_in = TEST_READER.with(|slot| slot.borrow_mut().take());
-        #[cfg(test)]
-        if let Some(reader) = stand_in {
-            return Ok(Reader::with_source(Source::Pending(PendingRead::start(reader)?), size));
-        }
-        let source = if magic == Some(FUSE_MAGIC) {
-            Source::Pending(PendingRead::start(file)?)
+        let isolated = isolated || TEST_READER.with(|slot| slot.borrow().is_some());
+        let source = if isolated {
+            match PendingRead::start(file) {
+                Ok(pending) => Source::Pending(pending),
+                Err(file) => Source::File(file),
+            }
         } else {
             Source::File(file)
         };
@@ -98,6 +144,27 @@ impl Reader {
 thread_local! {
     static TEST_READER: std::cell::RefCell<Option<Box<dyn Read + Send>>> = const { std::cell::RefCell::new(None) };
     static BUFFERS: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
+    static TEST_SPAWN_FAILURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+static TEST_WORKERS: Mutex<()> = Mutex::new(());
+
+#[cfg(test)]
+fn wait_for_workers() {
+    let started = std::time::Instant::now();
+    while LIVE_READ_WORKERS.load(Ordering::Relaxed) != 0 {
+        assert!(started.elapsed() < Duration::from_secs(5), "released source readers must free their worker slots");
+        std::thread::yield_now();
+    }
+}
+
+// Worker-using tests serialize on the process-wide cap and wait for the previous test's detached cleanup.
+#[cfg(test)]
+pub(super) fn test_workers() -> std::sync::MutexGuard<'static, ()> {
+    let held = TEST_WORKERS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    wait_for_workers();
+    held
 }
 
 // The next copy on this thread opens and checks its source normally, then reads this deterministic stand-in.
@@ -113,22 +180,5 @@ pub(super) fn test_take_buffers() -> Vec<usize> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::backend::testdir::TestDir;
-
-    #[test]
-    fn only_fuse_sources_take_the_read_worker() {
-        let d = TestDir::new("copyreadclass");
-        let src = d.file("source", "body");
-        for magic in [None, Some(0xEF53), Some(0x01021994), Some(FUSE_MAGIC)] {
-            let file = File::open(&src).unwrap();
-            let mut reader = Reader::new(file, 4, magic).unwrap();
-            assert_eq!(matches!(&reader.source, Source::Pending(_)), magic == Some(FUSE_MAGIC));
-            let cancel = AtomicBool::new(false);
-            assert_eq!(reader.read(&cancel).unwrap(), 4);
-            assert_eq!(&reader.buffer[..4], b"body");
-            assert_eq!(reader.read(&cancel).unwrap(), 0);
-        }
-    }
-}
+#[path = "copyread_tests.rs"]
+mod tests;

@@ -49,6 +49,7 @@ fn a_read_released_after_cancel_never_writes_to_the_partial_or_a_reused_name() {
 }
 
 fn cancel_held_read(first: bool) {
+    let _workers = copyread::test_workers();
     let d = TestDir::new("copyreadcancel");
     let src = d.file("source", "body");
     let dst = d.join("destination");
@@ -113,6 +114,7 @@ impl Read for LiveRead {
 
 #[test]
 fn a_slow_live_source_reports_each_chunk_before_its_next_read_finishes() {
+    let _workers = copyread::test_workers();
     let d = TestDir::new("copyreadlive");
     let src = d.file("source", "aaaabbbbcccc");
     let dst = d.join("destination");
@@ -144,6 +146,7 @@ fn a_slow_live_source_reports_each_chunk_before_its_next_read_finishes() {
 
 #[test]
 fn a_stalled_transfer_reports_cancelled_before_the_read_returns() {
+    let _workers = copyread::test_workers();
     use crate::backend::opsreq::{run_transfer, OpMsg};
     let d = TestDir::new("copyreadtransfer");
     let src = d.file("source", "body");
