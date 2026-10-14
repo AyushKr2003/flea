@@ -143,6 +143,7 @@ tests/gridprebuild.qml 457
 tests/code-column.qml 416
 tests/preview-pdf-flow.qml 439
 tests/preview-layout-loop.qml 408
+tests/preview-scroll.qml 523
 tests/columnsprebuild.qml 416
 ui/KeymapSheet.qml 551
 ui/List.qml 480

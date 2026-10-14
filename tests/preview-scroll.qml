@@ -39,7 +39,13 @@ ShellRoot {
     property int badFrames: 0
     property bool watchScroll: false
     property bool captured: false
-    readonly property var ops: ["open", "listing-ready", "seams", "supersede-scroll", "supersede-page", "supersede-return", "cancel-scroll", "cancel-return", "cancel-page", "cancel-reset", "capture-code-rest", "code-click", "code-wheel", "forward", "capture-code-paged", "back", "code-save", "code-next", "code-return",
+    property bool htmlActive: false
+    property bool htmlSampling: false
+    property int htmlFrames: 0
+    property var htmlFirstFrame: null
+    readonly property int htmlSavedY: 217
+    readonly property int htmlMovedY: 341
+    readonly property var ops: ["open", "listing-ready", "seams", "html-restore", "html-move", "html-source", "html-source-ready", "html-finish", "supersede-scroll", "supersede-page", "supersede-return", "cancel-scroll", "cancel-return", "cancel-page", "cancel-reset", "capture-code-rest", "code-click", "code-wheel", "forward", "capture-code-paged", "back", "code-save", "code-next", "code-return",
         "code-memory", "code-end", "forward-end", "code-top", "back-top", "short", "short-check", "markdown",
         "capture-markdown-rest", "markdown-click", "markdown-wheel", "forward", "capture-markdown-paged", "back", "markdown-save", "markdown-next", "markdown-return", "markdown-memory",
         "markdown-end", "forward-end", "markdown-top", "back-top", "csv", "csv-seams", "capture-csv-rest", "csv-wheel", "forward", "capture-csv-paged", "back", "csv-save",
@@ -132,6 +138,15 @@ ShellRoot {
         return { y: v.contentY, origin: v.originY, index: index, offset: item ? item.y - v.contentY : null }
     }
     function sample() {
+        if (root.htmlSampling) {
+            var viewport = htmlDocument.viewport
+            if (root.htmlFrames === 0)
+                root.htmlFirstFrame = [coldFrame.visible, coldScroll.pendingRestore, coldScroll.loading,
+                    viewport.contentY, coldScroll.drawnY]
+            root.htmlFrames++
+            if (coldFrame.visible && viewport.contentY !== root.expectedY)
+                root.check("HTML live frame keeps its restored offset", viewport.contentY, root.expectedY)
+        }
         var c = root.col(), v = root.view()
         if (!c || c.swap.holding || c.swap.capturing) return
         if (root.restoring && root.name() === root.restoring) {
@@ -168,6 +183,57 @@ ShellRoot {
             root.near("knob shows visible share", b.handleLength, b.trackLength * root.view().height / root.view().contentHeight)
             root.check("knob stays hidden at rest", b.shown, false)
             root.check("first Markdown without its Loader stays loading", coldScroll.loading, true)
+        } else if (op === "html-restore") {
+            firstMarkdown.isMarkdownRow = false
+            firstMarkdown.isHtmlRow = true
+            firstMarkdown.markdown = htmlDocument
+            firstMarkdown.path = root.fixture + "/saved.html"
+            firstMarkdown.row = { n: "saved.html", d: false, s: 100, m: 7 }
+            firstMarkdown.swap = htmlSwap
+            coldScroll.store(firstMarkdown.path, coldScroll.subject, { y: root.htmlSavedY })
+            coldScroll.follow()
+            root.htmlActive = true
+            root.expectedY = root.htmlSavedY
+            root.htmlFrames = 0
+            root.htmlSampling = true
+            htmlDocument.renderedReady = true
+            root.waiting = function () {
+                if (root.htmlFrames < 1) return false
+                root.check("rendered HTML restores without a code item", [coldScroll.html === htmlDocument, coldScroll.code], [true, null])
+                root.check("rendered HTML first live frame holds the saved offset", root.htmlFirstFrame,
+                    [true, false, false, root.htmlSavedY, root.htmlSavedY])
+                root.htmlSampling = false
+                return true
+            }
+        } else if (op === "html-move") {
+            firstMarkdown.linesItem.code = inactiveCode
+            renderedPage.contentY = root.htmlMovedY
+            root.check("rendered HTML scroll ignores the inactive cold code reader", [htmlSwap.holds, coldScroll.scrollPending], [0, false])
+            root.check("rendered HTML remembers its new drawn offset", [coldScroll.drawnY, coldScroll.places[firstMarkdown.path].place.y],
+                [root.htmlMovedY, root.htmlMovedY])
+        } else if (op === "html-source") {
+            htmlDocument.sourceView = true
+            coldScroll.follow()
+            root.waiting = function () {
+                root.check("HTML Source uses its own code reader and viewport", [coldScroll.code === htmlSourceCode, coldScroll.viewport === sourceViewport], [true, true])
+                root.check("HTML Source waits for its cold code window", [coldScroll.pendingRestore, coldScroll.loading, sourceViewport.contentY],
+                    [true, true, root.htmlMovedY])
+                return true
+            }
+        } else if (op === "html-source-ready") {
+            root.expectedY = root.htmlMovedY
+            root.htmlFrames = 0
+            root.htmlSampling = true
+            htmlSourceCode.firstScreen = true
+            root.waiting = function () {
+                if (root.htmlFrames < 1) return false
+                root.check("HTML Source first live frame waits for code and holds the offset", root.htmlFirstFrame,
+                    [true, false, false, root.htmlMovedY, root.htmlMovedY])
+                root.htmlSampling = false
+                return true
+            }
+        } else if (op === "html-finish") {
+            root.htmlActive = false
         } else if (op === "supersede-scroll" || op === "cancel-scroll") {
             root.col().pageBy(1)
             root.check("cold page starts a pending capture", [root.memory().scrollPending, root.col().swap.capturing], [true, true])
@@ -348,7 +414,65 @@ ShellRoot {
         TestEvent { id: driver }
         Item { id: frameProbe }
     }
-    Item { id: coldFrame; visible: false }
+    Rectangle {
+        id: coldFrame
+        parent: win.contentItem
+        width: 240
+        height: 100
+        z: 100
+        color: Flea.Theme.color.background
+        visible: root.htmlActive && !coldScroll.loading
+    }
+    Flickable {
+        id: renderedPage
+        parent: coldFrame
+        anchors.fill: parent
+        visible: !htmlDocument.sourceView
+        contentWidth: width
+        contentHeight: 1200
+        clip: true
+        property int currentIndex: -1
+        function forceLayout() {}
+        Text { width: parent.width; height: 1200; text: "Rendered HTML\n".repeat(60); color: Flea.Theme.color.foreground }
+    }
+    ListView {
+        id: sourceViewport
+        parent: coldFrame
+        anchors.fill: parent
+        visible: htmlDocument.sourceView
+        model: 100
+        clip: true
+        delegate: Text { required property int index; width: ListView.view.width; height: 20; text: "Source " + index; color: Flea.Theme.color.foreground }
+    }
+    QtObject {
+        id: htmlSourceCode
+        property bool settled: true
+        property bool firstScreen: false
+        readonly property var viewport: sourceViewport
+    }
+    QtObject {
+        id: inactiveCode
+        property bool settled: false
+        property bool firstScreen: false
+    }
+    QtObject {
+        id: htmlDocument
+        property bool sourceView: false
+        property bool renderedReady: false
+        readonly property var sourceCode: htmlDocument.sourceView ? htmlSourceCode : null
+        readonly property var viewport: htmlDocument.sourceView ? sourceViewport : renderedPage
+        readonly property bool contentReady: htmlDocument.sourceView ? htmlSourceCode.settled : htmlDocument.renderedReady
+        readonly property bool loading: htmlDocument.sourceView ? !htmlSourceCode.firstScreen : !htmlDocument.renderedReady
+    }
+    QtObject {
+        id: htmlSwap
+        property int holds: 0
+        property bool capturing: false
+        property bool holding: false
+        property string key: ""
+        function hold(callback, key, wheel) { htmlSwap.holds++; htmlSwap.key = key; htmlSwap.capturing = true }
+        function start(ready) {}
+    }
     QtObject {
         id: firstMarkdown
         property Item frameItem: coldFrame
