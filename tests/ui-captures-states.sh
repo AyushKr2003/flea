@@ -65,20 +65,9 @@ EOS
 # Columns heroes for a held listing and a denied folder, at 2 to 5 columns.
 case_cap_heldcolumns() {
     local dir listing markers real_bin n estate err_by denied denied_sentence
-    denied_sentence=$(python3 - "$repo/ui/js/Errors.js" <<'PY'
-import json
-from pathlib import Path
-import re
-import sys
-source = Path(sys.argv[1]).read_text()
-# Sample input: "var WORDS = {\n    denied: \"Permission denied\",\n}" yields Permission denied.
-table = re.search(r'\bvar\s+WORDS\s*=\s*\{(.*?)^\}', source, re.S | re.M)
-values = [] if table is None else re.findall(r'^\s*denied\s*:\s*("(?:\\.|[^"\\])*")\s*,?\s*$', table[1], re.M)
-if len(values) != 1:
-    sys.exit("Errors.WORDS.denied must name one string")
-print(json.loads(values[0]))
-PY
-    ) || fail "heldcolumns: Errors.WORDS.denied is unreadable"
+    # Sample input: '    denied: "This folder cannot be opened: you do not have permission.",' yields the quoted sentence.
+    denied_sentence=$(sed -n 's/^    denied: "\([^"\\]*\)",$/\1/p' "$repo/ui/js/Errors.js")
+    [[ "$(grep -c '^    denied: ' "$repo/ui/js/Errors.js")" -eq 1 ]] || fail "heldcolumns: Errors.WORDS.denied must name one string"
     [[ -n "$denied_sentence" ]] || fail "heldcolumns: Errors.WORDS.denied is empty"
     dir="$fixture_root/cap-heldcolumns"
     listing="$dir/listing"
