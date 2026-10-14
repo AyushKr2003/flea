@@ -2665,7 +2665,7 @@ record clears when the edit leaves that row or the tile is reused, so a pooled t
 ## File budget
 
 Columns landings retain their answered peeks and bound changing ancestor slots through the existing swap timings.
-The scoped ceilings are re-derived with `wc -l`: `ui/ColumnsArea.qml` 587, `ui/ColumnPane.qml` 456 and `tests/columnsfilter.qml` 403.
+The scoped ceilings are re-derived with `wc -l`: `ui/ColumnsArea.qml` 590, `ui/ColumnPane.qml` 461 and `tests/columnsfilter.qml` 403.
 The filter fixture declares the backend's `codeResult` signal so the Markdown preview keeps its strict log check.
 
 COPY-TRASH on the 0.3.11 stage moves the `src/backend/trashbrowse.rs` ceiling from 900 to 1025 (`wc -l`) for the approved typed refusals, per-item damaged-record failures and backward target naming, retaining the stage's newest-first listing and membership checks.

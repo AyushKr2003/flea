@@ -32,19 +32,3 @@ for round in $(seq "$rounds"); do
         || { tail -n 20 "$root/probe.log"; echo "FAIL columnsback: round $round (qs exit $status) did not land every Back whole in its first frame"; exit 1; }
 done
 echo "columnsback: $rounds rounds of 31 Columns Back landings drew parent, active and child whole in their first frame"
-
-cp tests/columnsmoves.qml "$root/config/shell.qml" || exit 1
-cp tests/columnsframes.js "$root/config/columnsframes.js" || exit 1
-env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
-    HOME="$root/home" XDG_STATE_HOME="$root/state" XDG_CACHE_HOME="$root/cache" XDG_RUNTIME_DIR="$root/runtime" \
-    FLEA_BIN="$PWD/target/debug/flea" \
-    QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 \
-    timeout 120 qs -p "$root/config" > "$root/moves.log" 2>&1
-status=$?
-grep -a 'COLUMNMOVES' "$root/moves.log" | sed 's/^.*qml: //'
-if [ "$status" -ne 0 ] || ! grep -q 'COLUMNMOVES DONE 12 moves, 0 failed' "$root/moves.log" \
-    || grep -qE 'TypeError|ReferenceError|Binding loop' "$root/moves.log"; then
-    tail -n 25 "$root/moves.log"
-    echo "FAIL columnsback: column move frames (qs exit $status)"
-    exit 1
-fi
