@@ -8,6 +8,11 @@ import sys
 import tempfile
 import time
 
+POLL_S = 0.02
+TICK_POLL_S = 0.002
+NEAR_TICK_S = 0.95
+READINESS_FAILURE_WAIT_S = 0.2
+
 repo, parent, marker = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
 if not parent.is_absolute() or not (parent / marker).is_file():
     raise SystemExit("FAIL capture-lifecycle: missing absolute owned fixture root")
@@ -29,12 +34,13 @@ def await_condition(condition, seconds=3):
     while time.monotonic() < end:
         if condition():
             return True
-        time.sleep(0.02)
+        time.sleep(POLL_S)
     return condition()
 
 
 def running(pid):
     try:
+        # Sample stat: '123 (sleep helper) S 1 123 123 ...'; state follows the final closing parenthesis.
         return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0] != "Z"
     except FileNotFoundError:
         return False
@@ -61,8 +67,32 @@ def send_group(group, sig):
 
 
 def stop(process):
+    force_stop_session(process)
+
+
+def session_groups(process):
+    # start_new_session makes the launched PID its SID; every matching group belongs to that owned session.
+    groups = set()
+    for path in Path("/proc").iterdir():
+        if path.name.isdigit():
+            try:
+                pid = int(path.name)
+                if os.getsid(pid) == process.pid and running(pid):
+                    groups.add(os.getpgid(pid))
+            except (ProcessLookupError, PermissionError):
+                pass
+    return groups
+
+
+def force_stop_session(process):
     send_group(process.pid, signal.SIGKILL)
     process.wait(timeout=3)
+    def stopped():
+        groups = session_groups(process)
+        for group in groups:
+            send_group(group, signal.SIGKILL)
+        return not groups
+    assert await_condition(stopped), "owned session groups survived forced cleanup"
 
 
 def launch(script, case, *args, env=None):
@@ -83,6 +113,12 @@ case_root=$1
 coh_theme=signal-proof coh_budget_s=60 coh_teardown_s=1 coh_poll_s=0.02 coh_usec_per_s=1000000
 coh_deadline=$((SECONDS + 60))
 coh_held=0
+child_disposition=${2:-ignore}
+tick_poll_s=''' + str(TICK_POLL_S) + '''
+kill() {
+    case "$1" in -TERM|-KILL) printf '%s %s %s\\n' "$1" "$SECONDS" "$EPOCHREALTIME" >> "$case_root/signals" ;; esac
+    builtin kill "$@"
+}
 coh_ydotool() {
     printf 'RELEASE_BEGIN\\n'
     command sleep 0.1
@@ -96,59 +132,107 @@ coh_run_surface() {
     set -x
     coh_held=1
     printf '%s\\n' "$BASHPID" > "$case_root/worker.pid"
-    bash -c 'trap "" TERM; printf "%s\\n" "$BASHPID" > "$1"; exec sleep 60' bash "$case_root/child.pid" &
+    bash -c '[[ "$2" != ignore ]] || trap "" TERM; printf "%s\\n" "$BASHPID" > "$1"; exec sleep 60' bash "$case_root/child.pid" "$child_disposition" &
     local child=$!
     while [[ ! -s "$case_root/child.pid" ]]; do command sleep 0.01; done
-    : > "$case_root/ready"
+    if [[ "$child_disposition" != not-ready ]]; then
+        set +x
+        local tick=$SECONDS
+        while (( SECONDS == tick )); do command sleep "$tick_poll_s"; done
+        printf '%s %s\\n' "$SECONDS" "$EPOCHREALTIME" > "$case_root/ready"
+        set -x
+    fi
     wait "$child"
 }
 coh_bounded signal 60 coh_surface_work
 printf 'UNEXPECTED_RETURN %s\\n' "$?"
 ''')
 
-for sig in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
-    for target in ("pid", "group"):
-        label = f"{sig.name}/{target}"
-        case = root / f"{sig.name}-{target}"
-        case.mkdir()
-        (case / marker).touch()
-        sentinel = subprocess.Popen(["sleep", "60"], start_new_session=True)
-        process = launch(runner, case)
-        groups = []
-        try:
-            ready = await_condition(lambda: (case / "ready").exists() or process.poll() is not None)
-            assert ready and (case / "ready").exists(), "surface did not become ready"
-            worker = int((case / "worker.pid").read_text())
-            child = int((case / "child.pid").read_text())
-            def children_ready():
-                children = Path(f"/proc/{process.pid}/task/{process.pid}/children").read_text().split()
-                groups[:] = [int(pid) for pid in children]
-                return len(groups) == 2
-            assert await_condition(children_ready), "worker/watchdog groups unavailable"
-            assert worker in groups and all(os.getpgid(pid) == pid for pid in groups), "groups are not owned children"
-            check(os.getpgid(child) == worker, f"{label} descendant belongs to the worker")
-            if target == "pid":
-                os.kill(process.pid, sig)
-            else:
-                send_group(process.pid, sig)
-            stopped = await_condition(lambda: not any(members(group) for group in groups))
-            status = process.wait(timeout=3)
-            released = (case / "release").read_text().splitlines() if (case / "release").exists() else []
-            log = (case / "runner.log").read_text()
-            if not stopped or released != ["click 0x80"]:
-                print(f"CAPTURELIFECYCLE TRACE {label}\n{log}", flush=True)
-            check(stopped, f"{label} worker and watchdog descendants stop", f"remaining={[members(g) for g in groups]}")
-            check(released == ["click 0x80"], f"{label} held button releases once", str(released))
-            check(status == 128 + sig and f"ORIGINAL {sig.name[3:]}" in log,
-                  f"{label} original caller trap runs after cleanup", f"exit={status}")
-            check(sentinel.poll() is None, f"{label} unrelated process survives")
-        except Exception as error:
-            check(False, f"{label} probe completed", str(error))
-        finally:
-            for group in groups:
-                send_group(group, signal.SIGKILL)
-            stop(process)
-            stop(sentinel)
+signal_cases = [(sig, target, "ignore") for sig in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM)
+                for target in ("pid", "group")]
+signal_cases.append((signal.SIGTERM, "pid", "cooperative"))
+for sig, target, disposition in signal_cases:
+    label = f"{sig.name}/{target}/{disposition}"
+    case = root / f"{sig.name}-{target}-{disposition}"
+    case.mkdir()
+    (case / marker).touch()
+    sentinel = subprocess.Popen(["sleep", "60"], start_new_session=True)
+    process = launch(runner, case, disposition)
+    groups = []
+    try:
+        ready = await_condition(lambda: (case / "ready").exists() or process.poll() is not None)
+        assert ready and (case / "ready").exists(), "surface did not become ready"
+        worker = int((case / "worker.pid").read_text())
+        child = int((case / "child.pid").read_text())
+        def children_ready():
+            # Sample children: '123 124 ' lists decimal child PIDs separated by whitespace.
+            children = Path(f"/proc/{process.pid}/task/{process.pid}/children").read_text().split()
+            groups[:] = [int(pid) for pid in children]
+            return len(groups) == 2
+        assert await_condition(children_ready), "worker/watchdog groups unavailable"
+        assert worker in groups and all(os.getpgid(pid) == pid for pid in groups), "groups are not owned children"
+        check(os.getpgid(child) == worker, f"{label} descendant belongs to the worker")
+        tick_seconds, tick_at = (case / "ready").read_text().split()
+        target_at = float(tick_at) + NEAR_TICK_S
+        while time.time() < target_at:
+            time.sleep(min(POLL_S, max(0.0, target_at - time.time())))
+        sent_at = time.monotonic()
+        if target == "pid":
+            os.kill(process.pid, sig)
+        else:
+            send_group(process.pid, sig)
+        stopped = await_condition(lambda: not any(members(group) for group in groups))
+        status = process.wait(timeout=3)
+        elapsed = time.monotonic() - sent_at
+        released = (case / "release").read_text().splitlines() if (case / "release").exists() else []
+        log = (case / "runner.log").read_text()
+        if not stopped or released != ["click 0x80"]:
+            print(f"CAPTURELIFECYCLE TRACE {label}\n{log}", flush=True)
+        signals = [line.split() for line in (case / "signals").read_text().splitlines()]
+        term = next(row for row in signals if row[0] == "-TERM")
+        kill_at = next((float(row[2]) for row in signals if row[0] == "-KILL"), None)
+        near_tick = int(term[1]) == int(tick_seconds) and 0.90 <= float(term[2]) - float(tick_at) < 1
+        check(near_tick, f"{label} signal lands near the runner's actual SECONDS tick",
+              f"tick={tick_at} TERM={term[2]} seconds={tick_seconds}/{term[1]}")
+        if disposition == "ignore":
+            grace = kill_at - float(term[2]) if kill_at is not None else 0
+            check(1 <= grace < 2.5, f"{label} KILL follows a full bounded one-second grace", f"seconds={grace:.6f}")
+        else:
+            check(kill_at is None and elapsed < 0.8, f"{label} stopped groups skip the remaining grace",
+                  f"seconds={elapsed:.6f} KILL={kill_at}")
+        check(stopped, f"{label} worker and watchdog descendants stop", f"remaining={[members(g) for g in groups]}")
+        check(released == ["click 0x80"], f"{label} held button releases once", str(released))
+        check(status == 128 + sig and f"ORIGINAL {sig.name[3:]}" in log,
+              f"{label} original caller trap runs after cleanup", f"exit={status}")
+        check(sentinel.poll() is None, f"{label} unrelated process survives")
+    except Exception as error:
+        check(False, f"{label} probe completed", str(error))
+    finally:
+        for group in groups:
+            send_group(group, signal.SIGKILL)
+        stop(process)
+        stop(sentinel)
+
+case = root / "not-ready"
+case.mkdir()
+(case / marker).touch()
+sentinel = subprocess.Popen(["sleep", "60"], start_new_session=True)
+process = launch(runner, case, "not-ready")
+try:
+    assert await_condition(lambda: (case / "child.pid").exists()), "unready surface never spawned"
+    assert await_condition(lambda: len(session_groups(process) - {process.pid}) == 2), "unready groups never spawned"
+    discovered = session_groups(process) - {process.pid}
+    ready = await_condition(lambda: (case / "ready").exists(), READINESS_FAILURE_WAIT_S)
+    check(not ready, "readiness failure control actually times out before group registration")
+    stop(process)
+    check(not any(members(group) for group in discovered), "readiness failure cleanup removes undiscovered owned groups",
+          f"groups={sorted(discovered)} remaining={[members(g) for g in discovered]}")
+    check(sentinel.poll() is None, "readiness failure cleanup leaves unrelated sentinel alive")
+except Exception as error:
+    check(False, "readiness failure probe completed", str(error))
+finally:
+    force_stop_session(process)
+    stop(sentinel)
 
 normal = root / "normal-runner.sh"
 normal.write_text('''set -u

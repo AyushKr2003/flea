@@ -490,8 +490,8 @@ coh_bounded() {
             for signal in TERM KILL; do
                 # TERM was sent once; a second one can re-enter EXIT and skip the held release.
                 [[ "$signal" != KILL ]] || kill -KILL -- "-$group" 2>/dev/null || :
-                end=$((SECONDS + coh_teardown_s))
-                while kill -0 -- "-$group" 2>/dev/null && (( SECONDS < end )); do
+                end=$(( ${EPOCHREALTIME/./} + coh_teardown_s * coh_usec_per_s ))
+                while kill -0 -- "-$group" 2>/dev/null && (( ${EPOCHREALTIME/./} < end )); do
                     command sleep "$coh_poll_s"
                 done
                 kill -0 -- "-$group" 2>/dev/null || break
