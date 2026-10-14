@@ -16,16 +16,36 @@ function parseLine(line, home) {
     return { role: kv[1], path: path }
 }
 
-// Sample input: XDG_DOWNLOAD_DIR="$HOME/Downloads".
-function userDirs(body, home) {
-    var out = []
+// Sample input: XDG_DOWNLOAD_DIR="$HOME/Old" then XDG_DOWNLOAD_DIR="$HOME/Inbox"; the last valid path wins.
+function readRoles(body, home) {
+    var roles = []
+    var paths = {}
     var lines = String(body || "").split("\n")
     for (var i = 0; i < lines.length; i++) {
         var entry = parseLine(lines[i], home)
-        // A disabled role points at Home, which is not a separate place or a default-sort folder.
-        if (!entry || !entry.path || entry.path === home)
+        if (!entry)
             continue
-        out.push({ path: entry.path, label: leaf(entry.path) })
+        if (roles.indexOf(entry.role) < 0)
+            roles.push(entry.role)
+        if (entry.path)
+            paths[entry.role] = entry.path
+    }
+    var out = []
+    for (var r = 0; r < roles.length; r++) {
+        if (paths[roles[r]] !== undefined)
+            out.push({ role: roles[r], path: paths[roles[r]] })
+    }
+    return out
+}
+
+// Sample input: XDG_DOWNLOAD_DIR="$HOME/Downloads".
+function userDirs(body, home) {
+    var out = []
+    var entries = readRoles(body, home)
+    for (var i = 0; i < entries.length; i++) {
+        // A disabled role points at Home, which is not a separate place or a default-sort folder.
+        if (entries[i].path !== home)
+            out.push({ path: entries[i].path, label: leaf(entries[i].path) })
     }
     return out
 }

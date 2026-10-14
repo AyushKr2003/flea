@@ -3,6 +3,7 @@
 .import "../../ui/js/Menu.js" as Menu
 .import "../../ui/js/Sort.js" as Sort
 .import "../../ui/js/Tabs.js" as Tabs
+.import "../../ui/js/Places.js" as Places
 .import "tabsfixture.js" as Fixture
 .import "sourcefixture.js" as Source
 .import "userdirsfixture.js" as UserDirsFixture
@@ -196,6 +197,7 @@ function run(check) {
 }
 
 function newestDefaults(check) {
+    UserDirsFixture.duplicateRoles(check, FolderSorts.newestPaths, Places.userDirs)
     var paths = ["/home/test/Inbox", "/home/test/Photos", "/home/test/Clips"]
     var fallback = { key: "name", reverse: false }
     var defaults = {}
@@ -224,7 +226,7 @@ function newestDefaults(check) {
         var sample = UserDirsFixture.cases[i]
         check("newest paths: " + sample[0],
               JSON.stringify(FolderSorts.newestPaths(UserDirsFixture.body(sample[1]), "/home/test")),
-              JSON.stringify(sample[2] === null ? [] : [sample[2]]))
+              JSON.stringify([sample[2] === null ? "/home/test/Downloads" : sample[2]]))
     }
     check("only the three XDG roles get newest-first defaults",
           FolderSorts.newestPaths('XDG_DOWNLOAD_DIR="$HOME/Inbox"\nXDG_PICTURES_DIR="$HOME/Photos/"\nXDG_VIDEOS_DIR="/media/Clips"\nXDG_DOCUMENTS_DIR="$HOME/Docs"', "/home/test").join("|"),

@@ -16,12 +16,9 @@ function newestPaths(body, home) {
     var paths = []
     if (!home) return paths
     var configured = {}
-    var lines = String(body || "").split("\n")
-    for (var l = 0; l < lines.length; l++) {
-        var entry = UserDirs.parseLine(lines[l], home)
-        if (entry && configured[entry.role] === undefined)
-            configured[entry.role] = entry.path
-    }
+    var entries = UserDirs.readRoles(body, home)
+    for (var e = 0; e < entries.length; e++)
+        configured[entries[e].role] = entries[e].path
     for (var i = 0; i < roles.length; i++) {
         var path = configured[roles[i]] === undefined ? home + "/" + names[i] : configured[roles[i]]
         if (path && path !== home && paths.indexOf(path) < 0)

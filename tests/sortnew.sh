@@ -27,8 +27,10 @@ for dir in Inbox 'Photo Library' Clips Documents; do
     touch -d '2025-01-01 UTC' "$folder/z-new.txt" || exit 1
     touch -d '2026-01-01 UTC' "$folder/.hidden.txt" || exit 1
 done
-printf '%s\n' 'XDG_DOWNLOAD_DIR="$HOME/Inbox"' 'XDG_PICTURES_DIR="$HOME/Photo Library"' \
-    'XDG_VIDEOS_DIR="$HOME/Clips"' 'XDG_DOCUMENTS_DIR="$HOME/Documents"' > "$test_root/xdg/user-dirs.dirs"
+printf '%s\n' 'XDG_DOWNLOAD_DIR="$HOME/Old Inbox"' 'XDG_PICTURES_DIR="relative"' \
+    'XDG_VIDEOS_DIR="$HOME"' 'XDG_DOWNLOAD_DIR="$HOME/Inbox"' 'XDG_PICTURES_DIR="$HOME/Photo Library"' \
+    'XDG_VIDEOS_DIR="$HOME/Clips"' 'XDG_DOCUMENTS_DIR="$HOME/Documents"' \
+    'XDG_DOWNLOAD_DIR="relative"' 'XDG_PICTURES_DIR="$HOME/Unterminated' > "$test_root/xdg/user-dirs.dirs"
 request=$(printf '{"mode":"open","folder":"%s","title":"Newest first"}' "$test_root/home/Inbox")
 for phase in fresh restart; do
     log="$test_root/$phase.log"

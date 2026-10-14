@@ -32,3 +32,30 @@ var cases = [
 function body(value) {
     return 'XDG_DOWNLOAD_DIR=' + value + '\nXDG_PICTURES_DIR="$HOME"\nXDG_VIDEOS_DIR="$HOME"'
 }
+
+function duplicateRoles(check, newestPaths, userDirs) {
+    for (var i = 0; i < cases.length; i++) {
+        var sample = cases[i]
+        var text = body('"$HOME/Original"') + '\nXDG_DOWNLOAD_DIR=' + sample[1]
+        var expected = [sample[2] === null ? "/home/test/Original" : sample[2]]
+        check("duplicate role defaults: " + sample[0], JSON.stringify(newestPaths(text, "/home/test")), JSON.stringify(expected))
+        check("duplicate role rail: " + sample[0],
+              JSON.stringify(userDirs(text, "/home/test").map(function (entry) { return entry.path })), JSON.stringify(expected))
+    }
+    var bodies = [
+        ['XDG_DOWNLOAD_DIR="relative"\nXDG_PICTURES_DIR="$HOME/Photos"\nXDG_DOWNLOAD_DIR="$HOME/Inbox"\nXDG_VIDEOS_DIR="$HOME"',
+         ["/home/test/Inbox", "/home/test/Photos"]],
+        [body('"$HOME/Original"') + '\nXDG_DOWNLOAD_DIR="$HOME"\nXDG_DOWNLOAD_DIR="relative"', []],
+        [body('"$HOME"') + '\nXDG_DOWNLOAD_DIR="$HOME/Inbox"\nXDG_DOWNLOAD_DIR="$HOME/Unterminated', ["/home/test/Inbox"]],
+        ['XDG_PICTURES_DIR="$HOME/Old Photos"\nXDG_DOWNLOAD_DIR="$HOME/Inbox"\nXDG_PICTURES_DIR="$HOME/Photos"\nXDG_VIDEOS_DIR="$HOME"',
+         ["/home/test/Photos", "/home/test/Inbox"]]
+    ]
+    for (var j = 0; j < bodies.length; j++) {
+        var rail = userDirs(bodies[j][0], "/home/test")
+        check("duplicate role rail order " + j, JSON.stringify(rail.map(function (entry) { return entry.path })), JSON.stringify(bodies[j][1]))
+        check("duplicate role final labels " + j, rail.map(function (entry) { return entry.label }).join("|"),
+              bodies[j][1].map(function (path) { return path.substring(path.lastIndexOf("/") + 1) }).join("|"))
+        check("duplicate role rail and defaults agree " + j,
+              JSON.stringify(newestPaths(bodies[j][0], "/home/test").sort()), JSON.stringify(bodies[j][1].slice().sort()))
+    }
+}
