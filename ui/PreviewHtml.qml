@@ -1,4 +1,5 @@
 import QtQuick
+import qs.Commons
 import Quickshell.Io
 import "." as Flea
 import "js/Markdown.js" as Markdown
@@ -16,6 +17,7 @@ Item {
     readonly property int settleMs: 160
     property int maxBytes: byteCeiling
     property bool truncate: false
+    property real cornerRadius: Math.max(0, Style.cornerRadius - Theme.spacing.hairline)
     property bool compact: false
     property bool externalScrollBars: false
     property var backend: null
@@ -56,6 +58,23 @@ Item {
     readonly property string lineLabel: Markdown.countLine(root.sourceView && root.sourceCode ? root.sourceCode.total : root.total)
     readonly property real scrollY: root.viewport ? root.viewport.contentY : 0
 
+    function captureState(window, owner, pane, column) {
+        var bar = column ? null : pane.barGeometry()
+        var frame = column ? owner.frameItem : owner.panesItem.parent
+        var lane = scrollBars.item ? scrollBars.item.children[0] : null
+        return JSON.stringify({ path: root.path, view: root.shownView, ready: root.firstScreen,
+            visible: column ? owner.visible : owner.revealedOpen, state: root.status,
+            lines: root.sourceView && root.sourceCode ? root.sourceCode.total : root.total,
+            count: bar ? bar.lines.text : root.lineLabel, mark: bar ? bar.markName : "html", file: root.imageFile,
+            width: root.renderedWidth, deviceWidth: root.deviceWidth, y: root.scrollY, zoom: root.zoom,
+            facts: column ? owner.factsLine.kind + owner.factsLine.tail : "", frame: window.rectOf(frame),
+            column: column, window: { width: window.width, height: window.height }, radius: frame.radius,
+            hairline: frame.border.width, ringColor: String(frame.border.color), canvasColor: String(frame.color),
+            viewportHeight: root.viewport ? root.viewport.height : 0, contentHeight: root.viewport ? root.viewport.contentHeight : 0,
+            lane: lane ? { shown: lane.shown, visible: lane.visible, rect: window.rectOf(lane) } : null,
+            close: bar ? { hovered: bar.close.hovered, pressed: bar.close.pressed, focused: bar.close.keyboardFocused,
+                ring: bar.close.ringItem.visible, centre: window.centreOf(bar.close) } : null })
+    }
     function cancel() {
         settle.stop()
         if (root.pending && root.backend && typeof root.backend.askHtml === "function")
@@ -157,6 +176,16 @@ Item {
             onStatusChanged: if (status === Image.Ready) root.hasDrawn = true
         }
     }
+    Loader {
+        anchors.fill: page
+        active: root.active && page.visible && root.cornerRadius > 0 && GraphicsInfo.api !== GraphicsInfo.Software
+        source: "HtmlClip.qml"
+        onLoaded: {
+            item.target = page
+            item.radius = Qt.binding(function () { return root.cornerRadius })
+            item.roundTop = root.slot !== "look"
+        }
+    }
     FileView {
         id: sourceFile
         path: root.active && root.sourceView && root.truncate && !root.tooLarge ? root.path : ""
@@ -185,6 +214,7 @@ Item {
     }
     Flea.FastScrollHandler { flickable: root.viewport; visible: !root.externalScrollBars }
     Loader {
+        id: scrollBars
         anchors.fill: parent
         property var targetView: root.viewport
         active: !root.externalScrollBars && root.viewport !== null

@@ -6,6 +6,7 @@ import "flea/js/Icons.js" as Icons
 ShellRoot {
     id: root
     property int phase: 0
+    readonly property real probeRadius: 12
     property int failures: 0
     property int checks: 0
     property var keys: null
@@ -60,6 +61,20 @@ ShellRoot {
             root.capturePending = false
         })
     }
+    function cornerShot(frame, name, column, after) {
+        frame.radius = root.probeRadius
+        var doc = column ? root.column().markdown : root.doc()
+        doc.cornerRadius = frame.radius - frame.border.width
+        root.capturePending = true
+        cornerWait.action = function () {
+            console.warn("HTML_CORNER_STATE " + JSON.stringify({ name: name, column: column,
+                frame: "0 0 " + frame.width + " " + frame.height, window: { width: frame.width, height: frame.height },
+                radius: frame.radius, hairline: frame.border.width, ringColor: String(frame.border.color), pageColor: "#ffffff",
+                graphicsApi: doc.GraphicsInfo.api, accelerated: doc.GraphicsInfo.api !== GraphicsInfo.Software && doc.GraphicsInfo.api !== GraphicsInfo.Unknown }))
+            root.shot(frame, name, after)
+        }
+        cornerWait.restart()
+    }
     function finish() {
         if (root.finished) return
         root.finished = true
@@ -91,7 +106,7 @@ ShellRoot {
                 [true, false, "rendered", true, "html", "index.html", "61 lines", false])
             root.check("rendered frame uses device width", d.renderedWidth, d.deviceWidth)
             root.check("the HTML mark uses the approved shield path", Icons.pathFor("html"), "M4 2h16l-1.5 17L12 22l-6.5-3z M15.5 6.5h-7V11h7v5L12 17.5 8.5 16")
-            root.shot(l.panesItem, "html-quicklook", function () {
+            root.cornerShot(l.panesItem.parent, "html-quicklook", false, function () {
                 root.cursorBefore = p.cursorIndex
                 root.key("j")
                 root.key("+")
@@ -102,13 +117,15 @@ ShellRoot {
             if (!root.calm(d && d.scrollY > 0 && d.zoom > 1)) return
             root.check("j scrolls rendered HTML without moving the cursor", p.cursorIndex, root.cursorBefore)
             root.check("plus zooms on the preview ladder", d.zoom, 1.25)
-            root.key("0")
-            root.key("k")
-            root.beforeResize = root.replies
-            viewportHost.width = 1220
-            viewportHost.width = 1260
-            viewportHost.width = 1240
-            root.next()
+            root.shot(l.panesItem.parent, "html-scrolled-zoomed", function () {
+                root.key("0")
+                root.key("k")
+                root.beforeResize = root.replies
+                viewportHost.width = 1220
+                viewportHost.width = 1260
+                viewportHost.width = 1240
+                root.next()
+            })
             break
         case 3:
             if (d && d.pending && d.imageFile.length > 0 && !d.sourceView) {
@@ -116,7 +133,7 @@ ShellRoot {
                 if (d.loading || !d.bodyItem.visible) root.lostResize = true
             }
             if (!root.calm(d && d.contentReady && d.renderedWidth === d.deviceWidth && root.replies > root.beforeResize)) return
-            root.check("a resize keeps the drawn page until the new render lands", root.heldResize && !root.lostResize, true)
+            root.check("a resize keeps the drawn page until the new render lands", [root.heldResize, root.lostResize], [true, false])
             root.check("resize burst renders only the settled width", root.replies - root.beforeResize, 1)
             root.check("zero restores fit", d.zoom, 1)
             root.key("r")
@@ -150,8 +167,17 @@ ShellRoot {
         case 7:
             if (!root.calm(l && l.isMarkdown && l.markdownShown && l.markdownShown.firstScreen)) return
             root.check("Markdown remains rendered after HTML chose Source", l.markdownShown.shownView, "rendered")
-            root.key("r")
-            root.next()
+            root.shot(l.panesItem.parent, "markdown-corners-look", function () { root.phase = 32 })
+            break
+        case 32:
+            if (!root.calm(c && c.isMarkdownRow && c.markdown && c.markdown.contentReady)) return
+            c.frameItem.radius = root.probeRadius
+            root.shot(c.frameItem, "markdown-corners-column", function () {
+                root.key("r")
+                root.phase = 8
+                root.started = Date.now()
+                root.calmAt = 0
+            })
             break
         case 8:
             if (!root.calm(l.markdownShown.shownView === "source" && l.markdownShown.firstScreen)) return
@@ -251,7 +277,7 @@ ShellRoot {
         case 22:
             if (!root.calm(c && c.markdown && !c.markdown.sourceView && c.markdown.contentReady && !c.textLoading)) return
             root.check("the board specimen has the exact compact facts", c.factsLine.kind + c.factsLine.tail, "HTML document · 1.6 kB · 61 lines")
-            root.shot(c, "html-board-column")
+            root.cornerShot(c.frameItem, "html-board-column", true)
             root.next()
             break
         case 23:
@@ -282,6 +308,16 @@ ShellRoot {
                 source: "file://" + Quickshell.env("HTML_UI") + "/WindowBody.qml"
                 onLoaded: item.host = window
             }
+        }
+    }
+    Timer { id: cornerWait; interval: 150; property var action: null; onTriggered: action() }
+    Connections {
+        target: root.doc() || null
+        function onPendingChanged() {
+            var d = root.doc()
+            if (root.phase !== 3 || !d || !d.pending || !d.imageFile.length || d.sourceView) return
+            root.heldResize = true
+            if (d.loading || !d.bodyItem.visible) root.lostResize = true
         }
     }
     Connections {

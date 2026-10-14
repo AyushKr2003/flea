@@ -69,14 +69,7 @@ QtObject {
             : root.look.kind === "text" && root.look.isHtml ? root.look.markdownShown : null
         var doc = pane ? (column ? pane : pane.document) : null
         if (!doc) return "{}"
-        var bar = column ? null : pane.barGeometry()
-        return JSON.stringify({ path: doc.path, view: doc.shownView, ready: doc.firstScreen,
-            visible: column ? c.visible : root.look.revealedOpen, state: doc.status,
-            lines: doc.sourceView && doc.sourceCode ? doc.sourceCode.total : doc.total,
-            count: bar ? bar.lines.text : doc.lineLabel, mark: bar ? bar.markName : "html",
-            file: doc.imageFile,
-            width: doc.renderedWidth, deviceWidth: doc.deviceWidth, y: doc.scrollY, zoom: doc.zoom,
-            facts: column ? c.factsLine.kind + c.factsLine.tail : "", frame: root.fleaWindow.rectOf(column ? c.frameItem : doc) })
+        return doc.captureState(root.fleaWindow, column ? c : root.look, pane, column)
     }
     // Read the Compare pane and its real controls only after Quick Look has built it.
     function compareState(): string {

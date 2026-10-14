@@ -81,6 +81,7 @@ ShellRoot {
             root.check("Escape and Ctrl+2 land on the HTML column at 1100x700", [p.viewMode, p.rowFor(p.cursorIndex).n, c.isHtmlRow, window.width, window.height], ["columns", "board.html", true, 1100, 700])
             var state = JSON.parse(observer.htmlState(true))
             root.check("the column HTML observer reads the active pane", [state.visible, state.ready, state.view, state.lines, state.facts], [true, true, "rendered", 61, "HTML document · 1.6 kB · 61 lines"])
+            root.check("the HTML corner observer names the real frame", [state.window.width, state.window.height, state.column, state.hairline > 0], [1100, 700, true, true])
             root.check("fresh UI state has no stored document views", [Flea.ViewState.preview.markdownView, Flea.ViewState.preview.htmlView], [undefined, undefined])
             root.capturing = true
             var output = Quickshell.env("FLEA_CI_SUITE_LOGS") || Quickshell.env("HTML_ROOT")
@@ -94,6 +95,10 @@ ShellRoot {
         case 1:
             if (!root.calm(ready && columnReady)) return
             root.check(kind + " opens rendered", m.shownView, "rendered")
+            if (root.kindIndex === 0) {
+                var lookState = JSON.parse(observer.htmlState(false))
+                root.check("Quick Look capture observes its actual close mark", [lookState.column, typeof lookState.close.centre, lookState.close.pressed], [false, "string", false])
+            }
             var g = m.barGeometry()
             root.check(kind + " bar has no segment or view controls", [!!g.segment, !!g.rendered, !!g.source], [false, false, false])
             root.capturing = true
@@ -159,6 +164,12 @@ ShellRoot {
     }
     QtObject {
         id: observedWindow
+        readonly property real width: window.width
+        readonly property real height: window.height
+        function centreOf(item) {
+            var point = item.mapToItem(null, item.width / 2, item.height / 2)
+            return Math.round(point.x) + " " + Math.round(point.y)
+        }
         function rectOf(item) {
             var point = item.mapToItem(null, 0, 0)
             return [Math.round(point.x), Math.round(point.y), Math.round(item.width), Math.round(item.height)].join(" ")

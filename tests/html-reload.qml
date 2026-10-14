@@ -60,11 +60,16 @@ ShellRoot {
                         root.check("new image stays Loading throughout pending capture", picture.status === Image.Loading)
                         writer.write("publish\n")
                     })
-                }
+                } else console.warn(line)
             }
         }
         onExited: function (code) {
-            root.check("replacement bytes published to the same path", code === 0)
+            root.check("replacement bytes published to the same path (exit " + code + ")", code === 0)
+            if (code !== 0) {
+                console.warn("HTML_PREVIEW DONE reload, " + root.failures + " failed")
+                Qt.exit(1)
+                return
+            }
             var picture = document.bodyItem.contentItem.children[0]
             picture.source = Qt.binding(function () { return Format.fileUri(document.imageFile) + "#t" + document.imageToken })
             root.phase = 3
