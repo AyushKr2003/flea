@@ -1,5 +1,12 @@
 .pragma library
 
+// DialogButton rounds its local frame extent, while its hit box and caption keep their fractional layout.
+function snappedFrame(frame, button) {
+    var local = frame.mapToItem(button, 0, 0, frame.width, frame.height)
+    return local.x === 0 && local.y === button.frameY
+        && local.width === Math.round(button.width) && local.height === Math.round(button.frameHeight)
+}
+
 // Where each dialog's fields, buttons and check boxes lie in the 1000 x 650 test window on the 0.3.10 stage (Open With and Convert hold their status slot), before any ring room.
 // Sample input: "stop 12 new file" reads field, Cancel and Create as "x,y,width,height" strings in tree order; the save field follows 6b1824a75.
 var PINS = ({

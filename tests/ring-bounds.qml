@@ -367,7 +367,7 @@ ShellRoot {
         root.check(Qt.colorEqual(frame.border.color, want === "accent" ? c.accent : c.foreground), tag + " focused button frames itself in " + frame.border.color + ", not the " + want)
         var width = want === "thick" ? root.thickWidth : root.hairline
         root.check(frame.border.width === width, tag + " focused button frame is " + frame.border.width + " px, not " + width)
-        root.check(frame.width === button.width && frame.height === button.height, tag + " focused button frame " + frame.width + "x" + frame.height + " is not the button's own " + button.width + "x" + button.height)
+        root.check(Pins.snappedFrame(frame, button), tag + " focused button frame " + root.rectText(frame) + " is not the button's snapped local rect")
         var box = frame.mapToItem(card, 0, 0, frame.width, frame.height)
         root.clear(tag + " frame in the viewport", box, card.width, card.height, 0)
     }

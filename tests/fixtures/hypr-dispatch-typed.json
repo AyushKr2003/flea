@@ -65,5 +65,12 @@
       "-30"
     ],
     "text": "hl.dsp.cursor.move({x = -20, y = -30})"
+  },
+  {
+    "operation": "session_exec_script",
+    "args": [
+      "/home/flea-sandbox/iso/session-mount.ABCD/run.sh"
+    ],
+    "text": "hl.dsp.exec_cmd(\"/bin/bash '/home/flea-sandbox/iso/session-mount.ABCD/run.sh'\")"
   }
 ]

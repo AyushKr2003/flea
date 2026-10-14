@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import QtTest
 import "flea" as Flea
+import "flea/js/Buttons.js" as Buttons
 
 // Real controls exercise the capture-only reader, including geometry while pressed and an item outside its clipping parent.
 ShellRoot {
@@ -12,6 +13,8 @@ ShellRoot {
     property int checks: 0
     property var failures: []
     property var rest: null
+    property var restLabel: null
+    property double pressSince: 0
     property var reader: null
 
     function check(cond, label) {
@@ -22,6 +25,18 @@ ShellRoot {
         return JSON.parse(root.reader.read(window, window.contentItem, /^(DialogButton|SettingsRow)_QML/, {}))
     }
     function control(state, name) { return state.controls.find(function(c) { return c.name === name }) }
+    function named(item, name) {
+        if (item.objectName === name) return item
+        for (var i = 0; i < item.children.length; i++) {
+            var found = root.named(item.children[i], name)
+            if (found) return found
+        }
+        return null
+    }
+    function rect(item, target) {
+        var box = item.mapToItem(target, 0, 0, item.width, item.height)
+        return [box.x, box.y, box.width, box.height]
+    }
     function report() {
         timer.running = false
         console.log("COHCAPTURE DONE checks=" + root.checks + " failed=" + root.failures.length)
@@ -59,6 +74,7 @@ ShellRoot {
             if (root.stage === 0) {
                 var state = root.read()
                 root.rest = root.control(state, "Press")
+                root.restLabel = root.rect(root.named(button, "buttonLabel"), stage)
                 root.check(!!root.rest && root.rest.exposed && root.rest.pressLive, "the button exposes a real press target")
                 root.check(root.control(state, "Clipped").exposed === false, "a centre outside its clipping parent is not a pointer target")
                 var play = root.control(state, "Play")
@@ -68,15 +84,27 @@ ShellRoot {
                 var hint = state.controls.find(function(c) { return c.kind === "SettingsRow" })
                 root.check(!!hint && !hint.hoverLive && !hint.pressLive, "an informational settings row has no live hover or press target")
                 driver.mousePress(stage, root.rest.targetX, root.rest.targetY, Qt.LeftButton, Qt.NoModifier, 0)
+                root.pressSince = Date.now()
                 root.stage = 1
                 return
             }
             if (root.stage === 1) {
+                if (Date.now() - root.pressSince < Buttons.PRESS_MS) return
                 var held = root.control(root.read(), "Press")
                 root.check(held.pressed, "a held press is read from the actual button")
-                root.check(held.x !== root.rest.x || held.y !== root.rest.y, "press scaling invalidates the old coordinate signature")
+                root.check([held.x, held.y, held.w, held.h, held.targetX, held.targetY].join() ===
+                    [root.rest.x, root.rest.y, root.rest.w, root.rest.h, root.rest.targetX, root.rest.targetY].join(), "a press keeps the hit box and coordinate signature fixed")
+                var insetX = Flea.Theme.reducedMotion ? 0 : Math.round(button.width * (1 - Buttons.PRESS_SCALE) / 2)
+                var insetY = Flea.Theme.reducedMotion ? 0 : Math.round(button.frameHeight * (1 - Buttons.PRESS_SCALE) / 2)
+                root.check(root.rect(root.named(button, "buttonFrame"), button).join() ===
+                    [insetX, button.frameY + insetY, Math.round(button.width) - 2 * insetX, Math.round(button.frameHeight) - 2 * insetY].join(), "only the frame takes the exact whole-pixel press inset")
+                root.check(root.rect(root.named(button, "buttonLabel"), stage).join() === root.restLabel.join(), "a press keeps the caption geometry fixed")
                 root.check(held.x <= root.rest.targetX && root.rest.targetX < held.x + held.w
-                    && held.y <= root.rest.targetY && root.rest.targetY < held.y + held.h, "the original hit point still identifies the scaled control")
+                    && held.y <= root.rest.targetY && root.rest.targetY < held.y + held.h, "the original hit point still identifies the held control")
+                button.x += 1
+                var moved = root.control(root.read(), "Press")
+                root.check(moved.x === held.x + 1 && moved.targetX === held.targetX + 1, "a real move invalidates the old coordinate signature")
+                button.x -= 1
                 driver.mouseRelease(stage, root.rest.targetX, root.rest.targetY, Qt.LeftButton, Qt.NoModifier, 0)
                 var point = media.playItem.mapToItem(stage, media.playItem.width / 2, media.playItem.height / 2)
                 driver.mousePress(stage, point.x, point.y, Qt.LeftButton, Qt.NoModifier, 0)

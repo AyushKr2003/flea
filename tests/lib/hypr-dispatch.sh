@@ -111,6 +111,18 @@ hypr_cursor_move() {
     _hypr_reply_ok "$status" "$answer" "$@"
 }
 
+# Sample input: hypr_session_exec_script /home/flea-sandbox/iso/session-mount.ABCD/run.sh, never a shell expression.
+hypr_session_exec_script() {
+    _hypr_arity hypr_session_exec_script 'SCRIPT' "$@" || return 1
+    [[ "$1" == /* && "$1" != *[!a-zA-Z0-9_./=-]* ]] || {
+        _hypr_refuse hypr_session_exec_script "$1" 'expected an absolute script path without shell metacharacters'
+        return 1
+    }
+    local answer status=0
+    answer=$(hyprctl dispatch "hl.dsp.exec_cmd(\"/bin/bash '$1'\")" 2>&1) || status=$?
+    _hypr_reply_ok "$status" "$answer" "$@"
+}
+
 # Sample input: bash tests/lib/hypr-dispatch.sh window_resize 0xabc 800 480.
 _hypr_program() {
     local operation="${1-}"
@@ -124,6 +136,7 @@ _hypr_program() {
         window_resize_absolute) hypr_window_resize_absolute "$@" ;;
         window_move_absolute) hypr_window_move_absolute "$@" ;;
         cursor_move) hypr_cursor_move "$@" ;;
+        session_exec_script) hypr_session_exec_script "$@" ;;
         *) _hypr_refuse hypr-dispatch.sh "$operation" 'unknown typed operation' ;;
     esac || return 1
     printf '%s\n' ok

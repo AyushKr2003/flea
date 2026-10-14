@@ -59,6 +59,12 @@ ShellRoot {
         return null
     }
     function header() { return root.findType(root.win.contentItem, "PickerHeader") }
+    // A 10 ms probe can read new text before Row's next polish; measure only after its pending layout.
+    function pathStrip(chrome) {
+        var strip = root.findName(chrome, "pickerStrip")
+        if (strip) strip.forceLayout()
+        return strip
+    }
 
     // The strip's recipe from Picker040 at base size 14: board height, the path one gap after Back and Up, the leaf inline after its parents, centred above the rule.
     function checkGeometry(tag, chrome, strip) {
@@ -85,7 +91,7 @@ ShellRoot {
     function checkStrip(tag) {
         var chrome = root.findType(root.win.contentItem, "PickerChrome")
         if (!chrome) return false
-        var strip = root.findName(chrome, "pickerStrip")
+        var strip = root.pathStrip(chrome)
         if (!strip || strip.width <= 0 || !strip.visible) return false
         if (strip.children.length < 2) return false
         var parents = strip.children[0], leaf = strip.children[1]
@@ -128,7 +134,7 @@ ShellRoot {
     function checkDeep(tag) {
         var chrome = root.findType(root.win.contentItem, "PickerChrome")
         if (!chrome) return false
-        var strip = root.findName(chrome, "pickerStrip")
+        var strip = root.pathStrip(chrome)
         if (!strip || strip.width <= 0 || !strip.visible) return false
         if (strip.children.length < 2) return false
         if (strip.display !== "/a/b/winprobe") return false
@@ -145,7 +151,7 @@ ShellRoot {
     function checkLongParents(tag) {
         var chrome = root.findType(root.win.contentItem, "PickerChrome")
         if (!chrome) return false
-        var strip = root.findName(chrome, "pickerStrip")
+        var strip = root.pathStrip(chrome)
         if (!strip || strip.width <= 0 || !strip.visible || strip.children.length < 2) return false
         if (strip.display !== root.longParents + "winprobe") return false
         var parents = strip.children[0], leaf = strip.children[1]
@@ -164,7 +170,7 @@ ShellRoot {
     function checkLongLeaf(tag) {
         var chrome = root.findType(root.win.contentItem, "PickerChrome")
         if (!chrome) return false
-        var strip = root.findName(chrome, "pickerStrip")
+        var strip = root.pathStrip(chrome)
         if (!strip || strip.width <= 0 || !strip.visible || strip.children.length < 2) return false
         if (strip.display !== "/a/" + root.longLeaf) return false
         var parents = strip.children[0], leaf = strip.children[1]
@@ -190,7 +196,7 @@ ShellRoot {
     function checkRecent(tag) {
         var chrome = root.findType(root.win.contentItem, "PickerChrome")
         if (!chrome) return false
-        var strip = root.findName(chrome, "pickerStrip")
+        var strip = root.pathStrip(chrome)
         if (!strip || strip.width <= 0 || !strip.visible) return false
         if (strip.children.length < 2) return false
         if (strip.display !== Picker.RECENT_LABEL) return false
