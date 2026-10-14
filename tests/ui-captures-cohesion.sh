@@ -254,27 +254,46 @@ coh_open_trash_self() {
 coh_open_colpdf() { seek_row_named manual.pdf || fail "cohesion: no manual.pdf row"; coh_until previewColumnState pdf; coh_until columnPdfLoaded true; }
 
 # One real wheel step wakes the PDF bar; a pointer in its lane keeps it drawn through slow screenshots.
+coh_pdf_receipt() {
+    local found exposed reader
+    # Sample input: {"captureReader":"porttp4d","controls":[{"surface":"PreviewColumn","kind":"ViewportScrollBar","value":"vertical","exposed":true}]}.
+    read -r found exposed reader < <(jq -r '[any(.controls[]; .surface == "PreviewColumn" and .kind == "ViewportScrollBar" and .value == "vertical"),
+        any(.controls[]; .surface == "PreviewColumn" and .kind == "ViewportScrollBar" and .value == "vertical" and .exposed), .captureReader // "missing"] | @tsv' <<< "$observed")
+    printf 'COH_WAKE %s cols-pdf bar=%s after=%s frame="%s" found=%s reader=%s observed=%s\n' \
+        "$coh_theme" "$exposed" "$(( $(date +%s%3N) - started ))" "$frame" "$found" "$reader" "$observed"
+}
+
 coh_wake_colpdf() {
-    local started deadline observed frame fx fy fw fh tx ty exposed
-    observed=$(ipc cohesionControls) || fail "cohesion: the PDF bar reader failed"
-    coh_pdf_bar=$(jq -c '.controls[] | select(.surface == "PreviewColumn" and .kind == "ViewportScrollBar" and .value == "vertical" and .exposed and .hovered)' <<< "$observed")
-    [[ -n "$coh_pdf_bar" ]] && return 0
+    local started deadline observed frame fx fy fw fh tx ty
     started=$(date +%s%3N)
     deadline=$((started + coh_wait_s * 1000))
     frame=$(ipc columnFrameRect) || fail "cohesion: the PDF frame reader failed"
+    # Sample input: columnFrameRect answers "810 40 275 560", x y width height in window pixels.
     read -r fx fy fw fh <<< "$frame"
     [[ "$fx" =~ ^-?[0-9]+$ && "$fy" =~ ^-?[0-9]+$ && "$fw" =~ ^[0-9]+$ && "$fh" =~ ^[0-9]+$ ]] \
         && (( fw > 2 && fh > 2 )) || fail "cohesion: invalid PDF frame [$frame]"
+    observed=$(ipc cohesionControls) || fail "cohesion: the PDF bar reader failed"
+    # Sample input: {"captureReader":"porttp4d","controls":[],"previewColumns":[],"scrollBars":[]}.
+    if ! jq -e '.captureReader == "porttp4d"' <<< "$observed" >/dev/null; then
+        coh_pdf_receipt
+        fail "cohesion: stale capture reader; expected porttp4d, see COH_HARNESS and COH_WAKE"
+    fi
+    # Sample input: {"controls":[{"surface":"PreviewColumn","kind":"ViewportScrollBar","value":"vertical","exposed":true,"hovered":true}]}.
+    coh_pdf_bar=$(jq -c '.controls[] | select(.surface == "PreviewColumn" and .kind == "ViewportScrollBar" and .value == "vertical" and .exposed and .hovered)' <<< "$observed")
+    [[ -z "$coh_pdf_bar" ]] || { coh_pdf_receipt; return 0; }
     coh_pointer_to "$((fx + fw / 2))" "$((fy + fh / 2))"
     omarchy-drive scroll down 1 >/dev/null || fail "cohesion: the PDF wake wheel step failed"
     while (( $(date +%s%3N) < deadline )); do
         observed=$(ipc cohesionControls) || fail "cohesion: the PDF wake reader failed"
+        # Sample input: {"controls":[{"surface":"PreviewColumn","kind":"ViewportScrollBar","value":"vertical","exposed":true,"targetX":1078,"targetY":115}]}.
         coh_pdf_bar=$(jq -c '.controls[] | select(.surface == "PreviewColumn" and .kind == "ViewportScrollBar" and .value == "vertical" and .exposed)' <<< "$observed")
         if [[ -n "$coh_pdf_bar" ]]; then
+            # Sample input: {"targetX":1078,"targetY":115}; jq answers "1078<TAB>115".
             read -r tx ty < <(jq -r '[.targetX,.targetY] | @tsv' <<< "$coh_pdf_bar")
             coh_pointer_to "$tx" "$ty"
             if coh_wait_flag "$coh_pdf_bar" hovered; then
-                printf 'COH_WAKE %s cols-pdf bar=true after=%s\n' "$coh_theme" "$(( $(date +%s%3N) - started ))"
+                observed=$(ipc cohesionControls) || fail "cohesion: the PDF hover receipt reader failed"
+                coh_pdf_receipt
                 return 0
             fi
             break
@@ -282,8 +301,7 @@ coh_wake_colpdf() {
         sleep "$coh_poll_s"
     done
     observed=$(ipc cohesionControls) || fail "cohesion: the failed PDF wake reader failed"
-    exposed=$(jq -r 'any(.controls[]; .surface == "PreviewColumn" and .kind == "ViewportScrollBar" and .value == "vertical" and .exposed)' <<< "$observed")
-    printf 'COH_WAKE %s cols-pdf bar=%s after=%s observed=%s\n' "$coh_theme" "$exposed" "$(( $(date +%s%3N) - started ))" "$observed"
+    coh_pdf_receipt
     fail "cohesion: cols-pdf reports no exposed pointer target or live lane hover after one wheel step"
 }
 
@@ -416,7 +434,7 @@ coh_run_surface() {
 
 # The caller disables errexit while this runner waits; job control gives only its worker and watchdog separate process groups.
 coh_bounded() {
-    local name="$1" limit="$2" remaining=$((coh_deadline - SECONDS)) started=$SECONDS worker watchdog status monitor=0
+    local name="$1" limit="$2" remaining=$((coh_deadline - SECONDS)) started=$SECONDS worker watchdog status monitor=0 signal end
     shift 2
     if (( remaining <= 0 )); then
         printf 'COH_SKIPPED %s %s over the %ss budget\n' "$coh_theme" "$name" "$coh_budget_s"
@@ -440,6 +458,23 @@ coh_bounded() {
     (( monitor )) || set +m
     wait "$worker"
     status=$?
+    # The detached native window belongs to launch/theme teardown; only this recorded worker group is drained here.
+    if kill -0 -- "-$worker" 2>/dev/null; then
+        for signal in TERM KILL; do
+            kill "-$signal" -- "-$worker" 2>/dev/null || :
+            end=$((SECONDS + coh_teardown_s))
+            while kill -0 -- "-$worker" 2>/dev/null && (( SECONDS < end )); do
+                command sleep "$coh_poll_s"
+            done
+            kill -0 -- "-$worker" 2>/dev/null || break
+        done
+        if kill -0 -- "-$worker" 2>/dev/null; then
+            printf 'COH_GROUP_FAILED %s %s pgid=%s survived teardown\n' "$coh_theme" "$name" "$worker"
+            (( status != 0 )) || status=1
+        else
+            printf 'COH_GROUP %s %s pgid=%s remaining=none\n' "$coh_theme" "$name" "$worker"
+        fi
+    fi
     kill -TERM -- "-$watchdog" 2>/dev/null || :
     wait "$watchdog" 2>/dev/null || :
     if (( status == 0 && SECONDS - started >= limit )); then
@@ -516,6 +551,9 @@ case_cap_cohesion() {
     fi
     local flea_ui
     flea_ui=$(coh_capture_ui) || fail "cohesion: the UI fixture could not be prepared"
+    # Sample input: sha256sum answers "0123456789abcdef...  tests/ui-captures-reader.qml"; the first field names the source.
+    printf 'COH_HARNESS helper=%s reader=%s ui=%s\n' "$(sha256sum "$repo/tests/ui-captures-cohesion.sh" | cut -d' ' -f1)" \
+        "$(sha256sum "$flea_ui/IpcControls.qml" | cut -d' ' -f1)" "$flea_ui"
     coh_fixture "$coh_dir"
     mkdir -p "$evidence_dir" || fail "cohesion: the evidence directory could not be created"
     : > "$evidence_dir/coh-manifest.tsv"

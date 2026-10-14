@@ -6,6 +6,8 @@ QtObject {
     function read(quick, top, kinds, alias): string {
         // Sample input, ControlReader.read's JSON: {"focus":{"kind":"DialogButton","via":"owner"},"controls":[{"kind":"DialogButton","name":"Open","x":900,"y":612,"w":96,"h":32}]}
         var state = JSON.parse(ControlReader.read(quick, top, kinds, alias))
+        state.captureReader = "porttp4d"
+        state.previewColumns = []
         state.scrollBars = []
         var menus = JSON.parse(ControlReader.read(quick, top, /^(MenuRow|CardScroll|ViewportScrollBar)_QML/, {})).controls
         for (var m = 0; m < menus.length; m++) {
@@ -65,10 +67,14 @@ QtObject {
         }
         function walk(item) {
             if (!item) return
+            if (/^(PreviewColumn|SelectionPreview)_QML/.test(String(item)))
+                state.previewColumns.push({type: String(item).split("(")[0], visible: item.visible, opacity: item.opacity,
+                    loaded: item.pdfLoaded(), drawn: item.pdfDrawn})
             if (String(item).indexOf("ViewportScrollBar_QML") === 0) {
                 var at = item.mapToItem(null, 0, 0)
                 state.scrollBars.push({x: Math.round(at.x), y: Math.round(at.y), visible: item.visible, opacity: item.opacity,
-                    shown: item.shown, overflow: item.overflow, content: item.contentLength, viewport: item.viewportLength})
+                    shown: item.shown, overflow: item.overflow, content: item.contentLength, viewport: item.viewportLength,
+                    position: item.contentPosition})
             }
             if (!item.visible || item.opacity <= 0) return
             // Sample input: String(item) === "DialogButton_QML_88(0x55d0c8a1b2c0)", or "MenuRow_QML_40(0x55d0c8a1b2c0)"

@@ -2,12 +2,25 @@
 # Replays capture assertions against controlled replies, including scaled controls and both outcomes of the open-file unmount.
 set -uo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)" || exit 1
+bash -n "$repo/tests/ui-captures-cohesion.sh" || exit 1
+bash -n "$repo/tests/capture-port.sh" || exit 1
+printf 'CAPTUREPORT SYNTAX both shell scripts passed\n'
 . "$repo/tools/flea-sandbox-guard"
 sandbox_root_ok
 scratch=$(mktemp -d "$SANDBOX_ROOT/flea-capture-port.XXXXXXXX") || exit 1
 : > "$scratch/$SANDBOX_MARKER"
 holder=""
+group_fixture="" detached_launcher=""
 cleanup() {
+    if [[ "$group_fixture" == "$scratch/"* && -f "$group_fixture/$SANDBOX_MARKER" ]]; then
+        local file pid
+        for file in "$group_fixture/child.pid" "$group_fixture/detached.pid"; do
+            [[ -f "$file" ]] || continue
+            read -r pid < "$file"
+            [[ "$pid" =~ ^[0-9]+$ ]] && kill -KILL "$pid" 2>/dev/null || true
+        done
+        [[ -z "$detached_launcher" ]] || wait "$detached_launcher" 2>/dev/null || true
+    fi
     if [[ -n "$holder" ]]; then kill "$holder" 2>/dev/null || true; wait "$holder" 2>/dev/null || true; fi
     sandbox_remove "$scratch"
 }
@@ -288,12 +301,70 @@ grep -q '^COH_TIMING replay swallowed-cut .*exit=124$' "$scratch/swallowed-budge
 check "a swallowed signal still reports the budget failure" "$?" 0
 check "budget runners leave no live watchdog job" "$(jobs -pr)" ''
 
+# Both stand-ins stay in one marked root; only the worker's group belongs to the bounded runner.
+group_fixture=$(mktemp -d "$scratch/worker-group.XXXXXXXX") || exit 1
+: > "$group_fixture/$SANDBOX_MARKER"
+cat > "$group_fixture/ignore-term.sh" <<'SH'
+#!/usr/bin/env bash
+set -eu
+trap - TERM
+[[ "$2" != ignore ]] || trap '' TERM
+printf '%s\n' "$BASHPID" > "$1.pid"
+ps -o pgid= -p "$BASHPID" > "$1.group"
+: > "$1.ready"
+exec sleep 60
+SH
+setsid bash "$group_fixture/ignore-term.sh" "$group_fixture/detached" normal > /dev/null 2>&1 < /dev/null &
+detached_launcher=$!
+replay_ready() {
+    local end=$((SECONDS + 3))
+    until [[ -f "$1.ready" ]]; do
+        (( SECONDS < end )) || fail "process-group stand-in did not become ready"
+        command sleep 0.01
+    done
+}
+replay_ready "$group_fixture/detached"
+group_worker() {
+    printf '%s\n' "$BASHPID" > "$group_fixture/worker.pid"
+    bash "$group_fixture/ignore-term.sh" "$group_fixture/child" ignore &
+    local child=$!
+    replay_ready "$group_fixture/child"
+    wait "$child"
+}
+coh_deadline=$((SECONDS + 8))
+coh_teardown_s=1
+group_started=$SECONDS
+coh_bounded ignored-term 1 group_worker > "$group_fixture/bounded.log" 2>&1
+group_status=$?
+coh_teardown_s=30
+read -r group_child < "$group_fixture/child.pid"
+read -r group_leader < "$group_fixture/worker.pid"
+read -r child_group < "$group_fixture/child.group"
+read -r detached_pid < "$group_fixture/detached.pid"
+read -r detached_group < "$group_fixture/detached.group"
+check "the TERM-ignoring child belongs to the recorded worker group" "$child_group" "$group_leader"
+[[ "$detached_group" == "$detached_pid" && "$detached_group" != "$group_leader" ]]
+check "the detached stand-in belongs to its own recorded group" "$?" 0
+child_alive=false detached_alive=false
+kill -0 "$group_child" 2>/dev/null && child_alive=true
+kill -0 "$detached_pid" 2>/dev/null && detached_alive=true
+printf 'COH_GROUP_STANDIN limit=1 grace=1 exit=%s child_alive=%s detached_alive=%s\n' "$group_status" "$child_alive" "$detached_alive"
+check "teardown removes a TERM-ignoring child after the worker leader exits" "$child_alive" false
+check "worker teardown leaves the detached stand-in untouched" "$detached_alive" true
+check "worker-group draining preserves the original timeout exit" "$group_status" 124
+(( SECONDS - group_started <= 4 )); check "worker-group draining stays bounded" "$?" 0
+kill -KILL "$group_child" 2>/dev/null || true
+kill -KILL "$detached_pid" 2>/dev/null || true
+wait "$detached_launcher" 2>/dev/null || true
+detached_launcher=""
+group_fixture=""
+
 # An asleep bar wakes only through the wheel, and the actual helper parks in its lane before capture.
 replay_wheels=0 replay_awake=false replay_in_lane=false replay_wheel_works=true
 coh_pdf_bar=''
 ipc() {
     if [[ "$1" == columnFrameRect ]]; then printf '200 40 300 300\n'; return; fi
-    jq -cn --argjson exposed "$replay_awake" --argjson hovered "$replay_in_lane" '{controls:[{
+    jq -cn --argjson exposed "$replay_awake" --argjson hovered "$replay_in_lane" '{captureReader:"porttp4d",controls:[{
         kind:"ViewportScrollBar",name:"Vertical scroll bar",surface:"PreviewColumn",value:"vertical",
         x:488,y:40,w:12,h:300,targetX:494,targetY:115,exposed:$exposed,hovered:$hovered,enabled:true}]}'
 }
@@ -313,6 +384,8 @@ check "the PDF wakes through exactly one wheel and is held in its own lane" "$? 
 check "the wheel targets the PDF body before the actual knob" "$(tr '\n' '|' < "$scratch/wake-moves.log")" '350 190|494 115|'
 grep -q '^COH_WAKE replay cols-pdf bar=true after=[0-9]' "$scratch/wake.log"
 check "a real wake prints its exposed state and elapsed milliseconds" "$?" 0
+grep -q 'frame="200 40 300 300" found=true reader=porttp4d' "$scratch/wake.log"
+check "a wake receipt records the real frame, discovery and reader revision" "$?" 0
 coh_wake_colpdf > "$scratch/wake-held.log"
 check "a pointer held in the lane needs no extra wheel between hover and press" "$? $replay_wheels" '0 1'
 replay_awake=false replay_in_lane=false
@@ -323,5 +396,9 @@ replay_awake=false replay_in_lane=false replay_wheel_works=false
 check "a wheel that leaves the bar asleep cannot satisfy target discovery" "$?" 1
 grep -q '^COH_WAKE replay cols-pdf bar=false after=' "$scratch/wake-refused.log"
 check "the unsuccessful wake prints a decisive non-exposed receipt" "$?" 0
+( ipc() { if [[ "$1" == columnFrameRect ]]; then printf '200 40 300 300\n'; else printf '{"controls":[]}\n'; fi; }; coh_wake_colpdf ) > "$scratch/stale-reader.log" 2>&1
+check "an older capture reader is refused before the wheel" "$?" 1
+grep -q 'frame="200 40 300 300" found=false reader=missing' "$scratch/stale-reader.log"
+check "an older reader gets a distinct missing-reader diagnosis" "$?" 0
 printf 'CAPTUREPORT DONE checks=%s failed=%s\n' "$checks" "$failed"
 [[ "$failed" == 0 ]]
