@@ -115,6 +115,7 @@ chmod 0700 "$suite_undo" || fail "the suite undo dir could not be locked down"
 export FLEA_UNDO_DIR="$suite_undo"
 # The tree's MPRIS helper, so a media case never looks for a /usr/lib/flea copy an older install lacks.
 export FLEA_MPRIS="${FLEA_MPRIS:-$repo/tools/flea-mpris}"
+[ -x "$FLEA_MPRIS" ] || fail "the MPRIS helper is not an executable at $FLEA_MPRIS"
 
 # Ten bursts of twelve clicks moved the 100k viewport about eleven rows when measured.
 scroll_bursts=10
