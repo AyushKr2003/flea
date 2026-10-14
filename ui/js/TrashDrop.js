@@ -6,13 +6,9 @@
 .import "Swap.js" as Swap
 .import "Mounts.js" as Mounts
 
-// A row drag dropped on the rail's Trash row trashes what it carries, the same trash request dd
-// sends, so the drop is undone by z like any other delete. ui/RailTrashRow.qml wires the handlers;
-// this file decides.
-//
-// Only a drag lifted in this very window may trash. A drop from another application, another Flea
-// or the shelf carries files this window did not lift, so a Trash drop refuses them rather than
-// deleting files on the strength of another sender's offer.
+// This file decides the rail's Trash drop, wired by ui/RailTrashRow.qml: it sends dd's trash request for the carried files, undone by z like any other delete.
+
+// Only a drag lifted in this window may trash; drops from another application, another Flea or the shelf are refused because this window did not lift those files.
 
 // The rows the marker carries, as numbers. Sample marker: "<instance>\n1,3\nmove\n%2Fd\n42\n1\n0\n7".
 function markerRows(marker) {
@@ -21,6 +17,7 @@ function markerRows(marker) {
     var rows = []
     var parts = field.split(",")
     for (var i = 0; i < parts.length; i++) {
+        if (!/^[0-9]+$/.test(parts[i])) return []
         var n = Number(parts[i])
         if (!Number.isInteger(n) || n < 0) return []
         rows.push(n)
@@ -28,10 +25,7 @@ function markerRows(marker) {
     return rows
 }
 
-// The request a drop sends, or null when it takes none. The paths whenever the drag carries them,
-// which survive any listing change under the drag; the rows only for a selection too wide to carry
-// paths, only onto the listing it was lifted from, and named in the numbering of the lift, so
-// src/backend/rowguard.rs refuses them rather than trashing whatever those indices name now.
+// The request or null: carried paths survive listing changes; rows are only for a selection too wide to carry paths, on its source listing in lift-time numbering, so src/backend/rowguard.rs refuses stale indices.
 function request(marker, urls, path) {
     if (!Drag.isOwnDrag(marker)) return null
     // Issue 133: a GVFS mount has no trash, so the drop is refused up front as d and the menu are.
@@ -49,8 +43,7 @@ function accepts(marker, urls, path) {
     return request(marker, urls, path) !== null
 }
 
-// Sends the drop's trash through the pane's own backend, whose trashed reply clears the selection
-// and re-reads the listing; answers whether anything was sent.
+// Sends trash through the pane's backend and answers whether it sent; the trashed reply clears the selection and re-reads the listing.
 function drop(pane, marker, urls) {
     if (!pane || !pane.backend) return false
     var sent = request(marker, urls, pane.path)

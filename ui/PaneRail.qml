@@ -120,8 +120,7 @@ Item {
         }
     }
 
-    // Below the rail, so the Trash row's own drop area answers first; taking nothing here keeps a
-    // drop on the overlay rail from falling through to whatever listing row lies under it.
+    // Below the rail so Trash answers first; refusing here keeps an overlay rail drop from falling through to the listing row under it.
     DropArea {
         id: dragReveal
         anchors { left: parent.left; top: parent.top; bottom: parent.bottom }

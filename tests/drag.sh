@@ -708,8 +708,7 @@ check "a plain drag is a move, so the source is gone" \
 echo
 echo "== RT: a row dropped on the rail's Trash row goes to the trash =="
 # ui/RailTrashRow.qml sends the same trash request dd does, by path, through ui/js/TrashDrop.js.
-# HOME and XDG_DATA_HOME are this run's own, and gio trashes a file on the home filesystem into
-# $XDG_DATA_HOME/Trash in-process, so the operator's own Trash never sees this file.
+# HOME and XDG_DATA_HOME belong to this run; gio trashes the home-filesystem file into $XDG_DATA_HOME/Trash in-process, so the operator's Trash never sees it.
 # Settled first: a baseline read while a re-list is out is not this folder's count.
 expect_ipc listInFlight false
 rt_before=$(ipc total)
@@ -722,7 +721,7 @@ for i in "${!rail_labels[@]}"; do [ "${rail_labels[$i]}" = Trash ] && trash_inde
 point=$(ipc railRowCentre "$trash_index")
 [[ "$point" =~ ^[0-9]+\ [0-9]+$ ]] || die "RT: the Trash row has no geometry: $point"
 read -r tx ty <<< "$point"
-set -- $(screen_centre t1.txt); sx=$1; sy=$2
+centre_into sx sy t1.txt
 warp "$sx" "$sy"; sleep 0.4
 press; sleep 0.3
 glide_to "$((WX + tx))" "$((WY + ty))"; sleep 0.5

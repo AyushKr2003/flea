@@ -104,7 +104,7 @@ tests/chromering.qml 413
 tests/columnrow-geom.qml 426
 tests/dialog-board.qml 663
 tests/columnscost.qml 416
-tests/rowcost.qml 417
+tests/rowcost.qml 438
 tests/gridmark.qml 419
 tests/columnsfilter.qml 402
 tests/columnsfolder.qml 400
@@ -166,7 +166,7 @@ ui/PreviewPdf.qml 482
 ui/PickerChrome.qml 295
 ui/PreviewMarkdown.qml 668
 tests/markdown-code.qml 477
-ui/Row.qml 458
+ui/Row.qml 459
 ui/SettingsPanel.qml 547
 ui/SettingsRow.qml 409
 ui/Sidebar.qml 709

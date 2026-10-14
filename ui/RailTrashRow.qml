@@ -1,9 +1,7 @@
 import QtQuick
 import "js/Drag.js" as DragOps
 
-// The rail's Trash row: the SidebarRow every place draws, plus a drop target that trashes the rows a
-// drag from this window carries, see ui/js/TrashDrop.js. It lives here rather than inline in
-// ui/Sidebar.qml, whose rows are indexed by group and whose file sits at its recorded ceiling.
+// The rail's Trash SidebarRow trashes rows dragged from this window through ui/js/TrashDrop.js; it lives outside the group-indexed ui/Sidebar.qml, which sits at its recorded ceiling.
 SidebarRow {
     id: root
 

@@ -28,8 +28,7 @@ function run(check) {
     check("the cursor lands where the first trashed row was", lifter.trashedFirst, 1)
     check("the bar says what the drop will do", TrashDrop.line(wire[Drag.ROWS_MIME], urls, "/d"), "Move 2 items to Trash")
 
-    // Paths survive the listing changing under the drag, so another directory still takes them,
-    // but the cursor has no row of its own to land on there.
+    // Paths survive a listing change and still trash in another directory, but its cursor has no source row to land on.
     var moved = []
     var elsewhere = pane(moved, rows, 9)
     elsewhere.path = "/e"
@@ -43,7 +42,7 @@ function run(check) {
     check("a foreign drag is refused", TrashDrop.drop(guard, "", ["file:///d/a.txt"]), false)
     var otherMarker = "other-flea" + wire[Drag.ROWS_MIME].substring(wire[Drag.ROWS_MIME].indexOf("\n"))
     check("another Flea's drag is refused", TrashDrop.drop(guard, otherMarker, ["file:///d/a.txt"]), false)
-    check("a non-file uri is no path to trash", TrashDrop.drop(guard, "", ["https://example.com/a.txt"]), false)
+    check("a non-file uri is no path to trash", TrashDrop.drop(guard, Drag.INSTANCE, ["https://example.com/a.txt"]), false)
     var gvfs = "/run/user/1000/gvfs/smb-share:server=nas,share=data"
     check("a drag lifted on a GVFS mount is refused, as d is",
           TrashDrop.accepts(Drag.markerPayload([1], false, gvfs, 42, true, false, 7), ["file://" + gvfs + "/a.txt"], gvfs), false)
@@ -78,6 +77,15 @@ function run(check) {
           TrashDrop.accepts(Drag.markerPayload([1], false, "/d", 42, true, false, 0), [], "/d"), false)
     check("a malformed row field is refused whole",
           TrashDrop.accepts(Drag.markerPayload(["1", "x"], false, "/d", 42, true, false, 7), [], "/d"), false)
+    var badFields = ["1,,3", "1,", ",1", "-1", " 1", "+1", "1.0", "1e0"]
+    var malformedSent = []
+    var malformedPane = pane(malformedSent, rows, 7)
+    for (var k = 0; k < badFields.length; k++) {
+        var badMarker = Drag.markerPayload(badFields[k].split(","), false, "/d", 42, true, false, 7)
+        check("row field " + badFields[k] + " parses as no rows", TrashDrop.markerRows(badMarker).length, 0)
+        check("row field " + badFields[k] + " refuses the whole drop", TrashDrop.drop(malformedPane, badMarker, []), false)
+    }
+    check("no malformed row field reaches the backend", malformedSent.length, 0)
     check("the marker reads its numbering back", Drag.markerListing(wide), 7)
     check("and an older marker reads as none", Drag.markerListing(Drag.INSTANCE + "\n1\nmove\n/d\n42"), 0)
 }

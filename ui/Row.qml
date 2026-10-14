@@ -132,6 +132,7 @@ Item {
         active: root.dropTarget || (root.clipMark.length > 0 && !root.renaming && !root.searching)
         anchors.fill: parent
         onActiveChanged: dropLoader.setSource(dropLoader.active ? Qt.resolvedUrl("RowDropTarget.qml") : "", { row: root })
+        Component.onCompleted: if (dropLoader.active) dropLoader.setSource(Qt.resolvedUrl("RowDropTarget.qml"), { row: root })
         onStatusChanged: if (status === Loader.Error) throw new Error("RowDropTarget.qml did not load: Loader status " + status)
     }
 
