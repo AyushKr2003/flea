@@ -14,7 +14,7 @@ import threading
 import urllib.request
 
 binary, root = sys.argv[1], pathlib.Path(sys.argv[2])
-process = subprocess.Popen([binary, '--backend'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+process = subprocess.Popen([binary, '--backend'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
 failures = []
 
 class Listener(BaseHTTPRequestHandler):
@@ -47,23 +47,52 @@ def check(name, got, want=True):
     if not good:
         failures.append((name, got, want))
 
+class ReplyLines:
+    def __init__(self, pipe):
+        self.fd = pipe.fileno()
+        os.set_blocking(self.fd, False)
+        self.pending = b''
+        self.eof = False
+
+    def readline(self, timeout=0):
+        end = time.monotonic() + timeout
+        while True:
+            if b'\n' in self.pending:
+                line, self.pending = self.pending.split(b'\n', 1)
+                return line
+            if self.eof:
+                line, self.pending = self.pending, b''
+                return line or None
+            if not select.select([self.fd], [], [], max(0, end - time.monotonic()))[0]:
+                return None
+            try:
+                chunk = os.read(self.fd, 65536)
+            except BlockingIOError:
+                continue
+            if not chunk:
+                self.eof = True
+            self.pending += chunk
+            if b'\n' not in self.pending and time.monotonic() >= end:
+                return None
+
+replies = ReplyLines(process.stdout)
+
 def ask(token, width, path=None, height=None):
     # A line already waiting belongs to an earlier request, so it is never credited to this one.
-    while select.select([process.stdout], [], [], 0)[0]:
-        if not process.stdout.readline():
-            break
+    while replies.readline() is not None:
+        pass
     payload = {'c': 'html', 'slot': 'test', 'token': token, 'path': str(path or root / 'fixture/index.html'), 'width': width}
     if height is not None:
         payload['height'] = height
-    process.stdin.write(json.dumps(payload) + '\n')
+    process.stdin.write((json.dumps(payload) + '\n').encode())
     process.stdin.flush()
     end = time.monotonic() + 25
     while time.monotonic() < end:
-        if not select.select([process.stdout], [], [], 1)[0]:
+        line = replies.readline(min(1, max(0, end - time.monotonic())))
+        if line is None:
+            if replies.eof:
+                break
             continue
-        line = process.stdout.readline()
-        if not line:
-            break
         # Sample input: {"t":"html","slot":"test","token":1,"state":"ready","file":"/cache/x.png","total":61,"width":984,"title":"Static HTML"}.
         reply = json.loads(line)
         # Generic errors carry no token (proto::error_line); discard them and require this request's HTML reply.
@@ -74,23 +103,40 @@ def ask(token, width, path=None, height=None):
     return {'state': 'timeout'}
 
 try:
-    with HTTPServer(('127.0.0.1', LISTENER_PORT), Listener) as parallel_listener:
-        check('parallel listener receives a different free port', parallel_listener.server_address[1] != port)
-    real_process = process
-    for matched in [True, False]:
-        probe = subprocess.Popen([sys.executable, '-u', '-c',
-            'import json,sys; request=json.loads(sys.stdin.readline()); '
-            'print(json.dumps({"t":"error","message":"stale"})); '
-            + ('print(json.dumps({"t":"html","token":request["token"],"state":"ready"}))' if matched else '')],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    check('listener requests a kernel-assigned port', LISTENER_PORT, 0)
+    real_process, real_replies = process, replies
+    for mode in ['chunk', 'error-only', 'partial', 'buffered-stale']:
+        stub = r"""import json,os,sys
+mode=sys.argv[1]
+if mode == 'partial':
+    os.write(1,b'{"t":"error"')
+    print('partial ready', file=sys.stderr, flush=True)
+request=json.loads(sys.stdin.buffer.readline())
+stale=b',"message":"partial"}\n' if mode == 'partial' else b'{"t":"error","message":"stale"}\n'
+reply=json.dumps({"t":"html","token":request["token"],"state":"ready"}).encode()+b'\n'
+extra=json.dumps({'t':'html','token':402,'state':'failed'}).encode()+b'\n' if mode == 'buffered-stale' else b''
+os.write(1,stale+(reply if mode != 'error-only' else b'')+extra)
+if mode != 'error-only':
+    request=sys.stdin.buffer.readline()
+    if mode == 'buffered-stale':
+        request=json.loads(request)
+        os.write(1,json.dumps({'t':'html','token':request['token'],'state':'ready'}).encode()+b'\n')
+        sys.stdin.buffer.readline()
+"""
+        probe = subprocess.Popen([sys.executable, '-u', '-c', stub, mode],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
         try:
-            process = probe
+            if mode == 'partial':
+                assert probe.stderr.readline() == b'partial ready\n'
+            process, replies = probe, ReplyLines(probe.stdout)
             reply = ask(401, 300)
-            check('stale generic error is never credited (matched=%s)' % matched, reply.get('state'), 'ready' if matched else 'timeout')
+            check('unbuffered reply drain (%s)' % mode, reply.get('state'), 'timeout' if mode == 'error-only' else 'ready')
+            if mode == 'buffered-stale':
+                check('buffered stale reply is drained before the next request', ask(402, 300).get('state'), 'ready')
         finally:
             probe.stdin.close()
             probe.wait(timeout=5)
-            process = real_process
+            process, replies = real_process, real_replies
     control = urllib.request.urlopen('http://127.0.0.1:%d/remote.png' % port, timeout=2).read()
     check('remote marker listener is reachable outside the jail', control.startswith(b'\x89PNG\r\n\x1a\n'))
     control_requests = Listener.requests

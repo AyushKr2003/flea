@@ -143,7 +143,7 @@ fn render(ask: &Ask, ticket: &codereq::Ticket) -> Option<String> {
     let log = String::from_utf8_lossy(&reader.join().ok()?).into_owned();
     // Sample input: qml: HTML_META {"title":"Static HTML"}.
     let title = log.lines().find_map(|line| line.split_once("HTML_META ").and_then(|(_, text)| field_str(text, "title"))).unwrap_or_default();
-    // Sample input: qml: HTML_RESOURCES {"resources":["file:///page/style.css"],"overflow":false}.
+    // Sample input: qml: HTML_RESOURCES {"resources":[{"url":"file:///page/style.css","failed":false}],"overflow":false}.
     let dependencies = log.lines().find_map(|line| line.split_once("HTML_RESOURCES ").and_then(|(_, text)| htmldeps::record(text, folder, started)));
     let record = work.dir.join("page.deps");
     exclusive(&record, dependencies.as_deref().unwrap_or(b"null\n"))?;

@@ -28,7 +28,7 @@ Window {
             + "if(!reply.result){console.warn('FLEA_RESOURCES null');return;}var urls=[],overflow=false;"
             + "function collect(tree){(tree.resources||[]).forEach(function(resource){try{"
             + "var url=new URL(resource.url);if(url.protocol!=='file:'||url.pathname.indexOf('/page/')!==0)return;url.search='';url.hash='';"
-            + "if(urls.length<" + (maxResources + 1) + ")urls.push(url.href);else overflow=true;}catch(skipped){}});"
+            + "if(urls.length<" + (maxResources + 1) + ")urls.push({url:url.href,failed:resource.failed===true});else overflow=true;}catch(skipped){}});"
             + "(tree.childFrames||[]).forEach(collect);}collect(reply.result.frameTree);"
             + "console.warn('FLEA_RESOURCES '+JSON.stringify({resources:urls,overflow:overflow}));socket.close();"
             + "}catch(error){console.warn('FLEA_RESOURCES null');}};"

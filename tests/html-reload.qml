@@ -2,12 +2,14 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "flea" as Flea
+import "flea/js/Format.js" as Format
 
 ShellRoot {
     id: root
     property int phase: 0
     property int failures: 0
     property bool capturing: false
+    property string fileSource: ""
     readonly property string folder: Quickshell.env("HTML_ROOT")
     readonly property string picturePath: root.folder + "/reload.png"
     readonly property string output: Quickshell.env("FLEA_CI_SUITE_LOGS") || root.folder
@@ -35,12 +37,37 @@ ShellRoot {
     }
     Process {
         id: writer
-        command: ["cp", root.folder + "/reload-blue.png", root.picturePath]
+        command: ["python3", "-u", root.folder + "/reload-writer.py", root.folder]
+        stdinEnabled: true
+        stdout: SplitParser {
+            onRead: function (line) {
+                if (line.indexOf("armed ") === 0) {
+                    document.ask()
+                    root.check("re-ask keeps the drawn image without a loading mark", !document.loading)
+                    root.reply()
+                    var picture = document.bodyItem.contentItem.children[0]
+                    root.fileSource = picture.source.toString()
+                    root.check("reply selects the real same-path URL with its new token", root.fileSource === Format.fileUri(root.picturePath) + "#t" + document.token)
+                    // Sample input: armed 43127, the controlled image transport's bound port.
+                    var port = parseInt(line.substring(6))
+                    // Hold the native Image in Loading without blocking Qt's local-file decoder.
+                    picture.source = "http://127.0.0.1:" + port + "/reload.png#t" + document.imageToken
+                } else if (line === "reader") {
+                    var picture = document.bodyItem.contentItem.children[0]
+                    root.check("reply changes the image token before pending capture", document.imageToken === document.token && !document.pending)
+                    root.check("new image is Loading after reply", picture.status === Image.Loading)
+                    root.shot("html-reload-pending", function () {
+                        root.check("new image stays Loading throughout pending capture", picture.status === Image.Loading)
+                        writer.write("publish\n")
+                    })
+                }
+            }
+        }
         onExited: function (code) {
             root.check("replacement bytes published to the same path", code === 0)
-            document.ask()
-            root.check("re-ask retains a ready image without a loading mark", !document.loading && document.bodyItem.contentItem.children[0].status === Image.Ready)
-            root.shot("html-reload-pending", function () { root.reply(); root.phase = 3 })
+            var picture = document.bodyItem.contentItem.children[0]
+            picture.source = Qt.binding(function () { return Format.fileUri(document.imageFile) + "#t" + document.imageToken })
+            root.phase = 3
         }
     }
     FloatingWindow {
@@ -65,7 +92,6 @@ ShellRoot {
             if (root.phase === 0 && document.token > 0) { root.reply(); root.phase = 1 }
             else if (root.phase === 1 && document.contentReady) {
                 root.phase = 2
-                root.check("native image retains pixels through asynchronous reload", document.bodyItem.contentItem.children[0].retainWhileLoading === true)
                 root.shot("html-reload-before", function () { writer.running = true })
             } else if (root.phase === 3 && document.contentReady) {
                 root.phase = 4

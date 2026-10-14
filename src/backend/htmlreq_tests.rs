@@ -63,6 +63,7 @@ fn html_and_code_slots_do_not_cancel_each_other() {
     // Registration is synchronous, so even a code reply that wins the scheduling race cannot hide a collision.
     assert!(!html.superseded(), "the code spawn cancelled an HTML ticket");
     spawn(Ask::parse(r#"{"slot":"test-isolated","cancel":true}"#), tx.clone());
+    assert!(html.superseded(), "the HTML cancel must supersede its own ticket");
     let mut lines = Vec::new();
     for _ in 0..2 {
         let received = rx.recv_timeout(Duration::from_secs(10)).expect("both namespaced tickets answer");
@@ -175,4 +176,20 @@ fn a_helper_past_the_deadline_is_killed_and_reports_timeout() {
     assert!(!Path::new(&format!("/proc/{pid}")).exists());
     let (tx, _) = mpsc::channel();
     ticket.finish("failed".into(), &tx);
+}
+
+#[test]
+fn oversized_marker_lines_are_dropped_before_later_normal_markers() {
+    for (marker, later) in [("HTML_META ", b"HTML_RESOURCES null\n".as_slice()),
+        ("HTML_RESOURCES ", b"HTML_META {\"title\":\"later\"}\n".as_slice())] {
+        let mut input = marker.as_bytes().to_vec();
+        input.extend(std::iter::repeat_n(b'x', STDERR_CAP + 1));
+        input.push(b'\n');
+        input.extend_from_slice(later);
+        assert_eq!(drain_stderr(&input[..]), later, "oversized {marker} beside a valid marker");
+        let mut oversized = marker.as_bytes().to_vec();
+        oversized.extend(std::iter::repeat_n(b'x', STDERR_CAP + 1));
+        oversized.push(b'\n');
+        assert!(drain_stderr(&oversized[..]).is_empty(), "oversized {marker} must be discarded");
+    }
 }

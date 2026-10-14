@@ -35,7 +35,7 @@ fn fields(meta: &Metadata) -> Vec<Json> {
     vec![number(meta.len()), number(meta.mtime()), number(meta.mtime_nsec()), number(meta.ino()), number(meta.dev())]
 }
 
-// Sample input: HTML_RESOURCES {"resources":["file:///page/sub/style.css"],"overflow":false}.
+// Sample input: HTML_RESOURCES {"resources":[{"url":"file:///page/sub/style.css","failed":false}],"overflow":false}.
 pub fn record(text: &str, folder: &Path, started: SystemTime) -> Option<Vec<u8>> {
     if text.len() > MAX_RECORD_BYTES { return None }
     let document = jsondoc::parse(text).ok()?;
@@ -45,25 +45,27 @@ pub fn record(text: &str, folder: &Path, started: SystemTime) -> Option<Vec<u8>>
     let mut rows = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for resource in resources {
-        let url = resource.as_str()?;
+        let url = resource.get("url")?.as_str()?;
+        let failed = resource.get("failed")?.as_bool()?;
         let Some(path) = url.strip_prefix("file:///page/").or_else(|| url.strip_prefix("file://localhost/page/")) else { continue };
         let path = path.split(['?', '#']).next()?;
-        if !seen.insert(path) { continue }
+        let duplicate = !seen.insert(path);
         let candidate = candidate_path(folder, path)?;
         if candidate.canonicalize().is_ok_and(|resolved| !resolved.starts_with(folder)) {
-            rows.push(Json::Arr(vec![Json::Str(path.to_string()), Json::Str("blocked".into())]));
+            if !duplicate { rows.push(Json::Arr(vec![Json::Str(path.to_string()), Json::Str("blocked".into())])); }
             continue;
         }
         let meta = match candidate.metadata() {
             Ok(_) => stamp(folder, path)?,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                rows.push(Json::Arr(vec![Json::Str(path.to_string()), Json::Str("absent".into())]));
+            Err(error) if failed && error.kind() == std::io::ErrorKind::NotFound => {
+                if !duplicate { rows.push(Json::Arr(vec![Json::Str(path.to_string()), Json::Str("absent".into())])); }
                 continue;
             }
             Err(_) => return None,
         };
         let changed = SystemTime::UNIX_EPOCH + Duration::new(meta.ctime().max(0) as u64, meta.ctime_nsec().max(0) as u32);
         if meta.modified().ok()? > started || changed > started { return None }
+        if duplicate { continue }
         let mut row = vec![Json::Str(path.to_string())];
         row.extend(fields(&meta));
         rows.push(Json::Arr(row));

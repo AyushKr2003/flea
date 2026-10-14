@@ -30,6 +30,7 @@ cp "$test_root/fixture/notes.md" "$test_root/fixture/other.md" || exit 1
 python3 tests/html-specimen.py "$test_root/specimen" || exit 1
 magick -size 300x400 xc:'#45bc23' "$test_root/reload.png" || exit 1
 magick -size 300x400 xc:'#2345bc' "$test_root/reload-blue.png" || exit 1
+cp tests/html-reload-writer.py "$test_root/reload-writer.py" || exit 1
 cp "$test_root/specimen/index.html" "$test_root/fixture/board.html" || exit 1
 mkdir -p "$test_root/cache #?"
 export HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_CACHE_HOME="$test_root/cache #?"

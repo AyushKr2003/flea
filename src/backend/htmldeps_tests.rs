@@ -14,7 +14,7 @@ fn engine_resources_record_nested_styles_images_fonts_and_encoded_names() {
     let d = TestDir::new("html-dependencies");
     d.dir("sub");
     for name in ["sub/style.css", "image #?.png", "font.woff"] { d.file(name, "data"); }
-    let png = saved(&d, r#"{"resources":["file:///page/sub/style.css","file:///page/image%20%23%3F.png","file:///page/font.woff","data:image/png;base64,abc"],"overflow":false}"#);
+    let png = saved(&d, r#"{"resources":[{"url":"file:///page/sub/style.css","failed":false},{"url":"file:///page/image%20%23%3F.png","failed":false},{"url":"file:///page/font.woff","failed":false},{"url":"data:image/png;base64,abc","failed":false}],"overflow":false}"#);
     assert!(unchanged(&png, d.path()));
     let document = jsondoc::parse(&std::fs::read_to_string(sidecar(&png)).unwrap()).unwrap();
     assert_eq!(document.get("dependencies").unwrap().as_array().unwrap().len(), 3);
@@ -27,7 +27,7 @@ fn each_size_nanosecond_mtime_and_inode_change_invalidates_the_record() {
     let d = TestDir::new("html-dependency-stamps");
     let css = d.file("style.css", "old!");
     let stamp = SystemTime::UNIX_EPOCH + Duration::new(9, 20);
-    let resources = r#"{"resources":["file:///page/style.css"],"overflow":false}"#;
+    let resources = r#"{"resources":[{"url":"file:///page/style.css","failed":false}],"overflow":false}"#;
     for change in ["size", "seconds", "nanoseconds", "inode"] {
         std::fs::write(&css, "old!").unwrap();
         File::open(&css).unwrap().set_times(FileTimes::new().set_modified(stamp)).unwrap();
@@ -59,7 +59,7 @@ fn dependency_records_reject_malformed_input_and_track_denied_paths() {
     let outside = TestDir::new("html-dependency-outside");
     let target = outside.file("other.css", "data");
     std::os::unix::fs::symlink(target, d.join("escape.css")).unwrap();
-    let png = saved(&d, r#"{"resources":["file:///page/escape.css"],"overflow":false}"#);
+    let png = saved(&d, r#"{"resources":[{"url":"file:///page/escape.css","failed":false}],"overflow":false}"#);
     let denied = jsondoc::parse(&std::fs::read_to_string(sidecar(&png)).unwrap()).unwrap();
     assert_eq!(denied.get("dependencies").and_then(Json::as_array).unwrap()[0],
         Json::Arr(vec![Json::Str("escape.css".into()), Json::Str("blocked".into())]));
@@ -72,13 +72,13 @@ fn dependency_records_reject_malformed_input_and_track_denied_paths() {
 fn a_missing_sheet_is_recorded_absent_and_its_arrival_invalidates() {
     let d = TestDir::new("html-dependency-absent");
     let png = d.join("cached.png");
-    let resources = r#"{"resources":["file:///page/late.css"],"overflow":false}"#;
+    let resources = r#"{"resources":[{"url":"file:///page/late.css","failed":true}],"overflow":false}"#;
     let bytes = record(resources, d.path(), SystemTime::now() + Duration::from_secs(1)).unwrap();
     std::fs::write(sidecar(&png), &bytes).unwrap();
     assert!(unchanged(&png, d.path()));
     d.file("late.css", "body{margin:0}");
     assert!(!unchanged(&png, d.path()));
-    let png = saved(&d, r#"{"resources":["file:///page/folder.css"],"overflow":false}"#);
+    let png = saved(&d, r#"{"resources":[{"url":"file:///page/folder.css","failed":true}],"overflow":false}"#);
     d.dir("folder.css");
     assert!(!unchanged(&png, d.path()), "any arrival invalidates an absent resource");
 }
@@ -88,10 +88,10 @@ fn overflow_and_edits_during_render_disable_reuse() {
     let d = TestDir::new("html-dependency-bounds");
     let started = SystemTime::UNIX_EPOCH;
     d.file("style.css", "data");
-    let resources = r#"{"resources":["file:///page/style.css"],"overflow":false}"#;
+    let resources = r#"{"resources":[{"url":"file:///page/style.css","failed":false}],"overflow":false}"#;
     assert!(record(resources, d.path(), started).is_none());
     assert!(record(r#"{"resources":[],"overflow":true}"#, d.path(), SystemTime::now()).is_none());
-    let urls = vec![Json::Str("file:///page/style.css".into()); MAX_RESOURCES + 1];
+    let urls = vec![jsondoc::parse(r#"{"url":"file:///page/style.css","failed":false}"#).unwrap(); MAX_RESOURCES + 1];
     let document = Json::Obj(vec![("resources".into(), Json::Arr(urls)), ("overflow".into(), Json::Bool(false))]);
     assert!(record(&jsondoc::render(&document), d.path(), SystemTime::now()).is_none());
     let rows = vec![Json::Arr(vec![Json::Str("style.css".into()), number(4), number(1), number(0), number(1), number(1)]); MAX_RESOURCES + 1];
@@ -100,4 +100,16 @@ fn overflow_and_edits_during_render_disable_reuse() {
     std::fs::write(sidecar(&png), jsondoc::render(&document)).unwrap();
     assert!(!unchanged(&png, d.path()));
     assert!(record(&" ".repeat(MAX_RECORD_BYTES + 1), d.path(), SystemTime::now()).is_none());
+}
+
+#[test]
+fn a_loaded_sheet_deleted_before_record_cannot_be_cached_as_absent() {
+    let d = TestDir::new("html-dependency-deleted");
+    let css = d.file("loaded.css", "body{color:red}");
+    let started = SystemTime::now();
+    std::fs::remove_file(css).unwrap();
+    let resources = r#"{"resources":[{"url":"file:///page/loaded.css","failed":false}],"overflow":false}"#;
+    assert!(record(resources, d.path(), started).is_none(), "loaded pixels outlive the deleted sheet");
+    let mixed = r#"{"resources":[{"url":"file:///page/loaded.css","failed":true},{"url":"file:///page/loaded.css","failed":false}],"overflow":false}"#;
+    assert!(record(mixed, d.path(), started).is_none(), "a failed duplicate must not hide a loaded resource");
 }
