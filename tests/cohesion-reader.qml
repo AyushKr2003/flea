@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import "flea" as Flea
 import "flea/js/Tabs.js" as Tabs
+import "flea/js/Scroll.js" as Scroll
 import QtTest
 
 // the montage's reader names each control with a box inside the window, at rest and with a dialog open.
@@ -15,6 +16,9 @@ ShellRoot {
     property int checks: 0
     property var failures: []
     property double wheelAt: 0
+    property double sleepWaitAt: 0
+    // A shown bar sleeps after Scroll.HOLD_MS and FADE_MS; twice that absorbs a loaded host.
+    readonly property int sleepWaitMs: 2 * (Scroll.HOLD_MS + Scroll.FADE_MS)
     readonly property string closeMark: "Close permissions"
 
     function check(cond, label) {
@@ -129,6 +133,11 @@ ShellRoot {
                 if (pane.columnsArea.previewColumn.swap.holding || pane.columnsArea.previewColumn.swap.capturing) return
                 var state = JSON.parse(root.ipcItem().seam.cohesionControls())
                 if (!state.previewColumns || !state.previewColumns.some(function(c) { return c.visible && c.drawn })) return
+                // The bar must be asleep before the wheel, so only the wheel can expose it; the PDF load may still show it.
+                var awake = state.controls.some(function(c) { return c.kind === "ViewportScrollBar" && c.surface === "PreviewColumn" && c.exposed })
+                if (awake && root.sleepWaitAt === 0) root.sleepWaitAt = Date.now()
+                if (awake && Date.now() - root.sleepWaitAt < root.sleepWaitMs) return
+                root.check(!awake, "the Columns PDF bar sleeps before the wheel")
                 var columns = root.read("columns").st
                 root.check(columns.captureReader === "porttp4d", "the full window uses the current capture reader")
                 root.check(columns.previewColumns.some(function(c) { return /^SelectionPreview_QML/.test(c.type) && c.loaded }),

@@ -16,6 +16,7 @@ cleanup() {
         local file pid
         for file in "$group_fixture/child.pid" "$group_fixture/detached.pid"; do
             [[ -f "$file" ]] || continue
+            # Sample input: child.pid and detached.pid each hold one decimal pid, "4242".
             read -r pid < "$file"
             [[ "$pid" =~ ^[0-9]+$ ]] && kill -KILL "$pid" 2>/dev/null || true
         done

@@ -67,6 +67,7 @@ QtObject {
         }
         function walk(item) {
             if (!item) return
+            // Sample input: String(item) is "SelectionPreview_QML_123(0x55d0c0a8)"; the type is the text before "(".
             if (/^(PreviewColumn|SelectionPreview)_QML/.test(String(item)))
                 state.previewColumns.push({type: String(item).split("(")[0], visible: item.visible, opacity: item.opacity,
                     loaded: item.pdfLoaded(), drawn: item.pdfDrawn})
