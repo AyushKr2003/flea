@@ -12,11 +12,14 @@ cap_html_expect() {
     done
     fail "HTML: $label: $state"
 }
+cap_html_dir=""
 cap_html_open() {
     local view="$1" dir
-    sandbox_require "$fixture_root/html"
     dir=$(mktemp -d "$fixture_root/html.XXXXXXXX") || fail "HTML: cannot create specimen sandbox"
+    sandbox_require "$dir"
+    cap_html_dir=$dir
     : > "$dir/$SANDBOX_MARKER"
+    trap cap_html_close EXIT
     python3 "$repo/tests/html-specimen.py" "$dir/page" || fail "HTML: specimen creation failed"
     seed_ui_state "$dir/state" '{"keys":"default","view":"list","display":{"textSize":{"mode":14}}}'
     launch "$dir/page"
@@ -31,11 +34,17 @@ cap_html_open() {
         cap_html_expect false '.visible and .ready and .view == "source" and .lines == 61' "HTML Source draws all lines"
     fi
 }
+cap_html_close() {
+    kill_flea
+    if [[ -n "$cap_html_dir" ]]; then sandbox_remove "$cap_html_dir"; fi
+    cap_html_dir=""
+    trap - EXIT
+}
 case_cap_html() {
     local menus_checks=0
     cap_html_open rendered
     shot ql-html
-    kill_flea
+    cap_html_close
 }
 case_cap_html_source() {
     local menus_checks=0
@@ -44,7 +53,12 @@ case_cap_html_source() {
     key -k Escape >/dev/null
     switch_view columns
     cap_html_expect true '.visible and .ready and .view == "rendered"' "the column renders after Quick Look Source closes"
-    kill_flea
+    switch_view list
+    seek_row_named index.html
+    key -k space >/dev/null
+    cap_html_expect false '.visible and .ready and .view == "rendered"' "Quick Look reopens rendered after Source closes"
+    key -k Escape >/dev/null
+    cap_html_close
 }
 case_cap_cols_html() {
     local menus_checks=0
@@ -53,5 +67,5 @@ case_cap_cols_html() {
     switch_view columns
     cap_html_expect true '.visible and .ready and .view == "rendered" and .lines == 61 and .facts == "HTML document · 1.6 kB · 61 lines"' "the tall column shows the board facts"
     shot cols-html
-    kill_flea
+    cap_html_close
 }

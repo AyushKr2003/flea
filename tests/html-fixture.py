@@ -2,6 +2,9 @@
 import pathlib
 import sys
 
+# The remote-marker listener's port, shared with html-engine.py: the jail must never reach it.
+LISTENER_PORT = 0
+
 folder = pathlib.Path(sys.argv[1])
 lines = [
     '<!doctype html>', '<html><head><meta charset="utf-8">',
@@ -15,7 +18,7 @@ lines = [
     '</head><body>', '<nav><b>Ridgeline</b><span>Huts</span><span>Weather</span></nav>',
     '<h1>Walking the col</h1>',
     '<p>The ridgeline trail leaves the car park at first light and climbs through pine forest for an hour.</p>',
-    '<img src="local.png"><img src="http://127.0.0.1:18879/remote.png">',
+    '<img src="local.png"><img src="http://127.0.0.1:%d/remote.png">' % LISTENER_PORT,
     '<img src="../outside.png"><img src="escape.png">',
     '<div class="note">Carry a map. The waymarks are red and white paint on rock cairns.</div>',
     '<section></section>', '</body></html>',

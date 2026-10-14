@@ -400,7 +400,7 @@ ShellRoot {
         shell.check(Bar.barError(g, tokens), "Quick Look bar order")
         shell.check(Bar.pressError(g.bar, g.close), "Quick Look close is the only bar control")
         shell.check(Bar.nameRoomError(longNamePane.barGeometry ? longNamePane.barGeometry() : null, tokens), "Quick Look name takes the freed room")
-        shell.check(Bar.plainBarError(plainBar.geometry(), tokens), "Quick Look bar without the segment keeps its count one gap before close")
+        shell.check(Bar.plainBarChecks(plainBar.geometry(), longNamePane.barGeometry(), tokens), "Quick Look bar without the segment keeps its count one gap before close")
         shell.barSqueezed(tokens)
         shell.barDriven(tokens)
     }

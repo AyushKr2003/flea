@@ -9,8 +9,8 @@ grep -q 'source: root.isHtml ? "HtmlPane.qml" : "MarkdownPane.qml"' ui/Preview.q
     || { echo "FAIL Quick Look builds its Markdown bar eagerly"; exit 1; }
 grep -q 'source: root.isHtmlRow ? "PreviewHtml.qml" : "PreviewMarkdown.qml"' ui/PreviewColumn.qml \
     || { echo "FAIL the column builds its Markdown pane eagerly"; exit 1; }
-if grep -nE '^[[:space:]]*(Flea\.)?(PreviewMarkdown|MarkdownPane)[[:space:]]*\{' ui/Preview.qml ui/PreviewColumn.qml; then
-    echo "FAIL a Markdown pane is instantiated directly"
+if grep -nE '^[[:space:]]*(Flea\.)?(PreviewMarkdown|MarkdownPane|PreviewHtml|HtmlPane)[[:space:]]*\{' ui/Preview.qml ui/PreviewColumn.qml; then
+    echo "FAIL a document pane is instantiated directly"
     exit 1
 fi
 # Pin direct QtQuick.Layouts imports in these four panes, not transitive runtime module loading.

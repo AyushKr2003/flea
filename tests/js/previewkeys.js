@@ -2,6 +2,7 @@
 .import "../../ui/js/PreviewKeys.js" as PreviewKeys
 .import "../../ui/js/Keymap.js" as Keymap
 .import "sourcefixture.js" as Source
+.import "documentview.js" as DocumentView
 
 function run(check) {
     var activated = []
@@ -100,7 +101,7 @@ function run(check) {
     var keysBody = Source.slice(viewerSrc, "Keys.onPressed", "readonly property int page")
     check("the pdf viewer closes on the preview action", keysBody.indexOf('|| action === "preview") root.closed()') >= 0, true)
 
-    // Rendered document kinds share r while preserving their separate remembered views.
+    // Rendered document kinds share r; the flip is transient and forgotten on close.
     function markPane(markdown, html) {
         var pane = { switched: 0 }
         pane.preview = {
@@ -124,10 +125,7 @@ function run(check) {
     check("r maps to markdownView in the preview context",
         Keymap.lookupFor("default", 0, "r", Qt.NoModifier, "preview", "gui"), "markdownView")
     var quickSrc = Source.source("ui/Preview.qml")
-    check("Quick Look owns a transient source flip and close forgets it",
-        quickSrc.indexOf('property bool markdownSource: false') >= 0
-            && Source.block(quickSrc, "function close()", "ui/Preview.qml").indexOf("root.markdownSource = false") >= 0
-            && quickSrc.indexOf("ViewState.setDocumentView") < 0, true)
+    DocumentView.run(check, quickSrc, Source.source("ui/ViewState.qml"), Source.block)
     check("r stays rename in the listing",
         Keymap.lookupFor("default", 0, "r", Qt.NoModifier, "listing", "gui"), "rename")
     // ButtonSystem040: Tab and Shift+Tab put the keyboard on the Markdown bar's close mark and take it off; Return or Space on it closes.

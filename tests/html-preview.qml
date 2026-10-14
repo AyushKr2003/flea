@@ -15,6 +15,9 @@ ShellRoot {
     property bool ticking: false
     property bool capturePending: false
     property int replies: 0
+    property bool heldResize: false
+    property bool lostResize: false
+    property bool rSent17: false
     property int beforeResize: 0
     property real beforePage: 0
     property int cursorBefore: -1
@@ -108,7 +111,12 @@ ShellRoot {
             root.next()
             break
         case 3:
+            if (d && d.pending && d.imageFile.length > 0 && !d.sourceView) {
+                root.heldResize = true
+                if (d.loading || !d.bodyItem.visible) root.lostResize = true
+            }
             if (!root.calm(d && d.contentReady && d.renderedWidth === d.deviceWidth && root.replies > root.beforeResize)) return
+            root.check("a resize keeps the drawn page until the new render lands", root.heldResize && !root.lostResize, true)
             root.check("resize burst renders only the settled width", root.replies - root.beforeResize, 1)
             root.check("zero restores fit", d.zoom, 1)
             root.key("r")
@@ -160,8 +168,11 @@ ShellRoot {
         case 10:
             if (!root.calm(d && d.sourceView && d.firstScreen)) return
             root.check("HTML r changes only the open Quick Look", d.shownView, "source")
-            root.press(Qt.Key_Space)
-            root.next()
+            root.press(Qt.Key_Escape)
+            root.open("index.html")
+            root.phase = 31
+            root.started = Date.now()
+            root.calmAt = 0
             break
         case 11:
             if (!root.calm(c && c.markdown && !c.markdown.sourceView && c.markdown.contentReady && !c.textLoading)) return
@@ -203,7 +214,7 @@ ShellRoot {
             root.next()
             break
         case 17:
-            if (d && !d.sourceView && d.contentReady && l.openState().landed) { root.key("r"); return }
+            if (!root.rSent17 && d && !d.sourceView && d.contentReady && l.openState().landed) { root.rSent17 = true; root.key("r"); return }
             if (!root.calm(d && d.sourceView && d.firstScreen && l.openState().landed)) return
             root.check("long HTML Source keeps its gutter and whole-file count", [d.sourceCode.total, d.sourceCode.numbered], [800, true])
             d.viewport.positionViewAtIndex(40, ListView.Beginning)
@@ -246,6 +257,15 @@ ShellRoot {
         case 23:
             if (!root.calm(true)) return
             root.finish()
+            break
+        case 31:
+            if (!root.calm(d && !d.sourceView && d.contentReady)) return
+            root.check("closing Source forgets the flip", d.shownView, "rendered")
+            root.press(Qt.Key_Space)
+            root.phase = 11
+            root.started = Date.now()
+            root.calmAt = 0
+            break
         }
     }
     FloatingWindow {

@@ -243,7 +243,7 @@ out=$(flea_ui '{"density":"tight"}' 2>&1); rc=$?
 check "a write over the retired leaf exits 0" "0" "$rc"
 check "and lands" "1" "$(grep -c '"density": "tight"' "$UI")"
 # The write fills the preview defaults in, so the unknown key and its sibling leaf are read back by value, not by shape.
-# Sample input: {"preview": {"markdownView": "source", "htmlView": "source", "thumbSize": "large"}, "view": "columns"}
+# Sample input (post-write fields, other defaults omitted): {"density": "tight", "view": "columns", "preview": {"column": true, "thumbSize": "large", "markdownView": "source", "htmlView": "source"}}
 kept=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); p=d.get("preview", {}); print(p.get("markdownView"), p.get("htmlView"), p.get("thumbSize"), d.get("view"))' "$UI" 2>&1)
 check "and the write keeps both retired leaves, their sibling leaf and the view as read" "source source large columns" "$kept"
 

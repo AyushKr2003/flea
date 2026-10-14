@@ -70,6 +70,8 @@ function tabWalkError(g) {
 function nameRoomError(g, tokens) {
     if (!g || !(g.name.width < g.name.implicitWidth))
         return "the long name never elided";
+    if (!g.countShown)
+        return "the count is hidden while its room is measured";
     var rightGap = g.close.x - (g.lines.x + g.lines.implicitWidth);
     return rightGap === tokens.gap ? "" : "the count ends " + rightGap + " px before close, want " + tokens.gap;
 }
@@ -77,7 +79,26 @@ function nameRoomError(g, tokens) {
 function plainBarError(g, tokens) {
     if (!g || g.segment || g.rendered || g.source)
         return "the plain bar exposes a retired view control";
-    return Mark.markError(g, tokens) || nameRoomError(g, tokens) || pressError(g.bar, g.close);
+    var drawn = Mark.markError(g, tokens);
+    if (drawn)
+        return drawn;
+    if (!g.countShown)
+        return "the plain bar hides its count";
+    if (!(g.mark.x < g.name.x && g.name.x < g.lines.x && g.lines.x < g.close.x))
+        return "the bar does not read mark, name, count, close from left to right";
+    return nameRoomError(g, tokens) || pressError(g.bar, g.close);
+}
+
+// Checker controls reject hidden counts and wrong order using the same live geometry as the positive check.
+function plainBarChecks(g, longName, tokens) {
+    var error = plainBarError(g, tokens);
+    if (error) return error;
+    if (!plainBarError(Object.assign({}, g, { countShown: false }), tokens))
+        return "the plain bar checker accepted a hidden count";
+    if (!nameRoomError(Object.assign({}, longName, { countShown: false }), tokens))
+        return "the name-room checker measured a hidden count";
+    var wrongOrder = Object.assign({}, g, { name: Object.assign({}, g.name, { x: -1 }) });
+    return plainBarError(wrongOrder, tokens) ? "" : "the plain bar checker accepted a name before its mark";
 }
 
 function fixedSizes(g) {

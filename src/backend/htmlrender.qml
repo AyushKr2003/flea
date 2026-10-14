@@ -13,7 +13,8 @@ Window {
     }
     readonly property url pageUrl: arg("page", "")
     readonly property string outPath: "/output/page.png"
-    readonly property int pageWidth: parseInt(arg("width", "984"))
+    readonly property int defaultWidth: 984
+    readonly property int pageWidth: parseInt(arg("width", String(defaultWidth)))
     readonly property int pageHeight: parseInt(arg("height", "0"))
     readonly property int maxHeight: parseInt(arg("max-height", "0"))
     readonly property int maxResources: parseInt(arg("max-resources", "0"))
@@ -25,9 +26,9 @@ Window {
             + "socket.onerror=function(){console.warn('FLEA_RESOURCES null');};"
             + "socket.onmessage=function(event){try{var reply=JSON.parse(event.data);if(reply.id!==1)return;"
             + "if(!reply.result){console.warn('FLEA_RESOURCES null');return;}var urls=[],overflow=false;"
-            + "function collect(tree){(tree.resources||[]).forEach(function(resource){if(resource.failed||resource.canceled)return;"
+            + "function collect(tree){(tree.resources||[]).forEach(function(resource){try{"
             + "var url=new URL(resource.url);if(url.protocol!=='file:'||url.pathname.indexOf('/page/')!==0)return;url.search='';url.hash='';"
-            + "if(urls.length<" + (maxResources + 1) + ")urls.push(url.href);else overflow=true;});"
+            + "if(urls.length<" + (maxResources + 1) + ")urls.push(url.href);else overflow=true;}catch(skipped){}});"
             + "(tree.childFrames||[]).forEach(collect);}collect(reply.result.frameTree);"
             + "console.warn('FLEA_RESOURCES '+JSON.stringify({resources:urls,overflow:overflow}));socket.close();"
             + "}catch(error){console.warn('FLEA_RESOURCES null');}};"

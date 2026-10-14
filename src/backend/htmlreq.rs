@@ -8,6 +8,9 @@ use std::sync::mpsc::Sender;
 use std::time::{Duration, Instant, SystemTime};
 
 const MAX_BYTES: u64 = 1_048_576;
+const DEFAULT_WIDTH: usize = 984;
+const STDERR_CAP: usize = htmldeps::MAX_RECORD_BYTES + STDERR_CHUNK;
+const STDERR_CHUNK: usize = 8 * 1024;
 const HELPER: &str = include_str!("htmlrender.qml");
 const LIMIT: Duration = Duration::from_secs(15);
 
@@ -23,7 +26,7 @@ pub struct Ask {
 impl Ask {
     // Sample input: {"c":"html","token":3,"slot":"look","path":"/home/gm/index.html","width":984,"height":625}.
     pub fn parse(line: &str) -> Self {
-        let requested_width = field_usize(line, "width").unwrap_or(984).max(1);
+        let requested_width = field_usize(line, "width").unwrap_or(DEFAULT_WIDTH).max(1);
         let width = requested_width.min(htmlcache::MAX_WIDTH);
         let height = field_usize(line, "height").map(|height| height.max(1).saturating_mul(width).div_ceil(requested_width)
             .clamp(1, htmlcache::MAX_HEIGHT as usize)).unwrap_or(htmlcache::DEFAULT_HEIGHT);
@@ -42,6 +45,36 @@ pub fn spawn(ask: Ask, tx: Sender<OpMsg>) {
     });
 }
 
+// Drain to EOF, retaining only the last bounded line for each helper marker, regardless of console noise.
+fn drain_stderr(mut reader: impl Read) -> Vec<u8> {
+    let mut markers: [Vec<u8>; 2] = Default::default();
+    let mut line = Vec::new();
+    let mut chunk = [0; STDERR_CHUNK];
+    let mut oversized = false;
+    let keep = |line: &[u8], markers: &mut [Vec<u8>; 2]| {
+        for (index, marker) in [b"HTML_META ".as_slice(), b"HTML_RESOURCES ".as_slice()].iter().enumerate() {
+            if line.windows(marker.len()).any(|part| part == *marker) { markers[index] = line.to_vec() }
+        }
+    };
+    loop {
+        let count = match reader.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(count) => count,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
+        };
+        for &byte in &chunk[..count] {
+            if line.len() < STDERR_CAP { line.push(byte) } else { oversized = true }
+            if byte != b'\n' { continue }
+            if !oversized { keep(&line, &mut markers) }
+            line.clear();
+            oversized = false;
+        }
+    }
+    if !oversized { keep(&line, &mut markers) }
+    markers.concat()
+}
+
 fn exclusive(path: &Path, bytes: &[u8]) -> Option<()> {
     use std::os::unix::fs::OpenOptionsExt;
     let mut file = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(path).ok()?;
@@ -56,6 +89,8 @@ fn confined_html(bytes: &[u8]) -> Vec<u8> {
     loop {
         while bytes.get(head).is_some_and(u8::is_ascii_whitespace) { head += 1; }
         if !bytes[head..].starts_with(b"<!--") { break }
+        if bytes[head + 4..].starts_with(b">") { head += 5; continue }
+        if bytes[head + 4..].starts_with(b"->") { head += 6; continue }
         let Some(end) = bytes[head + 4..].windows(3).position(|part| part == b"-->") else { break };
         head += 4 + end + 3;
     }
@@ -101,11 +136,7 @@ fn render(ask: &Ask, ticket: &codereq::Ticket) -> Option<String> {
     }).ok()?;
     let stderr = jailed.child.stderr.take();
     if !ticket.attach(jailed) { return None }
-    let reader = std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        if let Some(pipe) = stderr { let _ = pipe.take(64 * 1024).read_to_end(&mut bytes); }
-        bytes
-    });
+    let reader = std::thread::spawn(move || stderr.map(drain_stderr).unwrap_or_default());
     if !ticket.reap_until(Some(Instant::now() + LIMIT))?.ok()?.success() { return None }
     let png = work.dir.join("page.png");
     if !htmlcache::valid_png(&png, ask.width, ask.height) || ticket.superseded() { return None }

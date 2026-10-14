@@ -44,20 +44,43 @@ fn each_size_nanosecond_mtime_and_inode_change_invalidates_the_record() {
 }
 
 #[test]
-fn missing_malformed_oversized_and_escaping_records_are_misses() {
+fn dependency_records_reject_malformed_input_and_track_denied_paths() {
     let d = TestDir::new("html-dependency-records");
     let png = d.join("cached.png");
     assert!(!unchanged(&png, d.path()));
     for bad in ["null".to_string(), "{}".into(), "x".repeat(MAX_RECORD_BYTES + 1),
         r#"{"version":1,"dependencies":[["../outside",1,2,3,4,5]]}"#.into(),
-        r#"{"version":1,"dependencies":[["missing",1,2,3,4,5]]}"#.into()] {
+        r#"{"version":1,"dependencies":[["missing",1,2,3,4,5]]}"#.into(),
+        r#"{"version":1,"dependencies":[[]]}"#.into(),
+        r#"{"version":1,"dependencies":[["../outside","absent"]]}"#.into()] {
         std::fs::write(sidecar(&png), bad).unwrap();
         assert!(!unchanged(&png, d.path()));
     }
     let outside = TestDir::new("html-dependency-outside");
     let target = outside.file("other.css", "data");
     std::os::unix::fs::symlink(target, d.join("escape.css")).unwrap();
-    assert!(record(r#"{"resources":["file:///page/escape.css"],"overflow":false}"#, d.path(), SystemTime::now()).is_none());
+    let png = saved(&d, r#"{"resources":["file:///page/escape.css"],"overflow":false}"#);
+    let denied = jsondoc::parse(&std::fs::read_to_string(sidecar(&png)).unwrap()).unwrap();
+    assert_eq!(denied.get("dependencies").and_then(Json::as_array).unwrap()[0],
+        Json::Arr(vec![Json::Str("escape.css".into()), Json::Str("blocked".into())]));
+    assert!(unchanged(&png, d.path()), "an outside target stays inaccessible to the jail");
+    d.replace_file(&d.join("escape.css"), "now local");
+    assert!(!unchanged(&png, d.path()), "replacing the escape with local content must invalidate");
+}
+
+#[test]
+fn a_missing_sheet_is_recorded_absent_and_its_arrival_invalidates() {
+    let d = TestDir::new("html-dependency-absent");
+    let png = d.join("cached.png");
+    let resources = r#"{"resources":["file:///page/late.css"],"overflow":false}"#;
+    let bytes = record(resources, d.path(), SystemTime::now() + Duration::from_secs(1)).unwrap();
+    std::fs::write(sidecar(&png), &bytes).unwrap();
+    assert!(unchanged(&png, d.path()));
+    d.file("late.css", "body{margin:0}");
+    assert!(!unchanged(&png, d.path()));
+    let png = saved(&d, r#"{"resources":["file:///page/folder.css"],"overflow":false}"#);
+    d.dir("folder.css");
+    assert!(!unchanged(&png, d.path()), "any arrival invalidates an absent resource");
 }
 
 #[test]

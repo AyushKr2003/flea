@@ -8,7 +8,8 @@ Item {
     property string path: ""
     property int size: 0
     property string view: "rendered"
-    property int maxBytes: 1048576
+    readonly property int byteCeiling: 1048576
+    property int maxBytes: byteCeiling
     property bool truncate: false
     property string blockPath: ""
     property var backend: null

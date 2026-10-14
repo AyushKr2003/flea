@@ -54,6 +54,23 @@ fn html_and_code_slots_do_not_cancel_each_other() {
         code.finish("code".into(), &tx);
         assert!(matches!(rx.recv().unwrap(), OpMsg::Meta { line } if line == "code"));
     }
+    // Both production spawns namespace their tickets, so a code slot shaped like an HTML ticket still lands beside the HTML one.
+    let html = codereq::begin("html:test-isolated");
+    let (tx, rx) = mpsc::channel();
+    let Request::Code(code) = proto::parse_request(r#"{"c":"code","token":1,"slot":"html:test-isolated","text":"hi","name":"x.txt","first":1,"count":10}"#)
+        else { panic!("code request not parsed") };
+    codereq::spawn(code, tx.clone());
+    // Registration is synchronous, so even a code reply that wins the scheduling race cannot hide a collision.
+    assert!(!html.superseded(), "the code spawn cancelled an HTML ticket");
+    spawn(Ask::parse(r#"{"slot":"test-isolated","cancel":true}"#), tx.clone());
+    let mut lines = Vec::new();
+    for _ in 0..2 {
+        let received = rx.recv_timeout(Duration::from_secs(10)).expect("both namespaced tickets answer");
+        let OpMsg::Meta { line } = received else { panic!("non-meta reply") };
+        lines.push(line);
+    }
+    assert!(lines.iter().any(|line| line.contains("cancelled")), "HTML cancel missing: {lines:?}");
+    assert!(lines.iter().any(|line| line.contains(r#""t":"code""#)), "code answer missing: {lines:?}");
 }
 
 #[test]
@@ -74,6 +91,33 @@ fn a_bom_whitespace_and_complete_comments_keep_the_doctype_before_the_policy() {
     }
     let text = String::from_utf8(confined_html(b"<!-- incomplete <!doctype html><html>")).unwrap();
     assert!(text.starts_with("<meta"));
+}
+
+#[test]
+fn abrupt_comment_closings_keep_the_doctype_before_the_policy() {
+    for prefix in ["<!-->", "<!--->"] {
+        let source = format!("{prefix}<!doctype html><html>");
+        let text = String::from_utf8(confined_html(source.as_bytes())).unwrap();
+        assert!(text.starts_with(&format!("{prefix}<!doctype html><meta")), "{text}");
+    }
+}
+
+#[test]
+fn the_stderr_drain_keeps_the_markers_past_the_cap() {
+    let mut noisy = vec![b'x'; STDERR_CAP + 1024];
+    noisy.extend_from_slice(b"\nHTML_META {\"title\":\"Noisy\"}\nHTML_RESOURCES null\n");
+    noisy.extend(std::iter::repeat_n(b'x', STDERR_CAP + 1024));
+    noisy.push(b'\n');
+    let mut input = std::io::Cursor::new(noisy);
+    let tail = drain_stderr(&mut input);
+    assert_eq!(input.position(), input.get_ref().len() as u64, "stderr must be drained to EOF");
+    assert!(tail.len() <= 2 * STDERR_CAP);
+    let text = String::from_utf8(tail).unwrap();
+    assert!(text.contains("HTML_META {\"title\":\"Noisy\"}"), "{text}");
+    assert!(text.ends_with("HTML_RESOURCES null\n"), "{text}");
+    let short = drain_stderr(&b"HTML_META {\"title\":\"Short\"}\n"[..]);
+    assert_eq!(short, b"HTML_META {\"title\":\"Short\"}\n");
+    assert_eq!(drain_stderr(&b"HTML_RESOURCES null"[..]), b"HTML_RESOURCES null");
 }
 
 #[test]

@@ -12,7 +12,9 @@ Item {
     property bool active: false
     property string path: ""
     property int size: 0
-    property int maxBytes: 1048576
+    readonly property int byteCeiling: 1048576
+    readonly property int settleMs: 160
+    property int maxBytes: byteCeiling
     property bool truncate: false
     property bool compact: false
     property bool externalScrollBars: false
@@ -30,6 +32,8 @@ Item {
     property int token: -1
     property bool pending: false
     property bool readFailed: false
+    property bool hasDrawn: false
+    property int imageToken: -1
     property int total: 0
     property string imageFile: ""
     property string pageTitle: ""
@@ -45,7 +49,7 @@ Item {
         : !root.pending && picture.status === Image.Ready
     readonly property bool firstScreen: root.failed || root.tooLarge || root.binary
         || (root.sourceView ? !!root.sourceCode && root.sourceCode.firstScreen : root.contentReady)
-    readonly property bool loading: root.active && !root.firstScreen
+    readonly property bool loading: root.active && !root.firstScreen && (root.sourceView || !root.hasDrawn)
     readonly property bool blank: root.tooLarge || root.binary
     readonly property string status: root.tooLarge ? "This file is too large to preview."
         : root.failed ? "This file could not be read." : root.firstScreen ? "ready" : "loading"
@@ -89,6 +93,7 @@ Item {
 
     onPathChanged: {
         root.cancel()
+        root.hasDrawn = false
         root.imageFile = ""
         root.total = 0
         root.readFailed = false
@@ -112,7 +117,7 @@ Item {
         if (root.sourceCode) root.sourceCode.active = false
     }
     // Repeated width changes only restart this settle; no helper runs while the frame is being resized.
-    Timer { id: settle; interval: 160; onTriggered: root.ask() }
+    Timer { id: settle; interval: root.settleMs; onTriggered: root.ask() }
     Connections {
         target: root.backend
         function onHtmlResult(message) {
@@ -124,6 +129,7 @@ Item {
                 root.renderedWidth = message.width
                 root.pageTitle = message.title || ""
                 root.imageFile = message.file
+                root.imageToken = message.token
             }
         }
     }
@@ -143,10 +149,12 @@ Item {
             width: page.width * root.zoom
             height: implicitWidth > 0 ? implicitHeight * width / implicitWidth : 0
             // The helper bounds the whole scrollable page; decoding only the viewport would discard its lower pixels.
-            source: root.imageFile.length > 0 ? Format.fileUri(root.imageFile) : ""
+            source: root.imageFile.length > 0 ? Format.fileUri(root.imageFile) + "#t" + root.imageToken : ""
             fillMode: Image.Stretch
             asynchronous: true
             cache: false
+            retainWhileLoading: true
+            onStatusChanged: if (status === Image.Ready) root.hasDrawn = true
         }
     }
     FileView {

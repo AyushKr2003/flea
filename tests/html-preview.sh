@@ -28,6 +28,8 @@ ln -s ../outside.png "$test_root/fixture/escape.png" || exit 1
 python3 tests/html-fixture.py "$test_root/fixture" || exit 1
 cp "$test_root/fixture/notes.md" "$test_root/fixture/other.md" || exit 1
 python3 tests/html-specimen.py "$test_root/specimen" || exit 1
+magick -size 300x400 xc:'#45bc23' "$test_root/reload.png" || exit 1
+magick -size 300x400 xc:'#2345bc' "$test_root/reload-blue.png" || exit 1
 cp "$test_root/specimen/index.html" "$test_root/fixture/board.html" || exit 1
 mkdir -p "$test_root/cache #?"
 export HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_CACHE_HOME="$test_root/cache #?"
@@ -35,7 +37,7 @@ export XDG_RUNTIME_DIR="$test_root/runtime" FLEA_BIN="$bin" FLEA_PATH="$test_roo
 export HTML_UI="$test_root/config/flea" HTML_ROOT="$test_root" FLEA_REDUCED_MOTION=1
 engine_status=0
 python3 tests/html-engine.py "$bin" "$test_root" || engine_status=1
-for harness in html-source-refusals html-auto-render html-preview; do
+for harness in html-source-refusals html-auto-render html-preview html-reload; do
 cp "tests/$harness.qml" "$test_root/config/shell.qml" || exit 1
 log="$test_root/$harness.log"
 env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
@@ -51,6 +53,14 @@ if [ "$status" -ne 0 ] || [ "$(grep -ac 'HTML_PREVIEW DONE' "$log")" -ne 1 ] \
     tail -25 "$log"
     exit 1
 fi
+done
+reload_output=${FLEA_CI_SUITE_LOGS:-$test_root}
+for phase in before pending after; do
+    actual=$(magick "$reload_output/html-reload-$phase.png" -alpha off -format '%[pixel:p{150,100}]' info:) || exit 1
+    expected='srgb(69,188,35)'
+    [ "$phase" != after ] || expected='srgb(35,69,188)'
+    [ "$actual" = "$expected" ] || { printf 'FAIL html-preview: same-path %s pixels %s, want %s\n' "$phase" "$actual" "$expected"; exit 1; }
+    printf 'PASS html-preview: same-path %s pixels %s\n' "$phase" "$actual"
 done
 [ "$engine_status" -eq 0 ] || { printf 'FAIL html-preview: backend assertions failed\n'; exit 1; }
 printf 'html-preview: backend isolation and Quick Look/column passed\n'

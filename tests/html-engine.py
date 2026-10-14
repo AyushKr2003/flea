@@ -2,6 +2,7 @@
 import json
 import pathlib
 import os
+import re
 import shutil
 import select
 import subprocess
@@ -29,7 +30,15 @@ class Listener(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
-listener = HTTPServer(('127.0.0.1', 18879), Listener)
+# Sample input: LISTENER_PORT = 0, the fixture placeholder and ephemeral listener bind.
+LISTENER_PORT = int(re.search(r'^LISTENER_PORT = (\d+)$', (pathlib.Path(__file__).with_name('html-fixture.py')).read_text(), re.M).group(1))
+
+listener = HTTPServer(('127.0.0.1', LISTENER_PORT), Listener)
+port = listener.server_address[1]
+fixture_index = root / 'fixture/index.html'
+placeholder = 'http://127.0.0.1:%d/remote.png' % LISTENER_PORT
+assert placeholder in fixture_index.read_text(), 'html-fixture remote URL must use LISTENER_PORT'
+fixture_index.write_text(fixture_index.read_text().replace(placeholder, 'http://127.0.0.1:%d/remote.png' % port))
 threading.Thread(target=listener.serve_forever, daemon=True).start()
 
 def check(name, got, want=True):
@@ -39,6 +48,10 @@ def check(name, got, want=True):
         failures.append((name, got, want))
 
 def ask(token, width, path=None, height=None):
+    # A line already waiting belongs to an earlier request, so it is never credited to this one.
+    while select.select([process.stdout], [], [], 0)[0]:
+        if not process.stdout.readline():
+            break
     payload = {'c': 'html', 'slot': 'test', 'token': token, 'path': str(path or root / 'fixture/index.html'), 'width': width}
     if height is not None:
         payload['height'] = height
@@ -51,15 +64,34 @@ def ask(token, width, path=None, height=None):
         line = process.stdout.readline()
         if not line:
             break
+        # Sample input: {"t":"html","slot":"test","token":1,"state":"ready","file":"/cache/x.png","total":61,"width":984,"title":"Static HTML"}.
         reply = json.loads(line)
+        # Generic errors carry no token (proto::error_line); discard them and require this request's HTML reply.
         if reply.get('t') == 'error':
-            return reply
+            continue
         if reply.get('t') == 'html' and reply.get('token') == token:
             return reply
     return {'state': 'timeout'}
 
 try:
-    control = urllib.request.urlopen('http://127.0.0.1:18879/remote.png', timeout=2).read()
+    with HTTPServer(('127.0.0.1', LISTENER_PORT), Listener) as parallel_listener:
+        check('parallel listener receives a different free port', parallel_listener.server_address[1] != port)
+    real_process = process
+    for matched in [True, False]:
+        probe = subprocess.Popen([sys.executable, '-u', '-c',
+            'import json,sys; request=json.loads(sys.stdin.readline()); '
+            'print(json.dumps({"t":"error","message":"stale"})); '
+            + ('print(json.dumps({"t":"html","token":request["token"],"state":"ready"}))' if matched else '')],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        try:
+            process = probe
+            reply = ask(401, 300)
+            check('stale generic error is never credited (matched=%s)' % matched, reply.get('state'), 'ready' if matched else 'timeout')
+        finally:
+            probe.stdin.close()
+            probe.wait(timeout=5)
+            process = real_process
+    control = urllib.request.urlopen('http://127.0.0.1:%d/remote.png' % port, timeout=2).read()
     check('remote marker listener is reachable outside the jail', control.startswith(b'\x89PNG\r\n\x1a\n'))
     control_requests = Listener.requests
     previous = None
@@ -76,6 +108,7 @@ try:
         evidence = os.environ.get('FLEA_CI_SUITE_LOGS')
         if evidence:
             shutil.copyfile(image, pathlib.Path(evidence) / ('html-engine-%d.png' % width))
+        # Sample input: magick identify -format '%w %h' answers "984 2134".
         dimensions = subprocess.check_output(['magick', 'identify', '-format', '%w %h', str(image)], text=True).split()
         check('PNG width matches request', int(dimensions[0]), width)
         check('PNG contains the tall page', 1800 <= int(dimensions[1]) <= 8000)
@@ -85,9 +118,13 @@ try:
         check('outside file and symlink not loaded', colors[(0x34, 0x12, 0xab)], 0)
         check('remote/script image color absent', colors[(0xab, 0x12, 0x34)], 0)
         if token == 1:
+            dependencies = json.loads(image.with_suffix('.deps').read_text())
+            check('P1 real helper resources are non-null', isinstance(dependencies, dict))
+            print('EVIDENCE P1 dependencies=' + json.dumps(dependencies), flush=True)
             previous = (str(image), image.stat().st_mtime_ns)
         if token == 3:
             check('revisit reused PNG without rewriting it', (str(image), image.stat().st_mtime_ns), previous)
+            print('EVIDENCE P1 second same-width request cache_hit=' + str((str(image), image.stat().st_mtime_ns) == previous), flush=True)
     def rendered_colors(token, page):
         reply = ask(token, 300, page)
         check(page.name + ' rendered', reply.get('state'), 'ready')
@@ -129,6 +166,9 @@ try:
     colors, second_image = rendered_colors(15, page)
     check('F4 edited stylesheet changes the next render', colors[(0xbc, 0x45, 0x23)] > 10000)
     check('F4 old stylesheet pixels are absent', colors[(0x45, 0xbc, 0x23)], 0)
+    if first_image is not None and second_image is not None:
+        check('P2 the re-render reuses the cache path', str(second_image), str(first_image))
+        print('EVIDENCE P2 same_path=' + str(second_image == first_image) + ' path=' + str(second_image), flush=True)
     if second_image:
         record = json.loads(second_image.with_suffix('.deps').read_text()) if second_image.with_suffix('.deps').exists() else None
         check('F4 engine-recorded stylesheet dependency', isinstance(record, dict) and any(row[0] == 'edit.css' for row in record.get('dependencies', [])))
@@ -153,20 +193,42 @@ try:
         image.with_suffix('.deps').write_text('invalid')
         colors, refreshed = rendered_colors(18, page)
         check('F4 malformed dependency record forces rerender', refreshed is not None and refreshed.stat().st_mtime_ns != previous_stamp)
-    font_source = next(path for path in pathlib.Path('/usr/share/fonts').rglob('*') if path.suffix.lower() in {'.ttf', '.otf'} and path.is_file())
-    font = fixture / ('cached-font' + font_source.suffix)
-    shutil.copyfile(font_source, font)
-    page = fixture / 'font.html'
-    page.write_text('<!doctype html><style>@font-face{font-family:fixture;src:url("' + font.name + '")}body{font-family:fixture}</style><div>Local font resource</div>')
-    _, image = rendered_colors(19, page)
-    if image:
-        record = json.loads(image.with_suffix('.deps').read_text()) if image.with_suffix('.deps').exists() else None
-        check('F4 engine records the loaded local font', isinstance(record, dict) and any(row[0] == font.name for row in record.get('dependencies', [])))
-        previous_stamp = image.stat().st_mtime_ns
-        font_stamp = font.stat()
-        os.utime(font, ns=(font_stamp.st_atime_ns, font_stamp.st_mtime_ns + 1))
-        _, refreshed = rendered_colors(20, page)
-        check('F4 font nanosecond edit forces rerender', refreshed is not None and refreshed.stat().st_mtime_ns != previous_stamp)
+    late_style = fixture / 'late.css'
+    page = fixture / 'late-style.html'
+    page.write_text('<!doctype html><link rel="stylesheet" href="late.css"><div>late</div>')
+    colors, first_late = rendered_colors(30, page)
+    check('F9 unstyled page renders without its missing sheet', first_late is not None, True)
+    first_stamp = first_late.stat().st_mtime_ns if first_late else None
+    if first_late:
+        record = json.loads(first_late.with_suffix('.deps').read_text())
+        check('F9 engine records the missing sheet as absent', isinstance(record, dict) and ['late.css', 'absent'] in record.get('dependencies', []))
+    _, still_missing = rendered_colors(32, page)
+    check('F9 unchanged missing sheet hits the cached PNG', still_missing is not None and still_missing.stat().st_mtime_ns == first_stamp)
+    late_style.write_text('body{margin:0;background:#45bc23}')
+    colors, second_late = rendered_colors(31, page)
+    check('F9 created sheet changes the next render', colors[(0x45, 0xbc, 0x23)] > 10000)
+    if second_late is not None:
+        check('F9 created sheet misses the cached PNG', second_late.stat().st_mtime_ns != first_stamp, True)
+    try:
+        font_source = next(path for path in pathlib.Path('/usr/share/fonts').rglob('*') if path.suffix.lower() in {'.ttf', '.otf'} and path.is_file())
+    except StopIteration:
+        font_source = None
+    if font_source is None:
+        check('a local .ttf/.otf font exists under /usr/share/fonts', 'none found', 'a font file')
+    else:
+        font = fixture / ('cached-font' + font_source.suffix)
+        shutil.copyfile(font_source, font)
+        page = fixture / 'font.html'
+        page.write_text('<!doctype html><style>@font-face{font-family:fixture;src:url("' + font.name + '")}body{font-family:fixture}</style><div>Local font resource</div>')
+        _, image = rendered_colors(19, page)
+        if image:
+            record = json.loads(image.with_suffix('.deps').read_text()) if image.with_suffix('.deps').exists() else None
+            check('F4 engine records the loaded local font', isinstance(record, dict) and any(row[0] == font.name for row in record.get('dependencies', [])))
+            previous_stamp = image.stat().st_mtime_ns
+            font_stamp = font.stat()
+            os.utime(font, ns=(font_stamp.st_atime_ns, font_stamp.st_mtime_ns + 1))
+            _, refreshed = rendered_colors(20, page)
+            check('F4 font nanosecond edit forces rerender', refreshed is not None and refreshed.stat().st_mtime_ns != previous_stamp)
     short = fixture / 'short.html'
     short.write_text('<!doctype html><style>body{margin:0;background:white}</style><p>Short page</p>')
     short_images = []
@@ -175,6 +237,7 @@ try:
         check('F9 short page renders for viewport %d' % height, reply.get('state'), 'ready')
         if reply.get('state') == 'ready':
             image = pathlib.Path(reply['file'])
+            # Sample input: magick identify -format '%h' answers "625".
             actual_height = int(subprocess.check_output(['magick', 'identify', '-format', '%h', str(image)], text=True))
             check('F9 page fills requested viewport %d' % height, actual_height >= height)
             short_images.append(reply['file'])
