@@ -20,6 +20,7 @@ ShellRoot {
     readonly property int listedFile: 33188
     // The fences the synthetic sized documents hold: one at the top, two past the head's cut and one at the end.
     readonly property int sizedFences: 4
+    readonly property int previewLimitBytes: 1048576
     property int docIndex: 0
     property int hostIndex: 0
     property int failures: 0
@@ -100,6 +101,7 @@ ShellRoot {
         var d = root.docs[root.docIndex]
         var h = root.host()
         var path = root.dir + "/" + d.name
+        if (h.maxBytes !== root.previewLimitBytes) root.fail("the preview byte limit changed")
         root.reusedBefore = h.reusedParses
         h.active = false
         h.size = d.size
@@ -108,15 +110,23 @@ ShellRoot {
         h.active = true
         root.settleCheck(h)
     }
-    function settleCheck(h) { if (h.contentReady) Qt.callLater(root.landed, h) }
+    function settleCheck(h) { if (h.contentReady || h.tooLarge) Qt.callLater(root.landed, h) }
 
     // A host whose document is fully parsed and drawn: its blocks are read once, a turn after the ready flag (the whole list lands just behind it), then the next step starts.
     function landed(h) {
-        if (!h.contentReady || root.finished) return
+        if ((!h.contentReady && !h.tooLarge) || root.finished) return
         var d = root.docs[root.docIndex]
         var kind = root.hosts[root.hostIndex]
         if (h.path !== root.dir + "/" + d.name || root.seen[d.name + kind] === true) return
         root.seen[d.name + kind] = true
+        if (h.tooLarge) {
+            root.log("DOC " + d.name + " " + kind + " refused=large bytes=" + d.size)
+            if (d.size <= root.previewLimitBytes || h.status !== "This file is too large to preview."
+                || h.loading || h.contentReady || h.firstScreen || h.rawText !== "" || h.blockList.length !== 0)
+                root.fail(d.name + " " + kind + " did not settle as an unread oversized document")
+            return Qt.callLater(root.next)
+        }
+        if (d.size > root.previewLimitBytes) root.fail(d.name + " " + kind + " drew a document over the preview limit instead of refusing it")
         var blocks = h.blockList
         var n = Fence.leaks(blocks)
         root.log("DOC " + d.name + " " + kind + " blocks=" + blocks.length + " leaks=" + n + " reused=" + (h.reusedParses - root.reusedBefore) + " kinds=" + Fence.kinds(blocks).slice(0, 80))
@@ -129,7 +139,7 @@ ShellRoot {
         var shape = Fence.kinds(blocks)
         if (root.seen["kinds " + base] === undefined) root.seen["kinds " + base] = shape
         else if (root.seen["kinds " + base] !== shape) root.fail(d.name + " " + kind + " draws kinds " + shape.slice(0, 60) + " where its other line endings draw " + root.seen["kinds " + base].slice(0, 60))
-        if (d.name.indexOf("syn-size") === 0 && Fence.count(blocks, "fence") !== root.sizedFences) root.fail(d.name + " " + kind + " draws " + Fence.count(blocks, "fence") + " code blocks of the " + root.sizedFences + " it holds")
+        if ((d.name.indexOf("syn-size") === 0 || d.name.indexOf("syn-limit") === 0) && Fence.count(blocks, "fence") !== root.sizedFences) root.fail(d.name + " " + kind + " draws " + Fence.count(blocks, "fence") + " code blocks of the " + root.sizedFences + " it holds")
         if (kind === "prepared" && d.size <= Prepared.MAX_BYTES && h.reusedParses - root.reusedBefore < 1) root.fail(d.name + " prepared never took the entry, so it proved nothing")
         Qt.callLater(root.next)
     }

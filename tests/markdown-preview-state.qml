@@ -385,7 +385,7 @@ QtObject {
             + 'id: item\nproperty var root: ({ path: "/remote/A.md", row: { s: ' + remoteRowBytes + ' }, '
             + 'markdownActive: ' + active + ', textLimit: ' + remoteLimitBytes + ', truncateText: true })\n'
             + 'property var facts: ({ TEXT: "text" })\n'
-            + 'property bool active: false\nproperty string path: ""\nproperty int size: 0\n'
+            + 'property bool active: false\nproperty string path: ""\nproperty int size: 0\nproperty bool externalScrollBars: false\n'
             + 'property int maxBytes: ' + defaultReaderLimitBytes + '\nproperty bool truncate: false\nproperty bool compact: false\n'
             + 'property var seen: []\nreadonly property bool tooLarge:' + tooLarge + '\n'
             + 'readonly property string readerPath:' + readerPath + '\n'

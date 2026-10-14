@@ -64,7 +64,11 @@ EOS
 
 # Columns heroes for a held listing and a denied folder, at 2 to 5 columns.
 case_cap_heldcolumns() {
-    local dir listing markers real_bin n estate err_by denied
+    local dir listing markers real_bin n estate err_by denied denied_sentence
+    # Sample input: '    denied: "This folder cannot be opened: you do not have permission.",' yields the quoted sentence.
+    denied_sentence=$(sed -n 's/^    denied: "\([^"\\]*\)",$/\1/p' "$repo/ui/js/Errors.js")
+    [[ "$(grep -c '^    denied: ' "$repo/ui/js/Errors.js")" -eq 1 ]] || fail "heldcolumns: Errors.WORDS.denied must name one string"
+    [[ -n "$denied_sentence" ]] || fail "heldcolumns: Errors.WORDS.denied is empty"
     dir="$fixture_root/cap-heldcolumns"
     listing="$dir/listing"
     markers="$dir/markers"
@@ -113,7 +117,7 @@ case_cap_heldcolumns() {
         done
         # A denied scan answers locked, never error, per ui/js/Errors.js denied.
         [[ "$estate" == "locked" ]] || fail "heldcolumns: limit $n denied state is $estate"
-        [[ "$(ipc stateMessage)" == "Permission denied" ]] || fail "heldcolumns: limit $n denied sentence is $(ipc stateMessage)"
+        [[ "$(ipc stateMessage)" == "$denied_sentence" ]] || fail "heldcolumns: limit $n denied sentence is $(ipc stateMessage)"
         heldcolumns_fade_wait
         shot "heldcolumns-$n-error"
         chmod 700 "$denied" || fail "heldcolumns: limit $n denied restore failed"
