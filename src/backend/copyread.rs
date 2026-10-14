@@ -150,11 +150,15 @@ thread_local! {
 #[cfg(test)]
 static TEST_WORKERS: Mutex<()> = Mutex::new(());
 
+// A released reader frees its slot within milliseconds; five seconds only absorbs a loaded test host.
+#[cfg(test)]
+const WORKER_RELEASE_DEADLINE: Duration = Duration::from_secs(5);
+
 #[cfg(test)]
 fn wait_for_workers() {
     let started = std::time::Instant::now();
     while LIVE_READ_WORKERS.load(Ordering::Relaxed) != 0 {
-        assert!(started.elapsed() < Duration::from_secs(5), "released source readers must free their worker slots");
+        assert!(started.elapsed() < WORKER_RELEASE_DEADLINE, "released source readers must free their worker slots");
         std::thread::yield_now();
     }
 }
