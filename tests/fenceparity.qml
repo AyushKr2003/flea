@@ -23,6 +23,12 @@ ShellRoot {
     property var wheelBefore: null
     property bool finished: false
     property bool ticking: false
+    // The listing and fences count as settled after this long with no geometry change.
+    readonly property int quietMs: 180
+    // The whole drive must finish well inside fenceparity.sh's 90 s process timeout.
+    readonly property int stallMs: 60000
+    // Two wheel notches of 120 down, so the document scrolls and the long fence must move with it.
+    readonly property int wheelDelta: -240
 
     function log(line) { console.log("FENCEPARITY " + line) }
     function check(ok, why) { if (!ok) { root.failures++; root.log("FAIL " + why) } }
@@ -40,7 +46,7 @@ ShellRoot {
     function calm(ok) {
         if (!ok) { root.quietAt = 0; return false }
         if (root.quietAt === 0) root.quietAt = Date.now()
-        return Date.now() - root.quietAt >= 180
+        return Date.now() - root.quietAt >= root.quietMs
     }
     function finish() {
         if (root.finished) return
@@ -118,7 +124,7 @@ ShellRoot {
     }
 
     function tick() {
-        if (Date.now() - root.started > 60000) {
+        if (Date.now() - root.started > root.stallMs) {
             root.check(false, "stage " + root.stage + " fence " + root.fenceAt + " stalled " + root.state())
             root.finish()
             return
@@ -167,7 +173,7 @@ ShellRoot {
             if (root.fenceAt === 2) {
                 root.check(f.height > d.viewport.height, "the long fence fits inside the viewport")
                 root.wheelBefore = { scroll: d.viewport.contentY, y: f.mapToItem(d.viewport, 0, 0).y }
-                root.keys.mouseWheel(d.viewport, Math.round(d.viewport.width / 2), Math.round(d.viewport.height / 2), Qt.NoButton, Qt.NoModifier, 0, -240, -1)
+                root.keys.mouseWheel(d.viewport, Math.round(d.viewport.width / 2), Math.round(d.viewport.height / 2), Qt.NoButton, Qt.NoModifier, 0, root.wheelDelta, -1)
                 root.quietAt = 0
                 root.stage = 5
                 return
