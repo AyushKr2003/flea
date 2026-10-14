@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # A switch to Grid builds only the viewport's tiles before its first frame and the cache rows after it, and no frame draws a half-built Grid, offscreen with the real backend.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -11,7 +12,7 @@ trap 'sandbox_remove "$root"' EXIT
 mkdir -p "$root/config" "$root/fixture" "$root/run/home" "$root/run/state/flea" "$root/run/cache" "$root/run/runtime" || exit 1
 chmod 700 "$root/run/runtime" || exit 1
 ln -s "$PWD/ui" "$root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$root/config/Commons" || exit 1
+headless_commons "$root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$root/config/Ui" || exit 1
 cp tests/gridviewport.qml "$root/config/shell.qml" || exit 1
 # Two hundred files fill the Grid's viewport and its cache rows and leave rows to spare.

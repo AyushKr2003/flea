@@ -79,6 +79,8 @@ fs-matrix|needs root, loop devices and the mkfs tools for the loop-mount half; f
 fs-stick-images|needs root, loop devices, sfdisk and the mkfs tools to write the stick layouts
 mdspec-shots|draws every spec example for the contact sheets and judges nothing
 markdown-tables-assets|is the table assets library markdown-tables.sh and ui-captures-markdown.sh source, and judges nothing
+headless-commons|is the shared OEM Commons fixture library sourced by the offscreen suites, and judges nothing
+qslog-gate|is the Quickshell log classification library sourced by offscreen suites, and judges nothing
 "
 
 printf '\nNot run here, and why:\n'

@@ -1,4 +1,5 @@
 #!/bin/bash
+. "$(dirname "$0")/headless-commons.sh"
 # The Columns preview as v0.3.4 drew it (the cache file, the original only where none exists) and Quick Look's decode, offscreen; see AGENTS.md "File budget".
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -41,7 +42,7 @@ watchlog="$test_root/watch.log"
 mkdir -p "$config_dir" "$photos" "$runtime" || exit 1
 chmod 700 "$runtime" || exit 1
 ln -s "$PWD/tests/preview-decode.qml" "$config_dir/shell.qml" || exit 1
-ln -s /usr/share/omarchy/shell/Commons "$config_dir/Commons" || exit 1
+headless_commons "$test_root" "$config_dir/Commons" || exit 1
 ln -s /usr/share/omarchy/shell/Ui "$config_dir/Ui" || exit 1
 
 # Fifty sweep photos with a cache file each, the 6016x3900 PNG rest row and a text start row; only open events are counted, never pixels.

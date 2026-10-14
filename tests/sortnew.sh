@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Real browser views, column peeks and picker lists over localized XDG folders, then a fresh process reads an explicit Name choice.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
@@ -14,7 +15,7 @@ trap cleanup EXIT
 mkdir -p "$test_root"/{config,xdg,state/flea,cache,data,runtime,tmp,home/.config} || exit 1
 chmod 700 "$test_root/runtime" || exit 1
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/sortnew.qml "$test_root/config/shell.qml" || exit 1
 for dir in Inbox 'Photo Library' Clips Documents; do

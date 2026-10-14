@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # 31 Columns Back landings over a real ColumnsArea offscreen, each whole in its first frame.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -15,7 +16,7 @@ trap 'sandbox_remove "$root"' EXIT
 mkdir -p "$root/config" "$root/home" "$root/state" "$root/runtime" || exit 1
 chmod 700 "$root/runtime" || exit 1
 ln -s "$ui_dir" "$root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$root/config/Commons" || exit 1
+headless_commons "$root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$root/config/Ui" || exit 1
 cp tests/columnsback.qml "$root/config/shell.qml" || exit 1
 for round in $(seq "$rounds"); do

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # ipc cohesionControls answers sane boxes and states in the real WindowBody, offscreen.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -89,7 +90,7 @@ leg() {
     shift 4
     mkdir -p "$config" || return 1
     ln -s "$ui" "$config/flea"
-    ln -s "$(readlink -f ui/boot/Commons)" "$config/Commons"
+    headless_commons "$probe" "$config/Commons"
     ln -s "$(readlink -f ui/boot/Ui)" "$config/Ui"
     # The window loads its tab catcher from the shell directory, so the probe ships it as the product does.
     ln -s "$PWD/ui/boot/fleatab.qml" "$config/fleatab.qml"

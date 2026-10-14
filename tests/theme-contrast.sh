@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Applies each of the 24 palettes (the 22 stock themes, the Cool Dawn and Sunset fixtures) to the real ui/Theme.qml and holds its text and frame roles to their floors and a cursor row to the plain hover wash; offscreen, no display or lock.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -48,7 +49,7 @@ config="$test_root/config"
 mkdir -p "$config" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
 ln -s "$PWD/ui" "$config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$config/Commons" || exit 1
+headless_commons "$test_root" "$config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$config/Ui" || exit 1
 cp tests/theme-contrast.qml "$config/shell.qml" || exit 1
 cp tests/button-probe.js "$config/button-probe.js" || exit 1

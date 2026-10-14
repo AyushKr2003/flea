@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # A menu placed again while open with nothing new to draw still ends its pointer settle, and a menu opened by key or click reads its rows widths once per build; offscreen, so no display and no lock.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -18,7 +19,7 @@ mkdir -p "$test_root/config" "$test_root/home" "$test_root/state" "$test_root/ca
 chmod 700 "$test_root/runtime" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/menu-settle.qml "$test_root/config/shell.qml" || exit 1
 
@@ -56,7 +57,7 @@ for name in a.txt b.txt c.txt d.txt e.txt f.txt g.txt h.txt i.txt j.txt; do prin
 env HOME="$cost_root/home" XDG_STATE_HOME="$cost_root/state" "$bin" --ui-state \
     '{"view":"list","keys":"default","preview":{"column":false,"thumbnails":"off"},"updates":{"autoCheck":false},"display":{"textSize":{"mode":14}}}' >/dev/null || exit 1
 ln -s "$PWD/ui" "$cost_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$cost_root/config/Commons" || exit 1
+headless_commons "$cost_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$cost_root/config/Ui" || exit 1
 ln -s "$PWD/ui/boot/fleatab.qml" "$cost_root/config/fleatab.qml" || exit 1
 cp tests/menu-open-cost.qml "$cost_root/config/shell.qml" || exit 1

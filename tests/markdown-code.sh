@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Markdown Source and fenced blocks over the real backend and bat: the Source gutter and inks from line 1, a 3,000-line Source asking only for its window, fences coloured in Quick Look and the column, a one-screen sweep with no fence still owed its colours, and markup drawn as text. Offscreen, in the flea-ci image.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -38,7 +39,7 @@ fixture="$test_root/fixture"
 mkdir -p "$test_root/config" "$test_root/home" "$test_root/state" "$test_root/runtime" "$fixture" || exit 1
 chmod 700 "$test_root/runtime" || exit 1
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/markdown-code.qml "$test_root/config/shell.qml" || exit 1
 

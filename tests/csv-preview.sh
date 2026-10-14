@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # CSV and TSV as a table in the preview column and in Quick Look over the real backend: the header, the numbers, the frozen widths across a 49,999-row scroll, the quoted newline, the binary, large and empty frames. Offscreen, in the flea-ci image.
 set -uo pipefail
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -17,7 +18,7 @@ cleanup() { sandbox_remove "$test_root"; }
 trap cleanup EXIT
 mkdir -p "$test_root"/{config,fixture,home,state/flea,cache,runtime} || exit 1
 chmod 700 "$test_root/runtime" || exit 1
-ln -s "$(readlink -m ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -m ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp -a ui "$test_root/config/flea" || exit 1
 cp tests/csv-preview.qml "$test_root/config/shell.qml" || exit 1

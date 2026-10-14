@@ -22,15 +22,18 @@ def check(ok, label):
 
 with tempfile.TemporaryDirectory(prefix="md-gates-", dir=os.environ.get("TMPDIR")) as tmp:
     root = Path(tmp)
+    assert root.is_absolute() and len(root.parts) > 2
+    (root / '.flea-test-sandbox').touch()
     tree = root / "checkout"
     for directory in ["tests", "tools", "target/debug", "bin"]:
         (tree / directory).mkdir(parents=True)
     for directory in ["ui/boot/Commons", "ui/boot/Ui"]:
         (tree / directory).mkdir(parents=True)
-    for name in ["markdown-figures-render.sh", "markdown-figures-render.qml", "markdown-figures-render.js"]:
+    (tree / 'ui/boot/Commons/Style.qml').write_text('import QtQuick\nQtObject {\n  id: root\n}\n')
+    for name in ["headless-commons.sh", "markdown-figures-render.sh", "markdown-figures-render.qml", "markdown-figures-render.js"]:
         shutil.copyfile(REPO / "tests" / name, tree / "tests" / name)
     shutil.copyfile(REPO / "tools/flea-sandbox-guard", tree / "tools/flea-sandbox-guard")
-    for name in ["dirname", "mkdir", "chmod", "ln", "readlink", "cp", "realpath", "rm", "env", "timeout", "grep", "head", "cat"]:
+    for name in ["date", "python3", "dirname", "mkdir", "chmod", "ln", "readlink", "cp", "realpath", "rm", "env", "timeout", "grep", "head", "cat"]:
         (tree / "bin" / name).symlink_to(shutil.which(name))
     qs = tree / "bin/qs"
     qs.write_text('#!/bin/sh\nprintf "%s\\n" "$FLEA_UI" > "$MD_GATE_TRACE"\nexit 1\n')

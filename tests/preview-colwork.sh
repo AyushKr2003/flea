@@ -1,4 +1,5 @@
 #!/bin/bash
+. "$(dirname "$0")/headless-commons.sh"
 # Counts per-move preview work and per-file opens after observed completions, including each frame decode target.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -45,7 +46,7 @@ mkdir -p "$fx" "$cache" "$config_dir" "$test_root/home" "$runtime" "$test_root/t
 chmod 700 "$runtime" || exit 1
 ln -s "$PWD/tests/preview-colwork.qml" "$config_dir/shell.qml" || exit 1
 ln -s "$PWD/ui" "$config_dir/flea" || exit 1
-ln -s /usr/share/omarchy/shell/Commons "$config_dir/Commons" || exit 1
+headless_commons "$test_root" "$config_dir/Commons" || exit 1
 ln -s /usr/share/omarchy/shell/Ui "$config_dir/Ui" || exit 1
 
 head -c 4000 src/json.rs > "$fx/00-start.txt" || exit 1

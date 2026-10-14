@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # [flea] background-alpha through the real WindowBody offscreen, one launch per case with its own theme and user shell.toml.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -88,7 +89,7 @@ run_case() {
         '{"preview":{"thumbnails":"off"},"updates":{"autoCheck":false}}' >/dev/null \
         || { setup_failed "$name" "$bin --ui-state failed"; return 1; }
     # The window loads its tab catcher from the shell directory, so the probe ships it as the product does.
-    ln -s "$PWD/ui" "$probe/config/flea" && ln -s "$(readlink -f ui/boot/Commons)" "$probe/config/Commons" \
+    ln -s "$PWD/ui" "$probe/config/flea" && headless_commons "$probe" \
         && ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui" && ln -s "$PWD/ui/boot/fleatab.qml" "$probe/config/fleatab.qml" \
         && cp tests/glass.qml "$probe/config/shell.qml" && cp tests/glass.js "$probe/config/glass.js" \
         || { setup_failed "$name" "linking the probe's shell directory failed"; return 1; }

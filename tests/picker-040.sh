@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Release hunt: board behavior through real picker keys and backend responses.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
@@ -10,7 +11,7 @@ trap 'sandbox_remove "$test_root"' EXIT
 fixture="$test_root/fixture"
 mkdir -p "$test_root/config" "$fixture/sub"
 ln -s "$PWD/ui" "$test_root/config/flea"
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons"
+headless_commons "$test_root"
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui"
 cp tests/picker-040.qml "$test_root/config/shell.qml"
 for name in {a..l}; do printf '%s\n' "$name" > "$fixture/$name.txt"; done

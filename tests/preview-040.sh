@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # TallPreviews callout 7 is scheduled for 0.3.10; prove its only red leg is the unchanged scroll-restoration assertion.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
@@ -10,7 +11,7 @@ trap 'sandbox_remove "$test_root"' EXIT
 mkdir -p "$test_root/config" "$test_root/fixture" "$test_root"/{home,state,cache,data,runtime,tmp}
 chmod 700 "$test_root/runtime"
 ln -s "$PWD/ui" "$test_root/config/flea"
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons"
+headless_commons "$test_root"
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui"
 cp tests/preview-040.qml "$test_root/config/shell.qml"
 python3 - "$test_root/fixture" <<'PY'

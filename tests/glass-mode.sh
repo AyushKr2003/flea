@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Omarchy's Window Transparency precedence through Glass, one headless launch per case, and a Hyprland config reload with no theme switch.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -94,7 +95,7 @@ STUB
     env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state \
         '{"preview":{"thumbnails":"off"},"updates":{"autoCheck":false}}' >/dev/null \
         || { setup_failed "$name" "$bin --ui-state failed"; return 1; }
-    ln -s "$PWD/ui" "$probe/config/flea" && ln -s "$(readlink -f ui/boot/Commons)" "$probe/config/Commons" \
+    ln -s "$PWD/ui" "$probe/config/flea" && headless_commons "$probe" \
         && ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui" && cp tests/glass-mode.qml "$probe/config/shell.qml" \
         || { setup_failed "$name" "linking the probe's shell directory failed"; return 1; }
     local log="$probe/qs.log" tick sig=()

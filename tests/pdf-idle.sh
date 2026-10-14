@@ -1,4 +1,5 @@
 #!/bin/bash
+. "$(dirname "$0")/headless-commons.sh"
 # r35-pdfidle: real PreviewPdf and PdfViewer idle, walk, busy and hidden open rules, offscreen.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -39,7 +40,7 @@ sandbox_scratch "$idle_work"
 mkdir -p "$idle_work"/{config,home,runtime,tmp} || exit 1
 chmod 700 "$idle_work/runtime" || exit 1
 ln -s "$PWD/tests/pdf-idle.qml" "$idle_work/config/shell.qml" || exit 1
-ln -s /usr/share/omarchy/shell/Commons "$idle_work/config/Commons" || exit 1
+headless_commons "$idle_work" || exit 1
 ln -s /usr/share/omarchy/shell/Ui "$idle_work/config/Ui" || exit 1
 
 # Two light pages for the walk legs, and one photographic page whose render outlasts the settle.

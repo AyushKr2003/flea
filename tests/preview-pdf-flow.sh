@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # A PDF in the Columns preview fills the frame's width with its pages stacked under one another and a scroll knob, builds only the pages near the frame, and Quick Look keeps one page with its strip, offscreen at 1200 x 760 and 760 x 560.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -21,7 +22,7 @@ mkdir -p "$test_root/config" "$test_root/home" "$test_root/runtime" "$test_root/
 chmod 700 "$test_root/runtime" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/preview-pdf-flow.qml "$test_root/config/shell.qml" || exit 1
 

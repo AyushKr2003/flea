@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # An animated GIF in the Columns preview frame and Quick Look's image pane: the still first, the moving layer only for a GIF with frames and only after it, paused when covered or hidden, gone with the file; offscreen.
 set -uo pipefail
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -15,7 +16,7 @@ mkdir -p "$test_root"/{config,fixture,home,state,cache,runtime} || exit 1
 chmod 700 "$test_root/runtime" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/pv-gif.qml "$test_root/config/shell.qml" || exit 1
 fx="$test_root/fixture"

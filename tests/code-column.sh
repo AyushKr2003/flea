@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # The Columns preview column over the real backend and bat: code in the theme's inks, the binary, too large and long-line frames, no plain frame before the coloured one, plain lines without bat, markup drawn as text. Offscreen, in the flea-ci image.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -34,7 +35,7 @@ mkdir -p "$test_root/config" "$test_root/home" "$test_root/state" "$test_root/ru
 chmod 700 "$test_root/runtime" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/code-column.qml "$test_root/config/shell.qml" || exit 1
 # The jail tools and nothing else: bat is not on this PATH, so the backend answers plain.

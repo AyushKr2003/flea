@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Every spec example drawn by the real preview offscreen at body 14, judged on nothing but that each was captured; the contact sheets are built from these PNGs outside the repo.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -18,7 +19,7 @@ chmod 700 "$test_root/runtime" || exit 1
 python3 tests/mdspec-manifest.py "$test_root" "${MDSPEC_SHEET_LIMIT:-0}" || exit 1
 # The shell imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
 ln -s "$root/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/mdspec-shots.qml "$test_root/config/shell.qml" || exit 1
 output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \

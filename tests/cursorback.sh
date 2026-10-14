@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Back and Forward return the cursor to the row they left in every view, offscreen with no display or lock.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -33,7 +34,7 @@ run_probe() {
     env HOME="$root/home" XDG_STATE_HOME="$root/state" "$bin" --ui-state \
         "{\"view\":\"$view\",\"keys\":\"default\",\"preview\":{\"column\":false,\"thumbnails\":\"off\"},\"updates\":{\"autoCheck\":false},\"display\":{\"textSize\":{\"mode\":14}}}" >/dev/null || exit 1
     ln -s "$PWD/ui" "$root/config/flea" || exit 1
-    ln -s "$(readlink -f ui/boot/Commons)" "$root/config/Commons" || exit 1
+    headless_commons "$root" || exit 1
     ln -s "$(readlink -f ui/boot/Ui)" "$root/config/Ui" || exit 1
     ln -s "$PWD/ui/boot/fleatab.qml" "$root/config/fleatab.qml" || exit 1
     cp tests/cursorback.qml "$root/config/shell.qml" || exit 1

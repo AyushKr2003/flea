@@ -15,6 +15,7 @@ cleanup() {
     esac
 }
 trap cleanup EXIT
+python3 -B tests/headless-commons-check.py "$box" || exit 1
 checks=0
 bad=0
 # The verdict word is reworded in every line this suite prints, so only a real failure reads as one to flea-ci.

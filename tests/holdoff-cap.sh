@@ -1,4 +1,5 @@
 #!/bin/bash
+. "$(dirname "$0")/headless-commons.sh"
 # A PDF page render shows its loading state at Swap.CAP_MS and keeps it Swap.MIN_SHOW_MS, as the listing does; offscreen, counts and Timer intervals only.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -43,7 +44,7 @@ mkdir -p "$cap_work"/{config,home,runtime,tmp} || exit 1
 chmod 700 "$cap_work/runtime" || exit 1
 ln -s "$PWD/tests/holdoff-cap.qml" "$cap_work/config/shell.qml" || exit 1
 ln -s "$PWD/ui" "$cap_work/config/flea" || exit 1
-ln -s /usr/share/omarchy/shell/Commons "$cap_work/config/Commons" || exit 1
+headless_commons "$cap_work" || exit 1
 ln -s /usr/share/omarchy/shell/Ui "$cap_work/config/Ui" || exit 1
 
 # Four light pages, and a light page followed by one of 600000 filled rectangles, which renders far past the cap.

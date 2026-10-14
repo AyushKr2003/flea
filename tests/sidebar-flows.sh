@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Real WindowBody, keys and QML models for the Sidebar040 and ClickAndRefresh bug hunt.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -61,7 +62,7 @@ XML
 env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state \
     '{"preview":{"column":false,"thumbnails":"off"},"updates":{"autoCheck":false}}' >/dev/null || exit 1
 ln -s "$PWD/ui" "$probe/config/flea"
-ln -s "$(readlink -f ui/boot/Commons)" "$probe/config/Commons"
+headless_commons "$probe"
 ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui"
 # The window loads its tab catcher from the shell directory, so the probe ships it as the product does.
 ln -s "$PWD/ui/boot/fleatab.qml" "$probe/config/fleatab.qml"

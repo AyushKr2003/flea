@@ -1,4 +1,5 @@
 #!/bin/bash
+. "$(dirname "$0")/headless-commons.sh"
 # The preview swap keeps the old picture until the new preview is whole, in the
 # columns view and in Quick Look; a hold past the cap falls back to loading.
 # Before it, a cursor move drew the next preview half-built: v0.3.4 shows 145 to 151
@@ -40,7 +41,7 @@ sandbox_scratch "$swap_work"
 mkdir -p "$swap_work"/{config,home,runtime,tmp} "$swap_work"/frames-column "$swap_work"/frames-quicklook || exit 1
 chmod 700 "$swap_work/runtime" || exit 1
 ln -s "$PWD/tests/preview-swap.qml" "$swap_work/config/shell.qml" || exit 1
-ln -s /usr/share/omarchy/shell/Commons "$swap_work/config/Commons" || exit 1
+headless_commons "$swap_work" || exit 1
 ln -s /usr/share/omarchy/shell/Ui "$swap_work/config/Ui" || exit 1
 
 run_surface() {

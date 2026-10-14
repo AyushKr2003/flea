@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Exercise formula and diagram rendering, malformed and hostile inputs, size limits, EOF, engine refusals and the FigureService lifecycle.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -312,7 +313,7 @@ if ! command -v qs >/dev/null; then
 fi
 mkdir -p "$test_root/qsconfig" || exit 1
 ln -s "$PWD/ui" "$test_root/qsconfig/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/qsconfig/Commons" || exit 1
+headless_commons "$test_root" "$test_root/qsconfig/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/qsconfig/Ui" || exit 1
 cp tests/markdown-figures.qml "$test_root/qsconfig/shell.qml" || exit 1
 cp -R tests/figure-memory "$test_root/qsconfig/figure-memory" || exit 1

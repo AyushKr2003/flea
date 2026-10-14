@@ -1,4 +1,5 @@
 #!/bin/bash
+. "$(dirname "$0")/headless-commons.sh"
 # A page turn keeps the page on screen until the next one has rendered, in the preview column's
 # PreviewPdf.qml and in Quick Look's PdfViewer.qml; a render past Swap.js CAP_MS takes the old page
 # down for the loading mark, and a second document never brings the first one back or logs a conflict.
@@ -48,7 +49,7 @@ sandbox_scratch "$turn_work"
 mkdir -p "$turn_work"/{config,home,runtime,tmp} || exit 1
 chmod 700 "$turn_work/runtime" || exit 1
 ln -s "$PWD/tests/pdf-turn.qml" "$turn_work/config/shell.qml" || exit 1
-ln -s /usr/share/omarchy/shell/Commons "$turn_work/config/Commons" || exit 1
+headless_commons "$turn_work" || exit 1
 ln -s /usr/share/omarchy/shell/Ui "$turn_work/config/Ui" || exit 1
 
 # Four light pages whose top 15, 30, 45 and 60 percent is black, so the share of black pixels in a

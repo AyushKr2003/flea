@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # poolpark: a real list, grid and columns view over a stub pane reuse their pooled delegates on a warm Enter, with nothing stale.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -19,7 +20,7 @@ mkdir -p "$test_root/config" "$test_root/home" "$test_root/state" "$test_root/ru
 chmod 700 "$test_root/runtime" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/poolpark.qml "$test_root/config/shell.qml" || exit 1
 # Every row of both folders gets a real 1x1 PNG, so a thumbnailed row decodes a picture instead of logging a missing file.

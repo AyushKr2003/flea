@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Real browser window and backend without a compositor; wl-copy records only Copy as text.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -18,7 +19,7 @@ trap cleanup EXIT
 mkdir -p "$test_root"/{home,state,data,cache,runtime,config,bin,source,copy-dest,cut-dest,pasteas-dest,pasteas-absolute-dest,pasteas-hard-dest,original-dest} || exit 1
 chmod 700 "$test_root/runtime" || exit 1
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 # The window loads its tab catcher from the shell directory, so the probe ships it as the product does.
 ln -s "$PWD/ui/boot/fleatab.qml" "$test_root/config/fleatab.qml" || exit 1
