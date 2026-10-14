@@ -115,8 +115,10 @@ for variant in normalfill green mutant trashrow; do
 ' "$config/flea/SidebarRow.qml" || exit 1
     elif [ "$variant" = trashrow ]; then
         cp -a ui "$config/flea" || exit 1
-        [ "$(grep -cF '    highlighted: root.railIndex === root.rail.highlightedIndex' "$config/flea/RailTrashRow.qml")" -eq 1 ] || exit 1
-        sed -i '/^    highlighted: root\.railIndex === root\.rail\.highlightedIndex$/d' "$config/flea/RailTrashRow.qml" || exit 1
+        [ "$(grep -cF '    highlighted: root.railIndex === root.rail.highlightedIndex' "$config/flea/RailTrashRow.qml")" -eq 1 ] \
+            || { printf 'FAIL rail-highlight: RailTrashRow.qml no longer holds one shared highlighted binding\n'; exit 1; }
+        sed -i '/^    highlighted: root\.railIndex === root\.rail\.highlightedIndex$/d' "$config/flea/RailTrashRow.qml" \
+            || { printf 'FAIL rail-highlight: the Trash row mutant could not edit RailTrashRow.qml\n'; exit 1; }
     elif [ "$variant" = normalfill ]; then
         cp -a ui "$config/flea" || exit 1
         [ "$(grep -cF 'root.focused ? Style.selectedFill : Style.normalFill' "$config/flea/SidebarRow.qml")" -eq 1 ] || exit 1
