@@ -123,6 +123,7 @@ Item {
     // Below the rail so Trash answers first; refusing here keeps an overlay rail drop from falling through to the listing row under it.
     DropArea {
         id: dragReveal
+        objectName: "dragReveal"
         anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
         width: Math.max(strip.width, rail.width)
         enabled: root.overlay

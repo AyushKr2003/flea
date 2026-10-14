@@ -1330,31 +1330,31 @@ ui/PanePath.qml	67	root	Declared QML id; component context access is valid at ru
 ui/PanePath.qml	68	root	Declared QML id; component context access is valid at runtime.
 ui/PanePath.qml	69	root	Declared QML id; component context access is valid at runtime.
 ui/PanePath.qml	70	root	Declared QML id; component context access is valid at runtime.
-ui/PaneRail.qml	146	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	147	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	148	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	149	root	Declared QML id; component context access is valid at runtime.
-ui/PaneRail.qml	149	root	Declared QML id; component context access is valid at runtime.
+ui/PaneRail.qml	150	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	150	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	151	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	152	root	Declared QML id; component context access is valid at runtime.
-ui/PaneRail.qml	155	root	Declared QML id; component context access is valid at runtime.
+ui/PaneRail.qml	153	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	156	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	157	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	158	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	159	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	160	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	161	root	Declared QML id; component context access is valid at runtime.
-ui/PaneRail.qml	163	root	Declared QML id; component context access is valid at runtime.
-ui/PaneRail.qml	163	root	Declared QML id; component context access is valid at runtime.
+ui/PaneRail.qml	162	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	164	root	Declared QML id; component context access is valid at runtime.
-ui/PaneRail.qml	219	root	Declared QML id; component context access is valid at runtime.
+ui/PaneRail.qml	164	root	Declared QML id; component context access is valid at runtime.
+ui/PaneRail.qml	165	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	220	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	221	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	222	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	223	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	224	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	225	root	Declared QML id; component context access is valid at runtime.
+ui/PaneRail.qml	226	root	Declared QML id; component context access is valid at runtime.
 ui/PaneWire.qml	81	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	83	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	84	pane	Declared QML property; enclosing component context supplies it.
@@ -2858,31 +2858,31 @@ ui/PanePath.qml	67	root	Declared QML id; component context access is valid at ru
 ui/PanePath.qml	68	root	Declared QML id; component context access is valid at runtime.
 ui/PanePath.qml	69	root	Declared QML id; component context access is valid at runtime.
 ui/PanePath.qml	70	root	Declared QML id; component context access is valid at runtime.
-ui/PaneRail.qml	146	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	147	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	148	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	149	root	Declared QML id; component context access is valid at runtime.
-ui/PaneRail.qml	149	root	Declared QML id; component context access is valid at runtime.
+ui/PaneRail.qml	150	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	150	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	151	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	152	root	Declared QML id; component context access is valid at runtime.
-ui/PaneRail.qml	155	root	Declared QML id; component context access is valid at runtime.
+ui/PaneRail.qml	153	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	156	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	157	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	158	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	159	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	160	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	161	root	Declared QML id; component context access is valid at runtime.
-ui/PaneRail.qml	163	root	Declared QML id; component context access is valid at runtime.
-ui/PaneRail.qml	163	root	Declared QML id; component context access is valid at runtime.
+ui/PaneRail.qml	162	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	164	root	Declared QML id; component context access is valid at runtime.
-ui/PaneRail.qml	219	root	Declared QML id; component context access is valid at runtime.
+ui/PaneRail.qml	164	root	Declared QML id; component context access is valid at runtime.
+ui/PaneRail.qml	165	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	220	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	221	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	222	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	223	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	224	root	Declared QML id; component context access is valid at runtime.
 ui/PaneRail.qml	225	root	Declared QML id; component context access is valid at runtime.
+ui/PaneRail.qml	226	root	Declared QML id; component context access is valid at runtime.
 ui/PaneWire.qml	81	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	83	pane	Declared QML property; enclosing component context supplies it.
 ui/PaneWire.qml	84	pane	Declared QML property; enclosing component context supplies it.

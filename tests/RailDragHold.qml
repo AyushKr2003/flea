@@ -9,6 +9,7 @@ Item {
     required property var host
     required property var report
     property var sidebar: null
+    property var catcher: null
     property var target: null
     property var row: null
     property double enteredAt: 0
@@ -55,6 +56,11 @@ Item {
     function steps() {
         var out = [function () {
             root.sidebar = root.host.children.filter(function (item) { return String(item).indexOf("QQuickLoader") === 0 && item.item })[0].item
+            root.catcher = root.host.children.filter(function (item) { return item.objectName === "dragReveal" })[0] || null
+            root.report("the rail catcher is found by name", root.catcher !== null, true)
+            // An unrelated area before the catcher makes a depth-first first-area lookup read the wrong receiver.
+            var decoy = childTarget.createObject(root.host.children[0], { keys: ["application/x-flea-priority-decoy"] })
+            root.report("an unrelated area precedes the named catcher", root.dropArea(root.host) === decoy, true)
             Flea.ViewState.changeLeaf("places", { showTags: true, favourites: [{ label: "Drag hold", path: root.pane.path + "/Documents" }] })
             root.pane.tags().take([{ n: "note.txt", tg: ["Red"] }], true)
             return true
@@ -85,7 +91,7 @@ Item {
                 if (Date.now() - root.enteredAt < root.host.settleMs + 300) return false
                 root.report(kind + " row drag has no pointer or focus hold", [root.host.over, root.host.edgeShown, root.host.focusWanted], [false, false, false])
                 root.report(kind + " child DropArea holds the row drag", root.target.containsDrag, true)
-                root.report(kind + " row answers before the rail catcher", root.dropArea(root.host).containsDrag, false)
+                root.report(kind + " row answers before the rail catcher", root.catcher ? root.catcher.containsDrag : "missing", false)
                 root.report(kind + " row drag keeps the overlay rail revealed", root.host.revealed, true)
                 root.report(kind + " row drag keeps the rail at x 0", root.host.railX, 0)
                 root.moveTo(root.pane, root.pane.width * 0.6, root.pane.height / 2)

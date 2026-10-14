@@ -68,6 +68,7 @@ function run(check) {
           TrashDrop.drop(otherPane, wide, ["file:///d/c.txt"]), true)
     check("the other backend receives only the carried path", JSON.stringify(otherSent),
           JSON.stringify([{ c: "trash", paths: ["/d/c.txt"] }]))
+    check("paths through another backend have no cursor rows", otherPane.trashedFirst, -1)
     widePane.backend.heldListing = 8
     check("a wide drag on its own listing is taken", TrashDrop.drop(widePane, wide, []), true)
     check("as rows named in the numbering of the lift, not the one held now", JSON.stringify(byIndex),

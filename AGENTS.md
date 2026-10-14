@@ -1105,6 +1105,8 @@ The land235c review fixes retain 587 startup objects and the same 169 first-fram
 
 The land235r4 Trash backend guard and rail drag hold retain the first-frame unit list. The `wc -c` sum over `tests/startup-units.txt` moves from 1,630,044 to 1,630,730 bytes; `tests/startup-objects.sh` checks the census on both images.
 
+The land235r5 catcher name retains 587 startup objects and the same 169 first-frame units. The `wc -c` sum over `tests/startup-units.txt` moves from 1,630,730 to 1,630,763 bytes. Both unqualified-read profiles retain their allowance counts and reasons at the source positions shifted by the name.
+
 **Qt never caches a Quickshell config.** Quickshell serves its config through its own `qs:@/qs/`
 URL scheme (`src/core/rootwrapper.cpp`, intercepted in `src/core/qsintercept.cpp`) and Qt's QML
 disk cache accepts local files only. Run any launch with

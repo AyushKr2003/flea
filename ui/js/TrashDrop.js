@@ -46,7 +46,7 @@ function drop(pane, marker, urls) {
     var sent = request(marker, urls, pane.path, pane.backend)
     if (!sent) return false
     // Where the cursor lands once the rows are gone, as dd sets it; only a drag from this listing has one.
-    var rows = Drag.sameListing(marker, pane.path) ? markerRows(marker) : []
+    var rows = Drag.sameListing(marker, pane.path) && Drag.liftedBy(marker, pane.backend) ? markerRows(marker) : []
     var first = rows.length > 0 ? rows[0] : -1
     for (var i = 1; i < rows.length; i++)
         if (rows[i] < first) first = rows[i]
