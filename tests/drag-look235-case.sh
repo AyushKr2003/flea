@@ -118,9 +118,9 @@ glide_to "$x" "$y"
 press
 look235_hover Trash trash "Move 3 items to Trash"
 look235_shot 01-trash-hover 8 3 "Move 3 items to Trash" "Move 3 items to Trash" "" false Trash
-look235_hover omarchy favourite "Move 3 items to a folder · ctrl at lift copies"
-look235_shot 02-favorite-hover 8 3 "Move 3 items to a folder · ctrl at lift copies" \
-  "Move 3 items to a folder · ctrl at lift copies" "" false omarchy
+look235_hover omarchy favourite "Move 3 items to a folder · Ctrl copies, Shift moves"
+look235_shot 02-favorite-hover 8 3 "Move 3 items to a folder · Ctrl copies, Shift moves" \
+  "Move 3 items to a folder · Ctrl copies, Shift moves" "" false omarchy
 look235_hover Trash trash "Move 3 items to Trash"
 for name in "${look235_files[@]}"; do
   owned_path "$HOMEDIR/$name"
