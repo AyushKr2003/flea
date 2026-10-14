@@ -4,6 +4,7 @@ singleton Glass 1.0 Glass.qml
 singleton MediaSound 1.0 MediaSound.qml
 singleton Scripts 1.0 Scripts.qml
 singleton ViewState 1.0 ViewState.qml
+singleton UserDirs 1.0 UserDirs.qml
 singleton UpdateCheck 1.0 UpdateCheck.qml
 singleton DefaultClaim 1.0 DefaultClaim.qml
 singleton SettingsMetrics 1.0 SettingsMetrics.qml

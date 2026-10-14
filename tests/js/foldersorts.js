@@ -3,8 +3,10 @@
 .import "../../ui/js/Menu.js" as Menu
 .import "../../ui/js/Sort.js" as Sort
 .import "../../ui/js/Tabs.js" as Tabs
+.import "../../ui/js/Places.js" as Places
 .import "tabsfixture.js" as Fixture
 .import "sourcefixture.js" as Source
+.import "userdirsfixture.js" as UserDirsFixture
 
 // Per-folder sorts (issue 179) and Hidden files last (issue 70): map, Settings rows, flyout forget row, tab-kept sorts.
 function sortPane(path, sorts) {
@@ -35,6 +37,7 @@ function sortPane(path, sorts) {
 }
 
 function run(check) {
+    newestDefaults(check)
     // One key table: Sort.ORDERS is the same array FolderSorts owns, in backend order.
     check("Sort.ORDERS is the same array FolderSorts owns", Sort.ORDERS === FolderSorts.ORDERS, true)
     check("the supported order stays name,size,mtime,kind", Sort.ORDERS.join(","), "name,size,mtime,kind")
@@ -193,12 +196,83 @@ function run(check) {
     peekOrder(check)
 }
 
+function newestDefaults(check) {
+    UserDirsFixture.duplicateRoles(check, FolderSorts.newestPaths, Places.userDirs)
+    var paths = ["/home/test/Inbox", "/home/test/Photos", "/home/test/Clips"]
+    var fallback = { key: "name", reverse: false }
+    var defaults = {}
+    check("fresh Downloads defaults to Modified newest first",
+          JSON.stringify(FolderSorts.orderFor(defaults, paths[0], fallback, true, paths)),
+          JSON.stringify({ key: "mtime", reverse: true }))
+    check("Pictures also defaults to Modified newest first",
+          JSON.stringify(FolderSorts.orderFor({}, paths[1], fallback, true, paths)),
+          JSON.stringify({ key: "mtime", reverse: true }))
+    check("Videos also defaults to Modified newest first",
+          JSON.stringify(FolderSorts.orderFor({}, paths[2], fallback, true, paths)),
+          JSON.stringify({ key: "mtime", reverse: true }))
+    check("Documents keeps the global name order",
+          JSON.stringify(FolderSorts.orderFor({}, "/home/test/Documents", fallback, true, paths)), JSON.stringify(fallback))
+    var own = FolderSorts.set({}, paths[0], "name", false)
+    check("an explicit Name ascending survives serialization",
+          JSON.stringify(FolderSorts.orderFor(JSON.parse(JSON.stringify(own)), paths[0], fallback, true, paths)), JSON.stringify(fallback))
+    check("remember off ignores defaults and saved entries",
+          JSON.stringify(FolderSorts.orderFor(own, paths[0], { key: "size", reverse: true }, false, paths)),
+          JSON.stringify({ key: "size", reverse: true }))
+    check("a Downloads column peek defaults to Modified newest first",
+          JSON.stringify(FolderSorts.peekOrder({}, paths[0], true, paths, paths, fallback)),
+          JSON.stringify({ by: "mtime", desc: true }))
+    check("defaults never occupy a folderSorts slot", FolderSorts.count(defaults), 0)
+    for (var i = 0; i < UserDirsFixture.cases.length; i++) {
+        var sample = UserDirsFixture.cases[i]
+        check("newest paths: " + sample[0],
+              JSON.stringify(FolderSorts.newestPaths(UserDirsFixture.body(sample[1]), "/home/test")),
+              JSON.stringify([sample[2] === null ? "/home/test/Downloads" : sample[2]]))
+    }
+    check("only the three XDG roles get newest-first defaults",
+          FolderSorts.newestPaths('XDG_DOWNLOAD_DIR="$HOME/Inbox"\nXDG_PICTURES_DIR="$HOME/Photos/"\nXDG_VIDEOS_DIR="/media/Clips"\nXDG_DOCUMENTS_DIR="$HOME/Docs"', "/home/test").join("|"),
+          "/home/test/Inbox|/home/test/Photos|/media/Clips")
+    check("missing XDG roles use conventional names", FolderSorts.newestPaths("", "/home/test").join("|"),
+          "/home/test/Downloads|/home/test/Pictures|/home/test/Videos")
+    check("only the absent role uses its conventional name",
+          FolderSorts.newestPaths('XDG_PICTURES_DIR="$HOME/Photos"\nXDG_VIDEOS_DIR="$HOME"', "/home/test").join("|"),
+          "/home/test/Downloads|/home/test/Photos")
+    check("disabled roles pointing at Home do not default Home",
+          FolderSorts.newestPaths('XDG_DOWNLOAD_DIR="$HOME/"\nXDG_PICTURES_DIR="$HOME"\nXDG_VIDEOS_DIR="$HOME"', "/home/test").length, 0)
+    check("localized Downloads does not also default the English folder",
+          JSON.stringify(FolderSorts.orderFor({}, "/home/test/Downloads", fallback, true, paths)), JSON.stringify(fallback))
+    check("a default applies to the folder itself, not its children",
+          JSON.stringify(FolderSorts.orderFor({}, paths[0] + "/child", fallback, true, paths)), JSON.stringify(fallback))
+    check("a trailing separator still identifies the default folder",
+          JSON.stringify(FolderSorts.orderFor({}, paths[0] + "/", fallback, true, paths)), JSON.stringify({ key: "mtime", reverse: true }))
+    check("forgetting an explicit Name restores the default",
+          JSON.stringify(FolderSorts.orderFor(FolderSorts.forget(own, paths[0]), paths[0], fallback, true, paths)),
+          JSON.stringify({ key: "mtime", reverse: true }))
+    check("a default never changes a completion peek",
+          JSON.stringify(FolderSorts.peekOrder({}, paths[0], true, undefined, paths, fallback)), "{}")
+    check("remember off gives column peeks the global order",
+          JSON.stringify(FolderSorts.peekOrder(own, paths[0], false, paths, paths, { key: "size", reverse: true })),
+          JSON.stringify({ by: "size", desc: true }))
+    check("remember off keeps plain Name peeks untagged",
+          JSON.stringify(FolderSorts.peekOrder(own, paths[0], false, paths, paths, fallback)), "{}")
+    check("an explicit Name also wins in a column peek",
+          JSON.stringify(FolderSorts.peekOrder(own, paths[0], true, paths, paths, fallback)), JSON.stringify({ by: "name", desc: false }))
+    var invalid = {}
+    invalid[paths[0]] = { key: "unknown", reverse: false }
+    check("an unknown stored key still uses the folder default",
+          JSON.stringify(FolderSorts.orderFor(invalid, paths[0], fallback, true, paths)), JSON.stringify({ key: "mtime", reverse: true }))
+    var selected = sortPane(paths[0], {})
+    selected.backend.sortBy = "mtime"
+    selected.backend.sortDesc = true
+    Sort.resort(selected, "name", false)
+    check("choosing Name ascending from the default calls the folder writer", selected.remembered.join(","), paths[0] + "|name:false")
+}
+
 // The shipped Backend.peek over stub state: only a column's peek of a folder with its own remembered order carries it.
 function peekOrder(check) {
     var body = Source.slice(Source.source("ui/Backend.qml"), "function peek(path, first, hidden, hiddenLast, keep)", "// op is \"peers\"")
     var sent = function (state, keep) {
         var root = { last: null, send: function (message) { root.last = message } }
-        new Function("root", "ViewState", "FolderSorts", "return (" + body + ")")(root, { state: state }, FolderSorts)("/a", 35, false, undefined, keep)
+        new Function("root", "ViewState", "FolderSorts", "UserDirs", "return (" + body + ")")(root, { state: state }, FolderSorts, { newestFolders: [] })("/a", 35, false, undefined, keep)
         return root.last.by === undefined ? "none" : root.last.by + (root.last.desc ? " desc" : " asc")
     }
     var sorts = { "/a": { key: "size", reverse: true } }

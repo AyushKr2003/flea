@@ -1,4 +1,5 @@
 .pragma library
+.import "UserDirs.js" as UserDirs
 
 // Owned here so Backend.qml loads no sort closure at startup.
 var ORDERS = ["name", "size", "mtime", "kind"]
@@ -7,6 +8,29 @@ var ORDERS = ["name", "size", "mtime", "kind"]
 
 // The cap ui.json holds, oldest first; setting past it drops the folders sorted longest ago.
 var MAX = 500
+
+// Sample input: XDG_DOWNLOAD_DIR="$HOME/Inbox"; absent PICTURES and VIDEOS use their conventional names.
+function newestPaths(body, home) {
+    var roles = ["DOWNLOAD", "PICTURES", "VIDEOS"]
+    var names = ["Downloads", "Pictures", "Videos"]
+    var paths = []
+    if (!home) return paths
+    var configured = {}
+    var entries = UserDirs.readRoles(body, home)
+    for (var e = 0; e < entries.length; e++)
+        configured[entries[e].role] = entries[e].path
+    for (var i = 0; i < roles.length; i++) {
+        var path = configured[roles[i]] === undefined ? home + "/" + names[i] : configured[roles[i]]
+        if (path && path !== home && paths.indexOf(path) < 0)
+            paths.push(path)
+    }
+    return paths
+}
+
+function defaultOrder(path, newest) {
+    var folder = String(path || "").replace(/\/+$/, "")
+    return newest && newest.indexOf(folder) >= 0 ? { key: "mtime", reverse: true } : null
+}
 
 // Settings stores Modified as "date" while ORDERS and the backend spell it "mtime".
 function liveKey(key) {
@@ -61,16 +85,19 @@ function shouldRemember(remember, path) {
     return remember !== false && !!path
 }
 
-// Only a column's peek (it passes keep) asks for its folder's own order, only while remembering is on, and never kind, which the backend has no order for.
-function peekOrder(sorts, path, remember, keep) {
-    var own = Array.isArray(keep) && remember !== false ? get(sorts, path) : null
+// Columns pass keep: a saved order wins over XDG defaults; remembering off uses the global order, except kind, unsupported by peeks.
+function peekOrder(sorts, path, remember, keep, newest, fallback) {
+    if (!Array.isArray(keep)) return {}
+    var own = remember !== false ? get(sorts, path) || defaultOrder(path, newest)
+                                : fallback ? orderFor(null, path, fallback, false) : null
+    if (remember === false && own && own.key === "name" && !own.reverse) return {}
     return own && own.key !== "kind" ? { by: own.key, desc: own.reverse } : {}
 }
 
 // An unknown stored key reads as the default, so a newer Flea never wedges this one.
-function orderFor(sorts, path, fallback, remember) {
+function orderFor(sorts, path, fallback, remember, newest) {
     if (remember !== false) {
-        var own = get(sorts, path)
+        var own = get(sorts, path) || defaultOrder(path, newest)
         if (own)
             return own
     }

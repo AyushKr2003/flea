@@ -1339,6 +1339,8 @@ window's write keeps what another wrote since its read. A null `folderSorts` or
 or re-view moves its folder to the newest end of its map. Past either folder map's 500 cap
 the oldest entries go and the newest stay.
 
+With per-folder sorting enabled, Downloads, Pictures and Videos open in Modified order, newest first, unless their folderSorts entry chooses another order. These paths use user-dirs.dirs under XDG_CONFIG_HOME (or ~/.config), with the conventional XDG names for missing roles; a role pointing at Home is excluded. Browser listings, column peeks and the file chooser resolve the same defaults without storing an entry or using a slot in the 500-folder cap. Explicit Name ascending remains a stored choice. Turning per-folder sorting off uses the global order instead. Other folders and the terminal interface retain their existing sort behavior.
+
 **The window's read is the settled file, and not a raw one.** `main()` calls `Store::settle` before
 it hands off to `qs`: an empty patch through the same lock and the same per-key validation, so
 whenever that settle succeeded on a document it could read, a value a hand edit left in a key this
@@ -2668,6 +2670,10 @@ The RAW3 join onto the 0.3.11 stage records the merged `wc -l` ceilings at `src/
 The same join keeps all 66 stage Properties checks and all 7 RAW3 checks, then adds 4 checks for duplicate pairs, approved values and deferred completion of missing facts, and 8 checks (2 for each of a partial ISO, a partial camera, complementary fields and conflicting fields) that the immediate and deferred photo facts merge field by field before each pair is drawn once, so `tests/menu-contents.sh` expects 85. Both lint profiles retain their allowance counts, source text, symbols and reasons, with the `ui/MenuActionDialog.qml` reads one line lower (body 325 to 326, root 328 to 329 and 342 to 343). The 169 first-frame units still sum to 1,628,263 bytes; the changed RAW3 UI units are deferred, so `tests/startup-units.txt` stays unchanged.
 
 Qt 6.12 sequence handling adds `js/Lists.js` to the first-frame unit list. The merged 169 units sum to 1,628,263 bytes, re-derived with the `wc -c` sum used by `tests/startup-objects.sh`, from 1,627,754 bytes over 168 units. The added helper contributes 455 bytes and the Menu.js and MarkdownPrepared.js changes 54 bytes; the deferred menu-only units stay outside the first frame. The shared list test changes sequence recognition in Compare and nested Markdown readers. The `ui/js/Menu.js` ceiling moves from 502 to 503, re-derived with `wc -l` for its helper import. The 26 existing `QuickLookPrepare.qml` lint allowances move one line for the same import; their source text, symbols, reasons and counts are unchanged.
+
+The shared XDG directory reader is `ui/UserDirs.qml`, 25 lines, replacing the rail and picker readers; `ui/js/UserDirs.js` holds the existing parser without importing menu code. `ui/ColumnsArea.qml` moves from 572 to 576 lines for re-asking drawn columns when those directories change. The first-frame unit inventory adds UserDirs.qml and js/UserDirs.js and its summed source ceiling is 1,630,789 bytes, re-derived from the listed files with their current byte counts.
+`tests/columnsfilter.qml` moves from 402 to 403 lines for the backend stub's codeResult signal, matching the Markdown preview connection.
+`ui/PickerWindow.qml` moves from 812 to 813 lines for resolving each requested folder's sort while keeping the held rows' sort mark stable between requests.
 
 COPY-TRASH on the 0.3.11 stage moves the `src/backend/trashbrowse.rs` ceiling from 900 to 1025 (`wc -l`) for the approved typed refusals, per-item damaged-record failures and backward target naming, retaining the stage's newest-first listing and membership checks.
 The same port moves `src/backend/trashdelete.rs` from 938 to 965 (`wc -l`) for the approved outcome wrappers and cleanup logging, with the failed child put-back logging credited once to this port.

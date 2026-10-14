@@ -1,5 +1,4 @@
 import Quickshell
-import Quickshell.Io
 import QtQuick
 import "." as Flea
 import "js/Icons.js" as Icons
@@ -25,7 +24,7 @@ Item {
     // mode that cannot use the location does not offer it.
     property bool offerRecent: true
 
-    property string dirsText: ""
+    readonly property string dirsText: Flea.UserDirs.body
     // Recent is a location and not a path, so its row carries the token ui/js/Picker.js names; the
     // rail's own cursor and activation then work on it exactly as they do on a favourite.
     readonly property var recentRow: [{
@@ -85,15 +84,6 @@ Item {
             focused: rail.activeFocus
             onActivated: function (at) { root.choose(at) }
         }
-    }
-
-    FileView {
-        id: userDirsFile
-        path: (Quickshell.env("XDG_CONFIG_HOME") || root.home + "/.config") + "/user-dirs.dirs"
-        printErrors: false
-        onLoaded: root.dirsText = text()
-        watchChanges: true
-        onFileChanged: reload()
     }
 
     function choose(index) {

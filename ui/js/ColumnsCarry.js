@@ -10,8 +10,8 @@ var PEEK_CAP = 512
 
 // The folder order a column asks under, as the tag its peek key and reply carry.
 // Sample input: orderOf({ folderSorts: {}, rememberSort: true }, "/a", []) is "" for a folder with no order of its own.
-function orderOf(state, path, drawn) {
-    var order = FolderSorts.peekOrder(state.folderSorts, path, state.rememberSort, drawn)
+function orderOf(state, path, drawn, newest) {
+    var order = FolderSorts.peekOrder(state.folderSorts, path, state.rememberSort, drawn, newest, state.sort)
     return Columns.orderTag(order.by, order.desc)
 }
 

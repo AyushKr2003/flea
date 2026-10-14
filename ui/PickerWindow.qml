@@ -188,6 +188,7 @@ ShellRoot {
                 recents.refresh()
                 return
             }
+            backend.resetSort(next)
             win.requestListing(backend.listRequest(next, win.windowSize, win.showHidden))
         }
 
@@ -442,7 +443,7 @@ ShellRoot {
         Flea.Backend {
             id: backend
             pickerOnly: true
-            // The saved order seeds the first listing only: a window re-sorting later would move the mark over rows that never moved.
+            // Each listing resolves its folder explicitly; between requests the mark must keep describing the held rows.
             preserveSort: true
 
             onListed: function (n, readMs, sortMs) {
