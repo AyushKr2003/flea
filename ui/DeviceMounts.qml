@@ -259,14 +259,7 @@ Item {
     // Eject goes through the mount point. gio mount dispatches on --device before it ever reads
     // --eject (glib 2.88.3 gio-tool-mount.c:1264 against :1278), so "-e -d <device>" mounts instead.
     // gio's own -f is never passed: forcing an unmount over an open write is how a file manager
-    // loses somebody's data.
-    //
-    // A loop row (an ISO opened from the file list) takes -u instead: -e hung indefinitely against
-    // it every time it was tried, on a bare loop device and on a hybrid ISO's partitioned one alike
-    // -- neither carries a Drive object, and that is what gio's eject path never comes back from
-    // waiting on. Its loop device is then detached (Devices.ejectCommand), and judgeEject reads the
-    // very next listing either way, so the result is judged identically: gone or unmounted is
-    // "safe", still mounted is not.
+    // loses somebody's data. A loop row takes -u: -e never returns on a loop without a Drive (measured), and judgeEject reads the next listing either way.
     function eject(index) {
         var e = root.entries[index]
         if (!e || e.kind !== "volume" || !e.mounted)
@@ -275,10 +268,8 @@ Item {
             root.message(Format.fill(Mounts.WORDS.stillEjecting, root._ejectLabel), false)
             return
         }
-        // A USB disk that is not media-removable (a USB HDD or SSD bridge) is powered off
-        // instead: ejecting its media re-announces the disk and udiskie remounts it at once.
-        // A loop row is never media-removable either, but there is no drive behind it to power
-        // off, so it skips this and takes the -u route below.
+        // A USB disk that is not media-removable (a USB HDD or SSD bridge) is powered off instead: ejecting its media re-announces it and udiskie remounts it.
+        // A loop row has no drive to power off, so it takes the -u route below.
         var disk = Devices.powerOffDisk(e.device)
         if (!e.loop && disk.length > 0 && e.mediaRemovable !== true) {
             root.powerOff(e, disk)

@@ -265,16 +265,16 @@ ui/ContextMenu.qml	642	root	Declared QML id; component context access is valid a
 ui/ContextMenu.qml	643	root	Declared QML id; component context access is valid at runtime.
 ui/DefaultClaim.qml	95	root	Declared QML id; component context access is valid at runtime.
 ui/DefaultClaim.qml	112	root	Declared QML id; component context access is valid at runtime.
-ui/DeviceMounts.qml	438	root	Declared QML id; component context access is valid at runtime.
-ui/DeviceMounts.qml	440	root	Declared QML id; component context access is valid at runtime.
-ui/DeviceMounts.qml	441	root	Declared QML id; component context access is valid at runtime.
-ui/DeviceMounts.qml	441	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
-ui/DeviceMounts.qml	442	root	Declared QML id; component context access is valid at runtime.
-ui/DeviceMounts.qml	442	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
-ui/DeviceMounts.qml	453	listOut	Quickshell type unresolved when its module is missing.
-ui/DeviceMounts.qml	464	root	Declared QML id; component context access is valid at runtime.
-ui/DeviceMounts.qml	490	root	Declared QML id; component context access is valid at runtime.
-ui/DeviceMounts.qml	525	root	Declared QML id; component context access is valid at runtime.
+ui/DeviceMounts.qml	429	root	Declared QML id; component context access is valid at runtime.
+ui/DeviceMounts.qml	431	root	Declared QML id; component context access is valid at runtime.
+ui/DeviceMounts.qml	432	root	Declared QML id; component context access is valid at runtime.
+ui/DeviceMounts.qml	432	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
+ui/DeviceMounts.qml	433	root	Declared QML id; component context access is valid at runtime.
+ui/DeviceMounts.qml	433	text	Enclosing Quickshell StdioCollector, Process or FileView supplies this member.
+ui/DeviceMounts.qml	444	listOut	Quickshell type unresolved when its module is missing.
+ui/DeviceMounts.qml	455	root	Declared QML id; component context access is valid at runtime.
+ui/DeviceMounts.qml	481	root	Declared QML id; component context access is valid at runtime.
+ui/DeviceMounts.qml	516	root	Declared QML id; component context access is valid at runtime.
 ui/FactsTable.qml	28	root	Declared QML id; component context access is valid at runtime.
 ui/FactsTable.qml	34	root	Declared QML id; component context access is valid at runtime.
 ui/FactsTable.qml	35	modelData	Declared QML property; enclosing component context supplies it.
