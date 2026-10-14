@@ -116,33 +116,36 @@ function shelfCopying(payload) {
 // instance has to be identifiable on its own or the receiver takes the internal path against a
 // selection it never made and the drop does nothing at all.
 var INSTANCE = String(Date.now()) + "-" + String(Math.floor(Math.random() * 1000000000))
+var lifted = { marker: "", backend: null }
 
 // False only when the listed directory cannot be written, which makes a same-device drag copy.
 function listingDeletable(pane) {
     return !(pane && pane.backend && pane.backend.dirWritable === false)
 }
 
-// One marker, not two mime types, carrying sender, rows and lift bits (fields: 0 sender, 1 rows, 2 ctrl, 3 source, 4 device, 5 deletable, 6 shift).
-function markerPayload(rows, copy, source, dev, deletable, shift) {
-    return INSTANCE + "\n" + rows.join(",") + "\n" + (copy ? "copy" : "move") + "\n" + encodeURIComponent(String(source || "")) + "\n" + String(dev || 0) + "\n" + (deletable === false ? "0" : "1") + "\n" + (shift === true ? "1" : "0")
+// One marker, not two mime types, carrying sender, rows and lift bits (fields: 0 sender, 1 rows, 2 ctrl, 3 source, 4 device, 5 deletable, 6 shift, 7 listing).
+function markerPayload(rows, copy, source, dev, deletable, shift, listing) {
+    return INSTANCE + "\n" + rows.join(",") + "\n" + (copy ? "copy" : "move") + "\n" + encodeURIComponent(String(source || "")) + "\n" + String(dev || 0) + "\n" + (deletable === false ? "0" : "1") + "\n" + (shift === true ? "1" : "0") + "\n" + String(listing || 0)
 }
 
-var MARKER_FIELDS = 7
+var MARKER_FIELDS = 8
+var SHIFT_MARKER_FIELDS = 7
 var LEGACY_MARKER_FIELDS = 5
 var DELETABLE_MARKER_FIELDS = 6
 
 // Five- and six-field legacy markers have raw paths; current markers percent-encode the path field.
-// Sample input: "foreign\n2\nmove\n%2Ftmp%2Fsource\n56\n1\n1".
+// Sample input: "foreign\n2\nmove\n%2Ftmp%2Fsource\n56\n1\n1\n7".
 function markerFields(payload) {
     var fields = String(payload).split("\n")
-    if ([LEGACY_MARKER_FIELDS, DELETABLE_MARKER_FIELDS, MARKER_FIELDS].indexOf(fields.length) < 0)
+    if ([LEGACY_MARKER_FIELDS, DELETABLE_MARKER_FIELDS, SHIFT_MARKER_FIELDS, MARKER_FIELDS].indexOf(fields.length) < 0)
         return null
     if (!/^-?[0-9]+$/.test(fields[4]) || (fields[2] !== "copy" && fields[2] !== "move")) return null
     if (fields.length >= DELETABLE_MARKER_FIELDS && fields[5] !== "0" && fields[5] !== "1") return null
-    if (fields.length === MARKER_FIELDS) {
+    if (fields.length >= SHIFT_MARKER_FIELDS) {
         if (fields[6] !== "0" && fields[6] !== "1") return null
         try { decodeURIComponent(fields[3]) } catch (error) { return null }
     }
+    if (fields.length === MARKER_FIELDS && !/^[0-9]+$/.test(fields[7])) return null
     return fields
 }
 
@@ -151,12 +154,18 @@ function markerFields(payload) {
 // indices any more and resolves by path against these instead.
 function markerSource(payload) {
     var fields = markerFields(payload)
-    return fields ? (fields.length === MARKER_FIELDS ? decodeURIComponent(fields[3]) : fields[3]) : ""
+    return fields ? (fields.length >= SHIFT_MARKER_FIELDS ? decodeURIComponent(fields[3]) : fields[3]) : ""
 }
 
 function markerDev(payload) {
     var fields = markerFields(payload)
     return fields ? Number(fields[4]) || 0 : 0
+}
+
+// Legacy markers carry no listing generation and cannot authorize a Trash drop by index.
+function markerListing(payload) {
+    var fields = markerFields(payload)
+    return fields && fields.length === MARKER_FIELDS ? Number(fields[7]) || 0 : 0
 }
 
 function markerShift(payload) {
@@ -174,6 +183,11 @@ function markerDeletable(payload) {
 // case the by-index transfer is safe in.
 function sameListing(payload, path) {
     return isOwnDrag(payload) && markerSource(payload) === path
+}
+
+// Equal listing generations in two pane backends still number different rows.
+function liftedBy(marker, backend) {
+    return !!backend && backend === lifted.backend && marker === lifted.marker
 }
 
 // Whether a drag carries at least one local path, which is what decides a drop resolves by path.
@@ -222,7 +236,8 @@ function uriFor(path) {
 // Whether the key is present is also what tells the bar the drag cannot leave Flea.
 function mimeFor(pane, rows, copy, shift) {
     var mime = {}
-    mime[ROWS_MIME] = markerPayload(rows, copy, Search.baseOf(pane), pane.backend ? pane.backend.dirDev : 0, listingDeletable(pane), shift === true)
+    mime[ROWS_MIME] = markerPayload(rows, copy, Search.baseOf(pane), pane.backend ? pane.backend.dirDev : 0, listingDeletable(pane), shift === true, pane.backend ? pane.backend.heldListing : 0)
+    lifted = { marker: mime[ROWS_MIME], backend: pane.backend || null }
     var uris = []
     var paths = []
     for (var i = 0; i < rows.length; i++) {
@@ -309,7 +324,7 @@ function reachNote(canLeave) {
     return canLeave ? "" : " · too wide to drag out"
 }
 
-// Sample marker "<instance>\n1,3\nmove\n/source\n42\n1\n0"; feedback never becomes destination row indices.
+// Sample marker "<instance>\n1,3\nmove\n%2Fsource\n42\n1\n0\n7"; feedback never becomes destination row indices.
 function feedbackFor(marker, urls, shelf, proposed) {
     var fields = markerFields(marker) || []
     var own = fields[0] === INSTANCE

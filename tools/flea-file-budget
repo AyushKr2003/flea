@@ -105,7 +105,7 @@ tests/chromering.qml 413
 tests/columnrow-geom.qml 426
 tests/dialog-board.qml 663
 tests/columnscost.qml 416
-tests/rowcost.qml 417
+tests/rowcost.qml 438
 tests/gridmark.qml 419
 tests/columnsfilter.qml 403
 tests/columnsfolder.qml 400
@@ -147,7 +147,7 @@ ui/List.qml 480
 tests/listprebuild.qml 410
 tests/poolpark.qml 419
 tests/touchpad-edge.qml 438
-tests/railmotion.qml 457
+tests/railmotion.qml 463
 ui/FastScrollHandler.qml 476
 ui/FigureService.qml 405
 ui/FlashView.qml 397
@@ -168,10 +168,10 @@ ui/PreviewPdf.qml 482
 ui/PickerChrome.qml 295
 ui/PreviewMarkdown.qml 668
 tests/markdown-code.qml 477
-ui/Row.qml 496
+ui/Row.qml 459
 ui/SettingsPanel.qml 547
 ui/SettingsRow.qml 409
-ui/Sidebar.qml 721
+ui/Sidebar.qml 716
 ui/StatusBar.qml 477
 ui/Theme.qml 480
 ui/TrashView.qml 492
@@ -192,7 +192,7 @@ ui/js/MdDocument.js 337
 ui/js/MdLeaf.js 309
 ui/js/MdHtml.js 307
 ui/js/Menu.js 503
-ui/js/Drag.js 349
+ui/js/Drag.js 364
 ui/js/Format.js 305
 ui/js/Ops.js 577
 ui/js/Search.js 396

@@ -89,6 +89,8 @@ Item {
         return Object.assign({}, entry, { count: root.trashCount })
     })
     signal trashRequested()
+    // A row drag resting on the Trash row, which ui/PaneRail.qml reads to keep an overlay rail up.
+    readonly property bool trashDragOver: trashRepeater.count > 0 && !!trashRepeater.itemAt(0) && trashRepeater.itemAt(0).dragOver
 
     // The saved place an Edit is rewriting, "" when none is; ui/js/RailMenu.js editPlace sets it.
     property string editingPlace: ""
@@ -538,14 +540,7 @@ Item {
             Repeater {
                 id: trashRepeater
                 model: root.trashEntries
-                delegate: SidebarRow {
-                    lit: index + root.homeLead.length + root.recentEntries.length + root.homeRest.length === root.litIndex
-                    highlighted: index + root.homeLead.length + root.recentEntries.length + root.homeRest.length === root.highlightedIndex
-                    cursor: root.cursorDrawn && index + root.homeLead.length + root.recentEntries.length + root.homeRest.length === root.cursorIndex
-                    focused: root.focused
-                    onActivated: function (idx) { root.activate(idx + root.homeLead.length + root.recentEntries.length + root.homeRest.length) }
-                    onMenuRequested: function(idx, pos) { root.openRailMenu(idx + root.homeLead.length + root.recentEntries.length + root.homeRest.length, pos) }
-                }
+                delegate: RailTrashRow { rail: root }
             }
 
             RailHeading {

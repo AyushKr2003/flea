@@ -63,6 +63,8 @@ rename-grid-bottom|needs node, which the flea-ci image does not carry, so it run
 preview-040|exits 0 only on its known per-file scroll restoration failure and exits 1 on any other result, unexpected green included
 ui|needs the display, and refuses beside a Flea it did not start; cap_raw_grid, cap_raw_columns, cap_raw_quicklook and cap_raw_properties also need native screenshots
 drag|needs the display and a real pointer through uinput
+drag-look235|needs display and uinput capture for review
+drag-look235-case|is a case library sourced by drag.sh look235
 cardsizes|needs the display, a real pointer through uinput, and Hyprland to resize the window
 bench|is a separate headless benchmark-contract suite
 package|needs a real makepkg archive in FLEA_PACKAGE_FILE

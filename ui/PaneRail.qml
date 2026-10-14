@@ -1,6 +1,7 @@
 import QtQuick
 import "." as Flea
 import "js/Focus.js" as Focus
+import "js/Drag.js" as DragOps
 import "js/Eject.js" as Eject
 import "js/RailKeys.js" as RailKeys
 import "js/RailMenu.js" as RailMenu
@@ -64,7 +65,8 @@ Item {
     property bool edgeShown: false
     // The Sidebar is built by the first strip entry or Tab and then kept, so later reveals spawn nothing and keep cursor and scroll.
     property bool built: false
-    readonly property bool pointerWanted: root.edgeShown || root.over || root.menuHere || root.releasing
+    readonly property bool dragHere: dragReveal.containsDrag || root.rowDragOver(rail.item)
+    readonly property bool pointerWanted: root.edgeShown || root.over || root.menuHere || root.releasing || root.dragHere
     readonly property bool focusWanted: root.pane !== null && root.pane.focusView === Focus.RAIL
     readonly property bool wanted: root.pointerWanted || root.focusWanted
     // 0 withdrawn to 1 shown; the rail's x follows it, and a reversal starts from where it stands.
@@ -116,6 +118,17 @@ Item {
                 else dwell.restart()
             }
         }
+    }
+
+    // Below the rail so Trash answers first; refusing here keeps an overlay rail drop from falling through to the listing row under it.
+    DropArea {
+        id: dragReveal
+        objectName: "dragReveal"
+        anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+        width: Math.max(strip.width, rail.width)
+        enabled: root.overlay
+        keys: [DragOps.ROWS_MIME]
+        onDropped: function (drop) { drop.accepted = false }
     }
 
     Loader {
@@ -212,5 +225,15 @@ Item {
             onQuiesce: function (path) { root.pane.quiesceVolume(path) }
             onFirstAnsweredChanged: root.hiddenEjectReady()
         }
+    }
+
+    // A child row DropArea takes the drag from dragReveal; its live containsDrag binding keeps the rail up.
+    function rowDragOver(item) {
+        if (!item) return false
+        if (item.containsDrag === true) return true
+        for (var i = 0; i < item.children.length; i++) {
+            if (root.rowDragOver(item.children[i])) return true
+        }
+        return false
     }
 }

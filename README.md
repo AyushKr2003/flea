@@ -129,6 +129,8 @@ If you previously pinned another directory handler, restore that handler explici
 
 **Dragging** moves within one device and copies between devices. Hold Ctrl to copy, Shift to move, or Ctrl with Shift to link through the Paste as links card; Flea reads these keys when the drag starts. A drag into another app offers copy, or move with Shift, or a link with Ctrl and Shift, and that app does the work: Flea deletes nothing afterwards. A terminal gets the path.
 
+**Dragging to Trash**: drop rows on the rail's Trash row and they go to the trash, the same as `dd`, and `z` puts them back. Only a drag that started in that Flea window is taken, so another app's files are never deleted by a drop.
+
 <p align="center">
   <img src="docs/images/shelf.png" width="49%" alt="The shelf card open over Flea, with thumbnails, pins and the last three screenshots">
   <img src="docs/images/iphone.png" width="49%" alt="An iPhone camera roll browsed over AFC, with HEIC thumbnails and a preview">

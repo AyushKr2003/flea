@@ -1,4 +1,6 @@
 module flea
+RowDropTarget 1.0 RowDropTarget.qml
+TrashDropHandler 1.0 TrashDropHandler.qml
 singleton Theme 1.0 Theme.qml
 singleton Glass 1.0 Glass.qml
 singleton MediaSound 1.0 MediaSound.qml
@@ -156,6 +158,8 @@ ParkedWait 1.0 ParkedWait.qml
 ShareBrowser 1.0 ShareBrowser.qml
 Sidebar 1.0 Sidebar.qml
 SidebarRow 1.0 SidebarRow.qml
+RailTrashRow 1.0 RailTrashRow.qml
+DropTarget 1.0 DropTarget.qml
 Spinner 1.0 Spinner.qml
 SearchStrip 1.0 SearchStrip.qml
 FilterStrip 1.0 FilterStrip.qml

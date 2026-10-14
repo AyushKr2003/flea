@@ -16,6 +16,8 @@ Item {
     property bool highlighted: root.lit
     property bool cursor: false
     property bool focused: false
+    // A drop cue replaces the trailing detail and reserves its caption's width.
+    property Item trailingLabel: null
     // The keyboard is on this row's eject mark, which then draws its own frame in the foreground at its hit box.
     property bool markFocused: false
     // Network only, driven from ui/Sidebar.qml's renamingIndex; swaps the label for the editor.
@@ -136,8 +138,10 @@ Item {
         anchors.left: mark.right
         anchors.leftMargin: Style.spacing.rowGap
         // The label ends one gap before any trailing number, square or mark.
-        anchors.right: root.detail.length > 0 ? detailText.left : dot.left
-        anchors.rightMargin: root.keepsTrailingGap ? Style.spacing.rowGap : 0
+        anchors.right: root.trailingLabel ? parent.right : root.detail.length > 0 ? detailText.left : dot.left
+        anchors.rightMargin: root.trailingLabel ? Math.min(root.width - label.x,
+            Theme.spacing.rowPaddingX + root.trailingLabel.implicitWidth + Theme.spacing.gap)
+            : root.keepsTrailingGap ? Style.spacing.rowGap : 0
         anchors.verticalCenter: parent.verticalCenter
         text: root.modelData.label
         color: root.modelData.error ? Theme.color.error : Theme.color.foreground
@@ -145,6 +149,7 @@ Item {
         font.pixelSize: Theme.font.body
         // A label too long for the rail keeps its start and ends in an ellipsis.
         elide: Text.ElideRight
+        clip: root.trailingLabel !== null
         textFormat: Text.PlainText
     }
 
@@ -178,7 +183,7 @@ Item {
     readonly property Item markFrameItem: ejectLoader.item ? ejectLoader.item.frame : null
     // The rail's real trailing indicator slot, so ui/Ipc.qml measures this dot instead of recomputing it.
     readonly property Item indicatorSlot: dot
-    readonly property Item detailItem: detailText
+    readonly property Item detailItem: root.trailingLabel || detailText
     readonly property Item labelItem: label
     readonly property bool indicatorVisible: root.showsDot
     // One gap before any trailing number, square or mark; detail covers the Trash count's zero-width dot.
@@ -186,6 +191,7 @@ Item {
 
     Text {
         id: detailText
+        visible: root.trailingLabel === null
         anchors.right: dot.left
         anchors.rightMargin: dot.width > 0 ? Style.spacing.rowGap : 0
         anchors.verticalCenter: parent.verticalCenter

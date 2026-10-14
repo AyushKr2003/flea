@@ -14,7 +14,23 @@ export FLEA_BIN="${FLEA_BIN:-$repo/target/release/flea}"
 export FLEA_UI="$repo/ui"
 . "$repo/tools/flea-sandbox-guard"
 
-SB=$FIXTURE_ROOT/flea-drag-char-$$
+drag_case=${1:-all}
+capture_root=""
+case "$drag_case" in
+  all) SB=$FIXTURE_ROOT/flea-drag-char-$$ ;;
+  look235)
+    look235_started=$SECONDS
+    FIXTURE_ROOT="$repo/.superpowers/look235"
+    sandbox_root_ok
+    mkdir -p "$SANDBOX_ROOT" || exit 1
+    capture_root=$(mktemp -d "$SANDBOX_ROOT/run.XXXXXXXX") || exit 1
+    printf 'look235 native captures\n' > "$capture_root/$SANDBOX_MARKER" || exit 1
+    FIXTURE_ROOT="$capture_root"
+    SB="$capture_root/fixture"
+    printf 'LOOK235_EVIDENCE_ROOT=%s\n' "$capture_root"
+    ;;
+  *) printf 'Usage: %s [look235]\n' "$0" >&2; exit 2 ;;
+esac
 HOMEDIR=$SB/home
 pass=0
 fail=0
@@ -299,6 +315,13 @@ ln -sfn "$HOME/.local/state/omarchy/current" "$HOMEDIR/.local/state/omarchy/curr
 for f in r1a r1b r2 r3 r4; do printf '%s payload\n' "$f" > "$HOMEDIR/$f.txt"; done
 # R6 shows hidden files in a second tab on the same directory, so every index below this one shifts.
 printf 'hidden\n' > "$HOMEDIR/.r0hidden"
+if [[ "$drag_case" == look235 ]]; then
+  mkdir "$HOMEDIR/omarchy" || exit 1
+  seed=$(jq -nc --arg path "$HOMEDIR/omarchy" '{view:"list",keys:"default",updates:{autoCheck:false},
+    places:{rail:"shown",autoHide:false,showHome:true,showTrash:true,showNetwork:false,showDevices:false,
+      favourites:[{label:"omarchy",path:$path}]}}') || exit 1
+  HOME="$HOMEDIR" "$FLEA_BIN" --ui-state "$seed" >/dev/null || exit 1
+fi
 
 # ---------------------------------------------------------------- pointer
 warp() { glide_to "$1" "$2"; }
@@ -622,6 +645,11 @@ wait_for() {
   return 1
 }
 
+if [[ "$drag_case" == look235 ]]; then
+  . "$repo/tests/drag-look235-case.sh"
+  exit "$fail"
+fi
+
 # ---------------------------------------------------------------- R0
 echo
 echo "== R0: with Settings up, no drag runs in the pane underneath it =="
@@ -675,6 +703,33 @@ check "and not in the folder it merely crossed" \
       "$([ -e "$HOMEDIR/aaa/r2.txt" ] && echo "aaa STALE" || echo clean)" "clean"
 check "a plain drag is a move, so the source is gone" \
       "$([ -e "$HOMEDIR/r2.txt" ] && echo still-there || echo moved)" "moved"
+
+# ---------------------------------------------------------------- RT
+echo
+echo "== RT: a row dropped on the rail's Trash row goes to the trash =="
+# The rail's Trash row sends dd's trash request by path into this run's own $XDG_DATA_HOME/Trash; the baseline count waits for a settled listing.
+expect_ipc listInFlight false
+rt_before=$(ipc total)
+printf 't1 payload\n' > "$HOMEDIR/t1.txt"
+expect_ipc total $((rt_before + 1))
+trash_index=""
+IFS='|' read -r -a rail_labels <<< "$(ipc railLabels)"
+for i in "${!rail_labels[@]}"; do [ "${rail_labels[$i]}" = Trash ] && trash_index=$i && break; done
+[ -n "$trash_index" ] || die "RT: the rail carries no Trash row: $(ipc railLabels)"
+point=$(ipc railRowCentre "$trash_index")
+[[ "$point" =~ ^[0-9]+\ [0-9]+$ ]] || die "RT: the Trash row has no geometry: $point"
+read -r tx ty <<< "$point"
+centre_into sx sy t1.txt
+warp "$sx" "$sy"; sleep 0.4
+press; sleep 0.3
+glide_to "$((WX + tx))" "$((WY + ty))"; sleep 0.5
+release; sleep 0.4
+wait_for "$HOMEDIR/t1.txt" absent
+check "the dropped file left its folder" \
+      "$([ -e "$HOMEDIR/t1.txt" ] && echo still-there || echo gone)" "gone"
+check "and it is in this run's Trash, not deleted" \
+      "$([ -e "$XDG_DATA_HOME/Trash/files/t1.txt" ] && echo trashed || echo missing)" "trashed"
+expect_ipc total "$rt_before"
 
 # ---------------------------------------------------------------- R3
 echo

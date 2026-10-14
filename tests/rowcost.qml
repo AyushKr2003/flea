@@ -132,6 +132,27 @@ ShellRoot {
             failures.push("row cell() no longer answers all four cells")
         if (probeRow.dropBuilt())
             failures.push("a row at rest builds its drop frame")
+        // Initial marks and drop targets must build their cue without a later active change.
+        var bornComponent = Qt.createComponent(Qt.resolvedUrl("flea/Row.qml"))
+        if (bornComponent.status !== Component.Ready) {
+            failures.push("the construction probe cannot load Row.qml: " + bornComponent.errorString())
+        } else {
+            var bornStates = [{ clipMark: "copy", dropTarget: false }, { clipMark: "scissors", dropTarget: false }, { clipMark: "", dropTarget: true }]
+            for (var b = 0; b < bornStates.length; b++) {
+                var born = bornComponent.createObject(root, { width: 800, row: root.sampleRow,
+                    clipMark: bornStates[b].clipMark, dropTarget: bornStates[b].dropTarget })
+                if (born === null) {
+                    failures.push("a row born marked could not be created")
+                    continue
+                }
+                if (bornStates[b].clipMark.length > 0 && born.clipRight() < 0)
+                    failures.push("a row born with " + bornStates[b].clipMark + " draws no clipboard mark")
+                if (bornStates[b].dropTarget && (!born.dropBuilt() || born.dropLabelText() !== "move here"))
+                    failures.push("a row born as a drop target builds no move cue")
+                born.destroy()
+            }
+        }
+        bornComponent.destroy()
         // No assigned set reaches a standalone row, so the fallback computes the draw from its own inputs.
         if (probeRow.assignedCols !== null)
             failures.push("a standalone row arrives with a shared set instead of the local default")

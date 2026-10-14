@@ -232,11 +232,13 @@ function runColumnRowCost(check) {
     check("the middle-elision backstop stays",
         row.indexOf("elide: Text.ElideMiddle") >= 0, true)
     var list = Source.source("ui/Row.qml")
+    var clip = Source.source("ui/RowDropTarget.qml")
     check("a list row with an empty clipboard reads no name geometry",
         list.indexOf("id: clipLoader") < 0
-            && list.indexOf("x: root.clipMark.length > 0 ? root.nameItem().x + Math.min(root.nameItem().implicitWidth") >= 0, true)
+            && list.indexOf('Qt.resolvedUrl("RowDropTarget.qml")') >= 0
+            && clip.indexOf("x: root.row.clipMark.length > 0 ? root.row.nameItem().x + Math.min(root.row.nameItem().implicitWidth") >= 0, true)
     check("the mark reads the filename item, not the Glyph's own name property",
-        list.indexOf("x: name.x + Math.min(name.implicitWidth") < 0, true)
+        clip.indexOf("x: name.x + Math.min(name.implicitWidth") < 0, true)
 }
 
 // The common library is already loaded everywhere; Grid-only code sits behind the Grid loader.

@@ -2,7 +2,6 @@ import QtQuick
 import Quickshell
 import qs.Commons
 import "js/Columns.js" as Columns
-import "js/Drag.js" as DragOps
 import "js/Format.js" as Format
 import "js/Icons.js" as Icons
 import "js/Match.js" as Match
@@ -132,45 +131,9 @@ Item {
         id: dropLoader
         active: root.dropTarget || (root.clipMark.length > 0 && !root.renaming && !root.searching)
         anchors.fill: parent
-        sourceComponent: Item {
-            property alias label: dropLabel
-            property alias mark: clipGlyph
-            anchors.fill: parent
-            // The board's accent hairline over a faint wash at the hover rung's alpha: the token wins over the mock's own 0.07.
-            Rectangle {
-                visible: root.dropTarget
-                width: root.paintWidth > 0 ? root.paintWidth : parent.width
-                height: parent.height
-                color: Util.alpha(Theme.color.accent, Style.hoverFillAlpha)
-                border.width: Theme.spacing.hairline
-                border.color: Theme.color.accent
-            }
-            // The board's own words in the columns' place: caption type in the accent, against the row padding.
-            Text {
-                id: dropLabel
-                visible: root.dropTarget
-                anchors.right: parent.right
-                anchors.rightMargin: Theme.spacing.rowPaddingX
-                anchors.verticalCenter: parent.verticalCenter
-                text: DragOps.label(root.dropCopying, root.dropLinking)
-                color: Theme.color.accent
-                font.family: Theme.font.family
-                font.pixelSize: Theme.font.caption
-                textFormat: Text.PlainText
-            }
-            // A clipboard row under a drag keeps its mark beside the label, one pixel above the text centre line.
-            Glyph {
-                id: clipGlyph
-                visible: root.clipMark.length > 0 && !root.renaming && !root.searching
-                width: root.clipPx
-                height: root.clipPx
-                x: root.clipMark.length > 0 ? root.nameItem().x + Math.min(root.nameItem().implicitWidth, root.nameItem().width) + Theme.spacing.gap : 0
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: -1
-                name: root.clipMark
-                color: Theme.color.mutedFrame
-            }
-        }
+        onActiveChanged: dropLoader.setSource(dropLoader.active ? Qt.resolvedUrl("RowDropTarget.qml") : "", { row: root })
+        Component.onCompleted: if (dropLoader.active) dropLoader.setSource(Qt.resolvedUrl("RowDropTarget.qml"), { row: root })
+        onStatusChanged: if (status === Loader.Error) throw new Error("RowDropTarget.qml did not load: Loader status " + status)
     }
 
     // A thumbnail is a decoded image and stays one; the icon beside it is a native mark. The two
