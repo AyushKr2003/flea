@@ -38,6 +38,7 @@ def compare(left, right):
                 require(row['documentScroll'] is not None and row['documentScroll']['together'], label + ' did not scroll with its document')
     for i, (a, b) in enumerate(zip(left, right)):
         require(a['spans'] == b['spans'], 'token inks differ for fence %d' % i)
+        require(a['textFormat'] == b['textFormat'], 'text formats differ for fence %d' % i)
         require(a['family'] == b['family'], 'monospace families differ for fence %d' % i)
         require(a['blocks'] == b['blocks'] and a['lines'] == b['lines'], 'blocks or lines differ for fence %d' % i)
     return errors

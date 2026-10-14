@@ -1,5 +1,13 @@
 .pragma library
 
+// A pixel within this many levels of the block background on every channel counts as background.
+var backgroundTolerance = 2
+// Antialiased glyph edges blend the ink at 55% to 105% of its distance from the background.
+var inkCoverageMin = 0.55
+var inkCoverageMax = 1.05
+// A blended pixel within this many levels of the ink at its coverage counts as that ink.
+var inkTolerance = 3
+
 function descendants(item) {
     var out = [item]
     for (var i = 0; i < out.length; i++) {
@@ -62,7 +70,7 @@ function pixelInks(data, width, height, record) {
         for (var x = left; x < right; x++) {
             var at = (y * width + x) * 4
             var pixel = [data[at], data[at + 1], data[at + 2]]
-            if (pixel.every(function (v, k) { return Math.abs(v - background[k]) <= 2 })) { fill++; continue }
+            if (pixel.every(function (v, k) { return Math.abs(v - background[k]) <= backgroundTolerance })) { fill++; continue }
             for (var i = 0; i < colors.length; i++) {
                 var norm = 0, dot = 0
                 for (var k = 0; k < 3; k++) {
@@ -71,8 +79,8 @@ function pixelInks(data, width, height, record) {
                     dot += (pixel[k] - background[k]) * direction
                 }
                 var alpha = dot / norm
-                if (alpha < 0.55 || alpha > 1.05) continue
-                var close = pixel.every(function (v, k) { return Math.abs(v - (background[k] + alpha * (colors[i][k] - background[k]))) <= 3 })
+                if (alpha < inkCoverageMin || alpha > inkCoverageMax) continue
+                var close = pixel.every(function (v, k) { return Math.abs(v - (background[k] + alpha * (colors[i][k] - background[k]))) <= inkTolerance })
                 if (close) counts[i]++
             }
         }
