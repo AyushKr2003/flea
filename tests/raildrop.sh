@@ -19,10 +19,12 @@ ln -s "$repo/ui" "$probe/config/flea"
 ln -s "$(readlink -f ui/boot/Commons)" "$probe/config/Commons"
 ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui"
 cp tests/raildrop.qml "$probe/config/shell.qml"
+# The caller may name the build under test, as tests/ui-captures-drops.sh does.
+bin=${FLEA_BIN:-$repo/target/debug/flea}
 run_probe() {
     env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
         HOME="$probe/home" XDG_STATE_HOME="$probe/state" XDG_CACHE_HOME="$probe/cache" XDG_RUNTIME_DIR="$probe/runtime" \
-        FLEA_UNDO_DIR="$probe/undo" FLEA_BIN="$repo/target/debug/flea" RAILDROP_FIXTURE="$probe/fixture" \
+        FLEA_UNDO_DIR="$probe/undo" FLEA_BIN="$bin" RAILDROP_FIXTURE="$probe/fixture" \
         QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 \
         timeout 45 dbus-run-session -- qs -p "$probe/config" > "$1" 2>&1
 }
