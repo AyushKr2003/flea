@@ -4,11 +4,13 @@ import QtTest
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import "flea" as Flea
 import "flea/js/Filter.js" as Filter
 import "flea/js/Format.js" as Format
 import "flea/js/Search.js" as Search
 import "sidebar-flows-extra.js" as Extra
+import "sidebar-flows-palette.js" as PaletteFlow
 
 // The real pane owns every tested property. TestEvent delivers keys to its real focused item.
 ShellRoot {
@@ -452,33 +454,7 @@ ShellRoot {
             var rail = pane.sidebar
             check("lit-place: the landed Recent listing lights the Recent row", rail.litIndex, root.railRecent)
             check("lit-place: the rows follow the lit place", root.railLit(), [root.railRecent])
-            Flea.Theme.applyColors('accent = "#7aa2f7"\nmuted = "#414868"\nbackground = "#1a1b26"\nforeground = "#a9b1d6"\n')
-            rail.cursorIndex = root.railHome
-            pane.focusView = "rail"
-            check("lit-place: keyboard focus moves the fill and accent edge to the cursor, with no frame", [root.railIndices("frame"), root.railLit(), root.railIndices("edge")], [[], [root.railHome], [root.railHome]])
-            check("lit-place: the keyboard cursor takes selectedFill and the current place is transparent", [Qt.colorEqual(root.railLook(rail.railItemFor(root.railHome)).color, Style.selectedFill), root.railLook(rail.railItemFor(root.railRecent)).fill], [true, false])
-            rail.cursorIndex = root.railTrash
-            check("lit-place: the cursor on Trash takes the fill without changing its IPC current state", [root.railIndices("frame"), root.railLit(), root.ipc(true).trashRail().current], [[], [root.railTrash], false])
-            check("lit-place: highlighted Trash takes selectedAccentFill and keeps its label in the foreground, as 0.3.9 drew it", [Qt.colorEqual(root.railLook(rail.railItemFor(root.railTrash)).color, Style.selectedAccentFill), Qt.colorEqual(rail.railItemFor(root.railTrash).labelItem.color, Flea.Theme.color.foreground)], [true, true])
-            rail.cursorIndex = root.railRecent
-            check("lit-place: the cursor on the current place draws one fill and no frame", [root.railIndices("frame"), root.railLit()], [[], [root.railRecent]])
-            // A real press through the rail's PointHandler, released past the drag threshold so the row's tap never fires.
-            var litRow = rail.railItemFor(root.railRecent)
-            driver.mousePress(litRow, litRow.width / 2, litRow.height / 2, Qt.LeftButton, Qt.NoModifier, 1)
-            check("lit-place: a pointer press on the focused rail hides the keyboard highlight and keeps the current place", [rail.pointerFocus, root.railIndices("frame"), root.railLit()], [true, [], [root.railRecent]])
-            driver.mouseMove(litRow, litRow.width * 3, litRow.height / 2, 1, Qt.LeftButton, Qt.NoModifier)
-            driver.mouseRelease(litRow, litRow.width * 3, litRow.height / 2, Qt.LeftButton, Qt.NoModifier, 1)
-            rail.pointerFocus = false
-            // Trash always offers its menu, where Home's rows sit behind the Places menu switch.
-            rail.openRailMenu(root.railTrash, Qt.point(40, 80))
-            check("lit-place: a rail menu open on a row draws no frame there", [rail.menu.opened, rail.cursorIndex, root.railIndices("frame")], [true, root.railTrash, []])
-            rail.menu.close()
-            check("lit-place: closing the menu restores the keyboard fill on its row", [root.railIndices("frame"), root.railLit()], [[], [root.railTrash]])
-            pane.focusView = "list"
-            check("lit-place: giving up rail focus highlights only the current place with no frame", [root.railIndices("frame"), root.railLit(), root.railIndices("edge")], [[], [root.railRecent], [root.railRecent]])
-            check("lit-place: an unfocused current place takes normalFill", Qt.colorEqual(root.railLook(rail.railItemFor(root.railRecent)).color, Style.normalFill), true)
-            pane.closeRecent()
-            return true
+            return PaletteFlow.litPlace(root, pane, Flea.Theme, Style, Commons.Color, driver)
         },
         function () {
             if (!ready(fixture)) return false

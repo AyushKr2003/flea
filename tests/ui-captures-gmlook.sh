@@ -4,7 +4,7 @@
 cap_gm_cleanup() {
     local status=0
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x80 >/dev/null 2>&1 || status=1
-    kill_flea || return 1
+    kill_flea || status=1
     [[ -n "$cap_gm_root" && "$cap_gm_root" == /* && ! -L "$cap_gm_root" && -f "$cap_gm_root/$SANDBOX_MARKER" ]] \
         || { printf 'REFUSED: gmlook cleanup lost its marked absolute root\n' >&2; return 1; }
     sandbox_remove "$cap_gm_root" || return 1
@@ -157,11 +157,13 @@ case_cap_gm_rail() {
 # Network.html's 16 px padding and 12 px gaps, with the shipped Dropbox footer beneath the action row.
 cap_gm_network_recipe() {
     local tokens metrics padding spacing row padding_y gap hairline body small caption size footer=0 installed=0
+    # Sample input: "412 237 480 360" (x y width height), from Ipc.cardRectOf via boot/shell.qml rectOf.
     read -r cap_gm_card_x cap_gm_card_y cap_gm_card_w cap_gm_card_h <<< "$(ipc networkCardRect)"
     [[ "$cap_gm_card_x $cap_gm_card_y $cap_gm_card_w $cap_gm_card_h" =~ ^[0-9]+\ [0-9]+\ [1-9][0-9]*\ [1-9][0-9]*$ ]] \
         || fail "gmlook: network card rectangle unavailable"
     tokens=$(ipc tokens) || fail "gmlook: network tokens unavailable"
     metrics=$(ipc networkDialogMetrics) || fail "gmlook: network padding and gap unavailable"
+    # Sample input: "16|12" (rounded card.padding|body.spacing), from NetworkDialog.qml formMetrics.
     IFS='|' read -r padding spacing <<< "$metrics"
     row=$(cap_gm_token rowHeight "$tokens"); padding_y=$(cap_gm_token rowPaddingY "$tokens")
     gap=$(cap_gm_token gap "$tokens"); hairline=$(cap_gm_token hairline "$tokens")
@@ -178,8 +180,13 @@ cap_gm_network_recipe() {
     command -v dropbox-cli >/dev/null && installed=1
     cap_gm_dropbox=$((1 - installed))
     if (( cap_gm_dropbox )); then
-        # The OEM caption reserves 15 percent above its font line; its actual height needs shot review.
-        footer=$((2 * spacing + 1 + (caption * 5 + 3) / 4 + (caption * 15 + 99) / 100 + (spacing * 10 + 6) / 12 + cap_gm_button_h))
+        # OEM Ui/PanelSectionHeader.qml:21 uses native Text height; 5/4 remains the existing capture estimate, not an OEM token.
+        local -r caption_line_estimate_px=$(((caption * 5 + 3) / 4))
+        # OEM Ui/PanelSectionHeader.qml:30 sets topPadding to Math.ceil(fontSize * 0.15).
+        local -r caption_top_padding_px=$(((caption * 15 + 99) / 100))
+        # NetworkDialog.qml:339 and :373 use Style.space(12) outside and Style.space(10) inside the Dropbox section.
+        local -r dropbox_section_gap_px=$(((spacing * 10 + 6) / 12))
+        footer=$((2 * spacing + 1 + caption_line_estimate_px + caption_top_padding_px + dropbox_section_gap_px + cap_gm_button_h))
     fi
     cap_gm_action_y=$((cap_gm_card_y + cap_gm_card_h - cap_gm_inset - footer - cap_gm_button_h / 2))
     cap_gm_right=$((cap_gm_card_x + cap_gm_card_w - cap_gm_inset))
@@ -211,6 +218,9 @@ cap_gm_hold_shot() {
 cap_gm_hold() {
     local name="$1" label="$2" cx="$3" cy="$4" width="$5" source="$6"
     local wx wy ww wh left top right bottom start now delay target begun ended protocol suffix
+    # Capture policy: one sample during Buttons.PRESS_MS (150 ms), then three settled samples during the hold.
+    local -r press_animation_ms=80 settled_early_ms=400 settled_middle_ms=900 settled_late_ms=1600
+    local -ra hold_targets_ms=("$press_animation_ms" "$settled_early_ms" "$settled_middle_ms" "$settled_late_ms")
     read -r wx wy ww wh < <(window_box) || fail "gmlook: native window rectangle unavailable"
     [[ "$cx $cy $width" =~ ^[0-9]+\ [0-9]+\ [1-9][0-9]*$ ]] || fail "gmlook: invalid control centre"
     (( cx > cap_gm_card_x && cx < cap_gm_card_x + cap_gm_card_w && cy > cap_gm_card_y && cy < cap_gm_card_y + cap_gm_card_h )) \
@@ -228,7 +238,7 @@ cap_gm_hold() {
     settle
     YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool click 0x40 >/dev/null 2>&1 || fail "gmlook: $label press failed"
     start=$(date +%s%3N)
-    for target in 80 400 900 1600; do
+    for target in "${hold_targets_ms[@]}"; do
         now=$(date +%s%3N); delay=$((start + target - now))
         if (( delay > 0 )); then sleep "$(printf '%d.%03d' "$((delay / 1000))" "$((delay % 1000))")"; fi
         begun=$(date +%s%3N)
@@ -246,7 +256,7 @@ cap_gm_hold() {
     cap_gm_wait networkProtocol "$protocol"
     ipc networkFocusState | jq -e '.busy == false' >/dev/null || fail "gmlook: $label hold started an action"
     [[ "$(ipc networkStatus)" == "" ]] || fail "gmlook: $label hold submitted the form"
-    for suffix in 80 400 900 1600 off-held released; do
+    for suffix in "${hold_targets_ms[@]}" off-held released; do
         cap_gm_crop "gm-net-$name-$suffix" control "$left" "$top" "$((right - left))" "$((bottom - top))"
     done
 }

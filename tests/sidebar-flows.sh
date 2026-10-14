@@ -68,6 +68,7 @@ ln -s "$PWD/ui/boot/fleatab.qml" "$probe/config/fleatab.qml"
 cp tests/sidebar-flows.qml "$probe/config/shell.qml"
 cp tests/sidebar-flows-extra.js "$probe/config/sidebar-flows-extra.js"
 cp tests/sidebar-flows-rail.js "$probe/config/sidebar-flows-rail.js"
+cp tests/sidebar-flows-palette.js "$probe/config/sidebar-flows-palette.js"
 log="$probe/qs.log"
 env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLEA_SELECT \
     HOME="$probe/home" XDG_STATE_HOME="$probe/state" XDG_CONFIG_HOME="$probe/config" \
@@ -91,39 +92,38 @@ if grep -aqE 'TypeError|ReferenceError|ERROR|Cannot assign' "$log"; then
 fi
 
 # The focused-fill gate and its 0.3.10 negative control each run against an isolated UI under the marked root.
-for variant in green mutant; do
-    highlight="$probe/highlight-$variant"
+for variant in normalfill green mutant; do
+    highlight="$probe/h-$variant"
     config="$highlight/config"
     mkdir -p "$config" "$highlight"/{home,state,data,cache,runtime} || exit 1
     chmod 700 "$highlight/runtime"
     if [ "$variant" = mutant ]; then
         cp -a ui "$config/flea" || exit 1
-        python3 - "$config/flea" <<'PY'
-from pathlib import Path
-import sys
-ui = Path(sys.argv[1])
-assert ui.is_absolute()
-p = ui / 'Sidebar.qml'
-p.write_text(p.read_text().replace('readonly property int highlightedIndex: root.cursorDrawn ? root.cursorIndex : root.litIndex', 'readonly property int highlightedIndex: root.litIndex'))
-p = ui / 'SidebarRow.qml'
-frame = '''    Rectangle {
-        visible: root.cursor
-        width: parent.width - Theme.spacing.hairline - Theme.chromeControlInset
-        height: parent.height
-        color: "transparent"
-        border.width: Theme.spacing.hairline
-        border.color: Theme.color.foreground
-    }
+        [ "$(grep -cF 'readonly property int highlightedIndex: root.cursorDrawn ? root.cursorIndex : root.litIndex' "$config/flea/Sidebar.qml")" -eq 1 ] || exit 1
+        sed -i 's/readonly property int highlightedIndex: root\.cursorDrawn ? root\.cursorIndex : root\.litIndex/readonly property int highlightedIndex: root.litIndex/' "$config/flea/Sidebar.qml" || exit 1
+        [ "$(grep -cF '    // The rail rounds nothing:' "$config/flea/SidebarRow.qml")" -eq 1 ] || exit 1
+        sed -i '/^    \/\/ The rail rounds nothing:/i\
+    Rectangle {\
+        visible: root.cursor\
+        width: parent.width - Theme.spacing.hairline - Theme.chromeControlInset\
+        height: parent.height\
+        color: "transparent"\
+        border.width: Theme.spacing.hairline\
+        border.color: Theme.color.foreground\
+    }\
 
-'''
-p.write_text(p.read_text().replace('    Rectangle {\n        visible: root.highlighted', frame + '    Rectangle {\n        visible: root.highlighted', 1))
-PY
+' "$config/flea/SidebarRow.qml" || exit 1
+    elif [ "$variant" = normalfill ]; then
+        cp -a ui "$config/flea" || exit 1
+        [ "$(grep -cF 'root.focused ? Style.selectedFill : Style.normalFill' "$config/flea/SidebarRow.qml")" -eq 1 ] || exit 1
+        sed -i 's/root\.focused ? Style\.selectedFill : Style\.normalFill/Style.normalFill/' "$config/flea/SidebarRow.qml" || exit 1
     else
         ln -s "$PWD/ui" "$config/flea" || exit 1
     fi
     ln -s "$(readlink -f ui/boot/Commons)" "$config/Commons" || exit 1
     ln -s "$(readlink -f ui/boot/Ui)" "$config/Ui" || exit 1
     cp tests/rail-highlight.qml "$config/shell.qml" || exit 1
+    cp tests/sidebar-flows-palette.js "$config/sidebar-flows-palette.js" || exit 1
     highlight_log="$highlight/qs.log"
     ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
         HOME="$highlight/home" XDG_STATE_HOME="$highlight/state" XDG_CONFIG_HOME="$config" \
@@ -136,14 +136,20 @@ PY
         exit 1
     fi
     if [ "$variant" = green ]; then
-        grep -aq 'RAIL_HIGHLIGHT DONE checks=12 failed=0' "$highlight_log" && ! grep -aq 'RAIL_HIGHLIGHT FAIL' "$highlight_log" \
+        grep -aq 'RAIL_HIGHLIGHT DONE checks=13 failed=0' "$highlight_log" && ! grep -aq 'RAIL_HIGHLIGHT FAIL' "$highlight_log" \
             || { cat "$highlight_log"; printf 'FAIL rail-highlight: the fill gate did not pass\n'; exit 1; }
-        printf 'rail-highlight: 12 checks, 0 failed\n'
+        printf 'rail-highlight: 13 checks, 0 failed\n'
+    elif [ "$variant" = normalfill ]; then
+        grep -aq 'RAIL_HIGHLIGHT ok selectedFill differs from normalFill' "$highlight_log" \
+            && grep -aq 'RAIL_HIGHLIGHT FAIL focused selectedFill and transparent current place' "$highlight_log" \
+            && grep -aq 'RAIL_HIGHLIGHT DONE checks=13 failed=1' "$highlight_log" \
+            || { cat "$highlight_log"; printf 'FAIL rail-highlight: the normalFill-only mutant escaped\n'; exit 1; }
+        printf 'rail-highlight: normalFill-only mutant rejected, 1 failed of 13\n'
     else
         grep -aq 'RAIL_HIGHLIGHT FAIL focused cursor fill' "$highlight_log" \
             && grep -aq 'RAIL_HIGHLIGHT FAIL focused rows have no frame' "$highlight_log" \
-            && grep -aq 'RAIL_HIGHLIGHT DONE checks=12 failed=[1-9][0-9]*' "$highlight_log" \
+            && grep -aq 'RAIL_HIGHLIGHT DONE checks=13 failed=5' "$highlight_log" \
             || { cat "$highlight_log"; printf 'FAIL rail-highlight: the 0.3.10 mutant escaped\n'; exit 1; }
-        printf 'rail-highlight: 0.3.10 fill-and-frame mutant rejected\n'
+        printf 'rail-highlight: 0.3.10 fill-and-frame mutant rejected, 5 failed of 13\n'
     fi
 done

@@ -99,21 +99,18 @@ for spec in $harnesses; do
         tag=PRESS
         cp -a ui "$config/flea" || exit 1
         # Mutate only this run's marked copy, restoring root scaling or removing both inset Behaviors.
-        python3 - "$config/flea/DialogButton.qml" "$negative" <<'PY'
-from pathlib import Path
-import sys
-p = Path(sys.argv[1])
-assert p.is_absolute()
-s = p.read_text()
-if sys.argv[2] == '2':
-    for axis in ('X', 'Y'):
-        behavior = '            Behavior on inset' + axis + ' {\n                enabled: !Theme.reducedMotion\n                NumberAnimation { duration: Buttons.PRESS_MS; easing.type: Easing.OutCubic }\n            }\n'
-        assert s.count(behavior) == 1
-        s = s.replace(behavior, '', 1)
-else:
-    s = s.replace('    id: root\n', '    id: root\n    scale: tap.pressed && root.available && !Theme.reducedMotion ? Buttons.PRESS_SCALE : 1\n    Behavior on scale { NumberAnimation { duration: Buttons.PRESS_MS; easing.type: Easing.OutCubic } }\n', 1)
-p.write_text(s)
-PY
+        if [ "$negative" -eq 2 ]; then
+            for axis in X Y; do
+                [ "$(grep -cxF "            Behavior on inset$axis {" "$config/flea/DialogButton.qml")" -eq 1 ] || exit 1
+                sed -i "/^            Behavior on inset$axis {$/,/^            }$/d" "$config/flea/DialogButton.qml" || exit 1
+            done
+        else
+            [ "$(grep -cxF '    id: root' "$config/flea/DialogButton.qml")" -eq 1 ] || exit 1
+            sed -i '/^    id: root$/a\
+    scale: tap.pressed && root.available && !Theme.reducedMotion ? Buttons.PRESS_SCALE : 1\
+    Behavior on scale { NumberAnimation { duration: Buttons.PRESS_MS; easing.type: Easing.OutCubic } }
+' "$config/flea/DialogButton.qml" || exit 1
+        fi
     else
         ln -s "$PWD/ui" "$config/flea" || exit 1
     fi
