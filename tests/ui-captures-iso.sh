@@ -33,9 +33,11 @@ cap_iso_session_exec() {
                 || { printf 'cap_iso: session command needs XDG_RUNTIME_DIR\n' >&2; break; }
             device="${@: -1}"
             if [[ "$verb" == loop-setup ]]; then
-                [[ "$device" == "$iso_file" ]] || break
+                [[ "$device" == "$iso_file" ]] \
+                    || { printf 'cap_iso: loop-setup takes only the fixture ISO, not %s\n' "$device" >&2; break; }
             else
-                [[ "$device" =~ ^/dev/loop[0-9]+$ ]] || break
+                [[ "$device" =~ ^/dev/loop[0-9]+$ ]] \
+                    || { printf 'cap_iso: %s takes a /dev/loopN device, not %s\n' "$verb" "$device" >&2; break; }
             fi
             job=$(mktemp -d "$iso_root/session-$verb.XXXXXXXX") || break
             {
