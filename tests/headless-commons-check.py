@@ -31,6 +31,7 @@ def call_scopes(source):
     substitutions = []
     heredocs = []
     arithmetic = []
+    conditionals = []
     groups = []
     closed_calls = set()
     pipe_next = False
@@ -43,6 +44,7 @@ def call_scopes(source):
     function_head = re.compile(r'(?:^|[;{}])\s*(?:function\s+)?\w+\s*\(\s*\)\s*$|(?:^|[;{}])\s*function\s+\w+\s*$')
     words = re.compile(r'\w+|;;&|;;|;&|&&|\|\||\|&|[();{}!|&]')
     delimiters = re.compile(r'(?<!<)<<-?(?!<)[ \t]*[\'"]?([A-Za-z_]\w*)[\'"]?')
+    redirects = re.compile(r'&>>?|[<>]&')
     at = 0
     while at < len(source):
         char = source[at]
@@ -72,7 +74,8 @@ def call_scopes(source):
             word_start = False
             at += 1
             continue
-        if source.startswith('$(', at):
+        # Sample input: <(printf x)#suffix and >(cat)#suffix join a word just as $(printf x)#suffix does.
+        if source.startswith('$(', at) or not quoted and source[at:at + 2] in ('<(', '>('):
             if source.startswith('$((', at):
                 arithmetic.append(depth)
             substitutions.append((depth, quoted))
@@ -99,11 +102,35 @@ def call_scopes(source):
             end = source.find('\n', at)
             at = len(source) if end < 0 else end
             continue
+        # Sample input: [[ x == y || if == if ]] contains data words, but $(commands) inside it still run in a child.
+        if not arithmetic and command_start and word_start and source.startswith('[[', at) and source[at + 2:at + 3].isspace():
+            conditionals.append(depth)
+            command_start = False
+            word_start = True
+            at += 2
+            continue
+        if conditionals and conditionals[-1] == depth:
+            if word_start and source.startswith(']]', at) and (at + 2 == len(source) or source[at + 2].isspace() or source[at + 2] in ';|&<>'):
+                conditionals.pop()
+                at += 2
+                word_start = False
+            else:
+                word_start = char.isspace()
+                at += 1
+            command_start = False
+            continue
         # Sample input: cat <<'TEXT' skips its body; cat <<<ready is a here-string, never a heredoc at either trailing <<.
         heredoc = delimiters.match(source, at) if not arithmetic else None
         if heredoc:
             heredocs.append(heredoc[1])
             at += len(heredoc[0])
+            continue
+        # Sample input: } 2>&1 redirects; } >out\>& ends with an escaped filename character and a real background &.
+        redirect = redirects.match(source, at) if not arithmetic else None
+        if redirect:
+            at = redirect.end()
+            word_start = True
+            command_start = False
             continue
         if source.startswith('((', at):
             arithmetic.append(depth)
@@ -120,16 +147,22 @@ def call_scopes(source):
             continue
         word = token[0]
         line = source.count('\n', 0, at) + 1
-        pattern_close = word == ')' and cases and cases[-1] == 'pattern'
-        # Sample input: } &>out, } &>>out and } 2>&1 redirect a parent group; } & starts a background child.
-        redirect_amp = word == '&' and (source[token.end():token.end() + 1] == '>' or token.start() > 0 and source[token.start() - 1] in '<>')
+        # Sample input: (( if || case )) and $(( if + case )) use variable names, not shell reserved words.
+        if arithmetic and word not in ('(', ')'):
+            at = token.end()
+            command_start = False
+            word_start = False
+            continue
+        pattern_close = word == ')' and not arithmetic and cases and cases[-1] == 'pattern'
         # Sample input: echo } is an argument; fi | cat closes a compound command only at a reserved-word position.
         separated = token.end() == len(source) or source[token.end()].isspace() or source[token.end()] in '();|&<>'
         keyword = command_start and word_start and separated
-        in_pattern = cases and cases[-1] == 'pattern'
+        in_pattern = not arithmetic and cases and cases[-1] == 'pattern'
         opens_brace = word == '{' and not in_pattern and word_start and separated and (command_start or function_head.search(source[:at].rsplit('\n', 1)[-1]))
         opens_compound = opens_brace or keyword and word in compound_ends and not in_pattern
-        closes_compound = keyword and (word in ('}', 'fi', 'done') and not in_pattern or word == 'esac' and not re.match(r'\s*\)', source[token.end():]))
+        # Sample input: printf '' | case x in esac closes an empty case before the next parent-shell guard.
+        case_end = word == 'esac' and cases and word_start and separated and (command_start or in_pattern) and not re.match(r'\s*\)', source[token.end():])
+        closes_compound = keyword and word in ('}', 'fi', 'done') and not in_pattern or case_end
         joins_word = False
         at += len(word)
         # Sample input: (\n headless_commons "$root" || exit 1\n) exits only a child; case x in x) is not a subshell close.
@@ -141,9 +174,9 @@ def call_scopes(source):
             cases.append('subject')
         elif word == 'in' and word_start and separated and cases and cases[-1] == 'subject':
             cases[-1] = 'pattern'
-        elif word == 'esac' and keyword and cases and not re.match(r'\s*\)', source[at:]):
+        elif case_end:
             cases.pop()
-        elif cases and cases[-1] == 'pattern':
+        elif in_pattern:
             if word == ')':
                 cases[-1] = 'body'
         elif word in (';;', ';&', ';;&') and cases:
@@ -168,7 +201,7 @@ def call_scopes(source):
             else:
                 closed_calls.clear()
                 unmatched_tail = True
-        elif word in ('|', '|&', '&') and not redirect_amp:
+        elif word in ('|', '|&', '&'):
             for call in closed_calls:
                 scopes[call] = max(scopes[call], 1)
             closed_calls.clear()
@@ -392,14 +425,58 @@ def controls(box):
         'brace-open-argument': '{\necho {\n' + contract_call + '} | cat\n',
         'if-brace-argument': 'if true; then\necho }\n' + contract_call + 'fi | cat\n',
     }
-    for name, body in {**contract_parents, **contract_children}.items():
+    # Sample inputs below execute complete callers with external helpers, so lexical data cannot hide parent QS reachability.
+    boundary_parents = {
+        'process-input-parent': 'printf "%s\\n" <(printf x)#suffix\n' + contract_call,
+        'process-output-parent': 'printf "%s\\n" >(cat)#suffix\nwait\n' + contract_call,
+        'quoted-process-parent': 'printf "%s\\n" "<(printf x)"#suffix\n' + contract_call,
+        'escaped-process-parent': 'printf "%s\\n" \\<\\(x\\)#suffix\n' + contract_call,
+        'process-comment-parent': 'printf "%s\\n" <(printf x) # comment (\n' + contract_call,
+        'redirect-even-escape': '{\n' + contract_call + r'} > "$root/output"\\>&1' + '\n',
+        'redirect-input-descriptor': '{\n' + contract_call + '} <&0\n',
+        'conditional-words-parent': '[[ x == y || if == if ]]\n' + contract_call,
+        'conditional-pipe-parent': '[[ x == if || fi == fi ]] | cat\n' + contract_call,
+        'conditional-quoted-parent': '[[ "if || case" == "if || case" ]]\n' + contract_call,
+        'conditional-nested-parent': '[[ ( x == y || if == if ) && done == done ]]\n' + contract_call,
+        'arithmetic-words-parent': 'if=1; case=1; (( if || case ))\n' + contract_call,
+        'arithmetic-substitution-parent': 'if=1; case=1; printf "%s\\n" "$(( if + case ))"#suffix\n' + contract_call,
+        'arithmetic-for-parent': 'for (( if = 0; if < 1; if++ )); do :; done\n' + contract_call,
+        'empty-case-right': 'printf "" | case x in esac\n' + contract_call,
+        'empty-case-left': 'case x in esac | cat\n' + contract_call,
+        'empty-case-middle': 'printf "" | case x in esac | cat\n' + contract_call,
+        'empty-case-comment': 'printf "" | case x in\n# comment ) | if\nesac\n' + contract_call,
+        'empty-case-subject': 'printf "" | case esac in esac\n' + contract_call,
+        'empty-case-nested': 'case x in x) case x in esac; printf "%s\\n" esac;; esac | cat\n' + contract_call,
+        'quoted-case-pattern': 'case esac in "esac") :;; esac | cat\n' + contract_call,
+    }
+    boundary_children = {
+        'process-input-suffix-child': 'printf "%s\\n" <(printf x)#suffix; (\n' + contract_call + ')\n',
+        'process-output-suffix-child': 'printf "%s\\n" >(cat)#suffix; (\n' + contract_call + ')\nwait\n',
+        'process-nested-suffix-child': 'printf "%s\\n" <(printf "%s" "$(printf x)")#suffix; (\n' + contract_call + ')\n',
+        'process-comment-suffix-child': 'printf "%s\\n" <(# comment )\nprintf x)#suffix; (\n' + contract_call + ')\n',
+        'process-input-inner-child': 'cat <(\n' + contract_call + ')\n',
+        'process-output-inner-child': 'printf "" > >(\n' + contract_call + ')\nwait\n',
+        'redirect-escaped-output-child': '{\n' + contract_call + r'} > "$root/output"\>&' + '\nwait\n',
+        'redirect-escaped-input-child': '{\n' + contract_call + r'} > "$root/output"\<&' + '\nwait\n',
+        'redirect-odd-escape-child': '{\n' + contract_call + r'} > "$root/output"\\\>&' + '\nwait\n',
+        'redirect-quoted-tail-child': '{\n' + contract_call + '} > "$root/output>"&\nwait\n',
+        'redirect-then-background-child': '{\n' + contract_call + '} &>"$root/output" &\nwait\n',
+        'conditional-words-left': 'if true; then\n' + contract_call + '[[ x == y || if == if ]]\nfi | cat\n',
+        'conditional-words-right': 'printf "" | if true; then\n' + contract_call + '[[ x == y || if == if ]]\nfi\n',
+        'conditional-substitution-child': '[[ "$(\n' + contract_call + ')" == "" ]]\n',
+        'arithmetic-words-child': 'if true; then\n' + contract_call + '(( if || case ))\nfi | cat\n',
+        'arithmetic-suffix-child': 'printf "%s\\n" "$(( 1 + 1 ))"#suffix; (\n' + contract_call + ')\n',
+        'empty-case-nested-child': 'case x in x)\n' + contract_call + 'case x in esac\n;; esac | cat\n',
+        'quoted-case-pattern-child': 'case esac in "esac")\n' + contract_call + ';; esac | cat\n',
+    }
+    for name, body in {**contract_parents, **contract_children, **boundary_parents, **boundary_children}.items():
         owner = root / ('external-' + name)
         owner.mkdir()
         (owner / '.flea-test-sandbox').touch()
         direct.write_text('root=$1\n' + body + 'qs -p "$root"\n')
         syntax = subprocess.run(['bash', '-n', str(direct)], capture_output=True, text=True)
         assert syntax.returncode == 0, (name, syntax)
-        child = name in contract_children
+        child = name in contract_children or name in boundary_children
         errors = unchecked_calls(scanner)
         assert bool(errors) == child, (name, errors)
         result = subprocess.run(['bash', str(direct), str(owner)], cwd=source_root, env=contract_env,
@@ -417,6 +494,7 @@ def controls(box):
     print(f'HEADLESS_COMMONS_PIPE_COMMENT_CONTROLS parents={len(extra_parents)} refusal exit=1 qs=not-started; children={len(extra_children)} gate rejects exit=1')
     print('HEADLESS_COMMONS_ACTUAL_CALLER unmodified framegap.sh from repo and tests: refusal exit=1 qs=not-started')
     print(f'HEADLESS_COMMONS_EXTERNAL_CONTROLS parents={len(contract_parents)} refusal exit=1 qs=not-started; children={len(contract_children)} gate rejects exit=1')
+    print(f'HEADLESS_COMMONS_BOUNDARY_CONTROLS parents={len(boundary_parents)} refusal exit=1 qs=not-started; children={len(boundary_children)} gate rejects exit=1')
 
 
 if __name__ == '__main__':
