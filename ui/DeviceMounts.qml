@@ -256,10 +256,7 @@ Item {
         return deviceLock.lockCryptAfter(listing !== undefined ? listing : root._listing, device, label)
     }
 
-    // Eject goes through the mount point. gio mount dispatches on --device before it ever reads
-    // --eject (glib 2.88.3 gio-tool-mount.c:1264 against :1278), so "-e -d <device>" mounts instead.
-    // gio's own -f is never passed: forcing an unmount over an open write is how a file manager
-    // loses somebody's data. A loop row takes -u: -e never returns on a loop without a Drive (measured), and judgeEject reads the next listing either way.
+    // Eject by mount point, never -f (an open write loses data) or -e -d (gio-tool-mount.c:1264 mounts); a loop row takes -u, as -e never returns without a Drive.
     function eject(index) {
         var e = root.entries[index]
         if (!e || e.kind !== "volume" || !e.mounted)
@@ -268,8 +265,7 @@ Item {
             root.message(Format.fill(Mounts.WORDS.stillEjecting, root._ejectLabel), false)
             return
         }
-        // A USB disk that is not media-removable (a USB HDD or SSD bridge) is powered off instead: ejecting its media re-announces it and udiskie remounts it.
-        // A loop row has no drive to power off, so it takes the -u route below.
+        // A non-removable USB disk is powered off, since an eject lets udiskie remount it; a loop row has no drive, so it takes -u below.
         var disk = Devices.powerOffDisk(e.device)
         if (!e.loop && disk.length > 0 && e.mediaRemovable !== true) {
             root.powerOff(e, disk)

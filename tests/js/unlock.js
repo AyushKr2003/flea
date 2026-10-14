@@ -245,7 +245,7 @@ function run(check) {
 // Sample input: the listing before the eject (the crypt unlocked) and the one gio's exit was judged on (the drive gone).
 function ejectLockFrom(stale, judged, unmount) {
     var mounts = Source.source("ui/DeviceMounts.qml")
-    var body = Source.slice(mounts, "    function lockCrypt(", "    // Eject goes through")
+    var body = Source.slice(mounts, "    function lockCrypt(", "    function eject(")
         + Source.slice(mounts, "    function judgeEject(", "    Timer {")
     var handed = []
     var attempts = 0

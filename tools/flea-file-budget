@@ -160,7 +160,7 @@ ui/PermissionsDialog.qml 658
 ui/PickerWindow.qml 812
 ui/Preview.qml 1011
 ui/PreviewColumn.qml 553
-ui/DeviceMounts.qml 544
+ui/DeviceMounts.qml 540
 ui/js/Facts.js 360
 ui/PreviewPdf.qml 482
 ui/PickerChrome.qml 295
