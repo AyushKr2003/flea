@@ -130,6 +130,7 @@ pub mod copyfile;
 pub mod copymanifest;
 pub mod manifestdir;
 pub mod copynode;
+mod copyread;
 pub mod unheld;
 pub mod ops;
 pub mod opsname;

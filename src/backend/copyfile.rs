@@ -1,13 +1,9 @@
 // The copy primitives every transfer is built from: streaming, symlink-preserving, and refusing to overwrite.
 use crate::error::{from_io, FleaError};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-// Big enough that the syscall count stops mattering, small enough that a cancel is noticed promptly.
-const CHUNK: usize = 256 * 1024;
-// A file under a chunk reads through a buffer of its own size, never under this, so a tree of small files maps no chunk per file.
-const SMALL_CHUNK: usize = 8 * 1024;
 // 8 MiB is 32 chunks, so one range sync per 32 writes keeps the card live without a syscall per chunk.
 pub(crate) const CONFIRM_BYTES: u64 = 8 * 1024 * 1024;
 // 1 MiB starts the ramp, so the first confirmed report lands after 1 MiB rather than 16 MiB.
@@ -23,6 +19,8 @@ use super::archivefree::format_size;
 use super::unheld::Kind;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::os::unix::io::AsRawFd;
+#[cfg(test)]
+use super::copyread::CHUNK;
 
 // What a copy reports as it runs; a directory has no total without a sweep, so it reports 0 and renders indeterminate.
 pub struct Progress<'a> {
@@ -83,7 +81,7 @@ pub fn copy_file(src: &Path, dst: &Path, total: u64, p: &mut Progress) -> Result
 fn copy_file_at(src: At, dst: At, total: u64, p: &mut Progress) -> Result<(), FleaError> {
     // Anything reaching here that is not a regular file was swapped in after copy_any's stat:
     // O_NOFOLLOW refuses a symlink, and regfile's non-blocking open and fstat refuse every other kind.
-    let (mut r, src_meta) = crate::backend::regfile::open_if_regular_with_meta(src.at, O_NOFOLLOW)
+    let (r, src_meta) = crate::backend::regfile::open_if_regular_with_meta(src.at, O_NOFOLLOW)
         .map_err(|e| from_io("copy", &src.named.to_string_lossy(), &e))?;
     // A file the destination cannot hold is refused before a byte is written, so EFBIG never leaves a partial.
     if let Some(refusal) = precheck(dst.named, src_meta.len()) {
@@ -93,7 +91,10 @@ fn copy_file_at(src: At, dst: At, total: u64, p: &mut Progress) -> Result<(), Fl
     // Issue 109: a create takes the umask, so a 0600 source landed 0644 and the copy published what
     // the original kept private. The source's own bits are carried by the create itself, so there is
     // no window where the bytes are on disk under a wider mode, narrowed by the umask and never widened.
-    let mode = mode_for_source(crate::backend::fsinfo::magic_of(src.at), src_meta.permissions().mode(), false);
+    let source_magic = crate::backend::fsinfo::magic_of(src.at);
+    let mode = mode_for_source(source_magic, src_meta.permissions().mode(), false);
+    let mut r = super::copyread::Reader::new(r, src_meta.len(), source_magic)
+        .map_err(|e| from_io("copy", &src.named.to_string_lossy(), &e))?;
     let mut w = super::unheld::fault(dst.named, Kind::Entry)
         .and_then(|()| std::fs::OpenOptions::new().write(true).create_new(true).mode(mode).open(dst.at))
         .map_err(|e| super::unheld::refused(Kind::Entry, &e, dst.named, p.tree.is_some().then_some(src.at)))?;
@@ -101,9 +102,6 @@ fn copy_file_at(src: At, dst: At, total: u64, p: &mut Progress) -> Result<(), Fl
     super::durable::test_log("open-dest");
     // From here the destination exists, and every failure below leaves it for the caller to journal.
     let durable = p.durability.as_ref().is_some_and(|c| c.durable);
-    let mut buf = vec![0u8; usize::try_from(src_meta.len()).map_or(CHUNK, |len| len.clamp(SMALL_CHUNK, CHUNK))];
-    #[cfg(test)]
-    BUFFERS.with(|v| v.borrow_mut().push(buf.len()));
     let mut done: u64 = 0;
     let mut confirmed: u64 = 0;
     // A filesystem without range writeback (some FUSE mounts answer EINVAL) leaves the verdict to the final fsync.
@@ -117,14 +115,18 @@ fn copy_file_at(src: At, dst: At, total: u64, p: &mut Progress) -> Result<(), Fl
             let _ = std::fs::remove_file(dst.at);
             return Err(cancel_err(dst.named));
         }
-        let n = match r.read(&mut buf) {
+        let read = r.read(p.cancel);
+        if cancelled(p) {
+            continue;
+        }
+        let n = match read {
             Ok(n) => n,
             Err(e) => return Err(left_half_written(p, dst, &w, from_io("copy", &src.named.to_string_lossy(), &e))),
         };
         if n == 0 {
             break;
         }
-        if let Err(e) = write_chunk(&mut w, &buf[..n]) {
+        if let Err(e) = write_chunk(&mut w, &r.buffer[..n]) {
             return Err(left_half_written(p, dst, &w, from_io("copy", &dst.named.to_string_lossy(), &e)));
         }
         #[cfg(test)]
@@ -252,15 +254,7 @@ pub(crate) fn test_cancel_after_write(on: bool) {
 }
 
 #[cfg(test)]
-thread_local! {
-    static BUFFERS: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
-}
-
-// Test seam: the length of every copy buffer this thread allocated since the last read.
-#[cfg(test)]
-pub(crate) fn test_take_buffers() -> Vec<usize> {
-    BUFFERS.with(|v| std::mem::take(&mut *v.borrow_mut()))
-}
+pub(super) use super::copyread::test_take_buffers;
 
 // Production writes every byte; tests can refuse after a partial write without a sick drive.
 fn write_chunk(file: &mut std::fs::File, bytes: &[u8]) -> std::io::Result<()> {
@@ -737,3 +731,6 @@ fn cancel_err(path: &Path) -> FleaError {
 #[cfg(test)]
 #[path = "copyfile_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "copyfile_read_tests.rs"]
+mod read_tests;
