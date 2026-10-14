@@ -11,6 +11,9 @@ import time
 POLL_S = 0.02
 TICK_POLL_S = 0.002
 NEAR_TICK_S = 0.95
+NEAR_TICK_MIN_S = 0.90
+GRACE_MAX_S = 2.5
+COOPERATIVE_STOP_MAX_S = 0.8
 READINESS_FAILURE_WAIT_S = 0.2
 
 repo, parent, marker = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
@@ -128,6 +131,16 @@ coh_ydotool() {
 trap 'printf "ORIGINAL HUP\\n"; exit 129' HUP
 trap 'printf "ORIGINAL INT\\n"; exit 130' INT
 trap 'printf "ORIGINAL TERM\\n"; exit 143' TERM
+publish_ready() {
+    if [[ "$child_disposition" == partial-publication ]]; then
+        : > "$case_root/publication-open"
+        until [[ -f "$case_root/publication-continue" ]]; do
+            (( SECONDS < coh_deadline )) || return 1
+            command sleep "$tick_poll_s"
+        done
+    fi
+    printf '%s %s\\n' "$SECONDS" "$EPOCHREALTIME"
+}
 coh_run_surface() {
     set -x
     coh_held=1
@@ -139,7 +152,8 @@ coh_run_surface() {
         set +x
         local tick=$SECONDS
         while (( SECONDS == tick )); do command sleep "$tick_poll_s"; done
-        printf '%s %s\\n' "$SECONDS" "$EPOCHREALTIME" > "$case_root/ready"
+        publish_ready > "$case_root/ready.pending"
+        mv -- "$case_root/ready.pending" "$case_root/ready"
         set -x
     fi
     wait "$child"
@@ -147,6 +161,38 @@ coh_run_surface() {
 coh_bounded signal 60 coh_surface_work
 printf 'UNEXPECTED_RETURN %s\\n' "$?"
 ''')
+
+case = root / "partial-publication"
+case.mkdir()
+(case / marker).touch()
+sentinel = subprocess.Popen(["sleep", "60"], start_new_session=True)
+process = launch(runner, case, "partial-publication")
+try:
+    assert await_condition(lambda: (case / "publication-open").exists()), "publisher never paused after opening its output"
+    try:
+        exposed = (case / "ready").exists()
+        if exposed:
+            # Sample ready: '1 1792005217.002345\n' contains SECONDS and EPOCHREALTIME, separated by one space.
+            tick_seconds, tick_at = (case / "ready").read_text().split()
+        detail = f"ready exists={exposed} while timestamp printf is gated"
+    except ValueError as error:
+        detail = str(error)
+    check(not exposed, "partial publication hides the incomplete readiness record", detail)
+    (case / "publication-continue").touch()
+    assert await_condition(lambda: (case / "ready").exists() and (case / "ready").read_text().endswith("\n")), "publisher never completed readiness"
+    # Sample ready: '1 1792005217.002345\n' contains SECONDS and EPOCHREALTIME, separated by one space.
+    tick_seconds, tick_at = (case / "ready").read_text().split()
+    check(int(tick_seconds) >= 0 and float(tick_at) > 0,
+          "partial publication exposes the complete timestamp after release", f"record={tick_seconds} {tick_at}")
+    discovered = session_groups(process)
+    stop(process)
+    check(not any(members(group) for group in discovered), "partial publication cleanup removes owned groups")
+    check(sentinel.poll() is None, "partial publication cleanup leaves unrelated sentinel alive")
+except Exception as error:
+    check(False, "partial publication probe completed", str(error))
+finally:
+    stop(process)
+    stop(sentinel)
 
 signal_cases = [(sig, target, "ignore") for sig in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM)
                 for target in ("pid", "group")]
@@ -172,6 +218,7 @@ for sig, target, disposition in signal_cases:
         assert await_condition(children_ready), "worker/watchdog groups unavailable"
         assert worker in groups and all(os.getpgid(pid) == pid for pid in groups), "groups are not owned children"
         check(os.getpgid(child) == worker, f"{label} descendant belongs to the worker")
+        # Sample ready: '1 1792005217.002345\n' contains SECONDS and EPOCHREALTIME, separated by one space.
         tick_seconds, tick_at = (case / "ready").read_text().split()
         target_at = float(tick_at) + NEAR_TICK_S
         while time.time() < target_at:
@@ -188,17 +235,18 @@ for sig, target, disposition in signal_cases:
         log = (case / "runner.log").read_text()
         if not stopped or released != ["click 0x80"]:
             print(f"CAPTURELIFECYCLE TRACE {label}\n{log}", flush=True)
+        # Sample signals: '-TERM 1 1792005217.952345\n-KILL 2 1792005218.965432\n' records signal, SECONDS and EPOCHREALTIME.
         signals = [line.split() for line in (case / "signals").read_text().splitlines()]
         term = next(row for row in signals if row[0] == "-TERM")
         kill_at = next((float(row[2]) for row in signals if row[0] == "-KILL"), None)
-        near_tick = int(term[1]) == int(tick_seconds) and 0.90 <= float(term[2]) - float(tick_at) < 1
+        near_tick = int(term[1]) == int(tick_seconds) and NEAR_TICK_MIN_S <= float(term[2]) - float(tick_at) < 1
         check(near_tick, f"{label} signal lands near the runner's actual SECONDS tick",
               f"tick={tick_at} TERM={term[2]} seconds={tick_seconds}/{term[1]}")
         if disposition == "ignore":
             grace = kill_at - float(term[2]) if kill_at is not None else 0
-            check(1 <= grace < 2.5, f"{label} KILL follows a full bounded one-second grace", f"seconds={grace:.6f}")
+            check(1 <= grace < GRACE_MAX_S, f"{label} KILL follows a full bounded one-second grace", f"seconds={grace:.6f}")
         else:
-            check(kill_at is None and elapsed < 0.8, f"{label} stopped groups skip the remaining grace",
+            check(kill_at is None and elapsed < COOPERATIVE_STOP_MAX_S, f"{label} stopped groups skip the remaining grace",
                   f"seconds={elapsed:.6f} KILL={kill_at}")
         check(stopped, f"{label} worker and watchdog descendants stop", f"remaining={[members(g) for g in groups]}")
         check(released == ["click 0x80"], f"{label} held button releases once", str(released))
