@@ -11,6 +11,7 @@ var WORDS = {
     systemVolume: "This folder is on a system volume, which Flea never unmounts",
     noVolume: "This folder is not on a volume Flea can unmount",
     safe: "Ejected %1. It is safe to unplug.",
+    safeImage: "Ejected %1.",
     stillMounted: "%1 is still mounted; close what is using it.",
     blockedOne: "%1 could not be ejected because %2 on the same drive is still mounted. Eject that instead.",
     blockedMany: "%1 could not be ejected because %2 on the same drive are still mounted. Eject those instead.",
@@ -126,11 +127,13 @@ function collectMounted(node, out) {
         collectMounted(kids[i], out)
 }
 
-// "Safe to unplug" is a safety claim, so only the "safe" verdict earns it; every other line tells
-// the user to leave the stick in, and says what to press next only when pressing it does something.
-function sentence(v, label, others) {
+// Only a real drive's safe verdict may claim it is safe to unplug; an image has nothing to unplug.
+// Other verdicts keep their warnings and name a next step only when pressing it does something.
+function sentence(v, label, others, loop) {
     if (v === "safe")
-        return { text: Format.fill(WORDS.safe, label), isError: false }
+        return { text: Format.fill(loop === true ? WORDS.safeImage : WORDS.safe, label), isError: false }
+    if (v === "attached") // A loop row unmounted, but its loop device could not be detached.
+        return { text: "Unmounted " + label + ", but its loop device is still attached.", isError: true }
     if (v === "mounted") {
         var rest = others || []
         if (rest.length === 0)
@@ -146,7 +149,7 @@ function releasable(entry) {
     if (!entry || entry.mounted !== true)
         return false
     if (entry.group === "device" && entry.kind === "volume")
-        return entry.removable === true
+        return entry.removable === true || entry.loop === true
     if (entry.group === "device" && entry.kind === "phone")
         return true
     if (entry.group === "network" && entry.kind === "share") {

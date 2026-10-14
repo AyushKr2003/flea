@@ -29,7 +29,7 @@ function parseDevices(body, unmounted) {
                    mounted: true, removable: false, size: deviceBytes(system.size) })
     for (var i = 0; i < nodes.length; i++) {
         // Every disk walks the same way; hidden() hides the system disk's plumbing, and its disk row stands for the leaf holding /.
-        if (!nodes[i].name || isPseudo(nodes[i].name))
+        if (!nodes[i].name || isPseudo(nodes[i]))
             continue
         // No transport to inherit at the top: the disk answers for itself inside the walk.
         collectVolumes([nodes[i]], "", false, out, unmounted === true, unpluggable(nodes[i]))
@@ -37,9 +37,24 @@ function parseDevices(body, unmounted) {
     return dedupeVolumes(out)
 }
 
-// zram and loop devices are type "disk" too, and neither is a disk anyone browses.
-function isPseudo(name) {
-    return /^(zram|loop)/.test(String(name))
+// zram stays out; a loop device is browsable only while it or a child is mounted, despite rm=false.
+function isPseudo(node) {
+    var name = String(node.name || "")
+    if (/^zram/.test(name))
+        return true
+    return /^loop/.test(name) && !holdsMount(node)
+}
+
+// Like holdsRoot, but a mount on the loop itself or any child keeps the image browsable.
+function holdsMount(node) {
+    if (mountOf(node).length > 0)
+        return true
+    var kids = node.children || []
+    for (var k = 0; k < kids.length; k++) {
+        if (holdsMount(kids[k]))
+            return true
+    }
+    return false
 }
 
 // The disk that actually carries /, found through the mountpoints of its own subtree. It used to be
@@ -73,7 +88,7 @@ function holdsRoot(node) {
 // RailAdditions rule 1 adds the third case behind its own switch: a volume nothing has mounted, with
 // a filesystem to browse. With the switch off this is the 0.2.1 rule exactly, which kept a spare EFI
 // or recovery partition out of the rail.
-function collectVolumes(nodes, model, unplugs, out, unmounted, removableDisk, holder) {
+function collectVolumes(nodes, model, unplugs, out, unmounted, removableDisk, holder, underLoop) {
     for (var i = 0; i < nodes.length; i++) {
         var n = nodes[i]
         var kids = n.children || []
@@ -83,11 +98,13 @@ function collectVolumes(nodes, model, unplugs, out, unmounted, removableDisk, ho
         // mariobgsp (PR 74), whose USB drive reports tran=usb on sdb and null on sdb1. It stops
         // there: what a crypt leaf under it reads as is what it read as before that PR.
         var pulls = unpluggable(n) || (unplugs && String(n.type || "") === "part")
+        // Loop ancestry routes eject through unmount and detach, and skips the optional unmounted-volume rule.
+        var loopHere = underLoop || /^loop/.test(String(n.name || ""))
         // No row on any setting for a hidden leaf (ESP, swap, member) or for the leaf holding /, which its disk row stands for.
-        if (n.name && kids.length === 0 && !hidden(n) && !holdsRoot(n)
-                && (pulls || mountOf(n).length > 0 || (unmounted && browsable(n)) || isLockedNode(n)))
-            out.push(volumeRow(n, own, pulls, removableDisk === true, holder))
-        collectVolumes(kids, own, pulls, out, unmounted, removableDisk === true || unpluggable(n), containerName(n))
+        if (n.name && (kids.length === 0 || mountOf(n).length > 0) && !hidden(n) && !holdsRoot(n)
+                && (pulls || mountOf(n).length > 0 || (unmounted && browsable(n) && !loopHere) || isLockedNode(n)))
+            out.push(volumeRow(n, own, pulls, removableDisk === true, holder, loopHere))
+        collectVolumes(kids, own, pulls, out, unmounted, removableDisk === true || unpluggable(n), containerName(n), loopHere)
     }
 }
 
@@ -280,6 +297,24 @@ function powerOffDisk(device) {
     return bare ? text : ""
 }
 
+// With another partition mounted, loop-delete only marks autoclear and that mount keeps reading (measured in 0.3.10).
+// Sample input: {device: "/dev/loop0p1", path: "/run/media/u/ISO", loop: true} answers the sh chain on /dev/loop0.
+var detachFailedExit = 3
+function ejectCommand(e) {
+    var path = String(e.path || "")
+    if (e.loop !== true)
+        return ["gio", "mount", "-e", path]
+    var loop = String(e.device || "").match(/^\/dev\/(loop\d+)(?:p\d+)?$/)
+    if (!loop)
+        return ["gio", "mount", "-u", path]
+    var loopDisk = "/dev/" + loop[1]
+    return ["sh", "-c", 'autoclear=$(cat -- "$4" 2>/dev/null) || autoclear=; before=$(cat -- "$3" 2>/dev/null); '
+            + 'status=0; gio mount -u "$1" || status=1; if [ "$autoclear" != 0 ]; then exit "$status"; fi; ' // Autoclear 1 detaches at the kernel's last close; unreadable values are left alone.
+            + 'after=$(cat -- "$3" 2>/dev/null); if [ -n "$before" ] && [ "$after" = "$before" ]; then '
+            + 'udisksctl loop-delete --no-user-interaction -b "$2" || exit ' + detachFailedExit + '; fi; exit "$status"',
+            "sh", path, loopDisk, "/sys/block/" + loop[1] + "/loop/backing_file", "/sys/block/" + loop[1] + "/loop/autoclear"]
+}
+
 // The sysfs block name for a disk path, so the eject chain can watch its write counter.
 // Sample input: "/dev/sda" answers "sda", "/dev/nvme0n1" answers "nvme0n1.
 function sysBase(disk) {
@@ -386,7 +421,7 @@ function containerName(n) {
 }
 
 // Labelled by the filesystem label, then the drive's product name, then the kernel name; a crypt keeps its named container's.
-function volumeRow(n, model, unplugs, removableDisk, holder) {
+function volumeRow(n, model, unplugs, removableDisk, holder, loop) {
     var path = mountOf(n)
     var named = String(n.type || "") === "crypt" ? String(holder || "") : ""
     var label = named.length > 0 ? named : n.label ? String(n.label) : (model.length > 0 ? model : String(n.name))
@@ -396,7 +431,7 @@ function volumeRow(n, model, unplugs, removableDisk, holder) {
     return { kind: "volume", label: label, device: devicePath(n), path: path, mounted: path.length > 0,
              removable: removable, mediaRemovable: n.rm === true, readOnly: n.ro === true, size: deviceBytes(n.size),
              locked: isLockedNode(n), fstype: String(n.fstype || ""), fsver: String(n.fsver || ""),
-             uuid: fs === "btrfs" && n.uuid ? String(n.uuid) : "" }
+             uuid: fs === "btrfs" && n.uuid ? String(n.uuid) : "", loop: !!loop }
 }
 
 // An unavailable or malformed capacity stays absent; only the delegate formats valid byte counts.

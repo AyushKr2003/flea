@@ -75,12 +75,12 @@ tests/js/drag.js 493
 tests/js/dropsflow.js 301
 tests/js/collide.js 319
 tests/js/facts.js 415
-tests/js/devices.js 406
+tests/js/devices.js 437
 tests/js/previewswap.js 475
 tests/js/mdstructure.js 655
 tests/js/keymap.js 366
 tests/js/focus.js 843
-tests/js/mounts.js 349
+tests/js/mounts.js 359
 tests/js/menu.js 669
 tests/js/nav.js 478
 tests/js/rail.js 471
@@ -162,7 +162,7 @@ ui/PermissionsDialog.qml 658
 ui/PickerWindow.qml 845
 ui/Preview.qml 1011
 ui/PreviewColumn.qml 553
-ui/DeviceMounts.qml 537
+ui/DeviceMounts.qml 540
 ui/js/Facts.js 402
 ui/PreviewPdf.qml 482
 ui/PickerChrome.qml 295
@@ -180,7 +180,7 @@ ui/ViewState.qml 549
 ui/WindowBody.qml 816
 ui/js/Anchor.js 379
 ui/js/ColumnsCarry.js 94
-ui/js/Devices.js 405
+ui/js/Devices.js 440
 ui/js/Filter.js 284
 ui/js/Focus.js 492
 ui/js/Keymap.js 370

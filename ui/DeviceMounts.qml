@@ -63,6 +63,9 @@ Item {
     // the only witness: gio's own exit code has been 0 over a volume that was still mounted.
     property string _ejectDevice: ""
     property string _ejectLabel: ""
+    property bool _ejectLoop: false
+    // A loop detach failed; the next listing judges whether the unmount succeeded.
+    property bool _ejectDetachFailed: false
     // Listings are counted as they start. _verdictFromListing is 0 while gio runs, so nothing is
     // judged before it exits; at exit it becomes one past the count, so the listing in flight at
     // that moment, taken before the eject finished, is never the witness.
@@ -156,7 +159,7 @@ Item {
                        device: r.device, mounted: r.mounted, removable: r.removable,
                        mediaRemovable: r.mediaRemovable === true, readOnly: r.readOnly === true, size: r.size,
                        glyph: r.locked === true ? "lock" : "drive", locked: r.locked === true,
-                       fstype: r.fstype || "", fsver: r.fsver || "" })
+                       fstype: r.fstype || "", fsver: r.fsver || "", loop: !!r.loop })
         }
         // Same rule as ui/NetworkMounts.qml's: an unchanged poll assigns nothing, see Mounts.sameEntries.
         if (!Mounts.sameEntries(root.entries, out))
@@ -240,6 +243,8 @@ Item {
     function armEject(e) {
         root._ejectDevice = e.device
         root._ejectLabel = e.label
+        root._ejectLoop = e.loop === true
+        root._ejectDetachFailed = false
         root._verdictFromListing = 0
     }
 
@@ -251,10 +256,7 @@ Item {
         return deviceLock.lockCryptAfter(listing !== undefined ? listing : root._listing, device, label)
     }
 
-    // Eject goes through the mount point. gio mount dispatches on --device before it ever reads
-    // --eject (glib 2.88.3 gio-tool-mount.c:1264 against :1278), so "-e -d <device>" mounts instead.
-    // gio's own -f is never passed: forcing an unmount over an open write is how a file manager
-    // loses somebody's data.
+    // Eject by mount point, never -f (an open write loses data) or -e -d (gio-tool-mount.c:1264 mounts); a loop row takes -u, as -e never returns without a Drive.
     function eject(index) {
         var e = root.entries[index]
         if (!e || e.kind !== "volume" || !e.mounted)
@@ -263,17 +265,16 @@ Item {
             root.message(Format.fill(Mounts.WORDS.stillEjecting, root._ejectLabel), false)
             return
         }
-        // A USB disk that is not media-removable (a USB HDD or SSD bridge) is powered off
-        // instead: ejecting its media re-announces the disk and udiskie remounts it at once.
+        // A non-removable USB disk is powered off, since an eject lets udiskie remount it; a loop row has no drive, so it takes -u below.
         var disk = Devices.powerOffDisk(e.device)
-        if (disk.length > 0 && e.mediaRemovable !== true) {
+        if (!e.loop && disk.length > 0 && e.mediaRemovable !== true) {
             root.powerOff(e, disk)
             return
         }
         root.armEject(e)
         root.quiesce(e.path)
         root._ejectErr = ""
-        ejectProcess.command = ["gio", "mount", "-e", e.path]
+        ejectProcess.command = Devices.ejectCommand(e)
         ejectProcess.running = true
         // Replaces the arm prompt, and a stick mid-flush can take a while to come unmounted.
         root.message(Format.fill(Mounts.WORDS.ejecting, e.label), false)
@@ -339,13 +340,14 @@ Item {
             root.reportEject(verdict, Eject.blockers(body, root._ejectDevice), body)
     }
 
-    // "Safe to unplug" is a safety claim: Eject.sentence says it for the "safe" verdict only.
+    // "Safe to unplug" is a safety claim: only a real drive's "safe" verdict earns it.
     function reportEject(verdict, others, body) {
         if (root._ejectDevice.length === 0)
             return
         powerOffTimeout.stop()
         ejectVerdictTimeout.stop()
-        var s = Eject.sentence(verdict, root._ejectLabel, others)
+        // An unmounted loop row reads as safe to the listing; a failed detach still has to say so.
+        var s = Eject.sentence(verdict === "safe" && root._ejectDetachFailed ? "attached" : verdict, root._ejectLabel, others, root._ejectLoop)
         if (!s.isError)
             root.lockCrypt(root._ejectDevice, root._ejectLabel, body)
         root._ejectDevice = ""
@@ -529,6 +531,7 @@ Item {
             }
             if (root._powerOffDisk.length > 0)
                 root._powerOffDisk = ""
+            root._ejectDetachFailed = root._ejectLoop && exitCode === Devices.detachFailedExit
             root._verdictFromListing = root._listingsStarted + 1
             ejectVerdictTimeout.restart()
             root.poll()
