@@ -632,11 +632,30 @@ r0_before=$(ipc total)
 aaa_before_r0=$(ls -A "$HOMEDIR/aaa" | tr '\n' ' ')
 printf 's1 payload\n' > "$HOMEDIR/s1.txt"
 expect_ipc total $((r0_before + 1))
-centre_into s1x s1y s1.txt
 centre_into a1x a1y aaa
 native_key -M ctrl -k comma -m ctrl
 expect_ipc settingsOpen true
+# R0 owns ground, so derive its press from the visible row outside the measured card and rail.
+r0_index=$(rowidx s1.txt) || die "R0 could not find s1.txt's row"
+r0_row=$(ipc rowRect "$r0_index") || die "R0 could not read s1.txt's row rectangle"
+r0_card=$(ipc settingsCardRect) || die "R0 could not read Settings' card rectangle"
+r0_area=$(ipc listAreaRect) || die "R0 could not read the listing viewport"
+r0_rail=$(ipc railState) || die "R0 could not read the pane rail"
+r0_point=$(python3 "$repo/tests/lib/settings-ground-point.py" "$r0_row" "$r0_card" "$r0_area" "$r0_rail" "$WIN" "$pointer_tolerance") \
+    || die "R0 has no ground press point over s1.txt outside Settings and the rail, see DRAG_R0_GROUND_REFUSED coordinates"
+read -r s1x s1y <<< "$r0_point"
 warp "$s1x" "$s1y"; sleep 0.4
+# Recheck the card and rail after pointer motion, before any button is held.
+r0_index=$(rowidx s1.txt) || die "R0 could not find s1.txt's row before the press"
+read -r r0_actual_x r0_actual_y <<< "$(hyprctl cursorpos | tr -d ',')"
+python3 "$repo/tests/lib/settings-ground-point.py" "$(ipc rowRect "$r0_index")" "$(ipc settingsCardRect)" \
+    "$(ipc listAreaRect)" "$(ipc railState)" "$WIN" 1 "$r0_actual_x $r0_actual_y" >/dev/null \
+    || die "R0 press point is not on the panel ground, see DRAG_R0_GROUND_REFUSED coordinates"
+r0_folder_index=$(rowidx aaa) || die "R0 could not find aaa's unchanged destination row"
+python3 "$repo/tests/lib/settings-ground-point.py" "$(ipc rowRect "$r0_folder_index")" "$(ipc settingsCardRect)" \
+    "$(ipc listAreaRect)" "$(ipc railState)" "$WIN" 1 "$a1x $a1y" >/dev/null \
+    || die "R0's unchanged aaa destination is not on the panel ground, see DRAG_R0_GROUND_REFUSED coordinates"
+printf 'DRAG_R0_GROUND press=%s,%s observed=%s,%s row=%q card=%q rail=%q destination=%s,%s\n' "$s1x" "$s1y" "$r0_actual_x" "$r0_actual_y" "$r0_row" "$r0_card" "$r0_rail" "$a1x" "$a1y"
 press; sleep 0.3
 glide_to "$a1x" "$a1y"; sleep 0.5
 release; sleep 0.8
