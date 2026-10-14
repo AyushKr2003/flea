@@ -145,19 +145,37 @@ window_box() { printf '%s\n' "$native_box"; }
 hyprctl() { [[ "$*" == 'monitors -j' ]] && printf '%s\n' "$replay_outputs"; }
 pointer_glide() {
     printf '%s %s\n' "$1" "$2" >> "$scratch/moves.log"
-    if (( coh_held )); then native_box='701 752 1100 700'; fi
+    if (( coh_held )); then native_box='701 752 900 600'; fi
 }
 coh_ydotool() { printf '%s\n' "$*" >> "$scratch/buttons.log"; }
 resizes=0
-cap_resize() { resizes=$((resizes + 1)); native_box="701 370 $1 $2"; }
+cap_resize() {
+    local x y w h
+    read -r x y w h <<< "$native_box"
+    resizes=$((resizes + 1))
+    native_box="$x $y $1 $2"
+}
+flea_pid() { printf '4242\n'; }
+window_addr_of_pid() { [[ "$1" == 4242 ]] && printf '0xabc\n'; }
+hypr_window_move() {
+    local x y w h
+    [[ "$1" == 0xabc ]] || return 1
+    read -r x y w h <<< "$native_box"
+    native_box="$2 $3 $w $h"
+}
 name=window
 coh_held=1
-coh_cancel_press > "$scratch/drag.log"
-coh_park
-check "a held chrome cancel restores geometry before the next park" "$? $resizes $coh_held $native_box" '0 1 0 701 370 1100 700'
+( coh_cancel_press; coh_park; printf 'REPLAY_DRAG %s %s %s\n' "$resizes" "$coh_held" "$native_box" ) > "$scratch/drag.log" 2>&1
+check "a held chrome cancel restores geometry before the next park" "$?" 0
+check "the cancel restores position and size after releasing the button" "$(sed -n 's/^REPLAY_DRAG //p' "$scratch/drag.log")" '1 0 701 370 1100 700'
 check "both pointer moves stay inside the output" "$(tr '\n' '|' < "$scratch/moves.log")" '707 1064|707 1064|'
-grep -q '^COH_DRAG_RESET replay window .*displaced=701 752 1100 700 restored=701 370 1100 700' "$scratch/drag.log"
+grep -q '^COH_DRAG_RESET replay window .*displaced=701 752 900 600 restored=701 370 1100 700' "$scratch/drag.log"
 check "a chrome drag records original, displaced and restored geometry" "$?" 0
+coh_held=0
+( coh_held=1; pointer_glide() { native_box='701 752 900 600'; }; hypr_window_move() { :; }; coh_cancel_press ) > "$scratch/unrestored.log" 2>&1
+check "a compositor that does not restore position fails the cancel" "$?" 1
+grep -q 'window geometry was not restored' "$scratch/unrestored.log"
+check "a failed restoration reports the geometry mismatch" "$?" 0
 native_box='701 752 1100 700'
 ( coh_pointer_to 6 694 ) > "$scratch/outside.log" 2>&1
 check "an off-output target is refused before motion" "$? $(wc -l < "$scratch/moves.log")" '1 2'
@@ -171,8 +189,46 @@ check "scaled outputs use logical pointer coordinates" "$?" 0
 check "a point inside physical pixels but outside logical pixels is refused" "$?" 1
 replay_outputs='[{"name":"fixture","x":0,"y":0,"width":1440,"height":2560,"scale":1,"transform":1}]'
 native_box='701 370 1100 700'
-coh_pointer_to 6 694
+coh_pointer_to 1000 694
 check "rotated outputs swap their physical dimensions" "$?" 0
+check "the rotated replay reaches a point outside the unswapped width" "$(tail -n 1 "$scratch/moves.log")" '1701 1064'
+# Sample function fragments: the rotated width uses height and the rotated height uses width.
+rotated_width='if ((.transform // 0) % 2) == 1 then .height else .width end'
+rotated_height='if ((.transform // 0) % 2) == 1 then .width else .height end'
+unrotated=$(declare -f coh_pointer_to)
+unrotated=${unrotated//"$rotated_width"/.width}
+unrotated=${unrotated//"$rotated_height"/.height}
+moves_before=$(wc -l < "$scratch/moves.log")
+( eval "$unrotated"; coh_pointer_to 1000 694 ) > "$scratch/unrotated.log" 2>&1
+check "removing the rotation swap refuses the same target before motion" "$? $(wc -l < "$scratch/moves.log")" "1 $moves_before"
+
+# Three distinct preview controls must each retain their own hit point through the actual surface loop.
+(
+    coh_launch() { :; }
+    coh_park() { :; }
+    coh_cancel_press() { coh_held=0; }
+    coh_pointer_to() { point_x="$1"; point_y="$2"; }
+    coh_wake_colpdf() { coh_pdf_bar=$(jq -c '.controls[] | select(.kind == "ViewportScrollBar")' <<< "$control_json"); }
+    coh_shot() { printf 'REPLAY_TARGET %s %s %s,%s\n' "$3" "$5" "$point_x" "$point_y"; }
+    point_x=0 point_y=0
+    # Sample input: each control is exposed in PreviewColumn and has a distinct kind and target.
+    control_json='{"controls":[
+        {"kind":"ChromeButton","name":"Zoom","x":700,"y":50,"w":30,"h":30,"targetX":715,"targetY":65},
+        {"kind":"DialogButton","name":"Open","x":800,"y":50,"w":60,"h":30,"targetX":830,"targetY":65},
+        {"kind":"ViewportScrollBar","name":"Vertical","value":"vertical","x":1080,"y":40,"w":12,"h":300,"targetX":1086,"targetY":115}]}'
+    control_json=$(jq -c '.controls |= map(. + {surface:"PreviewColumn",exposed:true,enabled:true,hoverLive:true,pressLive:true})' <<< "$control_json")
+    ipc() {
+        jq -c --argjson x "$point_x" --argjson y "$point_y" --argjson held "$coh_held" '.controls |= map(. + {
+            hovered:(.targetX == $x and .targetY == $y),pressed:(.targetX == $x and .targetY == $y and $held == 1)})' <<< "$control_json"
+    }
+    coh_run_surface cols-pdf coh_open_main '{}' none '640 40 1100 670'
+) > "$scratch/preview-targets.log" 2>&1
+check "the PDF surface finishes its multi-control walk" "$?" 0
+for target in 'ChromeButton|Zoom|700|50 715,65' 'DialogButton|Open|800|50 830,65' 'ViewportScrollBar|Vertical|1080|40 1086,115'; do
+    for phase in hover press; do
+        check "the PDF surface drives $target once at $phase" "$(grep -Fxc "REPLAY_TARGET $phase $target" "$scratch/preview-targets.log")" 1
+    done
+done
 
 # The full aggregate refuses before fixture work; each existing selector still schedules every surface.
 real_foreground='#ffffff'
@@ -281,6 +337,14 @@ coh_bounded own-limit 1 command sleep 60 > "$scratch/own-limit.log" 2>&1
 check "a shorter own timeout remains capped within the theme budget" "$?" 124
 grep -q '^COH_SKIPPED replay own-limit cut after 1s (theme remaining 8s)$' "$scratch/own-limit.log"
 check "the runner retains an own timeout shorter than the remaining budget" "$?" 0
+
+# Advance only the whole-second clock at worker completion to model crossing a boundary in under one second.
+(
+    wait() { builtin wait "$@"; local status=$?; SECONDS=$((SECONDS + 1)); return "$status"; }
+    coh_deadline=$((SECONDS + 8))
+    coh_bounded subsecond 1 true
+) > "$scratch/subsecond.log" 2>&1
+check "an under-limit success survives a whole-second clock boundary" "$?" 0
 
 coh_run_surface() { trap 'command sleep 60' EXIT; command sleep 60; }
 coh_failed=''

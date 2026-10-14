@@ -108,7 +108,7 @@ coh_park() {
 
 # A cancel motion from chrome starts WindowDrag; restore the viewport before any later pointer move.
 coh_cancel_press() {
-    local before after wx wy ww wh
+    local before after restored wx wy ww wh address end
     before=$(window_box) || fail "cohesion: pre-release window coordinates unavailable"
     read -r wx wy ww wh <<< "$before"
     coh_pointer_to "$coh_approach_px" "$((wh - coh_approach_px))"
@@ -118,8 +118,17 @@ coh_cancel_press() {
     after=$(window_box) || fail "cohesion: post-release window coordinates unavailable"
     if [[ "$before" != "$after" ]]; then
         cap_resize "$ww" "$wh"
+        address=$(window_addr_of_pid "$(flea_pid)") || fail "cohesion: owned window address unavailable"
+        hypr_window_move "$address" "$wx" "$wy" || fail "cohesion: window position restore failed"
+        end=$((SECONDS + coh_wait_s))
+        restored=$(window_box) || fail "cohesion: restored window coordinates unavailable"
+        while [[ "$restored" != "$before" ]] && (( SECONDS < end )); do
+            sleep "$coh_poll_s"
+            restored=$(window_box) || fail "cohesion: restored window coordinates unavailable"
+        done
         printf 'COH_DRAG_RESET %s %s before=%s displaced=%s restored=%s\n' \
-            "$coh_theme" "$name" "$before" "$after" "$(window_box)"
+            "$coh_theme" "$name" "$before" "$after" "$restored"
+        [[ "$restored" == "$before" ]] || fail "cohesion: window geometry was not restored: expected=$before actual=$restored"
     fi
 }
 
@@ -389,7 +398,7 @@ coh_run_surface() {
     (( count > 0 )) || fail "cohesion: $name reports no exposed pointer target"
     for ((i = 0; i < count; i++)); do
         t=$(jq -c ".[$i]" <<< "$targets")
-        if [[ "$name" == cols-pdf ]]; then
+        if [[ "$name" == cols-pdf ]] && jq -e '.kind == "ViewportScrollBar" and .value == "vertical"' <<< "$t" >/dev/null; then
             coh_wake_colpdf
             t="$coh_pdf_bar"
         fi
@@ -434,7 +443,7 @@ coh_run_surface() {
 
 # The caller disables errexit while this runner waits; job control gives only its worker and watchdog separate process groups.
 coh_bounded() {
-    local name="$1" limit="$2" remaining=$((coh_deadline - SECONDS)) started=$SECONDS worker watchdog status monitor=0 signal end
+    local name="$1" limit="$2" remaining=$((coh_deadline - SECONDS)) started=${EPOCHREALTIME/./} finished worker watchdog status monitor=0 signal end
     shift 2
     if (( remaining <= 0 )); then
         printf 'COH_SKIPPED %s %s over the %ss budget\n' "$coh_theme" "$name" "$coh_budget_s"
@@ -458,6 +467,7 @@ coh_bounded() {
     (( monitor )) || set +m
     wait "$worker"
     status=$?
+    finished=${EPOCHREALTIME/./}
     # The detached native window belongs to launch/theme teardown; only this recorded worker group is drained here.
     if kill -0 -- "-$worker" 2>/dev/null; then
         for signal in TERM KILL; do
@@ -477,7 +487,7 @@ coh_bounded() {
     fi
     kill -TERM -- "-$watchdog" 2>/dev/null || :
     wait "$watchdog" 2>/dev/null || :
-    if (( status == 0 && SECONDS - started >= limit )); then
+    if (( status == 0 && finished - started >= limit * 1000000 )); then
         printf 'COH_SKIPPED %s %s returned success after its %ss limit\n' "$coh_theme" "$name" "$limit"
         status=124
     fi
