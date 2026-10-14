@@ -92,7 +92,7 @@ if grep -aqE 'TypeError|ReferenceError|ERROR|Cannot assign' "$log"; then
 fi
 
 # The focused-fill gate and its 0.3.10 negative control each run against an isolated UI under the marked root.
-for variant in normalfill green mutant; do
+for variant in normalfill green mutant trashrow; do
     highlight="$probe/h-$variant"
     config="$highlight/config"
     mkdir -p "$config" "$highlight"/{home,state,data,cache,runtime} || exit 1
@@ -113,6 +113,10 @@ for variant in normalfill green mutant; do
     }\
 
 ' "$config/flea/SidebarRow.qml" || exit 1
+    elif [ "$variant" = trashrow ]; then
+        cp -a ui "$config/flea" || exit 1
+        [ "$(grep -cF '    highlighted: root.railIndex === root.rail.highlightedIndex' "$config/flea/RailTrashRow.qml")" -eq 1 ] || exit 1
+        sed -i '/^    highlighted: root\.railIndex === root\.rail\.highlightedIndex$/d' "$config/flea/RailTrashRow.qml" || exit 1
     elif [ "$variant" = normalfill ]; then
         cp -a ui "$config/flea" || exit 1
         [ "$(grep -cF 'root.focused ? Style.selectedFill : Style.normalFill' "$config/flea/SidebarRow.qml")" -eq 1 ] || exit 1
@@ -136,20 +140,25 @@ for variant in normalfill green mutant; do
         exit 1
     fi
     if [ "$variant" = green ]; then
-        grep -aq 'RAIL_HIGHLIGHT DONE checks=13 failed=0$' "$highlight_log" && ! grep -aq 'RAIL_HIGHLIGHT FAIL' "$highlight_log" \
+        grep -aq 'RAIL_HIGHLIGHT DONE checks=14 failed=0$' "$highlight_log" && ! grep -aq 'RAIL_HIGHLIGHT FAIL' "$highlight_log" \
             || { cat "$highlight_log"; printf 'FAIL rail-highlight: the fill gate did not pass\n'; exit 1; }
-        printf 'rail-highlight: 13 checks, 0 failed\n'
+        printf 'rail-highlight: 14 checks, 0 failed\n'
     elif [ "$variant" = normalfill ]; then
         grep -aq 'RAIL_HIGHLIGHT ok selectedFill differs from normalFill' "$highlight_log" \
             && grep -aq 'RAIL_HIGHLIGHT FAIL focused selectedFill and transparent current place' "$highlight_log" \
-            && grep -aq 'RAIL_HIGHLIGHT DONE checks=13 failed=1$' "$highlight_log" \
+            && grep -aq 'RAIL_HIGHLIGHT DONE checks=14 failed=1$' "$highlight_log" \
             || { cat "$highlight_log"; printf 'FAIL rail-highlight: the normalFill-only mutant escaped\n'; exit 1; }
-        printf 'rail-highlight: normalFill-only mutant rejected, 1 failed of 13\n'
+        printf 'rail-highlight: normalFill-only mutant rejected, 1 failed of 14\n'
+    elif [ "$variant" = trashrow ]; then
+        grep -aq 'RAIL_HIGHLIGHT FAIL focused Trash cursor fill' "$highlight_log" \
+            && grep -aq 'RAIL_HIGHLIGHT DONE checks=14 failed=1$' "$highlight_log" \
+            || { cat "$highlight_log"; printf 'FAIL rail-highlight: the Trash row without the shared highlight escaped\n'; exit 1; }
+        printf 'rail-highlight: Trash row highlight mutant rejected, 1 failed of 14\n'
     else
         grep -aq 'RAIL_HIGHLIGHT FAIL focused cursor fill' "$highlight_log" \
             && grep -aq 'RAIL_HIGHLIGHT FAIL focused rows have no frame' "$highlight_log" \
-            && grep -aq 'RAIL_HIGHLIGHT DONE checks=13 failed=5$' "$highlight_log" \
+            && grep -aq 'RAIL_HIGHLIGHT DONE checks=14 failed=6$' "$highlight_log" \
             || { cat "$highlight_log"; printf 'FAIL rail-highlight: the 0.3.10 mutant escaped\n'; exit 1; }
-        printf 'rail-highlight: 0.3.10 fill-and-frame mutant rejected, 5 failed of 13\n'
+        printf 'rail-highlight: 0.3.10 fill-and-frame mutant rejected, 6 failed of 14\n'
     fi
 done

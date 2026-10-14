@@ -43,7 +43,7 @@ ShellRoot {
         Flea.Sidebar { id: rail; anchors.fill: parent; polling: false; menu: menu }
     }
     QtObject { id: menu; property bool opened: false; property bool forRail: true }
-    Component.onCompleted: Flea.ViewState.state = { places: { showHome: true, showRecent: true, showTrash: false, showNetwork: false, showDevices: false } }
+    Component.onCompleted: Flea.ViewState.state = { places: { showHome: true, showRecent: true, showTrash: true, showNetwork: false, showDevices: false } }
     Timer {
         interval: 1200
         running: true
@@ -71,6 +71,10 @@ ShellRoot {
                     shell.check("closed menu restores keyboard fill", shell.indices("fill"), [1])
                     rail.pointerFocus = true
                     shell.check("pointer suppresses keyboard highlight", [shell.indices("fill"), shell.indices("frame")], [[0], []])
+                    rail.pointerFocus = false
+                    var trashAt = rail.entries.findIndex(function (e) { return e.kind === "trash" })
+                    rail.cursorIndex = trashAt
+                    shell.check("focused Trash cursor fill", [trashAt > 1, shell.indices("fill")], [true, [trashAt]])
                 }
             })
             console.log("RAIL_HIGHLIGHT DONE checks=" + shell.checks + " failed=" + shell.failures)
