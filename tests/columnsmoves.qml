@@ -28,6 +28,9 @@ ShellRoot {
     property int supersedeFrames: 0
     property bool supersedeBlank: false
     property double shownAt: 0
+    readonly property int capSlackMs: 35 // Margin past the cap so the timer has fired before the read.
+    readonly property int minSlackMs: 60 // Margin past cap plus minimum to prove hidden time cannot satisfy the shown minimum.
+    readonly property int waitTimeoutMs: 3000 // Bound for one backend round trip before the control fails.
     readonly property string base: "/fixture/group/a"
     readonly property string railPath: Quickshell.env("HOME")
     readonly property var cases: ["parent-click", "grandparent-click", "third-click", "right", "enter", "left", "back", "chrome-up", "backspace", "rail", "arrow", "parent-file-click"]
@@ -193,7 +196,7 @@ ShellRoot {
     }
     function finish() { console.log("COLUMNMOVES DONE " + cases.length + " moves, " + failures + " failed"); Qt.quit() }
     function until(label, condition, then) {
-        waitStep = { label: label, condition: condition, then: then, deadline: Date.now() + 3000 }
+        waitStep = { label: label, condition: condition, then: then, deadline: Date.now() + waitTimeoutMs }
     }
     Timer {
         interval: 4; running: root.waitStep !== null; repeat: true
@@ -239,12 +242,12 @@ ShellRoot {
             control(column !== null && area.rowsFor(area.parentPath).length > 0, "pending ancestor starts with held rows")
             if (!column) { finish(); return }
             column.visible = false
-            until("past the real cap", function () { return Date.now() - began >= Swap.CAP_MS + 35 }, function () {
+            until("past the real cap", function () { return Date.now() - began >= Swap.CAP_MS + capSlackMs }, function () {
                 control(area.landing.loading(area.parentPath) && area.rowsFor(area.parentPath).length === 0, "real cap timer replaces held rows with reading")
                 var mark = findItem(column, function (item) { return item.shown !== undefined && item.heldOff !== undefined })
                 if (!mark) { control(false, "cap builds the LoadingState"); finish(); return }
                 mark.shownChanged.connect(function () { if (mark.shown) root.shownAt = Date.now() })
-                until("minimum passes while the mark is hidden", function () { return Date.now() - began >= Swap.CAP_MS + Swap.MIN_SHOW_MS + 60 }, function () {
+                until("minimum passes while the mark is hidden", function () { return Date.now() - began >= Swap.CAP_MS + Swap.MIN_SHOW_MS + minSlackMs }, function () {
                     column.visible = true
                     control(mark.shown && shownAt > 0, "LoadingState reports when its mark is shown")
                     freezePeeks = false; pump()
@@ -280,10 +283,45 @@ ShellRoot {
                     until("reading supersede's reply lands", settled, function () {
                         control(Date.now() - appearedAt >= Swap.MIN_SHOW_MS && !column.loadingRows && area.rowsFor(area.parentPath).length > 0,
                                 "superseding reading state keeps its shown minimum before releasing to the new rows")
-                        finish()
+                        noCarryClears()
                     })
                 })
             })
+        })
+    }
+    function noCarryClears() {
+        freezePeeks = true
+        pane.open("/elsewhere/rail")
+        until("no-carry landing holds its drawn column", function () { return !pane.listInFlight && pane.path === "/elsewhere/rail" }, function () {
+            var heldPaths = Object.keys(area.landing.held)
+            control(heldPaths.length > 0, "no-carry setup holds a drawn column")
+            if (!heldPaths.length) { finish(); return }
+            var heldPath = heldPaths[0]
+            area.visible = false
+            pane.open("/fixture/other")
+            until("no-carry hidden hop lands", function () { return !pane.listInFlight && pane.path === "/fixture/other" }, function () {
+                pane.open("/elsewhere/rail")
+                until("no-carry hidden return lands", function () { return !pane.listInFlight && pane.path === "/elsewhere/rail" }, function () {
+                    area.visible = true
+                    control(area.landing.previous === null, "hidden navigations keep no previous landing")
+                    control(!area.landing.waiting(heldPath), "hidden navigations wait on no stale held row")
+                    freezePeeks = false; pump()
+                    until("no-carry landing settles", settled, noCarrySingleStep)
+                })
+            })
+        })
+    }
+    function noCarrySingleStep() {
+        freezePeeks = true
+        pane.open("/fixture/other")
+        until("single-step no-carry landing holds its drawn column", function () { return !pane.listInFlight && pane.path === "/fixture/other" }, function () {
+            var heldPath = area.parentPath
+            control(area.landing.target === pane.path && area.landing.waiting(heldPath), "single-step no-carry setup holds its current landing")
+            area.landing.begin(null, [])
+            control(area.landing.previous === null, "begin with no carry keeps no previous landing")
+            control(!area.landing.waiting(heldPath), "begin with no carry waits on nothing")
+            freezePeeks = false; pump()
+            until("single-step no-carry landing settles", settled, finish)
         })
     }
     function advance() {

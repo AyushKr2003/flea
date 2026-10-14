@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Drives every column move, superseding landing, and real cap and loading minimum offscreen.
+# Drives every column move, no-carry navigation, superseding landing, and real cap and loading minimum offscreen.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -30,7 +30,7 @@ if [ "$status" -ne 0 ] || ! grep -q 'COLUMNMOVES DONE 12 moves, 0 failed' "$root
     exit 1
 fi
 
-for mutant in previous-read cap-start minimum-start expire-start loading-copy; do
+for mutant in previous-read cap-start minimum-start expire-start loading-copy old-begin; do
     leg="$root/$mutant"
     sandbox_require "$leg" || exit 1
     mkdir -p "$leg/config" "$leg/home" "$leg/state" "$leg/cache" "$leg/runtime" || exit 1
@@ -50,6 +50,8 @@ changes = {
     'expire-start': ('state.expired = true',
                      '{ state.expired = true; for (var path of Object.keys(state.held)) root.earlyMark(path, true) }'),
     'loading-copy': ('loading: reading', 'loading: false'),
+    'old-begin': ('if (!carry) root.previous = null\n        else if (root.target === root.area.pane.path)',
+                  'if (root.target === root.area.pane.path)'),
 }
 before, after = changes[mutant]
 assert source.count(before) == 1, f'{mutant}: mutation target was not unique'
@@ -78,6 +80,7 @@ PY
         minimum-start) expected='CONTROL FAIL real minimum timer releases the reply timed out' ;;
         expire-start) expected='CONTROL FAIL reply during the shown minimum stays covered' ;;
         loading-copy) expected='CONTROL FAIL superseding landing carries the shown reading state' ;;
+        old-begin) expected='CONTROL FAIL hidden navigations keep no previous landing' ;;
     esac
     if [ -n "${FLEA_CI_SUITE_LOGS:-}" ]; then
         cp "$leg/moves.log" "$FLEA_CI_SUITE_LOGS/columnsmoves-$mutant.control.log" || exit 1
@@ -86,6 +89,11 @@ PY
         || grep -qE 'TypeError|ReferenceError|Binding loop' "$leg/moves.log"; then
         tail -n 25 "$leg/moves.log"
         echo "FAIL columnsmoves: $mutant was not rejected by its regression control (qs exit $status)"
+        exit 1
+    fi
+    if [ "$mutant" = old-begin ] && ! grep -qF 'CONTROL FAIL begin with no carry keeps no previous landing' "$leg/moves.log"; then
+        tail -n 25 "$leg/moves.log"
+        echo 'FAIL columnsmoves: old-begin was not rejected by the single-step no-carry control'
         exit 1
     fi
     echo "COLUMNMOVES MUTANT rejected $mutant by its regression control"

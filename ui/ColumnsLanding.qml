@@ -31,8 +31,9 @@ Item {
                 if (since !== undefined) inheritedSince = Math.max(inheritedSince, since)
             }
         }
-        // A superseding request still draws the previous landing, including its remaining cap and shown minimum.
-        if (root.target === root.area.pane.path) {
+        // Only a carried superseding request keeps the previous landing's cap and shown minimum.
+        if (!carry) root.previous = null
+        else if (root.target === root.area.pane.path) {
             root.previous = Object.keys(root.held).length ? {
                 target: root.target, held: root.held, expired: root.expired, minimum: root.minimum,
                 startedAt: root.startedAt, markSince: root.markSince
