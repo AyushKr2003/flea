@@ -15,6 +15,7 @@ NEAR_TICK_MIN_S = 0.90
 GRACE_MAX_S = 2.5
 COOPERATIVE_STOP_MAX_S = 0.8
 READINESS_FAILURE_WAIT_S = 0.2
+SENTINEL_LIFETIME_S = 60
 
 repo, parent, marker = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
 if not parent.is_absolute() or not (parent / marker).is_file():
@@ -165,9 +166,10 @@ printf 'UNEXPECTED_RETURN %s\\n' "$?"
 case = root / "partial-publication"
 case.mkdir()
 (case / marker).touch()
-sentinel = subprocess.Popen(["sleep", "60"], start_new_session=True)
-process = launch(runner, case, "partial-publication")
+sentinel = process = None
 try:
+    sentinel = subprocess.Popen(["sleep", str(SENTINEL_LIFETIME_S)], start_new_session=True)
+    process = launch(runner, case, "partial-publication")
     assert await_condition(lambda: (case / "publication-open").exists()), "publisher never paused after opening its output"
     try:
         exposed = (case / "ready").exists()
@@ -191,8 +193,12 @@ try:
 except Exception as error:
     check(False, "partial publication probe completed", str(error))
 finally:
-    stop(process)
-    stop(sentinel)
+    try:
+        if process is not None:
+            stop(process)
+    finally:
+        if sentinel is not None:
+            stop(sentinel)
 
 signal_cases = [(sig, target, "ignore") for sig in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM)
                 for target in ("pid", "group")]
