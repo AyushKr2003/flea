@@ -35,6 +35,8 @@ ShellRoot {
         property bool rowHasShebang: false
         property var columnsArea: null
         property var menuActions: ({ready: true, requestId: 1})
+        function selectedIndices() { return [] }
+        function menuSelectionIdentity() { return "[]" }
         function contextMenu() {
             // visible without opened is a menu in its close fade.
             return {visible: true, opened: false, hasRow: true, entries: [], cursor: 0, submenuOpen: false,
@@ -52,6 +54,8 @@ ShellRoot {
         property bool rowHasShebang: false
         property var columnsArea: null
         property var menuActions: stubPane.menuActions
+        function selectedIndices() { return [] }
+        function menuSelectionIdentity() { return "[]" }
         function contextMenu() { return stubPane.contextMenu() }
     }
     Flea.Ipc { id: ipc; pane: stubPane; fleaWindow: windowStub }

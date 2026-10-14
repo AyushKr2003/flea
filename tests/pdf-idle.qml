@@ -55,7 +55,8 @@ ShellRoot {
     function innerPdf(item) {
         if (!item)
             return null
-        if (item.opened !== undefined)
+        if (item.opened !== undefined && typeof item.fastOpens === "number"
+                && item.pageItem !== undefined)
             return item
         var kids = item.children || []
         for (var i = 0; i < kids.length; i++) {

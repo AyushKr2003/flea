@@ -1,7 +1,7 @@
 .pragma library
 
 // Where each dialog's fields, buttons and check boxes lie in the 1000 x 650 test window on the 0.3.10 stage (Open With and Convert hold their status slot), before any ring room.
-// Sample input: "stop 12 new file" reads field, Cancel and Create as "x,y,width,height" strings in tree order.
+// Sample input: "stop 12 new file" reads field, Cancel and Create as "x,y,width,height" strings in tree order; the save field follows 6b1824a75.
 var PINS = ({
     "stop 12 new file": ["field 276.00,325.00,449.00,26.00",
         "DialogButton 594.75,359.00,61.13,26.00",
@@ -22,7 +22,7 @@ var PINS = ({
         "CheckBox 434.00,271.00,16.00,16.00",
         "CheckBox 533.00,271.00,16.00,16.00",
         "CheckBox 631.00,271.00,16.00,16.00"],
-    "stop 12 save picker": ["field 68.00,12.00,760.00,29.00"],
+    "stop 12 save picker": ["field 12.00,34.00,816.00,26.00"],
     "stop 12 convert": ["DialogButton 519.56,515.00,61.13,26.00",
         "DialogButton 588.69,515.00,68.31,26.00",
         "CheckBox 343.00,403.00,16.00,16.00"],
@@ -56,7 +56,9 @@ var PINS = ({
         "CheckBox 422.00,260.00,18.00,18.00",
         "CheckBox 539.00,260.00,18.00,18.00",
         "CheckBox 656.00,260.00,18.00,18.00"],
-    "stop 14 save picker": ["field 81.00,14.00,745.00,34.00"],
+    "stop 14 save picker": function(captionHeight) {
+        return ["field 14.00," + (14 + captionHeight + 9).toFixed(2) + ",812.00,30.00"]
+    },
     "stop 14 convert": ["DialogButton 524.92,544.00,70.34,30.00",
         "DialogButton 604.27,544.00,78.73,30.00",
         "CheckBox 317.00,415.50,18.00,18.00"],

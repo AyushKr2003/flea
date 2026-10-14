@@ -430,8 +430,8 @@ Item {
     function pdfLoaded() { return pdfLoader.item !== null }
     function pdfLanded() { return pdfLoader.item ? pdfLoader.item.landedPages() : [] }
 
-    // For the geometry gate: the box of the page under the frame's top, null until the document below built it.
-    function pdfPageItem() { return pdfLoader.item ? pdfLoader.item.pageSlot(pdfLoader.item.page) : null }
+    // For the geometry gates: the box of the page under the frame's top, or of page index, null until the document below built it.
+    function pdfPageItem(index) { return pdfLoader.item ? pdfLoader.item.pageSlot(index === undefined ? pdfLoader.item.page : index) : null }
     // Read back through shell.qml's IPC so a test can prove the transport plays and seeks.
     function mediaPlaying() { return mediaLoader.item ? mediaLoader.item.playing : false }
     function mediaPosition() { return mediaLoader.item ? mediaLoader.item.position : 0 }

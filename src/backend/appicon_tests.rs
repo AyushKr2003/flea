@@ -6,6 +6,8 @@ use crate::backend::thumbspec::Thumbnailers;
 use crate::backend::thumbwrite::write_marker;
 use std::sync::Arc;
 use std::time::Instant;
+#[path = "appicon_fixtures.rs"]
+mod fixtures;
 
 const MTIME: i64 = 1787790423;
 const APPIMAGE: &str = "application/vnd.appimage";
@@ -367,31 +369,20 @@ fn on_path(name: &str) -> Option<String> {
 // The tools the test shell-outs to, run for real: an ELF prefix followed by a squashfs, as a type 2 AppImage is.
 #[test]
 fn real_7z_reads_a_real_appimage_with_a_symlink_dir_icon() {
-    let (Some(seven), Some(mksquashfs)) = (on_path("7z"), on_path("mksquashfs")) else {
-        eprintln!("SKIP real_7z_reads_a_real_appimage_with_a_symlink_dir_icon: 7z or mksquashfs is not installed");
+    let Some(seven) = on_path("7z") else {
+        eprintln!("SKIP real_7z_reads_a_real_appimage_with_a_symlink_dir_icon: 7z is not installed");
         return;
     };
-    let bytes = png(&TestDir::new("appicon-bytes"));
     let d = TestDir::new("appicon-real");
-    let tree = d.dir("tree");
-    std::fs::write(tree.join("app.png"), &bytes).unwrap();
-    std::fs::write(tree.join("AppRun"), "#!/bin/sh\n").unwrap();
-    std::os::unix::fs::symlink("app.png", tree.join(".DirIcon")).unwrap();
-    let fs = d.join("fs.sqfs");
-    let made = std::process::Command::new(mksquashfs).arg(&tree).arg(&fs).args(["-noappend", "-quiet"]).output().unwrap();
-    assert!(made.status.success(), "mksquashfs failed: {}", String::from_utf8_lossy(&made.stderr));
     let mut image = std::fs::read("/usr/bin/true").unwrap();
-    image.extend(std::fs::read(&fs).unwrap());
+    image.extend(fixtures::checked(&d, &seven, true));
     let f = fixture("appicon-real-f", "");
     std::fs::write(&f.job.path, &image).unwrap();
     let Outcome::Ready(path) = run_with(std::slice::from_ref(&seven), unjailed, plain, &f.tables, &f.job) else { panic!("real 7z did not yield the icon of a squashfs AppImage") };
     assert_eq!(png_text(&std::fs::read(path).unwrap(), "Thumb::URI"), Some(uri_for(&f.job.path)));
     // The same image with no .DirIcon is the image's answer, so it is recorded.
-    std::fs::remove_file(tree.join(".DirIcon")).unwrap();
-    let again = std::process::Command::new(on_path("mksquashfs").unwrap()).arg(&tree).arg(&fs).args(["-noappend", "-quiet"]).output().unwrap();
-    assert!(again.status.success());
     let mut bare = std::fs::read("/usr/bin/true").unwrap();
-    bare.extend(std::fs::read(&fs).unwrap());
+    bare.extend(fixtures::checked(&d, &seven, false));
     let f = fixture("appicon-real-none", "");
     std::fs::write(&f.job.path, &bare).unwrap();
     failed_and_recorded(&f, run_with(&[seven], unjailed, plain, &f.tables, &f.job));

@@ -788,7 +788,7 @@ mod tests {
     fn read_gio(dates: Result<&'static str, &'static str>) -> impl Fn(&[&str]) -> Result<String, Refusal> {
         move |args: &[&str]| match args[0] {
             "trash" => Ok(TRASH_LIST.to_string()),
-            _ => dates.map(String::from).map_err(|detail| unreadable(detail)),
+            _ => dates.map(String::from).map_err(unreadable),
         }
     }
     fn uris(items: &[Item]) -> Vec<&str> {

@@ -62,6 +62,8 @@ ShellRoot {
         property string shebangAsked: ""
         property bool rowHasShebang: false
         property int shebangId: 0
+        function selectedIndices() { return [] }
+        function menuSelectionIdentity() { return "[]" }
         function contextMenu() { return menu }
     }
     QtObject { id: windowStub; function rectOf(item) { return "" } }

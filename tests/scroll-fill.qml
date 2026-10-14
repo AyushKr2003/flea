@@ -243,7 +243,8 @@ ShellRoot {
             root.fail(label + " column paints " + fill + ", want viewport " + viewW)
     }
 
-    function checkPicker(label) {
+    function checkPicker(label, multiple) {
+        root.stubPicker.marksAllowed = multiple
         if (pick.count !== 3) { root.fail(label + " picks " + pick.count + ", want 3"); return }
         if (!pick.clip) root.fail(label + " picker loses viewport clipping")
         var lane = Flea.Theme.spacing.rowPaddingX
@@ -253,12 +254,17 @@ ShellRoot {
             if (cell === null) { root.fail(label + " builds no picker cell at " + i); continue }
             if (!root.near(cell.width, wantContent))
                 root.fail(label + " picker cell " + i + " width " + cell.width + ", want " + wantContent)
-            var markFill = cell.children.length > 0 ? cell.children[0].width : -1
-            // Only the marked row builds its fill; the rest prove the lane by the embedded Row below.
+            var mark = cell.children.length > 0 ? cell.children[0] : null
+            var markFill = mark ? mark.width : -1
+            if (!mark || mark.visible !== (multiple && i === 1))
+                root.fail(label + " picker mark visibility at " + i + ", multiple=" + multiple)
+            // Only a markable marked row draws its fill; every row proves the lane by its embedded Row.
             if (i === 1 && !root.near(markFill, pick.width))
                 root.fail(label + " picker mark paints " + markFill + ", want viewport " + pick.width)
-            if (cell.children.length < 3) { root.fail(label + " picker cell " + i + " builds no Row"); continue }
-            var row = cell.children[2]
+            var row = null
+            for (var c = 0; c < cell.children.length; c++)
+                if (typeof cell.children[c].nameRight === "function") row = cell.children[c]
+            if (row === null) { root.fail(label + " picker cell " + i + " builds no Row"); continue }
             if (row.clip === true) root.fail(label + " picker clips Row " + i)
             var rowFill = row.children.length > 0 ? row.children[0].width : -1
             if (i === 0 && !root.near(rowFill, pick.width))
@@ -282,7 +288,8 @@ ShellRoot {
         Flea.ViewState.state = { display: { textSize: { mode: 12 } } }
         root.checkList("wide12")
         root.checkCol("wide12")
-        root.checkPicker("wide12")
+        root.checkPicker("wide12 single", false)
+        root.checkPicker("wide12 multiple", true)
         if (root.failures.length > 0) { root.report(); return }
         t14.start()
     }
@@ -291,7 +298,8 @@ ShellRoot {
         Flea.ViewState.state = { display: { textSize: { mode: 14 } } }
         root.checkList("wide14")
         root.checkCol("wide14")
-        root.checkPicker("wide14")
+        root.checkPicker("wide14 single", false)
+        root.checkPicker("wide14 multiple", true)
         if (root.failures.length > 0) { root.report(); return }
         list.width = 240
         col.width = 200
@@ -302,7 +310,8 @@ ShellRoot {
     function phaseNarrow() {
         root.checkList("narrow")
         root.checkCol("narrow")
-        root.checkPicker("narrow")
+        root.checkPicker("narrow single", false)
+        root.checkPicker("narrow multiple", true)
         if (root.failures.length > 0) { root.report(); return }
         list.width = 700
         col.width = 400
