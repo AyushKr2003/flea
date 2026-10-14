@@ -707,9 +707,7 @@ check "a plain drag is a move, so the source is gone" \
 # ---------------------------------------------------------------- RT
 echo
 echo "== RT: a row dropped on the rail's Trash row goes to the trash =="
-# ui/RailTrashRow.qml sends the same trash request dd does, by path, through ui/js/TrashDrop.js.
-# HOME and XDG_DATA_HOME belong to this run; gio trashes the home-filesystem file into $XDG_DATA_HOME/Trash in-process, so the operator's Trash never sees it.
-# Settled first: a baseline read while a re-list is out is not this folder's count.
+# The rail's Trash row sends dd's trash request by path into this run's own $XDG_DATA_HOME/Trash; the baseline count waits for a settled listing.
 expect_ipc listInFlight false
 rt_before=$(ipc total)
 printf 't1 payload\n' > "$HOMEDIR/t1.txt"

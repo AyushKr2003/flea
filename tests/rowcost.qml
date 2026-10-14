@@ -137,7 +137,7 @@ ShellRoot {
         if (bornComponent.status !== Component.Ready) {
             failures.push("the construction probe cannot load Row.qml: " + bornComponent.errorString())
         } else {
-            var bornStates = [{ clipMark: "copy", dropTarget: false }, { clipMark: "scissors", dropTarget: true }]
+            var bornStates = [{ clipMark: "copy", dropTarget: false }, { clipMark: "scissors", dropTarget: false }, { clipMark: "", dropTarget: true }]
             for (var b = 0; b < bornStates.length; b++) {
                 var born = bornComponent.createObject(root, { width: 800, row: root.sampleRow,
                     clipMark: bornStates[b].clipMark, dropTarget: bornStates[b].dropTarget })
@@ -145,7 +145,7 @@ ShellRoot {
                     failures.push("a row born marked could not be created")
                     continue
                 }
-                if (born.clipRight() < 0)
+                if (bornStates[b].clipMark.length > 0 && born.clipRight() < 0)
                     failures.push("a row born with " + bornStates[b].clipMark + " draws no clipboard mark")
                 if (bornStates[b].dropTarget && (!born.dropBuilt() || born.dropLabelText() !== "move here"))
                     failures.push("a row born as a drop target builds no move cue")
