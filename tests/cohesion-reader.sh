@@ -51,6 +51,25 @@ printf '[Trash Info]\nPath=%s\nDeletionDate=2026-09-23T10:00:00\n' "$probe/home/
 chmod 700 "$probe/runtime"
 printf 'a\n' > "$probe/home/fixture/a.txt"
 printf 'b\n' > "$probe/home/fixture/b.txt"
+python3 - "$probe/home/fixture/manual.pdf" <<'PY' || exit 1
+import pathlib, sys
+objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>']
+for page in range(2):
+    stream = '0.1 0.1 0.1 rg 30 500 100 24 re f'
+    objects.append(f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 560] /Contents {4 + page * 2} 0 R >>')
+    objects.append(f'<< /Length {len(stream)} >>\nstream\n{stream}\nendstream')
+data = b'%PDF-1.4\n'
+offsets = []
+for number, body in enumerate(objects, 1):
+    offsets.append(len(data))
+    data += f'{number} 0 obj\n{body}\nendobj\n'.encode()
+xref = len(data)
+data += f'xref\n0 {len(objects) + 1}\n0000000000 65535 f \n'.encode()
+for offset in offsets:
+    data += f'{offset:010d} 00000 n \n'.encode()
+data += f'trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode()
+pathlib.Path(sys.argv[1]).write_bytes(data)
+PY
 ln -s a.txt "$probe/home/fixture/link.txt"
 mkdir "$probe/home/fixture/sub"
 printf 'read only\n' > "$probe/home/readonly/ro.txt"

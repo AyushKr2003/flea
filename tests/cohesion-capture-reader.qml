@@ -51,6 +51,7 @@ ShellRoot {
         Item {
             id: stage
             anchors.fill: parent
+            visible: root.stage < 3
             Flea.DialogButton { id: button; x: 100; y: 100; width: 100; height: 30; label: "Press" }
             Item {
                 x: 100; y: 160; width: 40; height: 30; clip: true
@@ -59,6 +60,18 @@ ShellRoot {
             Flea.MediaStrip { id: media; x: 10; y: 220; width: 480 }
             Flea.MenuRow { x: 100; y: 280; width: 100; entry: ({label: "Images", action: "1"}); current: true }
             Flea.SettingsRow { x: 100; y: 330; width: 200; row: ({kind: "hint", label: "Information"}) }
+        }
+        Flea.PreviewColumn {
+            id: pdf
+            anchors.fill: parent
+            visible: root.stage === 3 || root.stage === 4
+            row: ({n: "manual.pdf", d: false, s: 1000, p: 33188})
+            meta: ({})
+            path: Quickshell.env("HOME") + "/fixture/manual.pdf"
+        }
+        Flea.KeymapSheet {
+            anchors.fill: parent
+            opened: root.stage === 5
         }
         TestEvent { id: driver }
     }
@@ -111,9 +124,35 @@ ShellRoot {
                 root.stage = 2
                 return
             }
-            var playing = root.control(root.read(), "Play")
-            root.check(playing.pressed, "media play reads a real held press")
-            driver.mouseRelease(stage, playing.targetX, playing.targetY, Qt.LeftButton, Qt.NoModifier, 0)
+            if (root.stage === 2) {
+                var playing = root.control(root.read(), "Play")
+                root.check(playing.pressed, "media play reads a real held press")
+                driver.mouseRelease(stage, playing.targetX, playing.targetY, Qt.LeftButton, Qt.NoModifier, 0)
+                root.stage = 3
+                return
+            }
+            if (root.stage === 3) {
+                if (!pdf.pdfDrawn || pdf.pdfPages !== 2) return
+                var bar = root.control(root.read(), "Vertical scroll bar")
+                root.check(!!bar && bar.surface === "PreviewColumn" && bar.exposed && bar.hoverLive && bar.pressLive,
+                    "the real column PDF exposes its scrollbar knob and live pointer states")
+                if (!bar) { root.report(); return }
+                root.rest = bar
+                driver.mousePress(window.contentItem, bar.targetX, bar.targetY, Qt.LeftButton, Qt.NoModifier, 0)
+                root.stage = 4
+                return
+            }
+            if (root.stage === 4) {
+                var heldBar = root.control(root.read(), "Vertical scroll bar")
+                root.check(!!heldBar && heldBar.pressed, "the scrollbar reads its held MouseArea after the grab reparents")
+                driver.mouseRelease(window.contentItem, root.rest.targetX, root.rest.targetY, Qt.LeftButton, Qt.NoModifier, 0)
+                root.stage = 5
+                return
+            }
+            var sheet = root.control(root.read(), "Keys body")
+            if (!sheet || !sheet.exposed) return
+            root.check(sheet.kind === "CardScroll" && sheet.surface === "KeymapSheet" && !sheet.hoverLive && !sheet.pressLive,
+                "the buttonless Keys sheet exposes its real scrolling body without inventing pointer state")
             root.report()
         }
     }

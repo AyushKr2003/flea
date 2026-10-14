@@ -1,4 +1,4 @@
-# Every focus-drawing control at rest, hover, focus, press and disabled on three themes at text size 14, for the cohesion montage; sourced by ui.sh.
+# Every focus-drawing control at rest, hover, focus, press and disabled, one theme per native case; sourced by ui.sh.
 . "$repo/tests/lib/pointer-glide.sh"
 
 # Seconds a hover or press poll waits for the control to report its state.
@@ -16,14 +16,12 @@ coh_metrics="13 12 14 37"
 # Down steps a menu walk takes, and the single stop of a surface with no walk.
 coh_menu_stops=5
 coh_still_stops=1
-# Pixels the pointer moves up while a press is held, so the release lands off the control and nothing acts.
-coh_away_px=150
 # Tab stops one keyboard walk takes at most, so a walk that leaves the surface still ends.
 coh_tab_limit=14
 # Pointer targets one surface takes at most, one per distinct control look.
 coh_target_limit=8
-# Seconds one theme may take; a surface due after that is skipped with a line, so a run ends inside its minipc slot.
-coh_budget_s=900
+# Seconds one theme may take, leaving teardown time inside the native runner's 900-second limit.
+coh_budget_s=840
 
 coh_ydotool() { YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool "$@" >/dev/null 2>&1; }
 
@@ -68,9 +66,19 @@ coh_launch() {
 
 # Window pixels to the screen through the same frame-carrying uinput path the drag and unlock captures use.
 coh_pointer_to() {
-    local x="$1" y="$2" wx wy ww wh
+    local x="$1" y="$2" wx wy ww wh ax ay outputs
     read -r wx wy ww wh < <(window_box) || fail "cohesion: native window coordinates unavailable"
-    pointer_glide "$((wx + x))" "$((wy + y))" || fail "cohesion: pointer move failed"
+    ax=$((wx + x)); ay=$((wy + y))
+    outputs=$(hyprctl monitors -j) || fail "cohesion: native output geometry unavailable"
+    if ! jq -e --argjson x "$ax" --argjson y "$ay" 'any(.[]; .disabled != true and
+        (.scale // 1) > 0 and $x >= .x and $y >= .y and
+        $x < .x + ((if ((.transform // 0) % 2) == 1 then .height else .width end) / (.scale // 1)) and
+        $y < .y + ((if ((.transform // 0) % 2) == 1 then .width else .height end) / (.scale // 1)))' <<< "$outputs" >/dev/null; then
+        printf 'COH_POINTER_OUTSIDE %s %s local=%s,%s target=%s,%s window=%s outputs=%s\n' \
+            "$coh_theme" "${name:-unknown}" "$x" "$y" "$ax" "$ay" "$wx $wy $ww $wh" "$(jq -c . <<< "$outputs")"
+        fail "cohesion: pointer target is outside every output"
+    fi
+    pointer_glide "$ax" "$ay" || fail "cohesion: pointer move failed: target=$ax,$ay window=$wx,$wy,$ww,$wh outputs=$(jq -c . <<< "$outputs")"
 }
 
 # The left button is held between a press and its release; coh_held is read by the surface subshell's EXIT trap.
@@ -81,12 +89,35 @@ coh_release_held() {
     coh_ydotool click 0x80 || :
 }
 
+coh_trash_cleanup() {
+    local status="$1"
+    coh_release_held
+    trash_cleanup "$status"
+}
+
 # The status bar's empty left corner, where nothing draws a hover.
 coh_park() {
     local wx wy ww wh
     read -r wx wy ww wh < <(window_box) || fail "cohesion: native window coordinates unavailable"
     coh_pointer_to "$coh_approach_px" "$((wh - coh_approach_px))"
     settle
+}
+
+# A cancel motion from chrome starts WindowDrag; restore the viewport before any later pointer move.
+coh_cancel_press() {
+    local before after wx wy ww wh
+    before=$(window_box) || fail "cohesion: pre-release window coordinates unavailable"
+    read -r wx wy ww wh <<< "$before"
+    coh_pointer_to "$coh_approach_px" "$((wh - coh_approach_px))"
+    coh_ydotool click 0x80 || fail "cohesion: pointer release failed"
+    coh_held=0
+    settle
+    after=$(window_box) || fail "cohesion: post-release window coordinates unavailable"
+    if [[ "$before" != "$after" ]]; then
+        cap_resize "$ww" "$wh"
+        printf 'COH_DRAG_RESET %s %s before=%s displaced=%s restored=%s\n' \
+            "$coh_theme" "$name" "$before" "$after" "$(window_box)"
+    fi
 }
 
 # Sample manifest line: "cohesion-live-permissions-focus-0<TAB>live<TAB>permissions<TAB>focus<TAB>0<TAB>DialogButton|Open|900|700", the sidecar being NAME.json.
@@ -202,6 +233,7 @@ coh_open_trash_self() {
     trash_guard "$payload"
     mkdir "$payload" || fail "cohesion: trash payload creation failed"
     trash_start_bus
+    trap 'coh_trash_cleanup $?' EXIT
     printf 'alpha\n' > "$payload/alpha.txt"
     printf 'beta\n' > "$payload/beta.txt"
     export HOME="$home"
@@ -260,10 +292,9 @@ coh_open_transfer_self() {
 coh_run_surface() {
     local name="$1" opener="$2" state="$3" step="$4" region="${5:-}" n="cohesion-$coh_theme-$1"
     local k=0 limit="$coh_tab_limit" first="" sig st targets count i t cx cy tsig rx0 ry0 rx1 ry1 missed=0 surface=""
-    local trash_box="" payload="" trash_checks=0 trash_case_label=cohesion
-    local trash_parent_bus_id="" trash_private_bus_id="" trash_bus_address="" trash_bus_pid="" trash_provider_pid=""
     [[ "$opener" == *_self ]] || coh_launch "$state"
     "$opener"
+    printf 'COH_GEOMETRY %s %s window=%s outputs=%s\n' "$coh_theme" "$name" "$(window_box)" "$(hyprctl monitors -j | jq -c .)"
     coh_park
     # A menu keeps the keyboard on itself and moves its highlight, so its walk is a fixed count of Down steps.
     [[ "$step" == down ]] && limit="$coh_menu_stops"
@@ -291,11 +322,14 @@ coh_run_surface() {
         collide) surface=CollideConfirm ;; trash) surface=TrashView ;; transfer) surface=TransferCard ;;
     esac
     # One control per distinct look: kind, role, value and enabled state.
-    targets=$(ipc cohesionControls | jq -c --arg surface "$surface" --argjson x0 "$rx0" --argjson y0 "$ry0" --argjson x1 "$rx1" --argjson y1 "$ry1" --argjson cap "$coh_target_limit" '
+    st=$(ipc cohesionControls) || fail "cohesion: the target reader failed"
+    targets=$(jq -c --arg surface "$surface" --argjson x0 "$rx0" --argjson y0 "$ry0" --argjson x1 "$rx1" --argjson y1 "$ry1" --argjson cap "$coh_target_limit" '
         [.controls[] | select(.exposed and .w > 2 and .h > 2 and .surface == $surface
             and .targetX >= $x0 and .targetY >= $y0 and .targetX < $x1 and .targetY < $y1)]
-        | unique_by([.kind, .primary, .destructive, .member, .value, .enabled]) | .[:$cap]')
+        | unique_by([.kind, .primary, .destructive, .member, .value, .enabled]) | .[:$cap]' <<< "$st")
     count=$(jq length <<< "$targets")
+    printf 'COH_TARGETS %s %s surface=%s region=%s available=%s selected=%s\n' "$coh_theme" "$name" "$surface" "$region" \
+        "$(jq -c '[.controls[] | {surface,kind,name,exposed,targetX,targetY}]' <<< "$st")" "$targets"
     (( count > 0 )) || fail "cohesion: $name reports no exposed pointer target"
     for ((i = 0; i < count; i++)); do
         t=$(jq -c ".[$i]" <<< "$targets")
@@ -324,10 +358,7 @@ coh_run_surface() {
             settle
             coh_shot "$n-press-$i" "$name" press "$i" "$tsig"
         fi
-        coh_pointer_to "$coh_approach_px" "$((coh_win_h - coh_approach_px))"
-        coh_ydotool click 0x80 || fail "cohesion: pointer release failed"
-        coh_held=0
-        settle
+        coh_cancel_press
         # A release that acted anyway closes the surface; reopen it for the next control.
         if ! ipc cohesionControls | jq -e --arg sig "$tsig" '[.controls[] | select("\(.kind)|\(.name)|\(.x)|\(.y)" == $sig)] | length > 0' >/dev/null 2>&1; then
             printf 'COH_REOPEN %s %s after %s\n' "$coh_theme" "$name" "$tsig"
@@ -343,12 +374,15 @@ coh_run_surface() {
 
 # The surface runs in a subshell with errexit on, because an if-condition subshell would mask every failing step in it; the caller's errexit is restored as it was.
 coh_surface() {
-    local status=0 errexit=0
+    local status=0 errexit=0 started=$SECONDS
+    local trash_box="" payload="" trash_checks=0 trash_case_label=cohesion
+    local trash_parent_bus_id="" trash_private_bus_id="" trash_bus_address="" trash_bus_pid="" trash_provider_pid=""
     [[ $- == *e* ]] && errexit=1
     set +e
     ( set -e; coh_held=0; trap coh_release_held EXIT; coh_run_surface "$@" ) < /dev/null
     status=$?
     if (( errexit )); then set -e; fi
+    printf 'COH_TIMING %s %s seconds=%s exit=%s\n' "$coh_theme" "$1" "$((SECONDS - started))" "$status"
     (( status == 0 )) && return 0
     printf 'COH_FAILED %s %s\n' "$coh_theme" "$1"
     coh_failed+=" $coh_theme/$1"
@@ -356,10 +390,11 @@ coh_surface() {
 
 # The picker is the portal's own process, so its walk runs in Python against the picker's IPC. Each run takes a fresh root, so no picker state carries over.
 coh_picker() {
-    local home status=0
+    local home status=0 started=$SECONDS
     home=$(coh_home "$coh_theme")
     FLEA_BIN="$flea_bin" FLEA_UI="$flea_ui" timeout 180 python3 "$repo/tests/ui-captures-cohesion-picker.py" \
         "$fixture_root/coh-$coh_theme/picker-$RANDOM$RANDOM" "$home" "$evidence_dir" "$coh_theme" < /dev/null || status=$?
+    printf 'COH_TIMING %s picker seconds=%s exit=%s\n' "$coh_theme" "$((SECONDS - started))" "$status"
     (( status == 0 )) && return 0
     printf 'COH_FAILED %s picker status %s\n' "$coh_theme" "$status"
     coh_failed+=" $coh_theme/picker"
@@ -380,12 +415,15 @@ coh_fixture() {
            "$dir/manual.pdf" || fail "cohesion: magick produced no manual.pdf"
 }
 
-# COH_THEMES and COH_SURFACES narrow a run to fit a minipc slot; both default to everything.
+# Full themes use the per-theme selectors; COH_SURFACES may still group a smaller cross-theme capture.
 case_cap_cohesion() {
     local coh_dir="$fixture_root/cohesion" coh_theme coh_failed="" live_foreground="$real_foreground" menus_checks=0 s coh_deadline
     local list='{"keys":"default","view":"list","menu":{"hidden":[]}}'
     local cols='{"keys":"default","view":"columns","columnsLimit":3,"preview":{"column":true,"loadOn":"automatic"},"menu":{"hidden":[]}}'
     local themes="${COH_THEMES:-live gruvbox catppuccin-latte}" want="${COH_SURFACES:-all}"
+    if [[ "$want" == all && "$themes" == *" "* ]]; then
+        fail "cohesion: split full capture into ui:cap_cohesion_live ui:cap_cohesion_gruvbox ui:cap_cohesion_latte ui:cap_cohesion_kanagawa (one 900s slot each)"
+    fi
     local flea_ui
     flea_ui=$(coh_capture_ui) || fail "cohesion: the UI fixture could not be prepared"
     coh_fixture "$coh_dir"
@@ -396,7 +434,7 @@ case_cap_cohesion() {
         # The list comes in on fd 3 so no surface reads it off stdin, and it leads with one surface of each pane class for a run cut by its budget.
         while read -r -u 3 s opener state step region; do
             [[ "$want" == all || " $want " == *" $s "* ]] || continue
-            (( SECONDS < coh_deadline )) || { printf 'COH_SKIPPED %s %s over the %ss budget\n' "$coh_theme" "$s" "$coh_budget_s"; continue; }
+            (( SECONDS < coh_deadline )) || { printf 'COH_SKIPPED %s %s over the %ss budget\n' "$coh_theme" "$s" "$coh_budget_s"; coh_failed+=" $coh_theme/$s-budget"; continue; }
             [[ "$s" == picker ]] && { kill_flea; coh_picker; continue; }
             [[ "$region" == - ]] && region=""
             coh_surface "$s" "$opener" "${!state}" "$step" "${region//,/ }"
@@ -418,7 +456,7 @@ collide coh_open_collide list tab -
 convert coh_open_convert list tab -
 copyto-empty coh_open_copyto_empty list tab -
 newfile coh_open_newfile list tab -
-keymap coh_open_keymap list tab -
+keymap coh_open_keymap list none -
 pathbar coh_open_pathbar list tab -
 rename coh_open_rename list tab -
 ql-md coh_open_qlmd list tab -

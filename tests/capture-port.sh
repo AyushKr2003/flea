@@ -13,6 +13,7 @@ cleanup() {
 }
 trap cleanup EXIT
 . "$repo/tests/ui-captures-cohesion.sh"
+. "$repo/tests/ui-trash.sh"
 . "$repo/tests/ui-captures-b72.sh"
 . "$repo/tests/ui-captures-unlock.sh"
 . "$repo/tests/ui-captures-archives.sh"
@@ -122,5 +123,91 @@ kill_flea() { :; }
 case_cap_archives_format_kanagawa > "$scratch/archive.log" 2>&1
 check "the nested theme HOME passes the unchanged guard in the real archive case" "$?" 0
 check "the theme HOME has a marked direct parent" "$([[ -f "$fixture_root/cap-archives-format-kanagawa-home/$SANDBOX_MARKER" ]] && echo yes || echo no)" yes
+
+# Replay WindowDrag's displaced origin through the real cancel and parking helpers.
+native_box='701 370 1100 700'
+replay_outputs='[{"name":"fixture","x":0,"y":0,"width":2560,"height":1440,"scale":1,"transform":0}]'
+window_box() { printf '%s\n' "$native_box"; }
+hyprctl() { [[ "$*" == 'monitors -j' ]] && printf '%s\n' "$replay_outputs"; }
+pointer_glide() {
+    printf '%s %s\n' "$1" "$2" >> "$scratch/moves.log"
+    if (( coh_held )); then native_box='701 752 1100 700'; fi
+}
+coh_ydotool() { printf '%s\n' "$*" >> "$scratch/buttons.log"; }
+resizes=0
+cap_resize() { resizes=$((resizes + 1)); native_box="701 370 $1 $2"; }
+name=window
+coh_held=1
+coh_cancel_press > "$scratch/drag.log"
+coh_park
+check "a held chrome cancel restores geometry before the next park" "$? $resizes $coh_held $native_box" '0 1 0 701 370 1100 700'
+check "both pointer moves stay inside the output" "$(tr '\n' '|' < "$scratch/moves.log")" '707 1064|707 1064|'
+grep -q '^COH_DRAG_RESET replay window .*displaced=701 752 1100 700 restored=701 370 1100 700' "$scratch/drag.log"
+check "a chrome drag records original, displaced and restored geometry" "$?" 0
+native_box='701 752 1100 700'
+( coh_pointer_to 6 694 ) > "$scratch/outside.log" 2>&1
+check "an off-output target is refused before motion" "$? $(wc -l < "$scratch/moves.log")" '1 2'
+grep -q '^COH_POINTER_OUTSIDE replay window .*target=707,1446 .*"height":1440' "$scratch/outside.log"
+check "the refusal names the target and physical output size" "$?" 0
+replay_outputs='[{"name":"fixture","x":0,"y":0,"width":2560,"height":1440,"scale":2,"transform":0}]'
+native_box='100 100 300 200'
+coh_pointer_to 150 100
+check "scaled outputs use logical pointer coordinates" "$?" 0
+( coh_pointer_to 150 650 ) > "$scratch/scaled-outside.log" 2>&1
+check "a point inside physical pixels but outside logical pixels is refused" "$?" 1
+replay_outputs='[{"name":"fixture","x":0,"y":0,"width":1440,"height":2560,"scale":1,"transform":1}]'
+native_box='701 370 1100 700'
+coh_pointer_to 6 694
+check "rotated outputs swap their physical dimensions" "$?" 0
+
+# The full aggregate refuses before fixture work; each existing selector still schedules every surface.
+real_foreground='#ffffff'
+( COH_THEMES='live gruvbox' case_cap_cohesion ) > "$scratch/split.log" 2>&1
+check "the aggregate directs full captures to bounded per-theme cases" "$? $(grep -c 'ui:cap_cohesion_live ui:cap_cohesion_gruvbox ui:cap_cohesion_latte ui:cap_cohesion_kanagawa' "$scratch/split.log")" '1 1'
+coh_capture_ui() { printf '%s\n' "$repo/ui"; }
+coh_fixture() { :; }
+coh_surface() { printf 'REPLAY_SURFACE %s %s %s\n' "$coh_theme" "$1" "$4"; }
+coh_picker() { printf 'REPLAY_SURFACE %s picker none\n' "$coh_theme"; }
+evidence_dir="$scratch/evidence"
+for selector in live gruvbox latte kanagawa; do
+    ( "case_cap_cohesion_$selector" ) > "$scratch/theme-$selector.log" 2>&1
+    check "$selector schedules all 22 surfaces within its own case" "$? $(grep -c '^REPLAY_SURFACE ' "$scratch/theme-$selector.log")" '0 22'
+    grep -q '^REPLAY_SURFACE .* keymap none$' "$scratch/theme-$selector.log"
+    check "$selector keeps the keymap sheet open instead of sending Tab" "$?" 0
+done
+
+# Reload the wrapper and return from its worker before EXIT scans and terminates a real owned process.
+. "$repo/tests/ui-captures-cohesion.sh"
+coh_ydotool() { printf '%s\n' "$*" >> "$scratch/buttons.log"; }
+coh_failed=''
+coh_run_surface() {
+    trash_box="$scratch/trash-lifetime-$1"
+    sandbox_make "$trash_box"
+    export XDG_DATA_HOME="$trash_box/data"
+    trash_bus_address="unix:path=$trash_box/bus"
+    trash_private_bus_id=replay-private
+    mkdir "$XDG_DATA_HOME"
+    trap 'coh_trash_cleanup $?' EXIT
+    env DBUS_SESSION_BUS_ADDRESS="$trash_bus_address" XDG_DATA_HOME="$XDG_DATA_HOME" \
+        bash -c 'printf ready > "$1"; exec sleep 60' bash "$trash_box/ready" &
+    trash_bus_pid=$!
+    printf '%s\n' "$trash_bus_pid" > "$trash_box/pid"
+    local deadline=$((SECONDS + 5))
+    until [[ -f "$trash_box/ready" ]]; do
+        kill -0 "$trash_bus_pid" 2>/dev/null && (( SECONDS < deadline )) || fail "owned teardown replay process did not start"
+        command sleep 0.01
+    done
+    if [[ "$1" == failed ]]; then coh_held=1; exit 7; fi
+}
+coh_surface passed > "$scratch/trash-passed.log" 2>&1
+check "successful surface teardown retains ownership after its worker returns" "$? $(grep -c '^TRASH_TEARDOWN .*remaining=none status=0$' "$scratch/trash-passed.log")" '0 1'
+! kill -0 "$(cat "$scratch/trash-lifetime-passed/pid")" 2>/dev/null
+check "successful teardown reaps its private process" "$?" 0
+coh_surface failed > "$scratch/trash-failed.log" 2>&1
+grep -q '^COH_TIMING replay failed .*exit=7$' "$scratch/trash-failed.log"
+check "failure teardown preserves the original surface exit" "$?" 0
+! kill -0 "$(cat "$scratch/trash-lifetime-failed/pid")" 2>/dev/null
+check "failure teardown also reaps its private process" "$?" 0
+check "failure teardown releases a held pointer button" "$(tail -1 "$scratch/buttons.log")" 'click 0x80'
 printf 'CAPTUREPORT DONE checks=%s failed=%s\n' "$checks" "$failed"
 [[ "$failed" == 0 ]]
