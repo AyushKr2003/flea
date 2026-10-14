@@ -164,6 +164,10 @@ check "rotated outputs swap their physical dimensions" "$?" 0
 real_foreground='#ffffff'
 ( COH_THEMES='live gruvbox' case_cap_cohesion ) > "$scratch/split.log" 2>&1
 check "the aggregate directs full captures to bounded per-theme cases" "$? $(grep -c 'ui:cap_cohesion_live ui:cap_cohesion_gruvbox ui:cap_cohesion_latte ui:cap_cohesion_kanagawa' "$scratch/split.log")" '1 1'
+for themes in $'live\tgruvbox' $'live\ngruvbox'; do
+    ( COH_THEMES="$themes" case_cap_cohesion ) > "$scratch/split-whitespace.log" 2>&1
+    check "all shell whitespace splits full themes before fixture work" "$? $(grep -c 'split full capture' "$scratch/split-whitespace.log")" '1 1'
+done
 coh_capture_ui() { printf '%s\n' "$repo/ui"; }
 coh_fixture() { :; }
 coh_surface() { printf 'REPLAY_SURFACE %s %s %s\n' "$coh_theme" "$1" "$4"; }
@@ -180,6 +184,7 @@ done
 . "$repo/tests/ui-captures-cohesion.sh"
 coh_ydotool() { printf '%s\n' "$*" >> "$scratch/buttons.log"; }
 coh_failed=''
+coh_deadline=$((SECONDS + coh_budget_s))
 coh_run_surface() {
     trash_box="$scratch/trash-lifetime-$1"
     sandbox_make "$trash_box"
@@ -203,11 +208,120 @@ coh_surface passed > "$scratch/trash-passed.log" 2>&1
 check "successful surface teardown retains ownership after its worker returns" "$? $(grep -c '^TRASH_TEARDOWN .*remaining=none status=0$' "$scratch/trash-passed.log")" '0 1'
 ! kill -0 "$(cat "$scratch/trash-lifetime-passed/pid")" 2>/dev/null
 check "successful teardown reaps its private process" "$?" 0
+: > "$scratch/buttons.log"
 coh_surface failed > "$scratch/trash-failed.log" 2>&1
 grep -q '^COH_TIMING replay failed .*exit=7$' "$scratch/trash-failed.log"
 check "failure teardown preserves the original surface exit" "$?" 0
 ! kill -0 "$(cat "$scratch/trash-lifetime-failed/pid")" 2>/dev/null
 check "failure teardown also reaps its private process" "$?" 0
-check "failure teardown releases a held pointer button" "$(tail -1 "$scratch/buttons.log")" 'click 0x80'
+check "failure teardown releases a held pointer button" "$(cat "$scratch/buttons.log")" 'click 0x80'
+
+# A real blocking child must be interrupted, while the surface's existing EXIT trap still releases its held button.
+coh_run_surface() {
+    coh_held=1
+    bash -c 'printf "%s\n" "$$" > "$1"; exec sleep 60' bash "$scratch/budget-pid"
+}
+: > "$scratch/buttons.log"
+coh_failed=''
+coh_deadline=$((SECONDS + 1))
+budget_started=$SECONDS
+coh_surface late > "$scratch/surface-budget.log" 2>&1
+check "a late surface fails by its remaining theme budget" "$? $coh_failed" '0  replay/late'
+grep -q '^COH_SKIPPED replay late cut after 1s (theme remaining 1s)$' "$scratch/surface-budget.log"
+check "the budget cut names the interrupted surface" "$?" 0
+grep -q '^COH_TIMING replay late .*exit=124$' "$scratch/surface-budget.log"
+check "the interrupted surface reports its timeout exit" "$?" 0
+! kill -0 "$(cat "$scratch/budget-pid")" 2>/dev/null
+check "a budget cut stops a blocking surface child" "$?" 0
+check "a budget cut releases the current held button" "$(cat "$scratch/buttons.log")" 'click 0x80'
+(( SECONDS - budget_started <= 3 )); check "a late surface cannot spend its original long wait" "$?" 0
+
+# The actual picker wrapper bounds setup and its process by the same remaining theme second, rather than its own 180s.
+coh_home() { printf '%s\n' "$scratch/picker-home"; }
+python3() { bash -c 'printf "%s\n" "$$" > "$1"; exec sleep 60' bash "$scratch/picker-budget-pid"; }
+flea_ui="$repo/ui"
+coh_failed=''
+coh_deadline=$((SECONDS + 1))
+budget_started=$SECONDS
+coh_picker > "$scratch/picker-budget.log" 2>&1
+check "the picker fails by the remaining theme budget" "$? $coh_failed" '0  replay/picker'
+grep -q '^COH_SKIPPED replay picker cut after 1s (theme remaining 1s)$' "$scratch/picker-budget.log"
+check "the picker budget cut names the picker" "$?" 0
+grep -q '^COH_TIMING replay picker .*exit=124$' "$scratch/picker-budget.log"
+check "the picker reports its timeout exit" "$?" 0
+! kill -0 "$(cat "$scratch/picker-budget-pid")" 2>/dev/null
+check "a budget cut stops the blocking picker child" "$?" 0
+(( SECONDS - budget_started <= 3 )); check "the picker cannot take its fixed 180s past the theme budget" "$?" 0
+unset -f python3
+
+coh_run_surface() { printf 'UNEXPECTED_START\n'; }
+coh_failed=''
+coh_deadline=$SECONDS
+coh_surface expired > "$scratch/expired-budget.log" 2>&1
+coh_picker >> "$scratch/expired-budget.log" 2>&1
+check "expired budgets retain both failed surface names" "$? $coh_failed" '0  replay/expired replay/picker'
+check "expired budgets skip both workers before setup" "$(grep -c '^COH_SKIPPED ' "$scratch/expired-budget.log") $(grep -c '^UNEXPECTED_START$' "$scratch/expired-budget.log")" '2 0'
+
+coh_deadline=$((SECONDS + 8))
+coh_bounded own-limit 1 command sleep 60 > "$scratch/own-limit.log" 2>&1
+check "a shorter own timeout remains capped within the theme budget" "$?" 124
+grep -q '^COH_SKIPPED replay own-limit cut after 1s (theme remaining 8s)$' "$scratch/own-limit.log"
+check "the runner retains an own timeout shorter than the remaining budget" "$?" 0
+
+coh_run_surface() { trap 'command sleep 60' EXIT; command sleep 60; }
+coh_failed=''
+coh_deadline=$((SECONDS + 1))
+coh_teardown_s=1
+budget_started=$SECONDS
+coh_surface slow-cleanup > "$scratch/cleanup-budget.log" 2>&1
+coh_teardown_s=30
+check "a stuck teardown still retains the failed surface name" "$? $coh_failed" '0  replay/slow-cleanup'
+grep -q '^COH_TIMING replay slow-cleanup .*exit=137$' "$scratch/cleanup-budget.log"
+check "a stuck teardown is forcibly stopped after its grace" "$?" 0
+(( SECONDS - budget_started <= 4 )); check "teardown cannot hold the native slot indefinitely" "$?" 0
+coh_run_surface() { trap 'exit 0' TERM; command sleep 60; }
+coh_failed=''
+coh_deadline=$((SECONDS + 1))
+coh_surface swallowed-cut > "$scratch/swallowed-budget.log" 2>&1
+check "a cleanup that returns success cannot swallow budget expiry" "$? $coh_failed" '0  replay/swallowed-cut'
+grep -q '^COH_TIMING replay swallowed-cut .*exit=124$' "$scratch/swallowed-budget.log"
+check "a swallowed signal still reports the budget failure" "$?" 0
+check "budget runners leave no live watchdog job" "$(jobs -pr)" ''
+
+# An asleep bar wakes only through the wheel, and the actual helper parks in its lane before capture.
+replay_wheels=0 replay_awake=false replay_in_lane=false replay_wheel_works=true
+coh_pdf_bar=''
+ipc() {
+    if [[ "$1" == columnFrameRect ]]; then printf '200 40 300 300\n'; return; fi
+    jq -cn --argjson exposed "$replay_awake" --argjson hovered "$replay_in_lane" '{controls:[{
+        kind:"ViewportScrollBar",name:"Vertical scroll bar",surface:"PreviewColumn",value:"vertical",
+        x:488,y:40,w:12,h:300,targetX:494,targetY:115,exposed:$exposed,hovered:$hovered,enabled:true}]}'
+}
+coh_pointer_to() {
+    printf '%s %s\n' "$1" "$2" >> "$scratch/wake-moves.log"
+    replay_in_lane=false
+    [[ "$*" != '494 115' ]] || replay_in_lane=true
+}
+omarchy-drive() {
+    [[ "$*" == 'scroll down 1' ]] || return 1
+    replay_wheels=$((replay_wheels + 1))
+    [[ "$replay_wheel_works" != true ]] || replay_awake=true
+    return 0
+}
+coh_wake_colpdf > "$scratch/wake.log"
+check "the PDF wakes through exactly one wheel and is held in its own lane" "$? $replay_wheels $replay_in_lane" '0 1 true'
+check "the wheel targets the PDF body before the actual knob" "$(tr '\n' '|' < "$scratch/wake-moves.log")" '350 190|494 115|'
+grep -q '^COH_WAKE replay cols-pdf bar=true after=[0-9]' "$scratch/wake.log"
+check "a real wake prints its exposed state and elapsed milliseconds" "$?" 0
+coh_wake_colpdf > "$scratch/wake-held.log"
+check "a pointer held in the lane needs no extra wheel between hover and press" "$? $replay_wheels" '0 1'
+replay_awake=false replay_in_lane=false
+coh_wake_colpdf > "$scratch/wake-again.log"
+check "a bar that sleeps again is reawakened before another capture" "$? $replay_wheels $replay_in_lane" '0 2 true'
+replay_awake=false replay_in_lane=false replay_wheel_works=false
+( coh_wait_s=0; coh_wake_colpdf ) > "$scratch/wake-refused.log" 2>&1
+check "a wheel that leaves the bar asleep cannot satisfy target discovery" "$?" 1
+grep -q '^COH_WAKE replay cols-pdf bar=false after=' "$scratch/wake-refused.log"
+check "the unsuccessful wake prints a decisive non-exposed receipt" "$?" 0
 printf 'CAPTUREPORT DONE checks=%s failed=%s\n' "$checks" "$failed"
 [[ "$failed" == 0 ]]

@@ -106,11 +106,11 @@ leg() {
     done
     stop_qs || return 1
     printf 'cohesion-reader %s: owned process group gone\n' "$name"
-    grep -aE "$receipt|TypeError|ReferenceError|ERROR|Cannot assign" "$log"
+    grep -aE "$receipt|TypeError|ReferenceError|ERROR|Cannot assign|Insufficient arguments" "$log"
     tally=$(grep -ao "$receipt DONE checks=[0-9]* failed=[0-9]*" "$log" | tail -1)
     [[ -n "$tally" ]] || { printf 'FAIL cohesion-reader %s produced no completion receipt inside %ss; log tail:\n' "$name" "$run_budget_s"; tail -20 "$log"; return 1; }
     [[ "$tally" == *' failed=0' ]] || return 1
-    if grep -aqE 'TypeError|ReferenceError|ERROR|Cannot assign' "$log"; then
+    if grep -aqE 'TypeError|ReferenceError|ERROR|Cannot assign|Insufficient arguments' "$log"; then
         printf 'FAIL cohesion-reader %s logged an engine error beside its receipt\n' "$name"
         return 1
     fi
@@ -125,3 +125,11 @@ cp tests/ui-captures-reader.qml "$probe/capture-ui/IpcControls.qml" || exit 1
 leg capture-window COHREADER tests/cohesion-reader.qml "$probe/capture-ui" FLEA_PATH="$probe/home/fixture" FLEA_COH_CAPTURE=true || exit 1
 leg capture-picker COHPICKER tests/cohesion-picker-reader.qml "$probe/capture-ui" FLEA_PICKER="$request" FLEA_PICKER_REPLY="$probe/capture-reply.json" FLEA_COH_CAPTURE=true || exit 1
 leg capture COHCAPTURE tests/cohesion-capture-reader.qml "$probe/capture-ui" || exit 1
+# Without the wheel, the same derived PDF stays asleep and must fail before any held press.
+if leg capture-no-wheel COHCAPTURE tests/cohesion-capture-reader.qml "$probe/capture-ui" FLEA_COH_SKIP_WHEEL=true > "$probe/no-wheel.log" 2>&1; then
+    printf 'FAIL cohesion-reader: the sleeping PDF passed without its wake wheel\n'
+    exit 1
+fi
+grep -q 'COHCAPTURE FAIL an asleep PDF bar cannot expose without a wheel' "$probe/no-wheel.log" \
+    || { cat "$probe/no-wheel.log"; printf 'FAIL cohesion-reader: the no-wheel control failed for another reason\n'; exit 1; }
+printf 'cohesion-reader capture-no-wheel: the asleep PDF was refused before any press\n'

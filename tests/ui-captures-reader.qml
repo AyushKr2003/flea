@@ -6,6 +6,7 @@ QtObject {
     function read(quick, top, kinds, alias): string {
         // Sample input, ControlReader.read's JSON: {"focus":{"kind":"DialogButton","via":"owner"},"controls":[{"kind":"DialogButton","name":"Open","x":900,"y":612,"w":96,"h":32}]}
         var state = JSON.parse(ControlReader.read(quick, top, kinds, alias))
+        state.scrollBars = []
         var menus = JSON.parse(ControlReader.read(quick, top, /^(MenuRow|CardScroll|ViewportScrollBar)_QML/, {})).controls
         for (var m = 0; m < menus.length; m++) {
             var menu = menus[m]
@@ -23,8 +24,8 @@ QtObject {
             var left = 0, up = 0, right = top.width, bottom = top.height, surface = ""
             for (var owner = item; owner; owner = owner.parent) {
                 // Sample input: String(owner) === "SettingsPanel_QML_214(0x55d0c8a1b2c0)"
-                var match = String(owner).match(/^(PermissionsDialog|NetworkDialog|SettingsPanel|ContextMenu|Preview|PreviewColumn|KeymapSheet|OpenWithDialog|ConvertDialog|MenuActionDialog|CollideConfirm|TrashConfirm|TrashView|TransferCard)_QML/)
-                if (!surface && match) surface = match[1]
+                var match = String(owner).match(/^(PermissionsDialog|NetworkDialog|SettingsPanel|ContextMenu|Preview|PreviewColumn|SelectionPreview|KeymapSheet|OpenWithDialog|ConvertDialog|MenuActionDialog|CollideConfirm|TrashConfirm|TrashView|TransferCard)_QML/)
+                if (!surface && match) surface = match[1] === "SelectionPreview" ? "PreviewColumn" : match[1]
                 if (owner.clip) {
                     var point = owner.mapToItem(null, 0, 0)
                     left = Math.max(left, point.x); up = Math.max(up, point.y)
@@ -44,6 +45,8 @@ QtObject {
             }
             if (entry.kind === "CardScroll") entry.name = "Keys body"
             entry.exposed = entry.targetX >= left && entry.targetX < right && entry.targetY >= up && entry.targetY < bottom
+            if (entry.kind === "ViewportScrollBar")
+                entry.exposed = entry.exposed && item.shown && item.knobItem.parent.opacity > 0
             var pointer = item
             if (entry.kind === "CheckBox" && item.parent && item.parent.hovered !== undefined) pointer = item.parent
             var hover = handler(pointer, "QQuickHoverHandler"), tap = handler(pointer, "QQuickTapHandler")
@@ -61,7 +64,13 @@ QtObject {
             if (entry.kind === "SettingsRow") entry.value = String(item.kind)
         }
         function walk(item) {
-            if (!item || !item.visible || item.opacity <= 0) return
+            if (!item) return
+            if (String(item).indexOf("ViewportScrollBar_QML") === 0) {
+                var at = item.mapToItem(null, 0, 0)
+                state.scrollBars.push({x: Math.round(at.x), y: Math.round(at.y), visible: item.visible, opacity: item.opacity,
+                    shown: item.shown, overflow: item.overflow, content: item.contentLength, viewport: item.viewportLength})
+            }
+            if (!item.visible || item.opacity <= 0) return
             // Sample input: String(item) === "DialogButton_QML_88(0x55d0c8a1b2c0)", or "MenuRow_QML_40(0x55d0c8a1b2c0)"
             var point = item.mapToItem(null, 0, 0), name = String(item)
             var match = name.match(kinds) || name.match(/^(MenuRow|CardScroll|ViewportScrollBar)_QML/)

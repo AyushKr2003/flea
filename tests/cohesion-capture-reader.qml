@@ -4,6 +4,7 @@ import Quickshell
 import QtTest
 import "flea" as Flea
 import "flea/js/Buttons.js" as Buttons
+import "flea/js/Scroll.js" as Scroll
 
 // Real controls exercise the capture-only reader, including geometry while pressed and an item outside its clipping parent.
 ShellRoot {
@@ -16,6 +17,8 @@ ShellRoot {
     property var restLabel: null
     property double pressSince: 0
     property var reader: null
+    property double wakeAt: 0
+    property double hoverAt: 0
 
     function check(cond, label) {
         root.checks++
@@ -36,6 +39,15 @@ ShellRoot {
     function rect(item, target) {
         var box = item.mapToItem(target, 0, 0, item.width, item.height)
         return [box.x, box.y, box.width, box.height]
+    }
+    function pdfBar(item) {
+        if (!item || !item.visible) return null
+        if (String(item).indexOf("ViewportScrollBar_QML") === 0 && item.vertical) return item
+        for (var i = 0; i < item.children.length; i++) {
+            var found = root.pdfBar(item.children[i])
+            if (found) return found
+        }
+        return null
     }
     function report() {
         timer.running = false
@@ -61,10 +73,10 @@ ShellRoot {
             Flea.MenuRow { x: 100; y: 280; width: 100; entry: ({label: "Images", action: "1"}); current: true }
             Flea.SettingsRow { x: 100; y: 330; width: 200; row: ({kind: "hint", label: "Information"}) }
         }
-        Flea.PreviewColumn {
+        Flea.SelectionPreview {
             id: pdf
             anchors.fill: parent
-            visible: root.stage === 3 || root.stage === 4
+            visible: root.stage === 3 || root.stage === 4 || root.stage === 6 || root.stage === 7
             row: ({n: "manual.pdf", d: false, s: 1000, p: 33188})
             meta: ({})
             path: Quickshell.env("HOME") + "/fixture/manual.pdf"
@@ -128,14 +140,47 @@ ShellRoot {
                 var playing = root.control(root.read(), "Play")
                 root.check(playing.pressed, "media play reads a real held press")
                 driver.mouseRelease(stage, playing.targetX, playing.targetY, Qt.LeftButton, Qt.NoModifier, 0)
+                driver.mouseMove(window.contentItem, 0, 0, 0, Qt.NoButton, Qt.NoModifier)
                 root.stage = 3
                 return
             }
             if (root.stage === 3) {
                 if (!pdf.pdfDrawn || pdf.pdfPages !== 2) return
+                var actual = root.pdfBar(pdf)
+                if (!actual || actual.shown || actual.knobItem.parent.opacity > 0) return
                 var bar = root.control(root.read(), "Vertical scroll bar")
-                root.check(!!bar && bar.surface === "PreviewColumn" && bar.exposed && bar.hoverLive && bar.pressLive,
-                    "the real column PDF exposes its scrollbar knob and live pointer states")
+                root.check(actual.visible && actual.overflow, "the derived native PDF has a real overflowing scrollbar")
+                root.check(!!bar && bar.surface === "PreviewColumn" && !bar.exposed,
+                    "SelectionPreview's bar starts asleep and is not an exposed capture target")
+                if (!bar) { root.report(); return }
+                console.log("COH_SLEEP headless cols-pdf bar=false type=" + String(pdf).split("(")[0])
+                root.wakeAt = Date.now()
+                var frame = pdf.frameItem, centre = frame.mapToItem(pdf, frame.width / 2, frame.height / 2)
+                if (Quickshell.env("FLEA_COH_SKIP_WHEEL") !== "true")
+                    driver.mouseWheel(pdf, centre.x, centre.y, Qt.NoButton, Qt.NoModifier, 0, -120, 1)
+                root.stage = 6
+                return
+            }
+            if (root.stage === 6) {
+                var awakened = root.control(root.read(), "Vertical scroll bar")
+                if (!awakened || !awakened.exposed) {
+                    if (Date.now() - root.wakeAt < 3000) return
+                    root.check(false, "an asleep PDF bar cannot expose without a wheel")
+                    root.report()
+                    return
+                }
+                root.check(pdf.pdfScrollY > 0, "one actual wheel step scrolls the PDF before target discovery")
+                console.log("COH_WAKE headless cols-pdf bar=true after=" + (Date.now() - root.wakeAt))
+                driver.mouseMove(window.contentItem, awakened.targetX, awakened.targetY, 0, Qt.NoButton, Qt.NoModifier)
+                root.hoverAt = Date.now()
+                root.stage = 7
+                return
+            }
+            if (root.stage === 7) {
+                var bar = root.control(root.read(), "Vertical scroll bar")
+                if (Date.now() - root.hoverAt <= Scroll.HOLD_MS + Scroll.FADE_MS) return
+                root.check(!!bar && bar.exposed && bar.hovered && bar.hoverLive && bar.pressLive,
+                    "a pointer in the native lane keeps its real bar exposed past the idle hold and fade")
                 if (!bar) { root.report(); return }
                 root.rest = bar
                 driver.mousePress(window.contentItem, bar.targetX, bar.targetY, Qt.LeftButton, Qt.NoModifier, 0)
