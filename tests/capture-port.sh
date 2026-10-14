@@ -37,7 +37,15 @@ ipc() {
         statusPrimary) printf '%s\n' "$footer" ;;
     esac
 }
-key() { actions=$((actions + 1)); }
+# Escape clears a standing footer unless escape_clears=false; Return (Unmount) shows footer_after when one is set.
+key() {
+    actions=$((actions + 1))
+    case "$2" in
+        Escape) [[ "${escape_clears:-true}" == true ]] && footer='' ;;
+        Return) [[ -n "${footer_after:-}" ]] && footer=$footer_after ;;
+    esac
+    return 0
+}
 click_rail_row() { actions=$((actions + 1)); clicked_row="$1"; }
 menu_seek() { :; }
 shot() { shots=$((shots + 1)); }
@@ -68,22 +76,43 @@ rail_json=$(jq -cn --arg mount "$mount" '[{path:$mount,device:"/dev/mapper/fixtu
 cap_unlock_unmount_in_use "$mount" Unmount > "$scratch/mount-gone.log"
 check "a stale row with no actual mount also skips before cd" "$? $actions $shots $holder $inuse_receipt" '0 0 0  skipped'
 mkdir "$mount"
-mount_live=true inuse_receipt=in-use footer='S1LUKS is busy; close what is using it and try again.'
+busy='S1LUKS is busy; close what is using it and try again.'
+mount_live=true inuse_receipt=in-use footer='' footer_after=$busy
 rail_json=$(jq -cn --arg mount "$mount" '[{path:$mount,label:"Favourite",device:""},{path:$mount,device:"/dev/mapper/fixture",label:"S1LUKS",locked:false}]')
 cap_unlock_unmount_in_use "$mount" Unmount > "$scratch/in-use.log"
 check "a mounted row uses its filesystem name and captures the refusal" "$? $actions $shots $holder $inuse_receipt" '0 2 1  in-use'
 check "a favourite for the mount cannot replace the actual unlocked device row" "$clicked_row" 1
-footer='Locked container is busy; close what is using it and try again.'
-(
-    trap 'if [[ -n "$holder" ]]; then kill "$holder" 2>/dev/null || true; wait "$holder" 2>/dev/null || true; fi' EXIT
-    cap_unlock_unmount_in_use "$mount" Unmount
-) > "$scratch/wrong-name.log" 2>&1
-check "the locked container's name cannot satisfy the mounted-row refusal" "$?" 1
+# The open-file leg can leave the same busy sentence standing; only a new one after Unmount counts.
+actions=0 shots=0 footer=$busy footer_after=$busy
+cap_unlock_unmount_in_use "$mount" Unmount > "$scratch/stale-cleared.log"
+check "a standing busy sentence is cleared by Escape before Unmount" "$? $actions $shots $holder $footer" "0 3 1  $busy"
+unlock_refused() {
+    (
+        trap 'if [[ -n "$holder" ]]; then kill "$holder" 2>/dev/null || true; wait "$holder" 2>/dev/null || true; fi' EXIT
+        cap_unlock_unmount_in_use "$mount" Unmount
+    ) > "$scratch/$1.log" 2>&1
+    printf '%s %s' "$?" "$(grep -c -F -- "$2" "$scratch/$1.log")"
+}
+footer=$busy footer_after=''
+check "a standing busy sentence with no new one after Unmount is refused" \
+    "$(unlock_refused stale-only 'did not say it was busy')" '1 1'
+footer=$busy footer_after=$busy escape_clears=false
+check "a busy sentence that Escape never clears is refused before Unmount" \
+    "$(unlock_refused stale-stuck 'the earlier busy sentence never cleared')" '1 1'
+escape_clears=true footer='' footer_after='Locked container is busy; close what is using it and try again.'
+check "the locked container's name cannot satisfy the mounted-row refusal" \
+    "$(unlock_refused wrong-name 'did not say it was busy')" '1 1'
+footer_after=''
 
-# Drive the actual themed archive case with its UI steps stubbed; fixture_home_make still enforces the real destructive-path guard.
+# Drive the actual themed archive case with its UI steps stubbed; the fixture_home_make stub keeps its real sandbox_scratch guard.
 fixture_root="$scratch/fixtures"
 sandbox_make "$fixture_root"
 flea_bin=/usr/bin/true
+# The replay owns its 7z and theme, so the leg never depends on what the host or CI image installs.
+mkdir -p "$scratch/bin" && printf '#!/bin/sh\nexit 0\n' > "$scratch/bin/7z" && chmod +x "$scratch/bin/7z"
+PATH="$scratch/bin:$PATH"
+printf 'foreground = "#dcd7ba"\n' > "$scratch/kanagawa-colors.toml"
+kanagawa_colors="$scratch/kanagawa-colors.toml"
 fixture_home_make() { sandbox_scratch "$1"; mkdir -p "$1/.local/state/omarchy/current/theme"; }
 cap_archives_format_hue() { :; }
 cap_archives_format_open() { :; }

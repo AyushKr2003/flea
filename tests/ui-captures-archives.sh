@@ -304,7 +304,7 @@ case_cap_archives_format_live() {
 
 # Format focus on kanagawa through a child HOME, one shot.
 case_cap_archives_format_kanagawa() {
-    local dir="$fixture_root/cap-archives-format-kanagawa" menus_checks=0 src="/usr/share/omarchy/themes/kanagawa/colors.toml"
+    local dir="$fixture_root/cap-archives-format-kanagawa" menus_checks=0 src="${kanagawa_colors:-/usr/share/omarchy/themes/kanagawa/colors.toml}"
     command -v 7z >/dev/null || { printf 'CAP SKIP cap-archives-format-kanagawa: 7z is not installed\n'; return 0; }
     [[ -f "$src" ]] || fail "cap_archives_format_kanagawa: kanagawa colors.toml absent at $src"
     local sweep_root="$fixture_root/cap-archives-format-kanagawa-home" sweep_home="$fixture_root/cap-archives-format-kanagawa-home/home" sweep_real_bin="$flea_bin"
