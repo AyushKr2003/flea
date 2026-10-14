@@ -185,7 +185,7 @@ Item {
     readonly property Item indicatorSlot: dot
     readonly property Item detailItem: root.trailingLabel || detailText
     readonly property Item labelItem: label
-    readonly property bool indicatorVisible: root.showsDot
+    readonly property bool indicatorVisible: root.showsDot && root.trailingLabel === null
     // One gap before any trailing number, square or mark; detail covers the Trash count's zero-width dot.
     readonly property bool keepsTrailingGap: root.detail.length > 0 || dot.width > 0
 
@@ -208,6 +208,7 @@ Item {
     // NETWORK header's "+" share one centre line whatever their ink does: align by slot, never by ink.
     Item {
         id: dot
+        visible: root.trailingLabel === null
         anchors.right: parent.right
         anchors.rightMargin: Style.spacing.rowPaddingX
         anchors.verticalCenter: parent.verticalCenter

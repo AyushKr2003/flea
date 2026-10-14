@@ -57,9 +57,9 @@ fi
 uri_files=$(while IFS= read -r f; do
     code_of "$f" | grep -H --label="$f" 'text/uri-list'
 done < <(find ui -type f \( -name '*.qml' -o -name '*.js' \)) | cut -d: -f1 | sort -u)
-expected_uri_files=$(printf '%s\n' ui/DropInto.qml ui/FileDrag.qml ui/GridArea.qml ui/RowDrag.qml ui/js/Drag.js | sort -u)
+expected_uri_files=$(printf '%s\n' ui/DropInto.qml ui/FileDrag.qml ui/GridArea.qml ui/RailDrop.qml ui/RowDrag.qml ui/js/Drag.js | sort -u)
 if [[ "$uri_files" == "$expected_uri_files" ]]; then
-    ok "uri-list is confined to the file payload producers and their three receivers"
+    ok "uri-list is confined to the file payload producers and their four receivers"
 else
     bad "unexpected text/uri-list files: $uri_files"
 fi
@@ -152,7 +152,7 @@ while IFS= read -r hit; do
     text=$(printf '%s' "$hit" | cut -d: -f3-)
     case "$file" in
         ui/js/Drag.js) continue ;;
-        ui/DropInto.qml|ui/RowDrag.qml|ui/FileDrag.qml)
+        ui/DropInto.qml|ui/RowDrag.qml|ui/FileDrag.qml|ui/RailDrop.qml|ui/js/RailDrop.js)
             # Pass-through only (offer setting and argument forwarding); a bitwise read or comparison here would decide the verb outside the helper.
             case "$text" in
                 *"&"*|*"=="*|*"!="*) ;;

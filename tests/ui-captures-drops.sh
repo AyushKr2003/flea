@@ -1,5 +1,9 @@
 # Sourced by ui.sh, runs only by name: drops hover-open with the setting on, edge autoscroll and the pasted image; the FAT names card is a controller-driven skip.
 . "$repo/tests/lib/pointer-glide.sh"
+# The focused drag suite owns its launch, marked fixtures, input teardown and both mid-drag PNGs.
+case_cap_raildrop() {
+    FLEA_BIN="$flea_bin" /bin/bash "$repo/tests/drag.sh" raildrop || fail "cap_raildrop: focused native proof failed"
+}
 cap_drops_fat_skip() {
     printf 'CAP SKIP fat-card: needs a FAT mount, driven by the controller\n'
     return 0

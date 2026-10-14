@@ -89,8 +89,8 @@ Item {
         return Object.assign({}, entry, { count: root.trashCount })
     })
     signal trashRequested()
-    // A row drag resting on the Trash row, which ui/PaneRail.qml reads to keep an overlay rail up.
-    readonly property bool trashDragOver: trashRepeater.count > 0 && !!trashRepeater.itemAt(0) && trashRepeater.itemAt(0).dragOver
+    // Folder drops share one receiver below the rows; Trash's own area answers above it.
+    RailDrop { id: fileDrop; sidebar: root; viewport: scroller }
 
     // The saved place an Edit is rewriting, "" when none is; ui/js/RailMenu.js editPlace sets it.
     property string editingPlace: ""
@@ -475,7 +475,7 @@ Item {
     }
     Flickable {
         id: scroller
-        onContentYChanged: availability.restart()
+        onContentYChanged: { availability.restart(); fileDrop.reaim() }
         anchors.fill: parent
         clip: true
         contentWidth: width

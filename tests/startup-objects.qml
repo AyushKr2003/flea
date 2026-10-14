@@ -4,7 +4,8 @@ import Quickshell
 
 ShellRoot {
     id: root
-    readonly property int startupObjectLimit: 587
+    // The shared rail receiver adds one DropArea, two Connections and two inactive Loaders.
+    readonly property int startupObjectLimit: 592
     readonly property int sectorsWrittenField: 6
     readonly property int deadlineProbeMs: 1200
     readonly property int sectorChangeDelayMs: 600
@@ -250,6 +251,8 @@ ShellRoot {
                 return root.finish(false, "the context menu was built before the startup cut")
             if (sample.total > root.startupObjectLimit)
                 return root.finish(false, "total=" + sample.total + " limit=" + root.startupObjectLimit)
+            if ((sample.counts.RailDrop || 0) !== 1)
+                return root.finish(false, "startup has no single shared rail drop receiver")
             var rows = sample.objects.filter(function (object) {
                 return String(object).indexOf("Row_") === 0
             })

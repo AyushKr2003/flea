@@ -161,6 +161,7 @@ ParkedWait 1.0 ParkedWait.qml
 ShareBrowser 1.0 ShareBrowser.qml
 Sidebar 1.0 Sidebar.qml
 SidebarRow 1.0 SidebarRow.qml
+RailDrop 1.0 RailDrop.qml
 RailTrashRow 1.0 RailTrashRow.qml
 DropTarget 1.0 DropTarget.qml
 Spinner 1.0 Spinner.qml

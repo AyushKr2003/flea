@@ -1469,7 +1469,7 @@ check merely slow inside its budget is run again rather than skipped.
 
 ### devs
 
-`{"c":"devs","paths":[<string>,...]}`
+`{"c":"devs","paths":[<string>,...],"id":<uint optional>}`
 
 Example: `{"c":"devs","paths":["/","/home/gm","/home/gm/Documents"]}`
 
@@ -1482,6 +1482,7 @@ whose peeked rows carry no device, and keeps the answers by path. Answers one `d
 own, because a stat on a mount that stopped answering never returns and the loop waits on nothing. A path on a
 network or FUSE mount runs under the same 5 s bound a listing has, then the mount is marked stuck for 30 s and
 answers 0 at once, so a dead share costs one thread and one wait, never one per ask. An absent `paths` asks nothing.
+Rail hover requests include a positive `id`, echoed in the answer, so leaving or changing a row discards its late answer.
 
 ### clipSet
 
@@ -2285,7 +2286,7 @@ the whole answer's time, zoxide and the existence checks together.
 
 ### devs
 
-`{"t":"devs","devs":{<string>:<uint>,...}}`
+`{"t":"devs","devs":{<string>:<uint>,...},"id":<uint optional>}`
 
 Example: `{"t":"devs","devs":{"/":66305,"/home":66306,"/home/gm/gone":0}}`
 
@@ -2293,8 +2294,8 @@ The answer to one `devs`: each asked path once, in the order asked, with its dev
 be read, a missing one, an empty one, a relative one (it would name the backend's own directory, which the client
 never means) and one on a mount that is not answering all answer 0, and the client reads 0 as unknown and copies:
 copying where a move was possible is an annoyance, and moving across volumes loses the original. The line carries
-no request id, because each answer names its own paths and stays true on its own; a late answer for a folder the
-client has left only fills facts about paths that are still what they were.
+the request's positive `id` when supplied; the rail accepts only the current hover's id and path. Untagged answers
+continue to fill the breadcrumb and column device map, while tagged hover answers never enter that cache.
 
 ### changed
 

@@ -44,6 +44,7 @@ PaneSwap.qml
 PaneWire.qml
 PhoneMounts.qml
 PrebuildDriver.qml
+RailDrop.qml
 RailHeading.qml
 RailPlaces.qml
 RailTrashRow.qml
@@ -138,6 +139,7 @@ js/PlaceMenu.js
 js/Places.js
 js/PreviewKeys.js
 js/Protocols.js
+js/RailDrop.js
 js/RailKeys.js
 js/RailMenu.js
 js/Recent.js
@@ -171,4 +173,4 @@ js/TrashDates.js
 js/UiState.js
 js/Update.js
 js/UserDirs.js
-bytes 1640558
+bytes 1648928
