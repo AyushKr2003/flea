@@ -16,6 +16,8 @@ import time
 REPLY_TIMEOUT_S = 20
 PIPE_READ_BYTES = 65536
 DECODE_TIMEOUT_S = 20
+SHUTDOWN_TIMEOUT_S = 10
+KILL_WAIT_S = 5
 DNG_TAGS = {
     0xC612: ((1,), 4),  # DNGVersion
     0xC613: ((1,), 4),  # DNGBackwardVersion
@@ -178,12 +180,12 @@ def backend(binary, root, path):
             print("raw-fixture: meta and Properties photo=" + json.dumps(PHOTO, separators=(",", ":")))
             print("raw-fixture: extracted JPEG fully decoded")
             process.stdin.close()
-            require(process.wait(timeout=10) == 0, "backend shutdown failed")
+            require(process.wait(timeout=SHUTDOWN_TIMEOUT_S) == 0, "backend shutdown failed")
         finally:
             selector.close()
             if process.poll() is None:
                 process.kill()
-                process.wait(timeout=5)
+                process.wait(timeout=KILL_WAIT_S)
 
 
 def main():
