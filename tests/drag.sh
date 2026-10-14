@@ -647,6 +647,7 @@ read -r s1x s1y <<< "$r0_point"
 warp "$s1x" "$s1y"; sleep 0.4
 # Recheck the card and rail after pointer motion, before any button is held.
 r0_index=$(rowidx s1.txt) || die "R0 could not find s1.txt's row before the press"
+# Sample input: "1234, 567" from hyprctl cursorpos, the comma stripped before read.
 read -r r0_actual_x r0_actual_y <<< "$(hyprctl cursorpos | tr -d ',')"
 python3 "$repo/tests/lib/settings-ground-point.py" "$(ipc rowRect "$r0_index")" "$(ipc settingsCardRect)" \
     "$(ipc listAreaRect)" "$(ipc railState)" "$WIN" 1 "$r0_actual_x $r0_actual_y" >/dev/null \
