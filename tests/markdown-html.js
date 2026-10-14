@@ -148,13 +148,16 @@ function facts(px, geo) {
         }
         f.blocks.push(one);
     }
-    f.notice = geo.notice === null ? null : inkBox(px, geo.w, geo.h, geo.ground, geo.notice);
+    f.notice = geo.notice === null ? null : inkBox(px, geo.w, geo.h, geo.ground,
+        { x: geo.notice.x, y: geo.notice.y, w: geo.noticeInkWidth, h: geo.notice.h });
     f.noticeBand = null;
     f.below = null;
     if (geo.notice !== null) {
         var bottom = geo.notice.y + geo.notice.h;
-        f.noticeBand = inkBox(px, geo.w, geo.h, geo.ground, { x: 0, y: geo.notice.y, w: geo.w, h: geo.notice.h });
-        f.below = inkBox(px, geo.w, geo.h, geo.ground, { x: 0, y: bottom, w: geo.w, h: geo.h - bottom });
+        // Source ink ends at the notice's viewport edge; the frame's overlay scrollbar sits beyond it.
+        var right = geo.notice.x + geo.notice.w;
+        f.noticeBand = inkBox(px, geo.w, geo.h, geo.ground, { x: 0, y: geo.notice.y, w: right, h: geo.notice.h });
+        f.below = inkBox(px, geo.w, geo.h, geo.ground, { x: 0, y: bottom, w: right, h: geo.h - bottom });
     }
     return f;
 }

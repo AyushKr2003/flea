@@ -198,7 +198,7 @@ ShellRoot {
         var noticeRect = notice !== null && notice.visible ? { x: noticeAt.x, y: noticeAt.y, w: notice.width, h: notice.height } : null
         geo = { name: names[step], w: shell.paneW, h: shell.paneH, ground: rgb(shell.ground), chrome: hexRgb(String(md.chromeHex)),
             blocks: blocks, texts: texts, blockGap: md.blockGap, lineBox: Math.round(Flea.Theme.font.body * shell.lineBoxRatio), hAdvance: Math.floor(hMetrics.advanceWidth),
-            tooDeep: md.tooDeep, notice: noticeRect, noticeText: notice === null ? "" : notice.text }
+            tooDeep: md.tooDeep, notice: noticeRect, noticeInkWidth: notice === null ? 0 : Math.min(notice.width, Math.ceil(notice.contentWidth)), noticeText: notice === null ? "" : notice.text }
         grabRoot.grabToImage(function (result) {
             var path = shell.shotBase + "-" + shell.step + ".png"
             if (!result.saveToFile(path)) {

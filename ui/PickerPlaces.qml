@@ -1,4 +1,3 @@
-import Quickshell
 import QtQuick
 import "." as Flea
 import "js/Icons.js" as Icons

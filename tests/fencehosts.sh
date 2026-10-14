@@ -72,9 +72,11 @@ def sized(size, end):
 for size in (65535, 65537):
     for kind, end in (("lf", "\n"), ("crlf", "\r\n"), ("cr", "\r")):
         open("%s/syn-size%s-%d.md" % (out, kind, size), "w", newline="").write(sized(size, end))
+for size in (1048576, 1048577):
+    open("%s/syn-limit-%d.md" % (out, size), "w", newline="").write(sized(size, "\n"))
 PY
 docs=$(cd "$test_root/fixture" && for f in *.md; do printf '%s|%s\n' "$f" "$(stat -c %s "$f")"; done)
-# A ceiling for the whole run: 73 documents, each drawn in three hosts.
+# A ceiling for the whole run, with every document drawn or explicitly refused in three hosts.
 readonly qs_limit_seconds=300
 log="$test_root/run.log"
 ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
