@@ -54,7 +54,7 @@ ShellRoot {
            { burst: ["j", "k", "j", "k", "j", "k"], file: "01-icons.rs" },
            { move: "j", show: "02-more.rs", coloured: true }, { move: "j", show: "03-nul.txt", binary: true },
            { move: "j", show: "04-over.log", large: true }, { move: "j", show: "05-long.rs", long: true },
-           { move: "j", show: "06-img.html", literal: true }, { reload: true }, { wide: true }, { done: true }]
+           { move: "j", show: "06-img.xml", literal: true }, { reload: true }, { wide: true }, { done: true }]
 
     function log(line) { console.log("CODECOL " + line) }
     function check(label, actual, expected) {
@@ -215,10 +215,10 @@ ShellRoot {
             for (var g = 1; g <= root.grownLines; g++) grown.push("extra line " + g)
             grownFile.setText(grown.join("\n") + "\n")
             root.watchLoad = true
-            root.pane.refresh(root.fixture + "/06-img.html", false)
+            root.pane.refresh(root.fixture + "/06-img.xml", false)
             root.awaiting = function () {
                 var grownCode = root.codeOf(root.column())
-                if (!root.calm(!root.pane.listInFlight && root.loadsSeen > 0 && grownCode !== null && grownCode.lines.length === 1 + root.grownLines && root.drawn("06-img.html", "styled"))) return false
+                if (!root.calm(!root.pane.listInFlight && root.loadsSeen > 0 && grownCode !== null && grownCode.lines.length === 1 + root.grownLines && root.drawn("06-img.xml", "styled"))) return false
                 root.watchLoad = false
                 root.check("the listing loaded under a live CodeLines", root.loadsSeen > 0, true)
                 root.check("no code ask or queued load while the listing loads", root.askedLoading, 0)
@@ -345,7 +345,7 @@ ShellRoot {
     Flea.Backend { id: realBackend }
     FileView {
         id: grownFile
-        path: root.fixture + "/06-img.html"
+        path: root.fixture + "/06-img.xml"
         printErrors: false
         blockWrites: true
     }

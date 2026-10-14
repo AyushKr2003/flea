@@ -353,6 +353,8 @@ ShellRoot {
         id: firstMarkdown
         property Item frameItem: coldFrame
         property bool isMarkdownRow: true
+        property bool isHtmlRow: false
+        readonly property bool isDocumentRow: firstMarkdown.isMarkdownRow || firstMarkdown.isHtmlRow
         property var markdown: null
         property var swap: null
         property var row: ({ n: "03-long.md", d: false, s: 0, m: 0 })

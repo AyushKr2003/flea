@@ -77,7 +77,8 @@ if [ -z "$port" ]; then
     exit 1
 fi
 img="<img src=\"http://127.0.0.1:$port/x\">"
-printf '%s\n' "$img" > "$fixture/06-img.html"
+# XML keeps this literal-markup test on CodeLines now that HTML renders a page.
+printf '%s\n' "$img" > "$fixture/06-img.xml"
 
 # $1 is the run's name, $2 its PATH, $3 whether bat is withheld.
 run_harness() {

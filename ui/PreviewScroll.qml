@@ -87,7 +87,7 @@ Item {
             v.contentY = Math.max(bounds.min, Math.min(bounds.max, bounds.min + root.wanted.y))
         }
         v.forceLayout()
-        if (!root.markdown && !root.code.firstScreen) {
+        if (!root.markdown && !(root.html && !root.html.sourceView) && (!root.code || !root.code.firstScreen)) {
             root.applying = false
             return
         }
