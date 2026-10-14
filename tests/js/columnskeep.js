@@ -32,6 +32,7 @@ function columnsArea(area) {
     var replies = []
     var sent = []
     var root = {
+        landing: { answered: function () {} },
         visible: true, width: 1300, columnsLimit: undefined, peeked: ({}), pending: ({}), denials: ({}), peekOrders: ({}), peekFacts: ({}), peekVersion: 0, keep: { drawn: [] },
         childPath: "", shownChildPath: "", cursorIsDir: true,
         pane: { path: "/a/b", windowSize: 35, showHidden: false, backend: { peek: function (path, size, hidden, focus, keep) {

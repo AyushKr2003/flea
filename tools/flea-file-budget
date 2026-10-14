@@ -131,8 +131,8 @@ tests/xwsettings-tabs.qml 379
 ui/Backend.qml 597
 ui/MenuActionDialog.qml 402
 ui/ChromeBar.qml 352
-ui/ColumnsArea.qml 576
-ui/ColumnPane.qml 450
+ui/ColumnsArea.qml 594
+ui/ColumnPane.qml 461
 ui/ContextMenu.qml 737
 ui/ConvertDialog.qml 456
 ui/GridArea.qml 665
@@ -179,7 +179,7 @@ ui/UnlockDialog.qml 450
 ui/ViewState.qml 549
 ui/WindowBody.qml 816
 ui/js/Anchor.js 379
-ui/js/ColumnsCarry.js 94
+ui/js/ColumnsCarry.js 103
 ui/js/Devices.js 440
 ui/js/Filter.js 284
 ui/js/Focus.js 492

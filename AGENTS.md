@@ -655,15 +655,17 @@ window with the cursor on it in the first frame, but the rename anchor still ask
 after the list, so one or two frames can follow with the cursor on a row not yet held, as before; a
 watched re-read names no row at all, so the corner below stands for both.
 
-**// corner: two things still move after a swap, as they did before it.** A watched re-read with the
+**// corner: a watched re-read can still move after a swap.** A watched re-read with the
 cursor deep in a large folder swaps to the listing's first screenful and then jumps back when the
-anchor's own window arrives. The columns view's two neighbour columns are peeks keyed on the path, so
-an Enter, a rail hop or a search exit asks them again when the path moves and they stand empty for one
-peek round trip at the swap, as they did at the `listed` line before. A Back does not:
-`ui/js/ColumnsCarry.js` asks the incoming parent beside the list, keeps it across the landing and seeds
-the folder left from the held rows when their order and icons match a peek's, so the landing frame
-draws all three columns. The folder left takes one watching peek when the flight ends, since only a
-peek arms its watch, and its reply lands the rows the column already draws.
+anchor's own window arrives. Columns keeps every answered drawn folder across a navigation when its
+path, peek key and order match. `ui/js/ColumnsCarry.js` asks incoming ancestors beside the list and
+seeds the folder left from held rows when their order and icons match a peek's. Kept ancestors are
+re-read in place, and a seeded folder takes one watching peek when the flight ends. A changing
+ancestor keeps its slot's old rows, inert, until its replacement answers; `ui/ColumnsLanding.qml`
+bounds that hold with `Swap.CAP_MS` and shows the existing reading mark for `Swap.MIN_SHOW_MS` on
+fallback. The third column keeps its shown folder's cache through the landing and its watch through
+the replacement wait; a new folder waits under the existing folder cap, and a file preview uses
+`thirdSwap`. The backend's `changed` signal continues to re-ask kept folders.
 
 **A right click on the Locked tile opens the locked folder's own menu, never the parent's
 background one.** A failed listing leaves no rows, so every background right click in all three views
@@ -2674,6 +2676,10 @@ Qt 6.12 sequence handling adds `js/Lists.js` to the first-frame unit list. The m
 The shared XDG directory reader is `ui/UserDirs.qml`, 25 lines, replacing the rail and picker readers; `ui/js/UserDirs.js` holds the existing parser without importing menu code. `ui/ColumnsArea.qml` moves from 572 to 576 lines for re-asking drawn columns when those directories change. The first-frame unit inventory adds UserDirs.qml and js/UserDirs.js and its summed source ceiling is 1,630,789 bytes, re-derived from the listed files with their current byte counts.
 `tests/columnsfilter.qml` moves from 402 to 403 lines for the backend stub's codeResult signal, matching the Markdown preview connection.
 `ui/PickerWindow.qml` moves from 812 to 813 lines for resolving each requested folder's sort while keeping the held rows' sort mark stable between requests.
+
+Columns landings retain their answered peeks and bound changing ancestor slots through the existing swap timings.
+The scoped ceilings are re-derived with `wc -l`: `ui/ColumnsArea.qml` 590, `ui/ColumnPane.qml` 461 and `tests/columnsfilter.qml` 403.
+The filter fixture declares the backend's `codeResult` signal so the Markdown preview keeps its strict log check.
 
 COPY-TRASH on the 0.3.11 stage moves the `src/backend/trashbrowse.rs` ceiling from 900 to 1025 (`wc -l`) for the approved typed refusals, per-item damaged-record failures and backward target naming, retaining the stage's newest-first listing and membership checks.
 The same port moves `src/backend/trashdelete.rs` from 938 to 965 (`wc -l`) for the approved outcome wrappers and cleanup logging, with the failed child put-back logging credited once to this port.

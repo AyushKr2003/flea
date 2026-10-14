@@ -19,6 +19,8 @@ Item {
 
     // [{n, d, i}], from a peek or from the pane's own held window.
     property var rows: []
+    property bool loadingRows: false
+    signal loadingShown(bool shown)
     // The row this column's cursor is on, as an absolute index; -1 when this column has no cursor.
     property int selectedIndex: -1
     // The one row drawn as this column's cursor; a cursor move touches two delegates, not every live one.
@@ -428,6 +430,15 @@ Item {
 
     // For ui/Ipc.qml's columnChildEmpty readers: the tile's state and its mark's box.
     readonly property Item emptyItem: emptyTile
+    Loader {
+        anchors.fill: parent
+        active: root.loadingRows
+        sourceComponent: Flea.LoadingState {
+            heldOff: true
+            onShownChanged: root.loadingShown(shown)
+            Component.onCompleted: if (shown) root.loadingShown(true)
+        }
+    }
     // The same hero the list draws, per the operator: a peeked empty directory animates like the pane's own.
     Flea.EmptyState {
         id: emptyTile

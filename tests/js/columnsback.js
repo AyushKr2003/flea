@@ -55,7 +55,7 @@ function runPlan(check) {
     check("an Enter names no Back", Carry.isBack("/a/b", "/a/b/c"), false)
     check("a rail hop two up names no Back", Carry.isBack("/a/b/c", "/a"), false)
     check("staying at the root names no Back", Carry.isBack("/", "/"), false)
-    check("an Enter plans nothing", Carry.plan(area({}, { listingPath: "/a/b/c/c0" }), ["/a/b"], state), null)
+    check("an Enter carries the listing into its new ancestor slot", Carry.plan(area({}, { listingPath: "/a/b/c/c0" }), ["/a/b"], state).seed, "/a/b/c")
     var plan = Carry.plan(area({}, {}), ["/a"], state)
     check("a Back asks the incoming parent alone", plan.pre.join("|"), "/a")
     check("and carries the folder left as the seed", plan.seed + ">" + plan.target, "/a/b/c>/a/b")
@@ -98,16 +98,38 @@ function runLanding(check) {
     check("drops the columns no longer shown", next.peeked[key("/a/b")] === undefined && next.peeked[key("/a/b/c/c0")] === undefined, true)
     check("seeds the folder left as the child", next.peeked[key("/a/b/c")] === plan.rows, true)
     check("under its present order, with its facts", next.orders[key("/a/b/c")] + ":" + next.facts["/a/b/c"].v, ":7")
-    check("and names no ask, so every ask goes with the listing", next.pending, undefined)
+    check("with no outstanding ask when all peeks already answered", Object.keys(next.pending).length, 0)
     check("leaves the maps it was handed alone", a.peeked[key("/a/b")] !== undefined, true)
-    check("no carry clears everything", JSON.stringify(Carry.landing(null, a, ["/a"])), JSON.stringify({ peeked: {}, denials: {}, orders: {}, facts: {} }))
+    check("no carry clears everything", JSON.stringify(Carry.landing(null, a, ["/a"])), JSON.stringify({ peeked: {}, denials: {}, orders: {}, facts: {}, pending: {} }))
     check("a carry for another target clears everything", Object.keys(Carry.landing(plan, area({}, { path: "/x" }), ["/a"]).peeked).length, 0)
     check("an ancestor whose reply is still out is not kept", Carry.landing(plan, area({}, { path: "/a/b" }), ["/a"]).peeked[key("/a")], undefined)
     a.orderOf = function () { return "size1" }
+    check("an ancestor kept under another order is not reused", Carry.landing(plan, a, ["/a"]).peeked[key("/a")], undefined)
     check("a folder re-sorted since the request is not seeded", Carry.landing(plan, a, ["/a"]).peeked[key("/a/b/c")], undefined)
     var asked = area({}, { path: "/a/b" })
     asked.peeked[key("/a/b/c")] = listRows("z", 1)
+    asked.peekOrders[key("/a/b/c")] = ""
     check("a seed never replaces rows a peek already answered", Carry.landing(plan, asked, ["/a/b/c"]).peeked[key("/a/b/c")][0].n, "z0")
+    var lateralPlan = Carry.plan(area({}, { listingPath: "/a/b/d" }), ["/a/b"], state)
+    var lateral = area({ shownChildPath: "/a/b/c/kid" }, { path: "/a/b/d" })
+    lateral.peeked[key("/a/b")] = listRows("parent", 2)
+    lateral.peekOrders[key("/a/b")] = ""
+    lateral.denials[key("/a/b")] = 0
+    lateral.peekFacts["/a/b"] = { v: 8, w: false }
+    lateral.peeked[key(lateral.shownChildPath)] = listRows("child", 2)
+    lateral.peekOrders[key(lateral.shownChildPath)] = ""
+    var kept = Carry.landing(lateralPlan, lateral, ["/a/b"])
+    check("a lateral landing keeps the identical parent rows", kept.peeked[key("/a/b")] === lateral.peeked[key("/a/b")], true)
+    check("with the parent's denial and drag facts", kept.denials[key("/a/b")] + ":" + kept.facts["/a/b"].v + ":" + kept.facts["/a/b"].w, "0:8:false")
+    check("and the old third folder while its replacement waits", kept.peeked[key(lateral.shownChildPath)] === lateral.peeked[key(lateral.shownChildPath)], true)
+    var parentAsk = Columns.sentKey(key("/a/b"), lateral.pane.windowSize, "")
+    var goneAsk = Columns.sentKey(key("/gone"), lateral.pane.windowSize, "")
+    lateral.pending = {}; lateral.pending[parentAsk] = 2; lateral.pending[goneAsk] = 1
+    var outstanding = Carry.landing(lateralPlan, lateral, ["/a/b"]).pending
+    check("outstanding watching refreshes of a kept parent still land", outstanding[parentAsk], 2)
+    check("an outstanding peek of a folder no longer drawn is dropped", outstanding[goneAsk], undefined)
+    lateral.peekKey = function (path) { return Columns.peekKey(path, true, false) }
+    check("another hidden-files key carries none of the old peeks", Object.keys(Carry.landing(lateralPlan, lateral, ["/a/b"]).peeked).length, 0)
 }
 
 // The landing gap holds the third column through the shipped moveThird guard, and only the gap does.
@@ -151,6 +173,7 @@ function runGlue(check) {
     var inert = { cancel: function () {}, stop: function () {} }
     var childColumn = { emptyItem: { animateEntrance: true, markItem: { settle: function () {} } } }
     var root = {
+        landing: { begin: function () {}, landed: function () {}, answered: function () {} },
         visible: true, width: 1300, columnsLimit: undefined, carry: null, peekVersion: 0, keep: { drawn: ["/a/b", "/a/b/c/c0"] },
         peeked: {}, pending: {}, denials: {}, peekOrders: {}, peekFacts: {}, childPath: "/a/b/c/c0", shownChildPath: "/a/b/c/c0", cursorIsDir: true,
         pane: { path: "/a/b/c", listingPath: "/a/b/c", listInFlight: false, rows: cRows, held: 0, total: 300, windowSize: 35, showHidden: false,
@@ -214,15 +237,18 @@ function runGlue(check) {
     check("its reply carries the seeded rows", names(Carry.rowsFor(root.peeked, key("/a/b/c"), "/a/b/c", root.peekVersion)), names(seeded))
     check("and lands as one peek", root.peekVersion, before + 1)
 
-    // An Enter keeps today's landing: everything cleared and asked in the path's own turn.
+    // An Enter seeds the listing left into its incoming parent and arms its watch at the flight's end.
     sent = []
     root.pane.listInFlight = true
     root.pane.listingPath = "/a/b/c"
     onRequest()
-    check("an Enter plans no carry and asks nothing at its request", root.carry === null && sent.length === 0, true)
+    check("an Enter carries its listing and asks nothing redundant at its request", root.carry !== null && sent.length === 0, true)
     root.pane.path = "/a/b/c"
     root.childPath = ""
     onPath()
-    check("and its landing clears every column", root.answered("/a/b/c"), false)
-    check("then asks its new parent in the path's own turn", sent.join("|"), "/a/b")
+    check("its parent is seeded in the landing", root.answered("/a/b"), true)
+    check("its landing waits for the final cursor before asking", sent.length, 0)
+    root.pane.listInFlight = false
+    onFlight()
+    check("then refreshes and watches its new parent", sent.join("|"), "/a/b")
 }

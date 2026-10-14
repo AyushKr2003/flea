@@ -3,7 +3,7 @@
 .import "FolderSorts.js" as FolderSorts
 .import "Format.js" as Format
 
-// Back carries answered peeks across a listing so its landing frame draws all three columns whole.
+// Navigations carry answered peeks across a listing and refresh them without clearing drawn rows.
 
 // A peek answers at most this many rows, src/backend/peek.rs PEEK_CAP.
 var PEEK_CAP = 512
@@ -57,11 +57,11 @@ function peekRows(rows, count) {
     return out
 }
 
-// A Back request plan, or null when it is no Back or the window cannot seed.
+// A navigation plan, or null before the first listing has anything to carry.
 // Sample input: plan(area at "/a/b/c" listing "/a/b", ["/a"], { foldersFirst: true, groupByKind: false }).pre is ["/a"].
 function plan(area, asks, state) {
     var p = area.pane, here = p.path, target = p.listingPath
-    if (!isBack(here, target))
+    if (!here || !target)
         return null
     var tag = area.orderOf(here), count = Math.min(p.windowSize, PEEK_CAP, p.total)
     var list = { by: p.backend.sortBy, desc: p.backend.sortDesc, foldersFirst: state.foldersFirst, groupByKind: state.groupByKind }
@@ -70,14 +70,16 @@ function plan(area, asks, state) {
              rows: clean ? peekRows(p.rows, count) : null, facts: { v: p.backend.dirDev || 0, w: p.backend.dirWritable !== false } }
 }
 
-// A new listing's peek maps, keeping only a Back landing's answered ancestors and its seed.
+// A landing keeps answered drawn folders under the same key and order, plus the old third while its replacement waits.
 function landing(carry, area, asks) {
-    var next = { peeked: {}, denials: {}, orders: {}, facts: {} }
+    var next = { peeked: {}, denials: {}, orders: {}, facts: {}, pending: {} }
     if (!carry || carry.target !== area.pane.path)
         return next
-    for (var i = 0; i < asks.length; i++) {
-        var path = asks[i], key = area.peekKey(path)
-        if (area.peeked[key] === undefined)
+    var paths = asks.slice()
+    if (area.shownChildPath && paths.indexOf(area.shownChildPath) < 0) paths.push(area.shownChildPath)
+    for (var i = 0; i < paths.length; i++) {
+        var path = paths[i], key = area.peekKey(path)
+        if (area.peeked[key] === undefined || area.peekOrders[key] !== area.orderOf(path))
             continue
         next.peeked[key] = area.peeked[key]
         next.orders[key] = area.peekOrders[key]
@@ -85,10 +87,17 @@ function landing(carry, area, asks) {
         if (area.peekFacts[path] !== undefined) next.facts[path] = area.peekFacts[path]
     }
     var seedKey = area.peekKey(carry.seed), seedTag = area.orderOf(carry.seed)
-    if (carry.rows !== null && carry.tag === seedTag && next.peeked[seedKey] === undefined) {
+    if ((asks.indexOf(carry.seed) >= 0 || isBack(carry.seed, carry.target))
+            && carry.rows !== null && carry.tag === seedTag && next.peeked[seedKey] === undefined) {
         next.peeked[seedKey] = carry.rows
         next.orders[seedKey] = seedTag
         next.facts[carry.seed] = carry.facts
+    }
+    if (asks.indexOf(carry.seed) >= 0 || isBack(carry.seed, carry.target)) paths.push(carry.seed)
+    // A watched refresh already out must still land after navigation, even when its folder's settled rows are kept.
+    for (var path of paths) {
+        var sent = Columns.sentKey(area.peekKey(path), area.pane.windowSize, area.orderOf(path))
+        if (Columns.hasAsk(area.pending, sent)) next.pending[sent] = area.pending[sent]
     }
     return next
 }

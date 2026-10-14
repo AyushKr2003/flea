@@ -14,6 +14,7 @@ ChromeBar 1.0 ChromeBar.qml
 ChromeButton 1.0 ChromeButton.qml
 ChromeModes 1.0 ChromeModes.qml
 ColumnsArea 1.0 ColumnsArea.qml
+ColumnsLanding 1.0 ColumnsLanding.qml
 ColumnPane 1.0 ColumnPane.qml
 ColumnRow 1.0 ColumnRow.qml
 CountedWorker 1.0 CountedWorker.qml
