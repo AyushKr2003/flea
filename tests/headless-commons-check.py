@@ -39,6 +39,7 @@ def call_scopes(source):
     word_start = True
     unmatched_tail = False
     unknown_pipeline = False
+    shell_boundaries = '();|&<>'
     compound_ends = {'{': '}', 'if': 'fi', 'for': 'done', 'while': 'done', 'until': 'done', 'select': 'done', 'case': 'esac'}
     # Sample input: prepare() { and function prepare { are supported literal function headers, not brace arguments.
     function_head = re.compile(r'(?:^|[;{}])\s*(?:function\s+)?\w+\s*\(\s*\)\s*$|(?:^|[;{}])\s*function\s+\w+\s*$')
@@ -110,7 +111,8 @@ def call_scopes(source):
             at += 2
             continue
         if conditionals and conditionals[-1] == depth:
-            if word_start and source.startswith(']]', at) and (at + 2 == len(source) or source[at + 2].isspace() or source[at + 2] in ';|&<>'):
+            # Sample input: ([[ x == x ]]) closes the conditional before closing its containing subshell.
+            if word_start and source.startswith(']]', at) and (at + 2 == len(source) or source[at + 2].isspace() or source[at + 2] in shell_boundaries):
                 conditionals.pop()
                 at += 2
                 word_start = False
@@ -155,7 +157,7 @@ def call_scopes(source):
             continue
         pattern_close = word == ')' and not arithmetic and cases and cases[-1] == 'pattern'
         # Sample input: echo } is an argument; fi | cat closes a compound command only at a reserved-word position.
-        separated = token.end() == len(source) or source[token.end()].isspace() or source[token.end()] in '();|&<>'
+        separated = token.end() == len(source) or source[token.end()].isspace() or source[token.end()] in shell_boundaries
         keyword = command_start and word_start and separated
         in_pattern = not arithmetic and cases and cases[-1] == 'pattern'
         opens_brace = word == '{' and not in_pattern and word_start and separated and (command_start or function_head.search(source[:at].rsplit('\n', 1)[-1]))
@@ -469,16 +471,42 @@ def controls(box):
         'empty-case-nested-child': 'case x in x)\n' + contract_call + 'case x in esac\n;; esac | cat\n',
         'quoted-case-pattern-child': 'case esac in "esac")\n' + contract_call + ';; esac | cat\n',
     }
-    for name, body in {**contract_parents, **contract_children, **boundary_parents, **boundary_children}.items():
+    # Sample inputs below retain legal conditional token boundaries without extending unsupported arithmetic grammar.
+    nesting_parents = {
+        'conditional-paren-parent': '([[ x == x ]])\n' + contract_call,
+        'conditional-semicolon-parent': '[[ x == x ]];\n' + contract_call,
+        'conditional-and-parent': '[[ x == x ]]&& :\n' + contract_call,
+        'conditional-or-parent': '[[ x == x ]]|| :\n' + contract_call,
+        'conditional-pipe-parent': '[[ x == x ]]|cat\n' + contract_call,
+        'conditional-background-parent': '[[ x == x ]]&\nwait\n' + contract_call,
+        'conditional-output-parent': '[[ x == x ]]>"$root/output"\n' + contract_call,
+        'conditional-input-parent': ': > "$root/input"\n[[ x == x ]]<"$root/input"\n' + contract_call,
+        'conditional-comment-parent': '[[ x == x ]] # comment ) | if\n' + contract_call,
+    }
+    nesting_children = {
+        'conditional-paren-left': 'if true; then\n' + contract_call + '([[ x == x ]])\nfi | cat\n',
+        'conditional-paren-right': 'printf "" | if true; then\n' + contract_call + '([[ x == x ]])\nfi\n',
+        'conditional-paren-background': 'if true; then\n' + contract_call + '([[ x == x ]])\nfi &\nwait\n',
+        'conditional-paren-brace': '{\n' + contract_call + '([[ x == x ]])\n} | cat\n',
+    }
+    # Sample input: $(( $(guard) + 1 )) can reach parent QS, but unchecked_calls rejects a missing scope with != 0.
+    unsupported_children = {
+        'arithmetic-executable-unsupported': 'printf "%s\\n" "$(( $(\n' + contract_call + ') + 1 ))"\n',
+    }
+    for name, body in {**contract_parents, **contract_children, **boundary_parents, **boundary_children, **nesting_parents, **nesting_children, **unsupported_children}.items():
         owner = root / ('external-' + name)
         owner.mkdir()
         (owner / '.flea-test-sandbox').touch()
         direct.write_text('root=$1\n' + body + 'qs -p "$root"\n')
         syntax = subprocess.run(['bash', '-n', str(direct)], capture_output=True, text=True)
         assert syntax.returncode == 0, (name, syntax)
-        child = name in contract_children or name in boundary_children
+        child = name in contract_children or name in boundary_children or name in nesting_children or name in unsupported_children
         errors = unchecked_calls(scanner)
         assert bool(errors) == child, (name, errors)
+        if name in nesting_parents or name in nesting_children:
+            guard_line = next(n for n, line in enumerate(direct.read_text().splitlines(), 1) if line == contract_call.rstrip())
+            scope = call_scopes(direct.read_text()).get(guard_line)
+            assert scope is not None and (scope > 0) == child, (name, scope)
         result = subprocess.run(['bash', str(direct), str(owner)], cwd=source_root, env=contract_env,
                                 capture_output=True, text=True, timeout=CALLER_TIMEOUT_SECONDS)
         assert (owner / 'refusals').read_text() == 'HELPER_REFUSED\n', (name, result)
@@ -495,6 +523,8 @@ def controls(box):
     print('HEADLESS_COMMONS_ACTUAL_CALLER unmodified framegap.sh from repo and tests: refusal exit=1 qs=not-started')
     print(f'HEADLESS_COMMONS_EXTERNAL_CONTROLS parents={len(contract_parents)} refusal exit=1 qs=not-started; children={len(contract_children)} gate rejects exit=1')
     print(f'HEADLESS_COMMONS_BOUNDARY_CONTROLS parents={len(boundary_parents)} refusal exit=1 qs=not-started; children={len(boundary_children)} gate rejects exit=1')
+    print(f'HEADLESS_COMMONS_NESTING_CONTROLS parents={len(nesting_parents)} refusal exit=1 qs=not-started; children={len(nesting_children)} recorded child scope and gate rejects exit=1')
+    print(f'HEADLESS_COMMONS_UNSUPPORTED_CONTROLS children={len(unsupported_children)} reach parent qs but gate rejects exit=1; missing scope fails closed')
 
 
 if __name__ == '__main__':
