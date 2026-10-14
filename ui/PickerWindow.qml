@@ -9,6 +9,7 @@ import "." as Flea
 import "js/Picker.js" as Picker
 import "js/Keymap.js" as Keymap
 import "js/Thumbs.js" as Thumbs
+// ControlReader.js loads with IpcControls.qml on the first cohesionControls call, never with the picker's first frame.
 
 // One portal request, one window: the org.freedesktop.impl.portal.FileChooser dialog every caller on
 // the box gets, opened by flea --pick and answered through the reply file tools/flea-portal reads.
@@ -789,6 +790,12 @@ ShellRoot {
             function controls(): string { return JSON.stringify(chrome.controls().concat(answers.controls(), header.controls(), save.controls(), places.controls())) }
             function rowCentre(index: int): string { return win.centre(win.viewItem().itemAtIndex(index)) }
             function saveState(): string { return JSON.stringify({name: win.saveName, path: win.saveReview.path || "", collision: win.saveCollision, error: win.saveError, field: win.centre(save.fieldItem)}) }
+            // The cohesion captures' reader over the picker, see ui/js/ControlReader.js; its answer and chrome marks are inline components, and its filter is PickerFilter.
+            function cohesionControls(): string {
+                var kinds = /^(DialogButton|ChromeButton|SidebarRow|Answer|Mark|PickerFilter)(?:_QML|\()/
+                var alias = {Answer: "DialogButton", Mark: "ChromeButton"}
+                return Qt.createComponent("IpcControls.qml").createObject(null).read(win.contentItem ? win.contentItem.Window.window : null, win.contentItem, kinds, alias)
+            }
             function snapshot(): string {
                 // One reader answers path, field and Jump together, so a poll reads one instant.
                 var jumpItem = chrome.jump

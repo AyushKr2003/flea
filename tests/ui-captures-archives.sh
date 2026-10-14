@@ -216,3 +216,113 @@ case_cap_archives() {
     printf 'CAP_ARCHIVES submenu=with-password-last dialog=rest,mismatch,focus,encrypt-off,eye,cancel,submit,format,zip extract=card,cancel,submit,wrong iso=%s free-space=%s\n' "$iso_ok" "$huge_ok"
     kill_flea
 }
+
+# Hue by Theme's own rule, printed as one CAP_HSF line; refuse-hue fails on hue, record only notes it.
+cap_archives_format_hue() {
+    local toml="$1" mode="$2" accent="" floor="" sat="" has=""
+    # Sample input, one line of colors.toml: accent = "#7e9cd8"
+    accent=$(grep -E '^accent' "$toml" | grep -oE '#[0-9A-Fa-f]{6}') || fail "cap_archives_format: no accent in $toml"
+    # Sample input, one line of ui/Theme.qml: readonly property real hueFloor: 0.2
+    floor=$(grep -oE 'hueFloor: [0-9.]+' "$repo/ui/Theme.qml" | grep -oE '[0-9.]+') || fail "cap_archives_format: no hueFloor in ui/Theme.qml"
+    read -r sat has < <(python3 - "$accent" "$floor" <<'PY'
+# Sample input: argv "#7e9cd8" "0.2".
+import sys
+h = sys.argv[1].lstrip('#')
+f = float(sys.argv[2])
+r, g, b = int(h[0:2], 16) / 255, int(h[2:4], 16) / 255, int(h[4:6], 16) / 255
+mx, mn = max(r, g, b), min(r, g, b)
+sat = 0.0 if mx == 0 else (mx - mn) / mx
+print("%s %s" % ("%.4f" % sat, 'true' if sat > f else 'false'))
+PY
+    ) || fail "cap_archives_format: hue read failed for $accent"
+    printf 'CAP_HSF accent=%s saturation=%s floor=%s hasHue=%s\n' "$accent" "$sat" "$floor" "$has"
+    [[ "$mode" != refuse-hue || "$has" != true ]] || fail "cap_archives_format: kanagawa fixture has hue, $accent at $sat over $floor"
+}
+
+# Three files into Compress With password, the dialog open for the Format walk, no shots.
+cap_archives_format_open() {
+    local dir="$1" submenu="" glyphs=""
+    sandbox_scratch "$dir"
+    printf 'one\n' > "$dir/a.txt"
+    printf 'two\n' > "$dir/b.txt"
+    printf 'three\n' > "$dir/c.txt"
+    seed_ui_state "$fixture_root/cap-archives-format-state" '{"keys":"default","view":"list"}'
+    launch "$dir"
+    wait_listing 3
+    cap_resize 1100 700
+    [[ "$(ipc archiveFormats)" == *"7z"* ]] || fail "cap_archives_format: 7z installed but no 7z in archiveFormats [$(ipc archiveFormats)]"
+    click_row "$(row_index_of a.txt)" left
+    settle
+    click_row "$(row_index_of b.txt)" left --mods ctrl
+    settle
+    click_row "$(row_index_of c.txt)" left --mods ctrl
+    settle
+    [[ "$(ipc selectionCount)" == "3" ]] || fail "cap_archives_format: three ctrl clicks selected $(ipc selectionCount), not 3"
+    click_row "$(row_index_of a.txt)" right
+    settle
+    menus_expect menuState '.opened and .hasRow' "the file menu opens over the selection"
+    menu_seek Compress
+    key -k Right >/dev/null
+    settle
+    menus_expect menuState '.submenu and ([.submenuEntries[] | select(.label == "With password…")] | length) == 1' "the Compress flyout ends in With password"
+    submenu=$(ipc menuState | jq -r '[.submenuEntries[] | .label // "-"] | join("|")')
+    [[ "$submenu" == *"|-|With password…" ]] || fail "cap_archives_format: With password is not last under its separator: $submenu"
+    glyphs=$(ipc contextMenuSubmenuGlyphs)
+    [[ "$glyphs" == *"|key" ]] || fail "cap_archives_format: With password wears no key mark: $glyphs"
+    menu_seek_submenu "With password…"
+    key -k Return >/dev/null
+    menus_expect archiveCardsState '.compressOpened and .compressCount == 3 and .compressFormat == "7z"' "the password dialog opens for 3 items in 7z"
+    [[ "$(ipc contextMenuVisible)" == "false" ]] || fail "cap_archives_format: the menu stayed open behind the dialog"
+    settle
+}
+
+# Matching pair then Tab to the Format segment, the same forward walk the old case ends with.
+cap_archives_format_walk() {
+    key "pw" >/dev/null
+    key -k Tab >/dev/null
+    settle
+    key "pw" >/dev/null
+    key -k Tab >/dev/null
+    key -k Tab >/dev/null
+    key -k Tab >/dev/null
+    key -k Tab >/dev/null
+    menus_expect archiveCardsState '.compressOpened and .compressFocus == 1 and .compressFormat == "7z"' "Tab reaches the Format segment"
+}
+
+# Format focus on the live theme, one shot.
+case_cap_archives_format_live() {
+    local dir="$fixture_root/cap-archives-format-live" menus_checks=0
+    command -v 7z >/dev/null || { printf 'CAP SKIP cap-archives-format-live: 7z is not installed\n'; return 0; }
+    cap_archives_format_hue "$real_state_dir/theme/colors.toml" record
+    cap_archives_format_open "$dir"
+    cap_archives_format_walk
+    settle
+    assert_theme
+    shot archives-format-focus-live
+    kill_flea
+}
+
+# Format focus on kanagawa through a child HOME, one shot.
+case_cap_archives_format_kanagawa() {
+    local dir="$fixture_root/cap-archives-format-kanagawa" menus_checks=0 src="${kanagawa_colors:-/usr/share/omarchy/themes/kanagawa/colors.toml}"
+    command -v 7z >/dev/null || { printf 'CAP SKIP cap-archives-format-kanagawa: 7z is not installed\n'; return 0; }
+    [[ -f "$src" ]] || fail "cap_archives_format_kanagawa: kanagawa colors.toml absent at $src"
+    local sweep_root="$fixture_root/cap-archives-format-kanagawa-home" sweep_home="$fixture_root/cap-archives-format-kanagawa-home/home" sweep_real_bin="$flea_bin"
+    local real_foreground="" flea_bin="$flea_bin"
+    sandbox_make "$sweep_root"
+    fixture_home_make "$sweep_home"
+    cp "$src" "$sweep_home/.local/state/omarchy/current/theme/colors.toml"
+    printf 'kanagawa\n' > "$sweep_home/.local/state/omarchy/current/theme.name"
+    # Sample input, one line of colors.toml: foreground = "#dcd7ba"
+    real_foreground=$(python3 -c 'import pathlib,sys,tomllib; print(tomllib.loads(pathlib.Path(sys.argv[1]).read_text())["foreground"].lower())' "$sweep_home/.local/state/omarchy/current/theme/colors.toml")
+    flea_bin="$sweep_root/launcher"
+    { printf '#!/usr/bin/env bash\n'; printf 'exec env HOME=%q %q "$@"\n' "$sweep_home" "$sweep_real_bin"; } > "$flea_bin"
+    chmod +x "$flea_bin"
+    cap_archives_format_hue "$sweep_home/.local/state/omarchy/current/theme/colors.toml" refuse-hue
+    cap_archives_format_open "$dir"
+    cap_archives_format_walk
+    settle
+    assert_theme
+    shot archives-format-focus-kanagawa
+    kill_flea
+}

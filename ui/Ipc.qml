@@ -3,6 +3,7 @@ import Quickshell.Io
 import qs.Commons
 import "js/Tabs.js" as Tabs
 import "js/Search.js" as Search
+// ControlReader.js loads with IpcControls.qml on the first cohesionControls call, never with the first frame.
 
 // The seam the tests drive, see AGENTS.md "Testing". Read-only: it reports, never acts.
 QtObject {
@@ -874,6 +875,12 @@ QtObject {
             }
             return JSON.stringify({inside: inside, busy: !!dialog && dialog.busy,
                 activeItem: item ? String(item) : "", field: dialog ? dialog.formFocus() : ""})
+        }
+        // The cohesion captures' reader over the window, see ui/IpcControls.qml and ui/js/ControlReader.js.
+        function cohesionControls(): string {
+            var window = root.pane.Window.window
+            var kinds = /^(DialogButton|ChromeButton|CheckBox|DialogField|ProtocolChip|Crumb|MenuRow|SidebarRow|SettingsSegment|SettingsRow|TabBar|PathEntry|RenameField)_QML/
+            return Qt.createComponent("IpcControls.qml").createObject(null).read(window, window ? window.contentItem : null, kinds, {})
         }
         function networkHostPortWidths(): string { return root.networkDialog ? root.networkDialog.formHostPortWidths() : "" }
         // Mask state and presence only: the seam never returns password content.

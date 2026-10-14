@@ -142,12 +142,13 @@ cap_unlock_type_key() {
 
 # Writes DIR/lsblk: a loop container lists as a stick (rm, and a name past Devices.js isPseudo); other calls are the real lsblk.
 cap_unlock_lsblk_shim() {
-    local dir="$1" dev="$2" real="$3"
+    local dir="$1" dev="$2" real="$3" dev2="${4:-}"
     [[ "$dev" =~ ^/dev/loop[0-9]+$ && "$real" == /* && -x "$real" ]] || return 1
+    [[ -z "$dev2" || ( "$dev2" =~ ^/dev/loop[0-9]+$ && "$dev2" != "$dev" ) ]] || return 1
     mkdir -p -- "$dir" || return 1
     {
         printf '#!/bin/bash\n# Test-only lsblk written by tests/ui-captures-unlock.sh; it dies with its sandbox root.\n'
-        printf 'real=%q dev=%q\n' "$real" "$dev"
+        printf 'real=%q dev=%q dev2=%q\n' "$real" "$dev" "$dev2"
         cat <<'SHIM'
 # Sample input (Flea's argv, ui/DeviceMounts.qml): "--bytes --json -o NAME,PATH,...,UUID"; the real lsblk's reply: {"blockdevices":[{"name":"loop0","path":"/dev/loop0","rm":false,"children":[{"name":"luks-6f1c2a7e","rm":false}]}]}
 case " $* " in *" --json "*|*" -J "*) ;; *) exec "$real" "$@" ;; esac
@@ -158,7 +159,11 @@ if (( rc != 0 )) || ! jq -e --arg dev "$dev" "any(.blockdevices[]?; $pick)" <<< 
     exit "$rc"
 fi
 mark='def mark: .rm = true | if .children then .children |= map(mark) else . end;'
+if [[ -z "$dev2" ]]; then
 jq --arg dev "$dev" "$mark .blockdevices |= map(if $pick then (mark | .name = \"cap-\" + .name) else . end)" <<< "$body"
+else
+jq --arg dev "$dev" --arg dev2 "$dev2" "$mark .blockdevices |= map(if $pick then (mark | .name = \"cap-\" + .name) elif ((.path // (\"/dev/\" + (.name // \"\"))) == \$dev2) then (.name = \"cap-\" + .name) else . end)" <<< "$body"
+fi
 SHIM
     } > "$dir/lsblk" || return 1
     chmod 700 "$dir/lsblk"
@@ -179,15 +184,60 @@ cap_unlock_launch() {
     printf 'LAUNCH unlock dev=%q pid=%s\n' "$dev" "$(flea_pid)"
 }
 
+# The previous open-file leg may have unmounted, so a cwd holder needs both the unlocked row and the live mount.
+cap_unlock_unmount_in_use() {
+    local mount="$1" unmount_label="$2" row rail_idx mounted_label busy_status status end _attempt
+    row=$(ipc railEntries | jq -c --arg mount "$mount" '[to_entries[] | select(.value.path == $mount and .value.locked != true and (.value.device // "") != "")][0] // null')
+    if [[ "$row" == null ]] || ! mountpoint -q -- "$mount"; then
+        printf 'CAP SKIP unlock-unmount-in-use: the open-file leg left no mounted unlocked S1LUKS row at %s\n' "$mount"
+        inuse_receipt=skipped
+        return 0
+    fi
+    rail_idx=$(jq -r .key <<< "$row")
+    mounted_label=$(jq -er '.value.label | select(length > 0)' <<< "$row") || fail "cap_unlock: the mounted S1LUKS row has no name"
+    # DeviceMounts.qml:231,500 passes the mounted row's label to Devices.js:344, not the locked container's label.
+    busy_status="$mounted_label is busy; close what is using it and try again."
+    # The open-file leg can leave this same sentence standing, so Escape clears it and only a new one counts.
+    for _attempt in 1 2 3 4; do
+        [[ "$(ipc statusPrimary 2>/dev/null)" == "$busy_status" ]] || break
+        key -k Escape >/dev/null
+        settle
+    done
+    [[ "$(ipc statusPrimary 2>/dev/null)" != "$busy_status" ]] || fail "cap_unlock: the earlier busy sentence never cleared"
+    ( cd -- "$mount" && exec sleep 60 ) &
+    holder=$!
+    for _attempt in $(seq 1 40); do
+        [[ "$(readlink "/proc/$holder/cwd" 2>/dev/null)" == "$mount" ]] && break
+        sleep 0.05
+    done
+    [[ "$(readlink "/proc/$holder/cwd" 2>/dev/null)" == "$mount" ]] || { kill "$holder" 2>/dev/null || true; fail "cap_unlock: nothing holds $mount, so Unmount could not be refused"; }
+    click_rail_row "$rail_idx" right
+    settle
+    menu_seek "$unmount_label"
+    key -k Return >/dev/null
+    end=$((SECONDS + 25))
+    while (( SECONDS < end )); do
+        status=$(ipc statusPrimary 2>/dev/null || printf "")
+        [[ "$status" == "$busy_status" ]] && break
+        sleep 0.1
+    done
+    [[ "$status" == "$busy_status" ]] || { kill "$holder" 2>/dev/null || true; fail "cap_unlock: Unmount of a volume in use did not say it was busy, status [$status]"; }
+    settle
+    shot unlock-unmount-in-use
+    kill "$holder" 2>/dev/null || true
+    wait "$holder" 2>/dev/null || true
+    holder=""
+}
+
 # Unlock: the locked row, the card wrong-then-right, the unlocked row and the Eject that relocks it.
 case_cap_unlock() {
     # The container is FLEA_CAP_LUKS_DEV (LUKS2 over a vfat labelled S1LUKS); its test-only passphrase is FLEA_CAP_LUKS_KEY.
     local dir="$fixture_root/cap-unlock" dev="${FLEA_CAP_LUKS_DEV:-}" key="${FLEA_CAP_LUKS_KEY:-}"
     local label="" keyfile="" state="" status="" wrong="no-such-passphrase"
     local end crypt="" shot_done=false shim="" rail_poll_ms="" listing_ms="" unlocking="" stop=""
-    local mount="" first="" cancel_seen=false entries="" unmount_label="" rail_idx="" holder="" ilabel="" idev=""
+    local busy_status="" mount="" first="" cancel_seen=false entries="" unmount_label="" rail_idx="" holder="" ilabel="" idev=""
     # The receipt names only the states actually shot, so each SKIP below downgrades its part.
-    local cancel_receipt=rail openfile_receipt=skipped unmounted_receipt=rail eject_receipt=locked,ejected
+    local cancel_receipt=rail openfile_receipt=skipped inuse_receipt=in-use unmounted_receipt=rail eject_receipt=locked,ejected
     # An ssh-started Flea is an inactive polkit subject that udisks refuses, so it starts in the graphical slice.
     local -a flea_launch_wrap=(systemd-run --user --scope --quiet --slice=app-graphical.slice)
     sandbox_scratch "$dir"
@@ -213,6 +263,9 @@ case_cap_unlock() {
         printf 'CAP SKIP unlock-eye-rest: no FLEA_CAP_LUKS_DEV in this environment\n'
         printf 'CAP SKIP unlock-eye-hover: no FLEA_CAP_LUKS_DEV in this environment\n'
         printf 'CAP SKIP unlock-eye-on: no FLEA_CAP_LUKS_DEV in this environment\n'
+        printf 'CAP SKIP unlock-card-focus-unlock: no FLEA_CAP_LUKS_DEV in this environment\n'
+        printf 'CAP SKIP unlock-card-focus-cancel: no FLEA_CAP_LUKS_DEV in this environment\n'
+        printf 'CAP SKIP unlock-unmount-in-use: no FLEA_CAP_LUKS_DEV in this environment\n'
         return 0
     fi
     [[ "$dev" == /dev/* ]] || fail "cap_unlock: FLEA_CAP_LUKS_DEV names [$dev], not a device path"
@@ -223,7 +276,9 @@ case_cap_unlock() {
     if [[ "$dev" =~ ^/dev/loop[0-9]+$ ]]; then
         shim="$fixture_root/cap-unlock-shim"
         sandbox_scratch "$shim"
-        cap_unlock_lsblk_shim "$shim" "$dev" "$(command -v lsblk)" || fail "cap_unlock: the lsblk shim for $dev could not be written"
+        idev="${FLEA_CAP_INTERNAL_LUKS_DEV:-}"
+        [[ "$idev" =~ ^/dev/loop[0-9]+$ ]] || idev=""
+        cap_unlock_lsblk_shim "$shim" "$dev" "$(command -v lsblk)" "$idev" || fail "cap_unlock: the lsblk shim for $dev could not be written"
         printf 'CAP NOTE unlock: lsblk shim marks %s removable, listed as cap-%s\n' "$dev" "${dev#/dev/}"
     fi
     printf 'one\n' > "$dir/a.txt"
@@ -253,6 +308,9 @@ case_cap_unlock() {
         key -k Tab >/dev/null
         cap_unlock_expect ".focus == \"$stop\"" "Tab never reached $stop on the card"
     done
+    # The walk ends on Unlock, so the keyboard ring there is shot before Return submits it.
+    settle
+    shot unlock-card-focus-unlock
     # Return on the focused Unlock submits. A refusal can end inside one poll, so the Unlocking stop list is pinned on the right attempt below.
     key -k Return >/dev/null
     cap_unlock_expect '.phase == "wrong"' "a wrong passphrase never ended in the wrong state"
@@ -392,6 +450,15 @@ case_cap_unlock() {
     settle
     key -k Return >/dev/null
     cap_unlock_expect '.opened == true' "the Unlock card never reopened on $label"
+    # Reopened empty one Tab puts the keyboard ring on Cancel, so it is shot before typing.
+    key -k Tab >/dev/null
+    cap_unlock_expect '.focus == "cancel"' "Tab never put the keyboard on Cancel"
+    settle
+    shot unlock-card-focus-cancel
+    for stop in unlock field; do
+        key -k Tab >/dev/null
+        cap_unlock_expect ".focus == \"$stop\"" "Tab never came back through $stop to the field"
+    done
     keyfile="$dir/.cap-key2"
     trap "rm -f -- ${keyfile@Q}" EXIT
     cap_unlock_write_key "$keyfile" "$key"
@@ -463,7 +530,9 @@ case_cap_unlock() {
         wait "$holder" 2>/dev/null || true
         holder=""
         printf 'CAP SKIP unlock-lock-open-file: no Unmount or Eject on the unlocked rail menu (%s)\n' "$entries"
+        printf 'CAP SKIP unlock-unmount-in-use: no Unmount or Eject on the unlocked rail menu (%s)\n' "$entries"
         printf 'CAP SKIP unlock-unmounted-rail: no Unmount or Eject on the unlocked rail menu (%s)\n' "$entries"
+        inuse_receipt=skipped
         unmounted_receipt=skipped
     else
         menu_seek "$unmount_label"
@@ -488,6 +557,7 @@ case_cap_unlock() {
         wait "$holder" 2>/dev/null || true
         holder=""
         rm -f "$mount/hold.txt"
+        cap_unlock_unmount_in_use "$mount" "$unmount_label"
         # Clean unmount through the same menu for the locked row it leaves behind.
         crypt=$(ipc railEntries | jq -r '[.[] | select(.path | endswith("/S1LUKS")) | .device][0] // ""')
         if [[ -z "$crypt" ]]; then
@@ -544,6 +614,6 @@ case_cap_unlock() {
         printf 'CAP SKIP unlock-internal-locked-row: no FLEA_CAP_INTERNAL_LUKS_DEV in this environment\n'
     fi
     # Cancel and Unlock hovered and pressed, and the eye at rest, hovered and on, are shot in the flea --unlock lane above.
-    printf 'CAP_UNLOCK locked=row card=typing,text,wrong,unlocking,unlock,hover-cancel,hover-unlock,pressed-cancel,pressed-unlock eye=rest,hover,on unlocked=row,nonempty eject=%s cancel=%s openfile=%s unmounted=%s internal=env-gated\n' "$eject_receipt" "$cancel_receipt" "$openfile_receipt" "$unmounted_receipt"
+    printf 'CAP_UNLOCK locked=row card=typing,text,focus-unlock,wrong,unlocking,unlock,focus-cancel,hover-cancel,hover-unlock,pressed-cancel,pressed-unlock eye=rest,hover,on unlocked=row,nonempty eject=%s cancel=%s openfile=%s inuse=%s unmounted=%s internal=env-gated\n' "$eject_receipt" "$cancel_receipt" "$openfile_receipt" "$inuse_receipt" "$unmounted_receipt"
     kill_flea
 }
