@@ -6,11 +6,8 @@
 .import "Swap.js" as Swap
 .import "Mounts.js" as Mounts
 
-// This file decides the rail's Trash drop, wired by ui/RailTrashRow.qml: it sends dd's trash request for the carried files, undone by z like any other delete.
-
-// Only a drag lifted in this window may trash; drops from another application, another Flea or the shelf are refused because this window did not lift those files.
-
-// The rows the marker carries, as numbers. Sample marker: "<instance>\n1,3\nmove\n%2Fd\n42\n1\n0\n7".
+// Only rows lifted in this window may trash through ui/RailTrashRow.qml, with dd's request and z's undo.
+// Sample marker: "<instance>\n1,3\nmove\n%2Fd\n42\n1\n0\n7".
 function markerRows(marker) {
     var field = String(marker).split("\n")[1] || ""
     if (field.length === 0) return []
@@ -26,7 +23,7 @@ function markerRows(marker) {
 }
 
 // The request or null: carried paths survive listing changes; rows are only for a selection too wide to carry paths, on its source listing in lift-time numbering, so src/backend/rowguard.rs refuses stale indices.
-function request(marker, urls, path) {
+function request(marker, urls, path, backend) {
     if (!Drag.isOwnDrag(marker)) return null
     // Issue 133: a GVFS mount has no trash, so the drop is refused up front as d and the menu are.
     if (!Mounts.trashable(Drag.markerSource(marker) || path)) return null
@@ -34,19 +31,19 @@ function request(marker, urls, path) {
     if (paths.length > 0) return { c: "trash", paths: paths }
     var rows = markerRows(marker)
     var listing = Drag.markerListing(marker)
-    if (rows.length === 0 || listing <= 0 || !Drag.sameListing(marker, path)) return null
+    if (rows.length === 0 || listing <= 0 || !Drag.sameListing(marker, path) || !Drag.liftedBy(marker, backend)) return null
     return Swap.named({ c: "trash", rows: rows }, listing)
 }
 
 // Whether the drag can trash its carried files here, used by the hover check and status line.
-function accepts(marker, urls, path) {
-    return request(marker, urls, path) !== null
+function accepts(marker, urls, path, backend) {
+    return request(marker, urls, path, backend) !== null
 }
 
 // Sends trash through the pane's backend and answers whether it sent; the trashed reply clears the selection and re-reads the listing.
 function drop(pane, marker, urls) {
     if (!pane || !pane.backend) return false
-    var sent = request(marker, urls, pane.path)
+    var sent = request(marker, urls, pane.path, pane.backend)
     if (!sent) return false
     // Where the cursor lands once the rows are gone, as dd sets it; only a drag from this listing has one.
     var rows = Drag.sameListing(marker, pane.path) ? markerRows(marker) : []
@@ -59,8 +56,8 @@ function drop(pane, marker, urls) {
 }
 
 // The status bar while the drag rests on the Trash row. Sample: "Move 2 items to Trash".
-function line(marker, urls, path) {
-    if (!accepts(marker, urls, path)) return ""
+function line(marker, urls, path, backend) {
+    if (!accepts(marker, urls, path, backend)) return ""
     var rows = markerRows(marker)
     var n = rows.length > 0 ? rows.length : DragOut.filePaths(urls).length
     return "Move " + Ops.items(n) + " to Trash"

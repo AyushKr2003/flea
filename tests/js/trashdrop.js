@@ -50,21 +50,39 @@ function run(check) {
     check("a refused drag says nothing", TrashDrop.line("", ["file:///d/a.txt"], "/d"), "")
 
     // A selection too wide to carry paths trashes by index, in the numbering it was lifted in.
-    var wide = Drag.markerPayload([3, 0, 2], false, "/d", 42, true, false, 7)
     var byIndex = []
-    var widePane = pane(byIndex, rows, 8)
+    var widePane = pane(byIndex, [], 7)
+    var wide = Drag.mimeFor(widePane, [3, 0, 2], false)[Drag.ROWS_MIME]
+    var otherSent = []
+    var otherPane = pane(otherSent, rows.slice().reverse(), 7)
+    check("equal generations in another backend never authorize the lifted rows",
+          TrashDrop.request(wide, [], otherPane.path, otherPane.backend), null)
+    check("another backend refuses the wide drop", TrashDrop.drop(otherPane, wide, []), false)
+    check("no trash request reaches the other backend", otherSent.length, 0)
+    check("another backend refuses the hover", TrashDrop.accepts(wide, [], "/d", otherPane.backend), false)
+    check("another backend says nothing for the refused rows", TrashDrop.line(wide, [], "/d", otherPane.backend), "")
+    check("an unrecorded marker cannot borrow the lifting backend",
+          TrashDrop.request(Drag.markerPayload([1], false, "/d", 42, true, false, 7), [], "/d", widePane.backend), null)
+    check("the lifting backend still refuses a different directory", TrashDrop.request(wide, [], "/e", widePane.backend), null)
+    check("paths still work through another backend on the same folder",
+          TrashDrop.drop(otherPane, wide, ["file:///d/c.txt"]), true)
+    check("the other backend receives only the carried path", JSON.stringify(otherSent),
+          JSON.stringify([{ c: "trash", paths: ["/d/c.txt"] }]))
+    widePane.backend.heldListing = 8
     check("a wide drag on its own listing is taken", TrashDrop.drop(widePane, wide, []), true)
     check("as rows named in the numbering of the lift, not the one held now", JSON.stringify(byIndex),
           JSON.stringify([{ c: "trash", rows: [3, 0, 2], listing: 7 }]))
-    check("the bar counts the rows the marker carries", TrashDrop.line(wide, [], "/d"), "Move 3 items to Trash")
+    check("the bar counts the rows the marker carries", TrashDrop.line(wide, [], "/d", widePane.backend), "Move 3 items to Trash")
     check("the cursor lands on the minimum inside an unsorted selection", widePane.trashedFirst, 0)
 
     // Select All is uncapped; reversed rows put the minimum last and exceed QV4's apply capacity.
     var all = []
     for (var i = 1000000; i > 0; i--) all.push(i + 16)
     var allSent = []
-    var allPane = pane(allSent, rows, 8)
-    check("an uncapped selection reaches the backend", TrashDrop.drop(allPane, Drag.markerPayload(all, false, "/d", 42, true, false, 7), []), true)
+    var allPane = pane(allSent, rows, 7)
+    var allMarker = Drag.mimeFor(allPane, all, false)[Drag.ROWS_MIME]
+    allPane.backend.heldListing = 8
+    check("an uncapped selection reaches the backend", TrashDrop.drop(allPane, allMarker, []), true)
     var whole = allSent.length === 1 && allSent[0].c === "trash" && allSent[0].listing === 7
             && allSent[0].rows.length === all.length
     for (var j = 0; whole && j < all.length; j++) whole = allSent[0].rows[j] === all[j]

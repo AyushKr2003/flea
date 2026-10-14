@@ -158,6 +158,12 @@ ShellRoot {
         implicitHeight: 650
         Flea.WindowBody { id: body; host: window }
         Item { anchors.fill: parent; TestEvent { id: driver } }
+        RailDragHold {
+            id: dragHold
+            pane: root.pane
+            host: root.host
+            report: root.check
+        }
     }
     Connections {
         target: root.host
@@ -202,7 +208,7 @@ ShellRoot {
             check("with the rail not visible", sb !== null && sb.parent.visible, false)
             return true
         }
-    ]
+    ].concat(dragHold.steps())
 
     readonly property var steps: [
         function () { return until("the first listing", ready(root.home)) },
@@ -426,7 +432,7 @@ ShellRoot {
                   root.distinct(root.samples.map(function (s) { return s.lw })) + "|" + (pane.listArea.width === root.listWidth), "1|true")
             return true
         }
-    ].concat(root.holdSteps())
+    ].concat(root.holdSteps(), dragHold.steps())
 
     Timer {
         interval: 20

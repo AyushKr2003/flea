@@ -116,6 +116,7 @@ function shelfCopying(payload) {
 // instance has to be identifiable on its own or the receiver takes the internal path against a
 // selection it never made and the drop does nothing at all.
 var INSTANCE = String(Date.now()) + "-" + String(Math.floor(Math.random() * 1000000000))
+var lifted = { marker: "", backend: null }
 
 // False only when the listed directory cannot be written, which makes a same-device drag copy.
 function listingDeletable(pane) {
@@ -133,7 +134,7 @@ var LEGACY_MARKER_FIELDS = 5
 var DELETABLE_MARKER_FIELDS = 6
 
 // Five- and six-field legacy markers have raw paths; current markers percent-encode the path field.
-// Sample input: "foreign\n2\nmove\n%2Ftmp%2Fsource\n56\n1\n1".
+// Sample input: "foreign\n2\nmove\n%2Ftmp%2Fsource\n56\n1\n1\n7".
 function markerFields(payload) {
     var fields = String(payload).split("\n")
     if ([LEGACY_MARKER_FIELDS, DELETABLE_MARKER_FIELDS, SHIFT_MARKER_FIELDS, MARKER_FIELDS].indexOf(fields.length) < 0)
@@ -184,6 +185,11 @@ function sameListing(payload, path) {
     return isOwnDrag(payload) && markerSource(payload) === path
 }
 
+// Equal listing generations in two pane backends still number different rows.
+function liftedBy(marker, backend) {
+    return !!backend && backend === lifted.backend && marker === lifted.marker
+}
+
 // Whether a drag carries at least one local path, which is what decides a drop resolves by path.
 function hasPaths(urls) {
     return DragOut.filePaths(urls).length > 0
@@ -231,6 +237,7 @@ function uriFor(path) {
 function mimeFor(pane, rows, copy, shift) {
     var mime = {}
     mime[ROWS_MIME] = markerPayload(rows, copy, Search.baseOf(pane), pane.backend ? pane.backend.dirDev : 0, listingDeletable(pane), shift === true, pane.backend ? pane.backend.heldListing : 0)
+    lifted = { marker: mime[ROWS_MIME], backend: pane.backend || null }
     var uris = []
     var paths = []
     for (var i = 0; i < rows.length; i++) {
@@ -317,7 +324,7 @@ function reachNote(canLeave) {
     return canLeave ? "" : " · too wide to drag out"
 }
 
-// Sample marker "<instance>\n1,3\nmove\n/source\n42\n1\n0"; feedback never becomes destination row indices.
+// Sample marker "<instance>\n1,3\nmove\n%2Fsource\n42\n1\n0\n7"; feedback never becomes destination row indices.
 function feedbackFor(marker, urls, shelf, proposed) {
     var fields = markerFields(marker) || []
     var own = fields[0] === INSTANCE

@@ -1103,6 +1103,8 @@ The land235b census compares the actual merged `af9db27ab` UI with the first-use
 
 The land235c review fixes retain 587 startup objects and the same 169 first-frame units. The `tests/startup-units.txt` byte sum moves from 1,630,079 to 1,630,044: the row's completion guard adds bytes, while the one-line rail comments remove more. Both unqualified-read profiles retain their allowance counts and reasons at the shifted source positions.
 
+The land235r4 Trash backend guard and rail drag hold retain the first-frame unit list. The `wc -c` sum over `tests/startup-units.txt` moves from 1,630,044 to 1,630,730 bytes; `tests/startup-objects.sh` checks the census on both images.
+
 **Qt never caches a Quickshell config.** Quickshell serves its config through its own `qs:@/qs/`
 URL scheme (`src/core/rootwrapper.cpp`, intercepted in `src/core/qsintercept.cpp`) and Qt's QML
 disk cache accepts local files only. Run any launch with
@@ -6638,15 +6640,16 @@ Trash row, a `SidebarRow` with a `DropArea`, and `ui/js/TrashDrop.js` decides.
 **Only a drag this window lifted may trash.** A foreign drop, another Flea's or the shelf's carries
 files this window did not lift, so the Trash drop refuses them rather than deleting files on the
 strength of another sender's offer. A drag carrying paths trashes those
-paths. A selection too wide to carry paths trashes by index, only over the listing it was lifted
-from, and named in the numbering of the lift, which the row marker now carries as its eighth field,
+paths. A selection too wide to carry paths trashes by index, only through the backend that lifted
+it and over the source listing, named in the numbering of the lift, which the row marker carries as its eighth field,
 so `src/backend/rowguard.rs` refuses it after a re-list rather than trashing whatever those indices
 name now. `tests/js/trashdrop.js` drives the decisions and `tests/drag.sh` case RT the real drop.
 
 A platform drag delivers no hover, so an auto-hidden rail would never come up for one:
 `ui/PaneRail.qml` lays a `DropArea` over the edge strip and the rail's width that keeps the overlay
 rail up while a row drag rests there, and refuses the drop itself, so a drop elsewhere on the overlay
-rail no longer falls through to the listing row under it.
+rail no longer falls through to the listing row under it. A child row DropArea that takes the drag
+keeps the rail up through its own `containsDrag`, until the drag leaves the rail.
 
 ## Backend memory levers that were measured and dropped
 

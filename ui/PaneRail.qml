@@ -65,7 +65,7 @@ Item {
     property bool edgeShown: false
     // The Sidebar is built by the first strip entry or Tab and then kept, so later reveals spawn nothing and keep cursor and scroll.
     property bool built: false
-    readonly property bool dragHere: dragReveal.containsDrag || (rail.item !== null && rail.item.trashDragOver)
+    readonly property bool dragHere: dragReveal.containsDrag || root.rowDragOver(rail.item)
     readonly property bool pointerWanted: root.edgeShown || root.over || root.menuHere || root.releasing || root.dragHere
     readonly property bool focusWanted: root.pane !== null && root.pane.focusView === Focus.RAIL
     readonly property bool wanted: root.pointerWanted || root.focusWanted
@@ -224,5 +224,15 @@ Item {
             onQuiesce: function (path) { root.pane.quiesceVolume(path) }
             onFirstAnsweredChanged: root.hiddenEjectReady()
         }
+    }
+
+    // A child row DropArea takes the drag from dragReveal; its live containsDrag binding keeps the rail up.
+    function rowDragOver(item) {
+        if (!item) return false
+        if (item.containsDrag === true) return true
+        for (var i = 0; i < item.children.length; i++) {
+            if (root.rowDragOver(item.children[i])) return true
+        }
+        return false
     }
 }

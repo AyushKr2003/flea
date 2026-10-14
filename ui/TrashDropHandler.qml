@@ -5,7 +5,7 @@ import "js/TrashDrop.js" as TrashDrop
 FileDrag {
     id: root
 
-    function accepts(marker, urls, path) { return TrashDrop.accepts(marker, urls, path) }
-    function line(marker, urls, path) { return TrashDrop.line(marker, urls, path) }
+    function accepts(marker, urls, path) { return TrashDrop.accepts(marker, urls, path, root.pane ? root.pane.backend : null) }
+    function line(marker, urls, path) { return TrashDrop.line(marker, urls, path, root.pane ? root.pane.backend : null) }
     function drop(pane, marker, urls) { return TrashDrop.drop(pane, marker, urls) }
 }
