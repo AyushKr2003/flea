@@ -61,7 +61,7 @@ Item {
     // frame is neither: its facts are the listing's own and there is nothing in flight.
     readonly property bool busy: root.pending || (root.row !== null && root.row.d !== true && root.meta === null && !root.manualHold)
     readonly property string pdfSentence: pdfLoader.item ? pdfLoader.item.failSentence : ""
-    readonly property string failure: lines.readFailed || root.pdfFailed
+    readonly property string failure: lines.readFailed || root.pdfFailed || (root.isHtmlRow && root.markdown && root.markdown.failed)
         ? (root.pdfFailed && root.pdfSentence.length > 0 ? root.pdfSentence : "This file could not be read.")
         : (root.meta && root.meta.archiveFailed ? "This archive could not be read." : "")
 
@@ -82,14 +82,15 @@ Item {
     // The canvas's frame is 16 by 10, the one proportion every state shares but a tall kind's, which fills the column down to the name.
     readonly property real frameRatio: 10 / 16
     readonly property bool tallRow: root.previewState !== Facts.MULTI && Facts.tall(root.rowState)
-    // RenderedPreviews: a Markdown row renders instead of listing its first lines, in a frame
-    // tall from the column top down to the name, with no toggle; it always renders.
+    // Document rows always render in the tall column frame, independently of Quick Look.
     readonly property bool isMarkdownRow: root.rowState === Facts.TEXT && root.row !== null
         && Kinds.isMarkdown(root.row.n)
-    // The Markdown pane stays null without a Markdown row, so every reader guards the loader item.
+    readonly property bool isHtmlRow: root.rowState === Facts.CODE && root.row !== null && Kinds.isHtml(root.row.n)
+    readonly property bool isDocumentRow: root.isMarkdownRow || root.isHtmlRow
+    // The document pane stays null without a document row, so every reader guards the loader item.
     readonly property var markdown: markdownLoader.item
-    // The Markdown reader's activation, read by the Loader and its item together so the two cannot drift apart.
-    readonly property bool markdownActive: root.visible && !root.manualHold && root.rowState === Facts.TEXT && root.isMarkdownRow
+    // The document reader's activation is shared by the Loader and its item so the two cannot drift apart.
+    readonly property bool markdownActive: root.visible && !root.manualHold && root.isDocumentRow && (!root.isHtmlRow || root.selectionCount <= 1)
     // Stretch renders a vector to the whole box, so the frame's pictures keep Fit for an SVG alone.
     readonly property bool vectorPath: /\.svgz?$/i.test(root.path)
     // EXIF orientations 5 to 8 swap the sides, and Qt fits its decode before it turns, so the box it is asked for turns too.
@@ -112,6 +113,7 @@ Item {
     readonly property Item pictureItem: playerLoader.visible && playerLoader.item ? playerLoader.item.contentItem : frameThumb
     readonly property Item linesItem: lines
     readonly property Item archiveItem: archivePane
+    readonly property alias factsLine: facts.line
     // A 3D model's original is never decoded: Qt has no plugin for it, and each attempt logs a warning.
     readonly property bool originalRefused: Kinds.isModel(root.path)
     // Ready is the decoded picture (thumbShown is true while it loads); a model with no thumbnail coming reads Error, which ui/js/PreviewSwap.js treats as settled.
@@ -246,8 +248,8 @@ Item {
                 id: lines
                 anchors.fill: parent
                 anchors.margins: Theme.spacing.hairline
-                visible: (root.previewState === Facts.TEXT || root.previewState === Facts.CODE) && !root.isMarkdownRow
-                active: root.visible && !root.manualHold && (root.rowState === Facts.TEXT || root.rowState === Facts.CODE) && !root.isMarkdownRow
+                visible: (root.previewState === Facts.TEXT || root.previewState === Facts.CODE) && !root.isDocumentRow
+                active: root.visible && !root.manualHold && (root.rowState === Facts.TEXT || root.rowState === Facts.CODE) && !root.isDocumentRow
                 path: root.path
                 size: root.row ? root.row.s : 0
                 maxBytes: root.textLimit
@@ -255,14 +257,14 @@ Item {
                 backend: root.pane ? root.pane.backend : null
                 numbered: root.previewState === Facts.CODE
             }
-            // RenderedPreviews: the Markdown document rendered, flowing tall with no toggle; a file-path Loader compiles it only when needed.
+            // The document body flows tall with no toggle; a file-path Loader compiles it only when needed.
             Loader {
                 id: markdownLoader
                 anchors.fill: parent
                 anchors.margins: Theme.spacing.hairline
                 active: root.markdownActive
-                visible: root.isMarkdownRow
-                source: "PreviewMarkdown.qml"
+                visible: root.isDocumentRow && (!root.isHtmlRow || root.selectionCount <= 1)
+                source: root.isHtmlRow ? "PreviewHtml.qml" : "PreviewMarkdown.qml"
                 onLoaded: {
                     item.path = Qt.binding(function () { return root.path })
                     item.size = Qt.binding(function () { return root.row ? root.row.s : 0 })
@@ -273,7 +275,7 @@ Item {
                     item.externalScrollBars = true
                 }
             }
-            // The Markdown reader takes the pane's backend once loaded, so its Source and fences colour through the engine.
+            // The document reader takes the pane's backend once loaded, so Source and Markdown fences colour through the engine.
             Binding {
                 target: markdownLoader.item
                 property: "backend"
@@ -479,9 +481,9 @@ Item {
         case Facts.PDF:
             return !root.pdfDrawn
         case Facts.TEXT:
-            return root.isMarkdownRow ? (markdown ? markdown.blank : false) : lines.blank
+            return root.isDocumentRow ? (markdown ? markdown.blank : false) : lines.blank
         case Facts.CODE:
-            return lines.blank
+            return root.isDocumentRow ? (markdown ? markdown.blank : false) : lines.blank
         case Facts.ARCHIVE:
             return root.meta === null
         case Facts.MULTI:
@@ -525,6 +527,10 @@ Item {
     // Why the frame is showing a mark instead of the thing it meant to draw. Empty for every state
     // whose mark is simply what it draws, so the line only ever appears when something went wrong.
     function frameNote() {
+        if (root.isHtmlRow && root.markdown) {
+            if (root.markdown.binary) return "binary file"
+            if (root.markdown.tooLarge) return "too large to preview"
+        }
         if (lines.note.length > 0) return lines.note
         if (root.manualHold) {
             return KeyName.hinted("%1 loads it", "loadPreview")

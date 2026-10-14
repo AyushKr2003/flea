@@ -30,6 +30,9 @@ CsvTable 1.0 CsvTable.qml
 PreviewLines 1.0 PreviewLines.qml
 PreviewScroll 1.0 PreviewScroll.qml
 PreviewMarkdown 1.0 PreviewMarkdown.qml
+PreviewHtml 1.0 PreviewHtml.qml
+HtmlPane 1.0 HtmlPane.qml
+HtmlClip 1.0 HtmlClip.qml
 MarkdownSource 1.0 MarkdownSource.qml
 MarkdownRemote 1.0 MarkdownRemote.qml
 QuickLookBar 1.0 QuickLookBar.qml

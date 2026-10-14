@@ -10,14 +10,15 @@ Item {
     parent: root.column.frameItem
     anchors.fill: parent
 
-    readonly property var code: root.column.linesItem.code
+    readonly property var code: root.html && root.html.sourceView ? root.html.sourceCode : root.column.linesItem.code
     readonly property var markdown: root.column.isMarkdownRow ? root.column.markdown : null
+    readonly property var html: root.column.isHtmlRow ? root.column.markdown : null
     readonly property var viewport: root.column.linesItem.visible ? root.column.linesItem.viewport
-        : root.markdown ? root.markdown.viewport : null
+        : root.markdown ? root.markdown.viewport : root.html ? root.html.viewport : null
     readonly property string subject: root.column.row && root.column.path.length > 0
         ? JSON.stringify([root.column.path, root.column.row.s, root.column.row.m]) : ""
-    readonly property bool contentReady: root.markdown ? root.markdown.contentReady : !!root.code && root.code.settled
-    readonly property bool loading: root.scrollPending || (root.column.isMarkdownRow ? !root.markdown || root.markdown.loading || (root.markdown.contentReady && root.pendingRestore)
+    readonly property bool contentReady: root.html ? root.html.contentReady : root.markdown ? root.markdown.contentReady : !!root.code && root.code.settled
+    readonly property bool loading: root.scrollPending || (root.column.isDocumentRow ? !root.column.markdown || root.column.markdown.loading || (root.contentReady && root.pendingRestore)
         : root.column.linesItem.loading || (!!root.code && root.code.settled && (!root.code.firstScreen || root.pendingRestore))
         )
     property var places: ({})
@@ -104,7 +105,7 @@ Item {
         root.applying = true
         v.forceLayout()
         root.applying = false
-        if (!root.markdown && !root.code.firstScreen && root.column.swap
+        if (!root.markdown && !(root.html && !root.html.sourceView) && root.code && !root.code.firstScreen && root.column.swap
                 && !root.column.swap.holding && !root.column.swap.capturing) {
             var target = v.contentY
             var identity = root.identity
@@ -127,7 +128,7 @@ Item {
             }, key, true)
             return
         }
-        if (root.markdown || root.code.firstScreen)
+        if (root.markdown || (root.html && !root.html.sourceView) || (root.code && root.code.firstScreen))
             root.drawnY = v.contentY
         root.remember()
     }
@@ -168,6 +169,8 @@ Item {
     }
     Connections {
         target: root.viewport
+        // ListView has count; the rendered page's Flickable supplies only geometry and scrolling signals.
+        ignoreUnknownSignals: true
         function onCountChanged() { Qt.callLater(root.restore) }
         function onContentHeightChanged() { Qt.callLater(root.restore) }
         function onOriginYChanged() { Qt.callLater(root.restore) }
@@ -175,8 +178,8 @@ Item {
     }
     Flea.FastScrollHandler {
         id: wheel
-        flickable: root.column.linesItem.viewport
-        visible: root.column.linesItem.visible && flickable !== null
+        flickable: root.html ? root.viewport : root.column.linesItem.viewport
+        visible: (root.html !== null || root.column.linesItem.visible) && flickable !== null
         onWheel: function (event) {
             if (root.scrollPending) event.accepted = true
         }

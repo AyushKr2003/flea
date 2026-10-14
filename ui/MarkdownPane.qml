@@ -20,8 +20,6 @@ Item {
     property bool closeFocused: false
 
     signal closeRequested
-    // The view a pointer chose on the bar; the host sets its own state to it, which comes back as view.
-    signal viewRequested(string view)
 
     readonly property var bodyItem: doc.bodyItem
     readonly property var tableWheel: doc.tableWheel
@@ -56,11 +54,8 @@ Item {
         markName: "markdown"
         name: root.path.substring(root.path.lastIndexOf("/") + 1)
         countLabel: root.contentReady ? root.lineLabel : ""
-        views: true
-        view: root.shownView
         closeFocused: root.closeFocused
         onCloseRequested: root.closeRequested()
-        onViewRequested: function (which) { root.viewRequested(which) }
     }
 
     Flea.PreviewMarkdown {

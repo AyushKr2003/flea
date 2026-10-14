@@ -63,6 +63,14 @@ QtObject {
     }
     function previewKind(): string { return root.look.kind }
     function previewState(): string { return root.look.status }
+    function htmlState(column: bool): string {
+        var c = column && root.pane ? root.pane.previewColumnItem : null
+        var pane = column ? (c && c.isHtmlRow ? c.markdown : null)
+            : root.look.kind === "text" && root.look.isHtml ? root.look.markdownShown : null
+        var doc = pane ? (column ? pane : pane.document) : null
+        if (!doc) return "{}"
+        return doc.captureState(root.fleaWindow, column ? c : root.look, pane, column)
+    }
     // Read the Compare pane and its real controls only after Quick Look has built it.
     function compareState(): string {
         var look = root.look

@@ -72,8 +72,13 @@ function act(action, root) {
     root.preview.revealStrip()
     switch (action) {
     // A Compare overlay names two files, so the cursor moving under it opens no other file in its place.
-    case "cursorDown": if (!root.preview.isCompare) { Filter.moveCursor(root, 1); Marks.follow(root); follow(root) } return
-    case "cursorUp": if (!root.preview.isCompare) { Filter.moveCursor(root, -1); Marks.follow(root); follow(root) } return
+    case "cursorDown":
+    case "cursorUp":
+        var direction = action === "cursorDown" ? 1 : -1
+        if (root.preview.isHtml && root.preview.markdownShown && root.preview.markdownShown.shownView === "rendered")
+            root.preview.markdownShown.scrollBy(direction)
+        else if (!root.preview.isCompare) { Filter.moveCursor(root, direction); Marks.follow(root); follow(root) }
+        return
     case "preview": root.preview.close(); return
     // Space closes every kind now, so playback has its own key; it self-guards, because p reaches
     // this only in the media context and a still image has nothing to play.
@@ -101,9 +106,9 @@ function act(action, root) {
     case "expand": root.preview.toggleExpand(); return
     // MediaMute rule 5: the flag is the preview's to flip, and it silences without pausing.
     case "mute": root.preview.toggleMute(); return
-    // Decided 2026-10-03: r flips the open Markdown Quick Look between rendered and source, guarded on kind.
+    // r flips only the open document Quick Look between rendered and source.
     case "markdownView":
-        if (root.preview.isMarkdown) root.preview.toggleMarkdownView()
+        if (root.preview.isDocument) root.preview.toggleMarkdownView()
         return
     // Focus.js lets w through for a code or text Quick Look only; the choice is remembered in ui.json.
     case "toggleWrap": root.preview.toggleWrap(); return

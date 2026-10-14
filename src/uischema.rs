@@ -357,8 +357,10 @@ mod tests {
         assert_eq!(d.get("preview").and_then(|p| p.get("thumbNetwork")).and_then(Json::as_bool), Some(false));
         assert_eq!(d.get("preview").and_then(|p| p.get("thumbPhone")).and_then(Json::as_bool), Some(false));
         assert_eq!(d.get("preview").and_then(|p| p.get("thumbUsb")).and_then(Json::as_bool), Some(true));
-        // Decided 2026-10-03: the Markdown view is not a stored choice, so no leaf for it ships.
-        assert!(d.get("preview").and_then(|p| p.get("markdownView")).is_none());
+        // Document view flips belong only to an open Quick Look.
+        for leaf in ["markdownView", "htmlView"] {
+            assert!(d.get("preview").expect("preview").get(leaf).is_none(), "{leaf} is not stored");
+        }
         // TallPreviews: the tall kinds show one compact facts line until `i` opens the full table.
         assert_eq!(d.get("previewFacts").and_then(Json::as_str), Some("compact"));
         assert_eq!(d.get("preview").and_then(|p| p.get("wrap")).and_then(Json::as_bool), Some(false));

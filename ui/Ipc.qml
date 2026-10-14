@@ -601,6 +601,7 @@ QtObject {
         function columnFrameReady(): bool { return root.columns ? root.columns.frameReady() : false }
         function columnTextLines(): string { return root.columns ? root.columns.textLines() : "" }
         function columnMarkdownText(): string { return root.columns ? root.columns.markdownText() : "" }
+        function htmlState(column: bool): string { return root.previewReaders.htmlState(column) }
         function columnLinesRect(): string { return root.columns ? root.fleaWindow.rectOf(root.columns.linesItem()) : "" }
         function columnArchiveRect(): string { return root.columns ? root.fleaWindow.rectOf(root.columns.archiveItem()) : "" }
         function previewSurfaceRect(): string { return root.previewReaders.previewSurfaceRect() }

@@ -2,6 +2,7 @@
 .import "../../ui/js/PreviewKeys.js" as PreviewKeys
 .import "../../ui/js/Keymap.js" as Keymap
 .import "sourcefixture.js" as Source
+.import "documentview.js" as DocumentView
 
 function run(check) {
     var activated = []
@@ -100,11 +101,13 @@ function run(check) {
     var keysBody = Source.slice(viewerSrc, "Keys.onPressed", "readonly property int page")
     check("the pdf viewer closes on the preview action", keysBody.indexOf('|| action === "preview") root.closed()') >= 0, true)
 
-    // RenderedPreviews callout 1: r switches a Markdown Quick Look and nothing else.
-    function markPane(markdown) {
+    // Rendered document kinds share r; the flip is transient and forgotten on close.
+    function markPane(markdown, html) {
         var pane = { switched: 0 }
         pane.preview = {
             isMarkdown: markdown,
+            isHtml: html === true,
+            isDocument: markdown || html === true,
             revealStrip: function () {},
             toggleMarkdownView: function () { pane.switched += 1 }
         }
@@ -113,14 +116,16 @@ function run(check) {
     var notes = markPane(true)
     PreviewKeys.act("markdownView", notes)
     check("r switches a Markdown preview", notes.switched, 1)
+    var page = markPane(false, true)
+    PreviewKeys.act("markdownView", page)
+    check("r switches an HTML preview", page.switched, 1)
     var photo = markPane(false)
     PreviewKeys.act("markdownView", photo)
-    check("r does nothing to a non-Markdown preview", photo.switched, 0)
+    check("r does nothing to a non-document preview", photo.switched, 0)
     check("r maps to markdownView in the preview context",
         Keymap.lookupFor("default", 0, "r", Qt.NoModifier, "preview", "gui"), "markdownView")
     var quickSrc = Source.source("ui/Preview.qml")
-    check("the Quick Look flip is a local property and stores no choice",
-        quickSrc.indexOf("root.markdownSource = !root.markdownSource") >= 0 && quickSrc.indexOf("markdownView:") < 0, true)
+    DocumentView.run(check, quickSrc, Source.source("ui/ViewState.qml"), Source.block)
     check("r stays rename in the listing",
         Keymap.lookupFor("default", 0, "r", Qt.NoModifier, "listing", "gui"), "rename")
     // ButtonSystem040: Tab and Shift+Tab put the keyboard on the Markdown bar's close mark and take it off; Return or Space on it closes.
@@ -291,14 +296,15 @@ function runWrapKeys(check) {
     function open(kind) {
         return { active: true, isMedia: kind === "audio" || kind === "video", isPdf: kind === "pdf",
             isCodeText: kind === "code" || kind === "text", isMarkdown: kind === "markdown" || kind === "markdown-source",
-            markdownShown: { shownView: kind === "markdown-source" ? "source" : "rendered" } }
+            isHtml: kind === "html" || kind === "html-source", isDocument: /^(markdown|html)(-source)?$/.test(kind),
+            markdownShown: { shownView: /-source$/.test(kind) ? "source" : "rendered" } }
     }
     var kept = Keymap.preset
     for (var preset of ["default", "vim", "mac", "windows"]) {
         Keymap.setPreset(preset)
-        for (var kind of ["code", "text", "markdown-source"])
+        for (var kind of ["code", "text", "markdown-source", "html-source"])
             check(preset + ": w reaches a " + kind + " Quick Look", Focus.lookup(w, pane(open(kind))), "toggleWrap")
-        for (var other of ["markdown", "pdf", "image", "archive", "audio", "video"])
+        for (var other of ["markdown", "html", "pdf", "image", "archive", "audio", "video"])
             check(preset + ": w reaches nothing on a " + other + " Quick Look", Focus.lookup(w, pane(open(other))), "")
         check(preset + ": w stays close tab in the listing", Focus.lookup(w, pane({ active: false, isMedia: false, isPdf: false })), "tabClose")
         check(preset + ": r reaches the Markdown view in the preview context", Keymap.lookupFor(preset, 0, "r", Qt.NoModifier, "preview", "gui"), "markdownView")
@@ -310,11 +316,11 @@ function runWrapKeys(check) {
     check("the toggleWrap action asks the Quick Look to flip the wrap", wrapped.preview.toggled, 1)
     var quickSrc = Source.source("ui/Preview.qml")
     var toggle = new Function("root", "ViewState", Source.block(quickSrc, "function toggleWrap()", "ui/Preview.qml"))
-    for (var kind of ["code", "text", "markdown-source", "markdown", "pdf", "image", "archive", "audio", "video"]) {
+    for (var kind of ["code", "text", "markdown-source", "html-source", "markdown", "html", "pdf", "image", "archive", "audio", "video"]) {
         var changes = []
         toggle(open(kind), { previewWrap: false, changeLeaf: function (leaf, patch) { changes.push([leaf, patch.wrap]) } })
         check(kind + ": only a wrappable Quick Look writes preview.wrap", JSON.stringify(changes),
-            ["code", "text", "markdown-source"].indexOf(kind) >= 0 ? '[["preview",true]]' : "[]")
+            ["code", "text", "markdown-source", "html-source"].indexOf(kind) >= 0 ? '[["preview",true]]' : "[]")
     }
     check("the pane draws the remembered wrap", quickSrc.indexOf("wrap: ViewState.previewWrap") >= 0, true)
 }

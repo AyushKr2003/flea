@@ -102,7 +102,7 @@ pub struct Ticket {
 }
 
 // Registers the request on its slot at once, in the order requests come in. The older job is marked cancelled here and its jail is ended off the loop, because ending a jail waits for it to go.
-fn begin(slot: &str) -> Ticket {
+pub(super) fn begin(slot: &str) -> Ticket {
     static NEXT: AtomicU64 = AtomicU64::new(1);
     let seq = NEXT.fetch_add(1, Ordering::Relaxed);
     let run = Arc::new(Mutex::new(Run::Idle));
@@ -116,12 +116,12 @@ fn begin(slot: &str) -> Ticket {
 }
 
 impl Ticket {
-    fn superseded(&self) -> bool {
+    pub(super) fn superseded(&self) -> bool {
         matches!(*held(&self.run), Run::Cancelled)
     }
 
     // Hands the running jail over so a newer request can end it; false when that already happened, and the jail is ended here.
-    fn attach(&self, mut jailed: jail::Jailed) -> bool {
+    pub(super) fn attach(&self, mut jailed: jail::Jailed) -> bool {
         let mut run = held(&self.run);
         if matches!(*run, Run::Cancelled) {
             jail::kill_tree(&mut jailed);
@@ -133,11 +133,20 @@ impl Ticket {
 
     // Polls under the lock the older job's end kills under, so a kill never lands on a pid already reaped; None when cancelled.
     fn reap(&self) -> Option<std::io::Result<ExitStatus>> {
+        self.reap_until(None)
+    }
+
+    pub(super) fn reap_until(&self, deadline: Option<std::time::Instant>) -> Option<std::io::Result<ExitStatus>> {
         loop {
             {
                 let mut run = held(&self.run);
                 match &mut *run {
                     Run::Live(jailed) => match jailed.child.try_wait() {
+                        Ok(None) if deadline.is_some_and(|end| std::time::Instant::now() >= end) => {
+                            jail::kill_tree(jailed);
+                            *run = Run::Idle;
+                            return Some(Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "preview timed out")));
+                        }
                         Ok(None) => {}
                         done => {
                             *run = Run::Idle;
@@ -152,7 +161,7 @@ impl Ticket {
     }
 
     // The send and the slot check share one lock with begin, so a reply is either sent before a newer request registers or dropped.
-    fn finish(self, line: String, tx: &Sender<OpMsg>) {
+    pub(super) fn finish(self, line: String, tx: &Sender<OpMsg>) {
         let mut slots = held(table());
         if slots.get(&self.slot).is_some_and(|(seq, _)| *seq == self.seq) {
             slots.remove(&self.slot);
@@ -163,7 +172,7 @@ impl Ticket {
 
 // Answered on a thread, because a read on a hung mount never returns and the loop waits on nothing.
 pub fn spawn(ask: Ask, tx: Sender<OpMsg>) {
-    let ticket = begin(&ask.slot);
+    let ticket = begin(&format!("code:{}", ask.slot));
     std::thread::spawn(move || {
         let bat = if sandbox::available() { bat_in(&std::env::var("PATH").unwrap_or_default()) } else { None };
         if let Some(line) = answer(&ask, bat.as_deref(), &ticket) {

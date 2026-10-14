@@ -116,6 +116,9 @@ output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     timeout 60 qs -p "$test_root/config" 2>&1 ) 2>/dev/null )
 
 # Sample input, the verdict line: "  INFO qml: MARKDOWN_RENDER PASS chip, rules, bar and links all read"
+if [ -n "${FLEA_CI_SUITE_LOGS:-}" ]; then
+    printf '%s\n' "$output" > "$FLEA_CI_SUITE_LOGS/markdown-render-ui.log"
+fi
 if [ "$(printf '%s\n' "$output" | grep -c 'MARKDOWN_RENDER PASS')" -ne 1 ] || printf '%s\n' "$output" | grep -q 'MARKDOWN_RENDER FAIL'; then
     printf 'FAIL the rendered preview missed a pixel fact\n'
     printf '%s\n' "$output" | grep -aE 'MARKDOWN_RENDER|ERROR|error'
