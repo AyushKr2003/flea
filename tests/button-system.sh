@@ -84,7 +84,7 @@ chmod 700 "$test_root/runtime" || exit 1
 # The outer cap, passed to the harness as BUTTONSYS_TIMEOUT_S so its own cap, half of it, lands first.
 run_timeout_s=60
 # Each harness runs in its own config dir with the same pinned roots: "<qml file>:<report tag>:<checks a full green run makes>".
-harnesses="button-system.qml:BUTTONSYS:101 button-members.qml:MEMBERS:161 button-hueless.qml:HUELESS:20 button-keys.qml:KEYS:21 button-heldmask.qml:HELDMASK:4 button-press.qml:PRESS:102 button-press.qml:PRESSMUTANT:102"
+harnesses="button-system.qml:BUTTONSYS:101 button-members.qml:MEMBERS:161 button-hueless.qml:HUELESS:20 button-keys.qml:KEYS:21 button-heldmask.qml:HELDMASK:4 button-press.qml:PRESSSNAP:102 button-press.qml:PRESS:102 button-press.qml:PRESSMUTANT:102"
 total=0
 verdict_output=""
 for spec in $harnesses; do
@@ -93,17 +93,25 @@ for spec in $harnesses; do
     mkdir -p "$config" || exit 1
     negative=0
     # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
-    if [ "$tag" = PRESSMUTANT ]; then
+    if [ "$tag" = PRESSMUTANT ] || [ "$tag" = PRESSSNAP ]; then
         negative=1
+        [ "$tag" = PRESSSNAP ] && negative=2
         tag=PRESS
         cp -a ui "$config/flea" || exit 1
-        # Mutate only this run's marked copy, restoring the native-text scale defect.
-        python3 - "$config/flea/DialogButton.qml" <<'PY'
+        # Mutate only this run's marked copy, restoring root scaling or removing both inset Behaviors.
+        python3 - "$config/flea/DialogButton.qml" "$negative" <<'PY'
 from pathlib import Path
 import sys
 p = Path(sys.argv[1])
 assert p.is_absolute()
-s = p.read_text().replace('    id: root\n', '    id: root\n    scale: tap.pressed && root.available && !Theme.reducedMotion ? Buttons.PRESS_SCALE : 1\n    Behavior on scale { NumberAnimation { duration: Buttons.PRESS_MS; easing.type: Easing.OutCubic } }\n', 1)
+s = p.read_text()
+if sys.argv[2] == '2':
+    for axis in ('X', 'Y'):
+        behavior = '            Behavior on inset' + axis + ' {\n                enabled: !Theme.reducedMotion\n                NumberAnimation { duration: Buttons.PRESS_MS; easing.type: Easing.OutCubic }\n            }\n'
+        assert s.count(behavior) == 1
+        s = s.replace(behavior, '', 1)
+else:
+    s = s.replace('    id: root\n', '    id: root\n    scale: tap.pressed && root.available && !Theme.reducedMotion ? Buttons.PRESS_SCALE : 1\n    Behavior on scale { NumberAnimation { duration: Buttons.PRESS_MS; easing.type: Easing.OutCubic } }\n', 1)
 p.write_text(s)
 PY
     else
@@ -124,7 +132,19 @@ PY
     # Sample input: "  INFO qml: BUTTONSYS ok rest: ..." once per check, and "  INFO qml: BUTTONSYS DONE checks=101 failed=0" once.
     passed=$(printf '%s\n' "$output" | grep -c "$tag ok ")
     failed=$(printf '%s\n' "$output" | grep -c "$tag FAIL")
-    if [ "$negative" -eq 1 ]; then
+    if [ "$negative" -eq 2 ]; then
+        if [ "$failed" -eq 4 ] \
+            && [ "$(printf '%s\n' "$output" | grep -c 'PRESS FAIL case [0-3] press inset transitions before settling')" -eq 4 ] \
+            && [ "$(printf '%s\n' "$output" | grep -c 'PRESS ok case [45] reduced motion snaps without inset transition')" -eq 2 ] \
+            && printf '%s\n' "$output" | grep -q "PRESS DONE checks=$expected_checks failed=4"; then
+            printf 'button-system: no-Behavior mutant rejected by all four normal-motion cases; both reduced-motion cases snap (%s failed of %s)\n' "$failed" "$expected_checks"
+        else
+            fail 'button-press.qml: the no-Behavior mutant escaped its inset-transition gate'
+        fi
+        verdict_output="$verdict_output
+$output"
+        continue
+    elif [ "$negative" -eq 1 ]; then
         if printf '%s\n' "$output" | grep -q 'PRESS FAIL .*held label never transforms' \
             && printf '%s\n' "$output" | grep -q "PRESS DONE checks=$expected_checks failed=[1-9][0-9]*"; then
             printf 'button-system: root-scale mutant rejected by mapped-label checks (%s failed of %s)\n' "$failed" "$expected_checks"

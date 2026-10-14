@@ -22,7 +22,7 @@ ShellRoot {
     property var restFrame: []
     property bool wholeFrames: true
     property bool fixedLabels: true
-    property int animationSamples: 0
+    property bool insetTransition: false
     property int activations: 0
 
     function log(line) { QmlProbe.log("PRESS", line) }
@@ -42,9 +42,10 @@ ShellRoot {
         return [a.x, a.y, frame.width, frame.height]
     }
     function sample() {
-        shell.wholeFrames = shell.wholeFrames && shell.frameBox().every(function (v) { return v === Math.round(v) })
+        var frame = shell.frameBox()
+        shell.wholeFrames = shell.wholeFrames && frame.every(function (v) { return v === Math.round(v) })
         shell.fixedLabels = shell.fixedLabels && JSON.stringify(shell.labelBox()) === JSON.stringify(shell.restLabel)
-        shell.animationSamples += 1
+        shell.insetTransition = shell.insetTransition || JSON.stringify(frame) !== JSON.stringify(shell.expectedPressedFrame())
     }
     function expectedPressedFrame() {
         var reduced = shell.cases[shell.caseIndex][2]
@@ -96,19 +97,21 @@ ShellRoot {
             shell.restFrame = shell.frameBox()
             shell.wholeFrames = true
             shell.fixedLabels = true
-            shell.animationSamples = 0
+            shell.insetTransition = false
             shell.check("rest frame is on whole pixels", shell.restFrame.every(function (v) { return v === Math.round(v) }), true)
             shell.check("rest label scale", shell.restLabel[0], 1)
             shell.check("rest frame rounds the control size", shell.restFrame.slice(2), [Math.round(button.width), Math.round(button.frameHeight)])
             driver.mousePress(button, button.width / 2, button.height / 2, Qt.LeftButton, Qt.NoModifier, 0)
             shell.nextPhase()
+            // Sample before the first animation tick: a 1 px inset has no whole-pixel midpoint.
+            shell.sample()
         } else if (shell.phase === 2) {
             shell.sample()
             if (elapsed < 300) return
             shell.check("held point inside is pressed", button.pressed, true)
             shell.check("held label never transforms, including mid-animation", shell.fixedLabels, true)
             shell.check("rest, mid-animation and settled frame stay whole", shell.wholeFrames, true)
-            shell.check("animation sampled before settling", shell.animationSamples > 2, true)
+            shell.check(shell.cases[shell.caseIndex][2] ? "reduced motion snaps without inset transition" : "press inset transitions before settling", shell.insetTransition, !shell.cases[shell.caseIndex][2])
             shell.check("pressed frame uses whole pixel insets", shell.frameBox(), shell.expectedPressedFrame())
             shell.check("inside press wash is 14 percent", Math.abs(shell.washAlpha() - 0.14) < 0.002, true)
             shell.move(false)

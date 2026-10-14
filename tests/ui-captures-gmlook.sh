@@ -188,6 +188,7 @@ cap_gm_network_recipe() {
         "$cap_gm_card_x" "$cap_gm_card_y" "$cap_gm_card_w" "$cap_gm_card_h" "$padding" "$spacing" "$footer" "$cap_gm_button_h" "$cap_gm_dropbox"
 }
 
+# Sample input: "rowHeight=33\nrowPaddingY=8\ngap=6\nhairline=1" from ipc tokens.
 cap_gm_token() {
     local line
     while IFS= read -r line; do
