@@ -6,6 +6,8 @@ coh_wait_s=3
 # Seconds a dialog or an IPC reader may take to show, and the pause between two polls.
 coh_open_wait_s=15
 coh_poll_s=0.1
+# EPOCHREALTIME without its dot counts microseconds; a worker limit in seconds is compared in that unit.
+coh_usec_per_s=1000000
 # The window every surface is shot in, the pointer's offset from a control for the approach move, and the margin around a region.
 coh_win_w=1100
 coh_win_h=700
@@ -487,7 +489,7 @@ coh_bounded() {
     fi
     kill -TERM -- "-$watchdog" 2>/dev/null || :
     wait "$watchdog" 2>/dev/null || :
-    if (( status == 0 && finished - started >= limit * 1000000 )); then
+    if (( status == 0 && finished - started >= limit * coh_usec_per_s )); then
         printf 'COH_SKIPPED %s %s returned success after its %ss limit\n' "$coh_theme" "$name" "$limit"
         status=124
     fi

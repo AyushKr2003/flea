@@ -151,6 +151,7 @@ coh_ydotool() { printf '%s\n' "$*" >> "$scratch/buttons.log"; }
 resizes=0
 cap_resize() {
     local x y w h
+    # Sample input: native_box="701 370 1100 700", the window's x, y, width and height.
     read -r x y w h <<< "$native_box"
     resizes=$((resizes + 1))
     native_box="$x $y $1 $2"
@@ -160,6 +161,7 @@ window_addr_of_pid() { [[ "$1" == 4242 ]] && printf '0xabc\n'; }
 hypr_window_move() {
     local x y w h
     [[ "$1" == 0xabc ]] || return 1
+    # Sample input: native_box="701 752 900 600", the window's x, y, width and height.
     read -r x y w h <<< "$native_box"
     native_box="$2 $3 $w $h"
 }
