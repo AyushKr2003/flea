@@ -197,7 +197,6 @@ ShellRoot {
         property bool backendUnavailable: false
         property bool submitting: false
         property bool saving: false
-        property bool collisionReview: false
         property bool recent: false
         property bool answered: false
         property string path: "/home/x/y"
