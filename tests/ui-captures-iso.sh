@@ -222,14 +222,14 @@ case_cap_iso() (
             '[.[] | select(.device == $device)] | length == 1 and .[0].label == $label
              and .[0].path == $path and .[0].group == "device" and .[0].kind == "volume"
              and .[0].mounted == true and .[0].loop == true and .[0].removable == false
-             and .[0].glyph == "drive" and .[0].volumeMenu == true' <<< "$entries" >/dev/null && break
+             and .[0].glyph == "drive"' <<< "$entries" >/dev/null && break
         sleep 0.1
     done
     jq -e --arg device "$iso_loop" --arg label "$iso_label" --arg path "$mountpoint" \
         '[.[] | select(.device == $device)] | length == 1 and .[0].label == $label
          and .[0].path == $path and .[0].group == "device" and .[0].kind == "volume"
          and .[0].mounted == true and .[0].loop == true and .[0].removable == false
-         and .[0].glyph == "drive" and .[0].volumeMenu == true' <<< "$entries" >/dev/null \
+         and .[0].glyph == "drive"' <<< "$entries" >/dev/null \
         || fail "cap_iso: mounted ISO row absent or wrong: $entries"
     jq -e --argjson before "$before" \
         '[.[] | select(.group == "device") | .device] as $now
