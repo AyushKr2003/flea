@@ -3,6 +3,9 @@
 
 # Polkit accepts Hyprland's graphical session, while an ssh-started udisksctl is an inactive subject.
 cap_iso_session_exec() {
+    local -r dispatch_timeout_s=5
+    local -r completion_timeout_s=30
+    local -r poll_interval_s=0.05
     local verb="${1-}" status=125 argument job="" answer deadline device
     if [[ "${iso_session_incomplete:-false}" == true ]]; then
         printf 'cap_iso: previous session command completion is unknown\n' >&2
@@ -55,19 +58,22 @@ SH
             iso_session_incomplete=true
             status=0
             answer=$(XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" HYPRLAND_INSTANCE_SIGNATURE="$HYPRLAND_INSTANCE_SIGNATURE" \
-                timeout 5 hyprctl dispatch "hl.dsp.exec_cmd(\"/bin/bash '$job/run.sh'\")" 2>&1) || status=$?
+                timeout "$dispatch_timeout_s" hyprctl dispatch "hl.dsp.exec_cmd(\"/bin/bash '$job/run.sh'\")" 2>&1) || status=$?
             if [[ "$status" != 0 || "$answer" != ok ]]; then
                 printf 'cap_iso: session dispatch failed: %s (exit %s)\n' "$answer" "$status" >&2
                 [[ "$status" != 0 ]] || status=125
                 break
             fi
-            deadline=$((SECONDS + 30))
-            while [[ ! -f "$job/rc" ]] && (( SECONDS < deadline )); do sleep 0.05; done
+            deadline=$((SECONDS + completion_timeout_s))
+            while [[ ! -f "$job/rc" ]] && (( SECONDS < deadline )); do
+                sleep "$poll_interval_s"
+            done
             if [[ ! -f "$job/rc" ]]; then
                 printf 'cap_iso: session command timed out waiting for %s/rc\n' "$job" >&2
                 status=124
                 break
             fi
+            # Sample input: 0
             if ! read -r status < "$job/rc" || [[ ! "$status" =~ ^[0-9]{1,3}$ ]] || (( 10#$status > 255 )); then
                 printf 'cap_iso: session command wrote an invalid exit code\n' >&2
                 status=125
