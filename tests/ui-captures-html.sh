@@ -159,3 +159,49 @@ case_cap_html_close_focus() {
     cap_html_shot false ql-html-close-focus
     cap_html_close
 }
+
+# This controlled native card retains the same image and document while only its refusal changes.
+cap_html_clip_shot() {
+    local phase="$1" name="$2" state state_file="$evidence_dir/$2.json"
+    state=$(ipc htmlState true) || fail "HTML clip: observer failed"
+    jq -e '.visible and .ready and .accelerated and .drawn and (.file | length) > 0' <<< "$state" >/dev/null \
+        || fail "HTML clip: $phase needs a drawn page on RHI: $state"
+    mkdir -p "$evidence_dir"
+    [[ ! -e "$state_file" && ! -L "$state_file" ]] || fail "HTML clip: refusing existing evidence $state_file"
+    printf '%s\n' "$state" > "$state_file"
+    printf 'HTML_STATE %s %s\n' "$name" "$(jq -c . <<< "$state")"
+    shot "$name"
+    python3 "$repo/tests/html-clip-pixels.py" "$phase" "$evidence_dir/$name.png" "$state" \
+        || fail "HTML clip: $phase pixel check failed"
+}
+cap_html_clip() {
+    local refusal="$1" menus_checks=0 dir before
+    kill_flea
+    dir=$(mktemp -d "$fixture_root/html-clip.XXXXXXXX") || fail "HTML clip: cannot create sandbox"
+    sandbox_require "$dir"
+    cap_html_dir=$dir
+    : > "$dir/$SANDBOX_MARKER"
+    trap cap_html_close EXIT
+    local flea_ui="$dir" HTML_ROOT="$dir"
+    export HTML_ROOT
+    mkdir -p "$dir/boot"
+    cp "$repo/tests/html-clip.qml" "$dir/boot/shell.qml"
+    ln -s "$repo/ui" "$dir/boot/flea"
+    ln -s "$(readlink -m "$repo/ui/boot/Commons")" "$dir/boot/Commons"
+    ln -s "$(readlink -m "$repo/ui/boot/Ui")" "$dir/boot/Ui"
+    printf '<body style="margin:0;background:#2345bc;min-height:400px"></body>\n' > "$dir/page.html"
+    magick -size 300x400 xc:'#2345bc' "$dir/page.png" || fail "HTML clip: page creation failed"
+    seed_ui_state "$dir/state" '{"keys":"default","view":"list"}'
+    launch_window "$dir"
+    cap_html_expect true '.visible and .ready and .accelerated and .drawn and .clip and .state == "ready" and (.pending | not)' "native clip draws its page on RHI"
+    cap_html_clip_shot ready "html-clip-$refusal-before"
+    before=$(ipc htmlState true | jq -er '.file') || fail "HTML clip: no drawn image path"
+    [[ "$(ipc htmlClipRefuse "$refusal")" == true ]] || fail "HTML clip: $refusal transition refused"
+    cap_html_expect true ".visible and .ready and .drawn and .$refusal and (.pending | not)" "$refusal settles after the page was drawn"
+    [[ "$(ipc htmlState true | jq -er '.file')" == "$before" ]] || fail "HTML clip: $refusal discarded the old image before the check"
+    cap_html_clip_shot "$refusal" "html-clip-$refusal"
+    [[ "$(ipc htmlState true | jq -er '.clip | not')" == true ]] || fail "HTML clip: $refusal keeps its texture loader active"
+    cap_html_close
+}
+case_cap_html_failed() { cap_html_clip failed; }
+case_cap_html_large() { cap_html_clip large; }

@@ -1,14 +1,13 @@
 """Check the frame arc and the page boundary in a captured HTML preview."""
 import json
 import math
-import os
 from pathlib import Path
-import re
 import subprocess
 import sys
 
 
 def color(text):
+    # Sample input: "#ff2345bc" (#aarrggbb) and "#2345bc" both return (35, 69, 188).
     text = text.lstrip('#')
     if len(text) == 8:
         text = text[2:]
@@ -68,15 +67,11 @@ def check(png, state):
 
 
 def main():
-    if sys.argv[1] == '--qt':
-        # Sample input: libQt6Core.so.6 => /usr/lib/libQt6Core.so.6 (0x00007f00).
-        linked = subprocess.check_output(['ldd', sys.argv[2]], text=True)
-        core = re.search(r'libQt6Core\.so\.6\s+=>\s+(\S+)', linked).group(1)
-        print('HTML_QT qs=%s QtCore=%s' % (sys.argv[2], os.path.realpath(core)), flush=True)
-    elif sys.argv[1] == '--log':
+    if sys.argv[1] == '--log':
         count = 0
         failures = []
         for line in Path(sys.argv[2]).read_text().splitlines():
+            # Sample input: qml: HTML_CORNER_STATE {"name":"html-column","accelerated":true,"column":true}
             if 'HTML_CORNER_STATE ' not in line:
                 continue
             state = json.loads(line.split('HTML_CORNER_STATE ', 1)[1])

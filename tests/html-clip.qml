@@ -1,18 +1,16 @@
+//@ pragma AppId com.thisisgm.flea
+//@ pragma ShellId flea
+
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import "flea" as Flea
 
-// A hidden page must leave no live texture behind its refusal after a successful render.
+// Native captures drive the real document's refusal after its texture has been drawn.
 ShellRoot {
     id: root
-    property int phase: 0
-    property int failures: 0
-    property bool capturing: false
+    property string refusal: ""
     readonly property string folder: Quickshell.env("HTML_ROOT")
-    function check(name, good) {
-        if (!good) root.failures++
-        console.warn("HTML_PREVIEW " + (good ? "PASS " : "FAIL ") + name)
-    }
     function clipActive() {
         for (var i = 0; i < document.children.length; i++) {
             var child = document.children[i]
@@ -22,15 +20,7 @@ ShellRoot {
     }
     function reply(state) {
         responder.htmlResult({ slot: document.slot, token: document.token, state: state,
-            file: root.folder + "/reload.png", width: document.deviceWidth, total: 1 })
-    }
-    function shot(name, after) {
-        root.capturing = true
-        document.grabToImage(function (image) {
-            root.check(name + " capture saves", image.saveToFile(Quickshell.env("FLEA_CI_SUITE_LOGS") + "/" + name + ".png"))
-            root.capturing = false
-            after()
-        })
+            file: root.folder + "/page.png", width: document.deviceWidth, total: 1 })
     }
     QtObject {
         id: responder
@@ -38,47 +28,54 @@ ShellRoot {
         signal htmlResult(var message)
         function askHtml(slot, path, width, cancel, height) { return ++serial }
     }
-    FloatingWindow {
-        implicitWidth: 300
-        implicitHeight: 200
-        color: "transparent"
-        Flea.PreviewHtml {
-            id: document
-            anchors.fill: parent
-            active: true
-            compact: true
-            cornerRadius: 12
-            path: root.folder + "/clip.html"
-            backend: responder
+    IpcHandler {
+        target: "flea"
+        function htmlState(column: bool): string {
+            return JSON.stringify({ visible: window.visible, ready: document.firstScreen, view: document.shownView,
+                state: document.status, file: document.imageFile, drawn: document.hasDrawn, clip: root.clipActive(),
+                failed: document.failed, large: document.tooLarge, pending: document.pending,
+                accelerated: document.GraphicsInfo.api !== GraphicsInfo.Software && document.GraphicsInfo.api !== GraphicsInfo.Unknown,
+                frame: "40 40 " + card.width + " " + card.height,
+                window: { width: window.width, height: window.height }, pageColor: "#2345bc" })
+        }
+        function htmlClipRefuse(state: string): bool {
+            if (!document.contentReady || !document.hasDrawn || !root.clipActive() || root.refusal.length > 0) return false
+            if (state !== "failed" && state !== "large") return false
+            root.refusal = state
+            if (state === "failed") { document.ask(); root.reply("failed") }
+            else document.size = document.maxBytes + 1
+            return true
         }
     }
-    Timer {
-        interval: 100
-        running: true
-        repeat: true
-        onTriggered: {
-            if (root.capturing) return
-            if (root.phase === 0 && document.token > 0) { root.reply("ready"); root.phase = 1 }
-            else if (root.phase === 1 && document.contentReady && root.clipActive()) {
-                root.check("RHI clip is live after a ready reply", document.bodyItem.visible)
-                root.phase = 2
-                root.shot("html-clip-ready", function () { document.ask(); root.reply("failed") })
-            } else if (root.phase === 2 && document.failed) {
-                root.check("a failed rerender hides the page and unloads its clip", !document.bodyItem.visible && !root.clipActive())
-                root.phase = 3
-                root.shot("html-clip-failed", function () { document.ask(); root.reply("ready") })
-            } else if (root.phase === 3 && document.contentReady && root.clipActive()) {
-                document.size = document.maxBytes + 1
-                root.phase = 4
-            } else if (root.phase === 4 && document.tooLarge) {
-                root.check("an over-limit page unloads its clip", !document.bodyItem.visible && !root.clipActive())
-                root.phase = 5
-                root.shot("html-clip-large", function () {
-                    console.warn("HTML_PREVIEW DONE clip, " + root.failures + " failed")
-                    Qt.exit(root.failures ? 1 : 0)
-                })
+    FloatingWindow {
+        id: window
+        title: "Flea"
+        implicitWidth: 380
+        implicitHeight: 280
+        color: "#101315"
+        Rectangle {
+            id: card
+            x: 40
+            y: 40
+            width: 300
+            height: 200
+            color: "#101315"
+            radius: 12
+            Flea.PreviewHtml {
+                id: document
+                anchors.fill: parent
+                active: true
+                compact: true
+                cornerRadius: card.radius
+                path: root.folder + "/page.html"
+                backend: responder
             }
         }
     }
-    Timer { interval: 10000; running: true; onTriggered: { root.check("clip lifecycle completes", false); Qt.exit(1) } }
+    Timer {
+        interval: 50
+        running: root.refusal.length === 0
+        repeat: true
+        onTriggered: if (document.pending) root.reply("ready")
+    }
 }
