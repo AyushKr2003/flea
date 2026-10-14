@@ -1,10 +1,38 @@
 .import "../../ui/js/Drag.js" as Drag
 .import "../../ui/js/RailDrop.js" as RailDrop
 .import "../../ui/js/Messages.js" as Messages
+.import "../../ui/js/Devices.js" as Devices
 .import "collidefixture.js" as Fixture
 .import "sourcefixture.js" as Source
 
+// Read the native fixture's mktemp path and simple jq object so the parser sees its actual mountpoint.
+function nativeFixture(check) {
+    var script = Source.source("tests/drag.sh")
+    // Sample input: XDEV=$(mktemp -d "$XDG_RUNTIME_DIR/flea-drag-xdev-XXXXXXXX") || exit 1
+    var creates = script.match(/XDEV=\$\(mktemp -d [^\n]+/g) || []
+    check("all and R7 share one tmpfs fixture creation", creates.length, 1)
+    // Sample input: XDEV=$(mktemp -d "$XDG_RUNTIME_DIR/flea-drag-xdev-XXXXXXXX") captures $XDG_RUNTIME_DIR/flea-drag-xdev-XXXXXXXX.
+    var template = creates.length === 1 ? creates[0].match(/mktemp -d "?([^" )]+)/) : null
+    // Sample input: jq -nc --arg path "$XDEV/big" '{blockdevices:[{mountpoints:[$path]}]}' > "$SB/lsblk.json"
+    var object = script.match(/jq -nc --arg path "\$XDEV\/big" '([^'\n]+)' > "\$SB\/lsblk.json"/)
+    if (!template || !object) throw new Error("native drag lsblk fixture seam moved")
+    var runtime = "/run/user/1000"
+    // Sample input: $XDG_RUNTIME_DIR/flea-drag-xdev-XXXXXXXX becomes /run/user/1000/flea-drag-xdev-Fixture1/big.
+    var path = template[1].replace(/\$XDG_RUNTIME_DIR/g, runtime).replace(/X+$/, "Fixture1") + "/big"
+    // Sample input: {mountpoints:[$path]} becomes {"mountpoints":["/run/user/1000/flea-drag-xdev-Fixture1/big"]}.
+    var body = object[1].replace(/\$path/g, JSON.stringify(path)).replace(/([{,])([A-Za-z][A-Za-z0-9_]*):/g, '$1"$2":')
+    var rows = Devices.parseDevices(body)
+    check("native fixture mounts become exactly one USB row", rows.length, 1)
+    check("native USB row preserves its runtime path and capacity", rows.map(function (row) {
+        return [row.label, row.kind, row.path, row.mounted, row.size].join("|")
+    }).join(","), "USB|volume|" + runtime + "/flea-drag-xdev-Fixture1/big|true|128000000000")
+    var old = JSON.parse(body)
+    old.blockdevices[0].mountpoints = ["/dev/shm/flea-drag-xdev-Fixture1/big"]
+    check("the former dev-shm fixture is correctly hidden", Devices.parseDevices(JSON.stringify(old)).length, 0)
+}
+
 function run(check) {
+    nativeFixture(check)
     var sidebar = Source.source("ui/Sidebar.qml")
     check("the rail owns one shared receiver", (sidebar.match(/RailDrop \{/g) || []).length, 1)
     check("the real rail's scroller updates the hovered target", Source.block(sidebar, "onContentYChanged:", "ui/Sidebar.qml").indexOf("fileDrop.reaim()") >= 0, true)

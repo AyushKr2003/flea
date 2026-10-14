@@ -308,9 +308,17 @@ cleanup() {
         *) bad "could not read the operator journal $journal to check it for sandbox paths from $SB"; status=1 ;;
       esac
     fi
-    sandbox_remove "$SB" 2>/dev/null
-    # R7's tmpfs root has its own mktemp and marker, checked again before deletion.
-    case "${XDEV:-}" in /dev/shm/flea-drag-xdev-*) FIXTURE_ROOT=/dev/shm sandbox_remove "$XDEV" ;; esac
+    sandbox_remove "$SB" 2>/dev/null || status=1
+    # The shared rail/R7 tmpfs root names this run in its marker; the runtime parent is never a target.
+    if [[ -n "${XDEV:-}" ]]; then
+      if [[ "${XDG_RUNTIME_DIR:-}" == "/run/user/$(id -u)" && "$XDEV" == /* \
+          && "$XDEV" == "$XDG_RUNTIME_DIR"/flea-drag-xdev-???????? \
+          && -f "$XDEV/$SANDBOX_MARKER" && "$(< "$XDEV/$SANDBOX_MARKER")" == "$SB" ]]; then
+        FIXTURE_ROOT="$XDG_RUNTIME_DIR" sandbox_remove "$XDEV" || status=1
+      else
+        bad "cleanup refused unowned tmpfs fixture $XDEV"; status=1
+      fi
+    fi
   else
     bad "cleanup did not drain; fixtures kept at $SB ${XDEV:-}"
   fi
@@ -339,8 +347,15 @@ if [[ "$drag_case" == look235 ]]; then
       favourites:[{label:"omarchy",path:$path}]}}') || exit 1
   HOME="$HOMEDIR" "$FLEA_BIN" --ui-state "$seed" >/dev/null || exit 1
 else
-  XDEV=$(mktemp -d /dev/shm/flea-drag-xdev-XXXXXX) || exit 1
-  : > "$XDEV/$SANDBOX_MARKER" || exit 1
+  [[ -d "$XDG_RUNTIME_DIR" && -O "$XDG_RUNTIME_DIR" && ! -L "$XDG_RUNTIME_DIR" ]] \
+    || die "the real runtime directory is unavailable or not owned"
+  XDEV=$(mktemp -d "$XDG_RUNTIME_DIR/flea-drag-xdev-XXXXXXXX") || exit 1
+  printf '%s\n' "$SB" > "$XDEV/$SANDBOX_MARKER" || exit 1
+  xdev_source_dev=$(stat -c %d -- "$HOMEDIR") || die "cannot stat the source fixture"
+  xdev_dest_dev=$(stat -c %d -- "$XDEV") || die "cannot stat the tmpfs fixture"
+  [[ "$xdev_source_dev" != "$xdev_dest_dev" ]] || die "the tmpfs fixture is on the source filesystem"
+  [[ "$(stat -f -c %T -- "$XDEV")" == tmpfs ]] || die "the runtime fixture is not tmpfs"
+  printf 'DRAG_XDEV source_dev=%s destination_dev=%s filesystem=tmpfs path=%s\n' "$xdev_source_dev" "$xdev_dest_dev" "$XDEV"
   mkdir -p "$XDEV/big" "$SB/bin" || exit 1
   # Sample input: one removable lsblk volume with a tmpfs mountpoint, the suite's existing other-device stand-in.
   jq -nc --arg path "$XDEV/big" '{blockdevices:[{name:"sdz1",path:"/dev/sdz1",label:"USB",mountpoints:[$path],rm:true,ro:false,tran:"usb",size:128000000000,type:"part",fstype:"tmpfs"}]}' > "$SB/lsblk.json" || exit 1
@@ -446,7 +461,7 @@ expect_ipc() {
   die "$reader expected [$expected], observed [$observed]"
 }
 
-# Sample output: DRAG_R7 phase=before-Return reader=pathBarText value=/dev/shm/flea-drag-xdev-AbCdEf/big
+# Sample output: DRAG_R7 phase=before-Return reader=pathBarText value=/run/user/1000/flea-drag-xdev-AbCdEf12/big
 walk_state() {
   local leg="$1" phase="$2" reader value
   for reader in listInFlight listRequests tabCount tabIndex tabLabels path keyDeliveryState pathBarOpen pathBarText lastMessage statusError; do
@@ -691,7 +706,7 @@ raildrop_case() {
       group=device; name=rail-copy.txt; destination="$XDEV/big"; verb=Copy
     fi
     state=$(ipc railEntries) || die "raildrop: rail entries unavailable"
-    # Sample input: [{"label":"USB","group":"device","path":"/dev/shm/run/big"}] selects the unique row's index.
+    # Sample input: [{"label":"USB","group":"device","path":"/run/user/1000/flea-drag-xdev-AbCdEf12/big"}] selects the unique row's index.
     index=$(jq -er --arg label "$label" --arg group "$group" 'to_entries | map(select(.value.label == $label and .value.group == $group)) | if length == 1 then .[0].key else error("rail target missing or ambiguous") end' <<< "$state") || die "raildrop: no unique $label row"
     point=$(ipc railRowCentre "$index")
     [[ "$point" =~ ^[0-9]+\ [0-9]+$ ]] || die "raildrop: $label has no geometry"
