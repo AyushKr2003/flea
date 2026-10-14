@@ -333,6 +333,10 @@ ShellRoot {
             property bool listingFailed: false
             property int filterIndex: 0
             property string viewMode: "list"
+            property Item contentItem: holder
+            function accept() {}
+            function cancel() {}
+            function replace() {}
             function stepFocus(from, back) {}
             function control(name, item, available) { return { name: name } }
         }
