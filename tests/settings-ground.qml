@@ -38,6 +38,7 @@ ShellRoot {
     property point to: Qt.point(0, 0)
     property var scrollItem: null
     property real scrollBefore: 0
+    property var rulerHandler: null
     readonly property var current: cases[caseIndex]
 
     function check(name, actual, expected) {
@@ -52,6 +53,16 @@ ShellRoot {
         if (item[property] !== undefined) return item
         for (var i = 0; i < item.children.length; i++) {
             var found = findItem(item.children[i], property)
+            if (found) return found
+        }
+        return null
+    }
+    function tapHandlerAt(item, point) {
+        if (!item.contains(item.mapFromItem(body, point.x, point.y))) return null
+        for (var r = 0; r < item.resources.length; r++)
+            if (item.resources[r] instanceof TapHandler) return item.resources[r]
+        for (var i = 0; i < item.children.length; i++) {
+            var found = tapHandlerAt(item.children[i], point)
             if (found) return found
         }
         return null
@@ -95,6 +106,8 @@ ShellRoot {
                 var ruler = findItem(panel.rowItemForId("textStop"), "tickWidth")
                 check("the size ruler is active", ruler.active, true)
                 from = body.mapFromItem(ruler, ruler.tickWidth / 2, ruler.height / 2)
+                rulerHandler = tapHandlerAt(ruler, from)
+                check("the real ruler handler was found", rulerHandler !== null, true)
             }
             if (current.scroll) {
                 scrollItem = findItem(card, "compactHeight")
@@ -119,6 +132,7 @@ ShellRoot {
             // A click must finish before TapHandler's long-press threshold, while a drag keeps R0's hold.
             if (Date.now() - started < (current.move ? 300 : 40)) return
             check("the press leaves Settings open", pane.settingsPanel.opened, true)
+            if (current.ruler) check("the real ruler handler owns the press", rulerHandler !== null && rulerHandler.pressed, true)
             if (current.move) {
                 for (var step = 1; step <= 8; step++)
                     driver.mouseMove(body, from.x + (to.x - from.x) * step / 8,

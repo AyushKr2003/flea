@@ -6,6 +6,7 @@ import sys
 
 
 def rectangle(value):
+    # Sample input: "220 290 1000 32" is x, y, width and height separated by spaces.
     result = tuple(map(float, value.split()))
     if len(result) != 4 or not all(map(math.isfinite, result)) or min(result[2:]) <= 0:
         raise ValueError("invalid rectangle")
@@ -17,6 +18,7 @@ def ground_point(row, card, area, rail, window, margin, point=None):
     cx, cy, cw, ch = rectangle(card)
     ax, ay, aw, ah = rectangle(area)
     wx, wy, ww, wh = rectangle(window)
+    # Sample input: '{"x":0,"width":220}' is the pane rail's window-local geometry.
     rail = json.loads(rail)
     rail_x, rail_width = float(rail["x"]), float(rail["width"])
     if not math.isfinite(rail_x) or not math.isfinite(rail_width) or rail_width < 0 or margin < 1:
@@ -26,6 +28,7 @@ def ground_point(row, card, area, rail, window, margin, point=None):
         raise ValueError("no visible row width")
     top, bottom = max(ry, ay, 0) + margin, min(ry + rh, ay + ah, wh) - margin
     if point is not None:
+        # Sample input: "1102 306" is the absolute screen x and y separated by a space.
         px, py = map(int, point.split())
         y = py - wy
     else:
@@ -76,13 +79,23 @@ def self_test():
     assert 224 <= hidden_rail[0] <= 1216
     rail_cover = ground_point(row, card, area, '{"x":220,"width":400}', window, margin)
     assert rail_cover[0] > 984
+    clear_card, middle_rail = "420 400 560 400", '{"x":500,"width":400}'
+    rail_point = ground_point(row, clear_card, area, middle_rail, window, margin)
+    assert rail_point[0] < 496 or rail_point[0] > 904, "rail exclusion did not move the candidate off the rail"
+    assert ground_point(row, clear_card, area, middle_rail, window, margin, "%s %s" % rail_point) == rail_point
+    try:
+        ground_point(row, clear_card, area, middle_rail, window, margin, "720 306")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("a press point covered only by the rail was accepted")
     try:
         ground_point("1300 290 80 32", card, area, rail, window, margin)
     except ValueError:
         pass
     else:
         raise AssertionError("a row outside the viewport was accepted")
-    print("SETTINGS_GROUND_POINT PASS 9 checks")
+    print("SETTINGS_GROUND_POINT PASS 12 checks")
 
 
 if __name__ == "__main__":
