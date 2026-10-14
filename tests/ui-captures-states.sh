@@ -71,6 +71,7 @@ from pathlib import Path
 import re
 import sys
 source = Path(sys.argv[1]).read_text()
+# Sample input: "var WORDS = {\n    denied: \"Permission denied\",\n}" yields Permission denied.
 table = re.search(r'\bvar\s+WORDS\s*=\s*\{(.*?)^\}', source, re.S | re.M)
 values = [] if table is None else re.findall(r'^\s*denied\s*:\s*("(?:\\.|[^"\\])*")\s*,?\s*$', table[1], re.M)
 if len(values) != 1:

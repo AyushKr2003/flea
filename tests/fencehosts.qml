@@ -126,6 +126,7 @@ ShellRoot {
                 root.fail(d.name + " " + kind + " did not settle as an unread oversized document")
             return Qt.callLater(root.next)
         }
+        if (d.size > root.previewLimitBytes) root.fail(d.name + " " + kind + " drew a document over the preview limit instead of refusing it")
         var blocks = h.blockList
         var n = Fence.leaks(blocks)
         root.log("DOC " + d.name + " " + kind + " blocks=" + blocks.length + " leaks=" + n + " reused=" + (h.reusedParses - root.reusedBefore) + " kinds=" + Fence.kinds(blocks).slice(0, 80))
