@@ -10,10 +10,12 @@ headless_commons() {
     source=$(readlink -f ui/boot/Commons) || return 1
     mkdir -p "$target" || return 1
     cp -a "$source/." "$target/" || return 1
-    python3 - "$target/Style.qml" <<'PY'
+    python3 -B - "$target/Style.qml" <<'PY'
 from pathlib import Path
-import re
 import sys
+
+sys.path.insert(0, 'tests')
+from staticgates import ellipsis_blocks, ellipsis_code
 
 path = Path(sys.argv[1])
 if path.is_symlink() or not path.is_file():
@@ -29,9 +31,13 @@ if import_line in source or guarded:
     source = source.replace(import_line, '')
     source = source.replace(root_line, root_line + '  property QtObject headlessEvents: QtObject { signal rawEvent(var event) }\n')
     source = source.replace(target_line, '    target: root.headlessEvents\n')
-# Sample input: // Hyprland is documentation; import Quickshell.Hyprland remains an active reader, and quoted strings keep their slashes.
-active = re.sub(r'''("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|//[^\n]*|/\*.*?\*/''', lambda m: m[1] or '', source, flags=re.S)
-if 'Hyprland' in active:
+# Sample input: `http://example`; Hyprland is live code, while // Hyprland is documentation; template interpolations stay visible.
+quote = None
+active = []
+for line in ellipsis_blocks(source).splitlines():
+    code, quote = ellipsis_code(line, quote)
+    active.append(code)
+if 'Hyprland' in '\n'.join(active):
     raise SystemExit('FAIL headless Commons: the OEM Hyprland reader changed; update the fixture contract')
 if guarded:
     path.write_text(source)

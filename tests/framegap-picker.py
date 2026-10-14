@@ -61,8 +61,8 @@ def contract(owner, harness, readers):
     mocked = members(object_body(harness, 'mockPicker'))
     required = set()
     for file, source in readers.items():
-        # Sample input: enabled: !root.picker.saving reads saving from the picker owner's root.
-        used = set(re.findall(r'\broot\.picker\.(\w+)', masked(source, '.qml', fill=' ')))
+        # Sample input: enabled: root . picker .\n saving reads saving across whitespace and comments around each dot.
+        used = set(re.findall(r'\broot\s*\.\s*picker\s*\.\s*(\w+)', masked(source, '.qml', fill=' ')))
         required |= used
         if used - provided:
             raise ValueError(f'{file} has no owner member: {", ".join(sorted(used - provided))}')
@@ -100,7 +100,20 @@ def controls():
                 continue
             raise AssertionError(f'{subject} accepted a named function expression as a method: {expression}')
     assert members('property string label: "ok" // note\nfunction accept() {}') == {'label', 'accept'}
+    spaced_readers = ('root.picker.\naccept()', 'root .\n picker .\n accept()', 'root /* owner */ . picker . // member\n accept()')
+    for reader in spaced_readers:
+        spaced = {'spaced.qml': 'onClicked: ' + reader}
+        assert contract(owner, mock, spaced) == {'accept'}
+        for subject in ('owner', 'mock'):
+            try:
+                contract(owner.replace('function accept() {}', '') if subject == 'owner' else owner,
+                         mock.replace('function accept() {}', '') if subject == 'mock' else mock, spaced)
+            except ValueError as error:
+                assert 'accept' in str(error), error
+                continue
+            raise AssertionError(f'{subject} accepted a missing spaced reader member: {reader}')
     print('FRAMEGAP PICKER_CONTROLS 12 missing root declarations and 8 named function expressions rejected')
+    print(f'FRAMEGAP PICKER_SPACING {len(spaced_readers)} reader forms checked against owner and mock')
 
 
 if __name__ == '__main__':
