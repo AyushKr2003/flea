@@ -89,6 +89,7 @@ coh_pointer_to() {
 # The left button is held between a press and its release; coh_held is read by the surface subshell's EXIT trap.
 coh_held=0
 coh_release_held() {
+    trap '' HUP INT TERM
     (( coh_held )) || return 0
     coh_held=0
     coh_ydotool click 0x80 || :
@@ -445,17 +446,24 @@ coh_run_surface() {
 
 # The caller disables errexit while this runner waits; job control gives only its worker and watchdog separate process groups.
 coh_bounded() {
-    local name="$1" limit="$2" remaining=$((coh_deadline - SECONDS)) started=${EPOCHREALTIME/./} finished worker watchdog status monitor=0 signal end
+    local name="$1" limit="$2" remaining=$((coh_deadline - SECONDS)) started=${EPOCHREALTIME/./} finished worker="" watchdog="" status monitor=0 signal end group
+    local previous_traps interrupted=0
+    local -a pending_groups=()
     shift 2
     if (( remaining <= 0 )); then
         printf 'COH_SKIPPED %s %s over the %ss budget\n' "$coh_theme" "$name" "$coh_budget_s"
         return 124
     fi
     (( limit > 0 && limit < remaining )) || limit=$remaining
+    previous_traps=$(trap -p HUP INT TERM)
+    trap 'trap "" HUP INT TERM; interrupted=129; (( ${#pending_groups[@]} == 0 )) || kill -TERM -- "${pending_groups[@]}" 2>/dev/null || :; pending_groups=()' HUP
+    trap 'trap "" HUP INT TERM; interrupted=130; (( ${#pending_groups[@]} == 0 )) || kill -TERM -- "${pending_groups[@]}" 2>/dev/null || :; pending_groups=()' INT
+    trap 'trap "" HUP INT TERM; interrupted=143; (( ${#pending_groups[@]} == 0 )) || kill -TERM -- "${pending_groups[@]}" 2>/dev/null || :; pending_groups=()' TERM
     [[ $- == *m* ]] && monitor=1
     set -m
-    ( set +m; set -e; trap - EXIT HUP INT TERM; trap 'exit 124' TERM; "$@" ) < /dev/null &
+    ( set +m; set -e; trap - EXIT HUP INT TERM; trap 'trap "" HUP INT TERM; exit 124' TERM; "$@" ) < /dev/null &
     worker=$!
+    pending_groups+=("-$worker")
     (
         set +m
         trap - EXIT HUP INT TERM
@@ -466,29 +474,46 @@ coh_bounded() {
         kill -KILL -- "-$worker" 2>/dev/null || :
     ) < /dev/null &
     watchdog=$!
+    pending_groups+=("-$watchdog")
     (( monitor )) || set +m
-    wait "$worker"
-    status=$?
-    finished=${EPOCHREALTIME/./}
-    # The detached native window belongs to launch/theme teardown; only this recorded worker group is drained here.
-    if kill -0 -- "-$worker" 2>/dev/null; then
-        for signal in TERM KILL; do
-            kill "-$signal" -- "-$worker" 2>/dev/null || :
-            end=$((SECONDS + coh_teardown_s))
-            while kill -0 -- "-$worker" 2>/dev/null && (( SECONDS < end )); do
-                command sleep "$coh_poll_s"
-            done
-            kill -0 -- "-$worker" 2>/dev/null || break
-        done
-        if kill -0 -- "-$worker" 2>/dev/null; then
-            printf 'COH_GROUP_FAILED %s %s pgid=%s survived teardown\n' "$coh_theme" "$name" "$worker"
-            (( status != 0 )) || status=1
-        else
-            printf 'COH_GROUP %s %s pgid=%s remaining=none\n' "$coh_theme" "$name" "$worker"
-        fi
+    status=$interrupted
+    if (( interrupted == 0 )); then
+        wait "$worker"
+        status=$?
     fi
-    kill -TERM -- "-$watchdog" 2>/dev/null || :
-    wait "$watchdog" 2>/dev/null || :
+    finished=${EPOCHREALTIME/./}
+    (( ${#pending_groups[@]} == 0 )) || kill -TERM -- "${pending_groups[@]}" 2>/dev/null || :
+    pending_groups=()
+    # The native window belongs to launch/theme teardown; only these two recorded child groups are drained here.
+    for group in "$worker" "$watchdog"; do
+        if kill -0 -- "-$group" 2>/dev/null; then
+            for signal in TERM KILL; do
+                # TERM was sent once; a second one can re-enter EXIT and skip the held release.
+                [[ "$signal" != KILL ]] || kill -KILL -- "-$group" 2>/dev/null || :
+                end=$((SECONDS + coh_teardown_s))
+                while kill -0 -- "-$group" 2>/dev/null && (( SECONDS < end )); do
+                    command sleep "$coh_poll_s"
+                done
+                kill -0 -- "-$group" 2>/dev/null || break
+            done
+            if kill -0 -- "-$group" 2>/dev/null; then
+                printf 'COH_GROUP_FAILED %s %s pgid=%s survived teardown\n' "$coh_theme" "$name" "$group"
+                (( status != 0 )) || status=1
+            else
+                printf 'COH_GROUP %s %s pgid=%s remaining=none\n' "$coh_theme" "$name" "$group"
+            fi
+        fi
+    done
+    if ! kill -0 "$worker" 2>/dev/null; then wait "$worker" 2>/dev/null || :; fi
+    if ! kill -0 "$watchdog" 2>/dev/null; then wait "$watchdog" 2>/dev/null || :; fi
+    trap - HUP INT TERM
+    eval "$previous_traps"
+    if (( interrupted != 0 )); then
+        printf 'COH_INTERRUPTED %s %s signal=%s\n' "$coh_theme" "$name" "$((interrupted - 128))"
+        # The caller handles the original signal after its traps are restored and both child groups are stopped.
+        kill -"$((interrupted - 128))" "$BASHPID"
+        return "$interrupted"
+    fi
     if (( status == 0 && finished - started >= limit * coh_usec_per_s )); then
         printf 'COH_SKIPPED %s %s returned success after its %ss limit\n' "$coh_theme" "$name" "$limit"
         status=124

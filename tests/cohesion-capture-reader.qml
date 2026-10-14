@@ -18,6 +18,7 @@ ShellRoot {
     property double pressSince: 0
     property var reader: null
     property double wakeAt: 0
+    readonly property int wakeWaitMs: 3000
     property double hoverAt: 0
 
     function check(cond, label) {
@@ -164,7 +165,7 @@ ShellRoot {
             if (root.stage === 6) {
                 var awakened = root.control(root.read(), "Vertical scroll bar")
                 if (!awakened || !awakened.exposed) {
-                    if (Date.now() - root.wakeAt < 3000) return
+                    if (Date.now() - root.wakeAt < root.wakeWaitMs) return
                     root.check(false, "an asleep PDF bar cannot expose without a wheel")
                     root.report()
                     return

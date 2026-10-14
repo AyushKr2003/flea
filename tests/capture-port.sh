@@ -66,6 +66,9 @@ menu_seek() { :; }
 shot() { shots=$((shots + 1)); }
 mountpoint() { [[ "$mount_live" == true ]]; }
 
+python3 "$repo/tests/capture-lifecycle.py" "$repo" "$scratch" "$SANDBOX_MARKER"
+check "isolated signal and Trash teardown probes pass" "$?" 0
+
 target='{"kind":"DialogButton","name":"Open","x":100,"y":100,"w":80,"h":30,"targetX":140,"targetY":115}'
 control_json='{"controls":[{"kind":"DialogButton","name":"Open","x":102,"y":101,"w":80,"h":30,"pressed":true}]}'
 coh_wait_flag "$target" pressed >/dev/null; check "a scaled held button keeps its identity at the hit point" "$?" 0

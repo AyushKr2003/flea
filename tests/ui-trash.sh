@@ -111,7 +111,7 @@ PY
 trash_cleanup() {
     local result="$1" pid end pids
     trap - EXIT HUP INT TERM
-    [[ -n "${trash_box:-}" && -f "$trash_box/.flea-test-sandbox" && "${trash_bus_address:-}" == "unix:path=$trash_box/bus" ]] \
+    [[ -n "${trash_box:-}" && -f "$trash_box/$SANDBOX_MARKER" && "${trash_bus_address:-}" == "unix:path=$trash_box/bus" ]] \
         || { printf 'FAIL: trash: teardown lost its owned session root or bus address\n' >&2; exit 1; }
     (kill_flea) || result=1
     pids=$(trash_private_pids) || exit 1

@@ -16,6 +16,7 @@ ShellRoot {
     property int checks: 0
     property var failures: []
     property double wheelAt: 0
+    readonly property int wakeWaitMs: 3000
     property double sleepWaitAt: 0
     // A shown bar sleeps after Scroll.HOLD_MS and FADE_MS; twice that absorbs a loaded host.
     readonly property int sleepWaitMs: 2 * (Scroll.HOLD_MS + Scroll.FADE_MS)
@@ -156,7 +157,7 @@ ShellRoot {
             if (root.stage === 5) {
                 var observed = JSON.parse(root.ipcItem().seam.cohesionControls())
                 var bar = observed.controls.find(function(c) { return c.kind === "ViewportScrollBar" && c.surface === "PreviewColumn" && c.exposed })
-                if (!bar && Date.now() - root.wheelAt < 3000) return
+                if (!bar && Date.now() - root.wheelAt < root.wakeWaitMs) return
                 root.check(!!bar, "one wheel exposes the real Columns PDF bar through the native reader path")
                 console.log("COHREADER_COLUMNS reader=" + observed.captureReader + " found=" + !!bar + " frame="
                     + root.ipcItem().seam.columnFrameRect() + " bars=" + JSON.stringify(observed.scrollBars))
