@@ -139,8 +139,13 @@ DropArea {
         root.aim(drop.x, drop.y)
         var data = root.read(drop)
         var entry = root.rowIndex >= 0 ? root.sidebar.entries[root.rowIndex] : null
-        if (RailDrop.drop(root.pane, entry, root.held, data.marker, data.urls, data.shelf, data.plain, drop.proposedAction, ctrl, shift))
+        if (RailDrop.drop(root.pane, entry, root.held, data.marker, data.urls, data.shelf, data.plain, drop.proposedAction, ctrl, shift)) {
             drop.accept(Qt.CopyAction)
+            // The rail's key table ignores undo, so an accepted drop gives the receiving listing the keyboard.
+            root.pane.focusView = "list"
+            root.pane.focusRequested()
+            root.pane.listArea.forceActiveFocus()
+        }
         root.leave()
     }
     onEntered: function (drag) { root.enterAt(drag) }

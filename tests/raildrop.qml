@@ -128,6 +128,8 @@ ShellRoot {
         readonly property var statusBar: bar
         readonly property var listArea: focusItem
         readonly property var clipboard: ({ paths: [], moving: false })
+        property string focusView: "list"
+        function focusRequested() {}
         function asks() { return collide }
         function message(text, error) { root.check("pane message " + text, error === true, false) }
     }

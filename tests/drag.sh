@@ -15,7 +15,7 @@ export FLEA_UI="$repo/ui"
 . "$repo/tools/flea-sandbox-guard"
 
 drag_case=${1:-all}
-if [[ "$drag_case" == headless || ( "$drag_case" == all && ( "${QT_QPA_PLATFORM:-}" == offscreen || -n "${FLEA_CI_SUITES:-}" ) ) ]]; then
+if [[ "$drag_case" == headless ]]; then
   exec /bin/bash "$repo/tests/raildrop.sh"
 fi
 capture_root=""
@@ -678,7 +678,7 @@ wait_for() {
 
 # Native file-drop proof and the two mid-drag captures share the suite's existing pointer driver.
 raildrop_case() {
-  local label group name destination verb state index point x y sx sy before evidence
+  local label group name destination verb state index point x y sx sy before evidence top focus
   expect_ipc listInFlight false
   native_key -k Escape
   before=$(ipc total)
@@ -727,6 +727,10 @@ raildrop_case() {
     fi
     cmp -s "$destination/$name" <(printf '%s payload\n' "$name") || die "raildrop: landed content changed"
     printf 'RAILDROP_DROP row=%s verb=%s source=%s payload=exact\n' "$label" "$verb" "$([[ -e "$HOMEDIR/$name" ]] && echo kept || echo gone)"
+    state=$(ipc keyDeliveryState) || die "raildrop: key delivery state unavailable"
+    focus=$(ipc focusView) || die "raildrop: focus view unavailable"
+    top=$(jq -c '.undo[-1] // null' "$UNDO_DIR/undo-journal" 2>/dev/null) || top='"unavailable"'
+    printf 'RAILDROP_BEFORE_UNDO row=%s view=%s focus=%s top=%s\n' "$label" "$focus" "$state" "$top"
     native_key z
     wait_for "$destination/$name" absent || die "raildrop: undo kept $label destination"
     wait_for "$HOMEDIR/$name" present || die "raildrop: undo lost the source"
