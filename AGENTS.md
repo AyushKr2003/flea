@@ -2211,6 +2211,8 @@ failure fails the check rather than passing it.
   job: how work reaches the loop, as against what the loop does with it.
 - `backend/watch.rs` the one inotify watch on the directory the current listing came from, its
   reader thread and the `changed` line it answers with, see "The open directory is watched".
+- `backend/copyfile.rs` the copy primitives every transfer is built from: streaming, preserving symlinks and refusing to overwrite.
+- `backend/copyread.rs` the copy source reader: FUSE sources read on a worker so Cancel answers within 25 ms during a stalled read; local sources read directly.
 - `backend/undoshare.rs` the one undo history every backend in the session shares, under
   `$XDG_RUNTIME_DIR/flea/` with an flocked lock file and predictable-path writes; a take is one
   locked read-modify-write, so two windows pressing Ctrl+Z undo two different operations.
