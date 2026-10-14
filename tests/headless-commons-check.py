@@ -28,9 +28,12 @@ def call_scopes(source):
     substitutions = []
     heredocs = []
     arithmetic = []
+    groups = []
+    closed_calls = set()
+    pipe_next = False
     command_start = True
-    words = re.compile(r'\w+|;;&|;;|;&|&&|\|\||[();{}!|&]')
-    delimiters = re.compile(r'<<-?[ \t]*[\'"]?([A-Za-z_]\w*)[\'"]?')
+    words = re.compile(r'\w+|;;&|;;|;&|&&|\|\||\|&|[();{}!|&]')
+    delimiters = re.compile(r'(?<!<)<<-?(?!<)[ \t]*[\'"]?([A-Za-z_]\w*)[\'"]?')
     at = 0
     while at < len(source):
         char = source[at]
@@ -77,11 +80,12 @@ def call_scopes(source):
             literal = re.compile(pattern, re.S).match(source, at)
             at = len(source) if literal is None else literal.end()
             continue
-        if char == '#' and (at == 0 or source[at - 1].isspace()):
+        # Sample input: (# comment ) leaves the subshell open; ;# and |# also start comments at shell operator boundaries.
+        if char == '#' and (at == 0 or source[at - 1].isspace() or source[at - 1] in '();|&<>'):
             end = source.find('\n', at)
             at = len(source) if end < 0 else end
             continue
-        # Sample input: cat <<'TEXT' ignores fixture parentheses until TEXT; arithmetic << 2 has no word delimiter.
+        # Sample input: cat <<'TEXT' skips its body; cat <<<ready is a here-string, never a heredoc at either trailing <<.
         heredoc = delimiters.match(source, at) if not arithmetic else None
         if heredoc:
             heredocs.append(heredoc[1])
@@ -93,6 +97,7 @@ def call_scopes(source):
         if token is None:
             if char == '\n':
                 command_start = True
+                closed_calls.clear()
             elif not char.isspace():
                 command_start = False
             at += 1
@@ -100,10 +105,13 @@ def call_scopes(source):
         word = token[0]
         line = source.count('\n', 0, at) + 1
         pattern_close = word == ')' and cases and cases[-1] == 'pattern'
+        redirect_amp = word == '&' and token.start() > 0 and source[token.start() - 1] in '<>'
         at += len(word)
         # Sample input: (\n headless_commons "$root" || exit 1\n) exits only a child; case x in x) is not a subshell close.
         if word == 'headless_commons':
-            scopes[line] = depth
+            scopes[line] = max(depth, int(any(piped for piped, _ in groups)))
+            for _, calls in groups:
+                calls.add(line)
         elif word == 'case' and command_start and (not cases or cases[-1] == 'body'):
             cases.append('subject')
         elif word == 'in' and cases and cases[-1] == 'subject':
@@ -123,8 +131,22 @@ def call_scopes(source):
                 arithmetic.pop()
             if substitutions and depth == substitutions[-1][0]:
                 _, quoted = substitutions.pop()
+        # Sample input: {\n headless_commons "$root" || exit 1\n} | cat and cat | { ... } are unsupported child callers.
+        if word == '{':
+            groups.append((pipe_next, set()))
+            closed_calls.clear()
+        elif word == '}' and groups:
+            _, closed_calls = groups.pop()
+        elif word in ('|', '|&', '&') and not redirect_amp:
+            for call in closed_calls:
+                scopes[call] = max(scopes[call], 1)
+            closed_calls.clear()
+        elif word in (';', ';;', ';&', ';;&', '&&', '||'):
+            closed_calls.clear()
+        if word not in ('!', 'time'):
+            pipe_next = word in ('|', '|&')
         # Sample input: echo if case in esac keeps argument words; ; case and a case arm's ) start commands.
-        command_start = (word in (';', ';;', ';&', ';;&', '&&', '||', '|', '&', '{', '(') or bool(pattern_close)
+        command_start = (word in (';', ';;', ';&', ';;&', '&&', '||', '|', '|&', '&', '{', '(') or bool(pattern_close)
                          or command_start and word in ('if', 'elif', 'while', 'until', 'then', 'else', 'do', 'time', '!'))
     return scopes
 
@@ -240,12 +262,42 @@ def controls(box):
         'subshell-case': '(\ncase current in\ncurrent)\n' + call + ';;\nesac\n)\n',
         'subshell-keywords': 'printf "%s\\n" if case in\n(\ncase current in\ncurrent)\nprintf "%s\\n" esac\n' + call + ';;\nesac\n)\n',
     }
-    for name, body in {**parents, **children}.items():
+    extra_parents = {
+        'brace': '{\n' + call + '}\n',
+        'brace-prefix-comment': '{ # comment ) | (\n' + call + '}\n',
+        'parent-prefix-comment': ':;# comment ( | { }\n' + call,
+        'here-string': 'cat <<<ready\n' + call,
+        'here-string-quoted': 'cat <<<"ready ) | { #"\n' + call,
+        'here-string-spaced': "cat <<< 'ready ( | #'\n" + call,
+        'unrelated-pipe': 'printf "ready\\n" | cat\n' + call,
+        'literal-pipes': 'printf "%s\\n" "|" "{ }"\n' + call,
+        'multiline-comments': '# |\n# {\n# (\n' + call,
+    }
+    extra_children = {
+        'pipeline-left': '{\n' + call + '} | cat\n',
+        'pipeline-right': 'printf "" | {\n' + call + '}\n',
+        'pipeline-left-prefix-comment': '{\n# comment ) |\n' + call + '} |# comment } (\ncat\n',
+        'pipeline-right-prefix-comment': 'printf "" |# comment ) {\n{ # comment )\n' + call + '}\n',
+        'pipeline-both': 'printf "" | {\n' + call + '} | cat\n',
+        'pipeline-nested': '{\n{\n' + call + '}\n} | cat\n',
+        'pipeline-left-stderr': '{\n' + call + '} |& cat\n',
+        'pipeline-right-stderr': 'printf "" |& {\n' + call + '}\n',
+        'pipeline-redirect': '{\n' + call + '} 2>&1 | cat\n',
+        'background-brace': '{\n' + call + '} &\n',
+        'comment-after-paren': '(# comment )\n' + call + ')\n',
+        'comment-multiline': '(\n# comment )\n' + call + ')\n',
+        'comment-after-semi': '(:;# comment )\n' + call + ')\n',
+        'comment-after-pipe': 'printf "" | (# comment )\n' + call + ')\n',
+    }
+    for name, body in {**parents, **children, **extra_parents, **extra_children}.items():
         direct.write_text(prologue + body + 'qs -p "$2"\n')
-        assert bool(unchecked_calls(scanner)) == (name in children), name
+        child = name in children or name in extra_children
+        assert bool(unchecked_calls(scanner)) == child, name
+        syntax = subprocess.run(['bash', '-n', str(direct)], capture_output=True, text=True)
+        assert syntax.returncode == 0, (name, syntax)
         result = subprocess.run(['bash', str(direct), str(root), str(root / name / 'Commons'), str(repo)], cwd=source_root, env=env, capture_output=True, text=True)
-        assert 'reader changed' in result.stderr, (name, result)
-        if name in children:
+        assert 'reader changed' in result.stderr + result.stdout, (name, result)
+        if child:
             assert result.returncode == 0 and 'QS_REACHED' in result.stdout, (name, result)
             gate = subprocess.run([sys.executable, '-B', str(checker), str(box)], cwd=fixture, capture_output=True, text=True)
             assert gate.returncode == 1 and 'parent shell' in gate.stderr, (name, gate)
@@ -267,6 +319,7 @@ def controls(box):
     print(f'HEADLESS_COMMONS_CONTROLS direct sources={direct_controls} reader drift={len(variants)} targets=5 passed; OEM token bytes preserved')
     print(f'HEADLESS_COMMONS_CALL_CONTROLS unchecked=6 rejected exit=1; callers={calls} scope-checked')
     print(f'HEADLESS_COMMONS_WHOLE_CALLERS parents={len(parents)} refusal exit=1 qs=not-started; children={len(children)} reach qs but gate rejects exit=1')
+    print(f'HEADLESS_COMMONS_PIPE_COMMENT_CONTROLS parents={len(extra_parents)} refusal exit=1 qs=not-started; children={len(extra_children)} gate rejects exit=1')
     print('HEADLESS_COMMONS_ACTUAL_CALLER unmodified framegap.sh from repo and tests: refusal exit=1 qs=not-started')
 
 
