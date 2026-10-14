@@ -729,6 +729,7 @@ raildrop_case() {
     printf 'RAILDROP_DROP row=%s verb=%s source=%s payload=exact\n' "$label" "$verb" "$([[ -e "$HOMEDIR/$name" ]] && echo kept || echo gone)"
     state=$(ipc keyDeliveryState) || die "raildrop: key delivery state unavailable"
     focus=$(ipc focusView) || die "raildrop: focus view unavailable"
+    # Sample input (tests/fixtures/undo-journal-golden.json): {"v":2,"gen":7,"undo":[{"op":"move","steps":[{"k":"m","from":"/a/x","to":"/b/x"}]}],"redo":[]}.
     top=$(jq -c '.undo[-1] // null' "$UNDO_DIR/undo-journal" 2>/dev/null) || top='"unavailable"'
     printf 'RAILDROP_BEFORE_UNDO row=%s view=%s focus=%s top=%s\n' "$label" "$focus" "$state" "$top"
     native_key z
