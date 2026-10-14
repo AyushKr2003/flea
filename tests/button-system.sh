@@ -133,7 +133,7 @@ for spec in $harnesses; do
         if [ "$failed" -eq 4 ] \
             && [ "$(printf '%s\n' "$output" | grep -c 'PRESS FAIL case [0-3] press inset transitions before settling')" -eq 4 ] \
             && [ "$(printf '%s\n' "$output" | grep -c 'PRESS ok case [45] reduced motion snaps without inset transition')" -eq 2 ] \
-            && printf '%s\n' "$output" | grep -q "PRESS DONE checks=$expected_checks failed=4"; then
+            && printf '%s\n' "$output" | grep -q "PRESS DONE checks=$expected_checks failed=4$"; then
             printf 'button-system: no-Behavior mutant rejected by all four normal-motion cases; both reduced-motion cases snap (%s failed of %s)\n' "$failed" "$expected_checks"
         else
             fail 'button-press.qml: the no-Behavior mutant escaped its inset-transition gate'

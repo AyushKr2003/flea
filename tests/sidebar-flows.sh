@@ -136,19 +136,19 @@ for variant in normalfill green mutant; do
         exit 1
     fi
     if [ "$variant" = green ]; then
-        grep -aq 'RAIL_HIGHLIGHT DONE checks=13 failed=0' "$highlight_log" && ! grep -aq 'RAIL_HIGHLIGHT FAIL' "$highlight_log" \
+        grep -aq 'RAIL_HIGHLIGHT DONE checks=13 failed=0$' "$highlight_log" && ! grep -aq 'RAIL_HIGHLIGHT FAIL' "$highlight_log" \
             || { cat "$highlight_log"; printf 'FAIL rail-highlight: the fill gate did not pass\n'; exit 1; }
         printf 'rail-highlight: 13 checks, 0 failed\n'
     elif [ "$variant" = normalfill ]; then
         grep -aq 'RAIL_HIGHLIGHT ok selectedFill differs from normalFill' "$highlight_log" \
             && grep -aq 'RAIL_HIGHLIGHT FAIL focused selectedFill and transparent current place' "$highlight_log" \
-            && grep -aq 'RAIL_HIGHLIGHT DONE checks=13 failed=1' "$highlight_log" \
+            && grep -aq 'RAIL_HIGHLIGHT DONE checks=13 failed=1$' "$highlight_log" \
             || { cat "$highlight_log"; printf 'FAIL rail-highlight: the normalFill-only mutant escaped\n'; exit 1; }
         printf 'rail-highlight: normalFill-only mutant rejected, 1 failed of 13\n'
     else
         grep -aq 'RAIL_HIGHLIGHT FAIL focused cursor fill' "$highlight_log" \
             && grep -aq 'RAIL_HIGHLIGHT FAIL focused rows have no frame' "$highlight_log" \
-            && grep -aq 'RAIL_HIGHLIGHT DONE checks=13 failed=5' "$highlight_log" \
+            && grep -aq 'RAIL_HIGHLIGHT DONE checks=13 failed=5$' "$highlight_log" \
             || { cat "$highlight_log"; printf 'FAIL rail-highlight: the 0.3.10 mutant escaped\n'; exit 1; }
         printf 'rail-highlight: 0.3.10 fill-and-frame mutant rejected, 5 failed of 13\n'
     fi
