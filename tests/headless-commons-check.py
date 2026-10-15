@@ -43,8 +43,7 @@ def call_scopes(source, comments=None):
     function_groups = {}
     owners = {}
     commands = {}
-    arguments = {}
-    opaque_commands = []
+    uncertain_dispatch = False
     references = []
     pending_function = None
     prefix_assignment = False
@@ -62,9 +61,7 @@ def call_scopes(source, comments=None):
     redirects = re.compile(r'&>>?|[<>]&')
     literal_executable = re.compile(r'(?:[A-Za-z0-9_./:+-]+|\[)(?=$|[\s();|&<>])')
     assignment_head = re.compile(r'[A-Za-z_]\w*\+?=')
-    first_argument = re.compile(r'[ \t]+([A-Za-z_]\w*)(?=$|[\s();|&<>])')
     dispatchers = ('eval', 'trap', 'command', 'builtin', 'exec', 'export', 'declare', 'typeset')
-    forward_word = '"$@"'
     at = 0
     while at < len(source):
         char = source[at]
@@ -85,10 +82,7 @@ def call_scopes(source, comments=None):
                 literal = literal_executable.match(source, at)
                 command_name = literal[0] if literal else None
                 if literal is None and not source.startswith('[[', at):
-                    owner = next((function_groups[id(calls)] for _, _, calls in reversed(groups) if id(calls) in function_groups), None)
-                    end = at + len(forward_word)
-                    forwarding = source.startswith(forward_word, at) and (end == len(source) or source[end].isspace() or source[end] in shell_boundaries)
-                    opaque_commands.append((owner, forwarding))
+                    uncertain_dispatch = True
         # Sample input: checks=${checks%% *} contains parameter data, while ${name} as an executable remains opaque.
         if source.startswith('${', at):
             parameter_depth += 1
@@ -246,8 +240,6 @@ def call_scopes(source, comments=None):
         if keyword and not opens_compound and word not in ('}', 'fi', 'done', 'esac', 'then', 'else', 'elif', 'do', 'in', '!', 'time') and re.fullmatch(r'\w+', word):
             site = (line, token.start())
             commands[site] = word
-            argument = first_argument.match(source, at)
-            arguments[site] = argument[1] if argument else None
             owners[site] = owner
             scopes[site] = max(depth, int(pipe_next or any(piped for _, piped, _ in groups)))
             closed_calls.add(site)
@@ -319,15 +311,6 @@ def call_scopes(source, comments=None):
     if unknown_pipeline:
         scopes = {line: max(scope, 1) for line, scope in scopes.items()}
     resolved = {}
-    uncertain_dispatch = False
-    for owner, forwarding in opaque_commands:
-        # Sample input: helper() { "$@"; }; helper printf ... proves a non-local executable, never a local function invocation.
-        sites = [site for site, command in commands.items() if command == owner] if owner else []
-        targets = {arguments[site] for site in sites}
-        if not (forwarding and len(functions.get(owner, [])) == 1 and owner not in references and sites
-                and None not in targets and targets.isdisjoint(functions)):
-            uncertain_dispatch = True
-            break
 
     def function_scope(name, visiting):
         if name in resolved:
@@ -657,6 +640,7 @@ def controls(box):
         'function-quoted-name-argument': 'prepare() {\n' + contract_call + '}\nprepare "prepare"\n',
         'function-concatenated-argument': 'prepare() {\n' + contract_call + '}\nprepare pre"pare"\n',
         'function-forwarded-external': 'prepare() {\n' + contract_call + '}\ndispatch() { "$@"; }\ndispatch printf "%s" ready\nprepare\n',
+        'function-command-forwarded-external': 'prepare() {\n' + contract_call + '}\ndispatch() { command -- "$@"; }\ndispatch printf "%s" ready\nprepare\n',
         'heredoc-normal-parent': "cat <<'EOF'\n) # body only\nEOF\n" + contract_call,
         'heredoc-tabs-parent': "cat <<-'EOF'\n\t) # body only\n\tEOF\n" + contract_call,
     }
@@ -686,6 +670,8 @@ def controls(box):
         'function-dead-literal-expansion': 'prepare() {\n' + contract_call + '}\nif false; then prepare; fi\ntarget=pre; target+=pare\n"$target" | cat\n',
         'function-dead-literal-wrapper': 'prepare() {\n' + contract_call + '}\nif false; then prepare; fi\nwrapper() { pre"pare"; }\nwrapper | cat\n',
         'function-dead-literal-assignment': 'prepare() {\n' + contract_call + '}\nif false; then prepare; fi\nFLAG=1 pre"pare" | cat\n',
+        'function-forwarded-eval': 'prepare() {\n' + contract_call + '}\ndispatch() { "$@"; }\nif false; then prepare; fi\ndispatch eval prepare | cat\n',
+        'function-forwarded-shift': 'prepare() {\n' + contract_call + '}\nif false; then prepare; fi\ndispatch() { shift; "$@"; }\ndispatch printf prepare | cat\n',
         'heredoc-space-child': "(\ncat <<'EOF'\n EOF\n)\nEOF\n" + contract_call + ') | cat\n',
         'heredoc-normal-tab-child': "(\ncat <<'EOF'\n\tEOF\n)\nEOF\n" + contract_call + ') | cat\n',
         'heredoc-trailing-space-child': "(\ncat <<'EOF'\nEOF \n)\nEOF\n" + contract_call + ') | cat\n',
@@ -695,6 +681,8 @@ def controls(box):
         'heredoc-multiple-child': "(\ncat <<'FIRST' <<-'SECOND'\n FIRST\n)\nFIRST\n\tbody\n\tSECOND\n" + contract_call + ') | cat\n',
         'compound-process-redirect': '{\n' + contract_call + '} > >(cat; :) | cat\n',
     }
+    # Sample input: dispatch printf looks safe at runtime, but "$@" has no supported static function-dispatch proof.
+    unresolved_parents = {'function-forwarded-external'}
     for name, body in {**safety_parents, **unsafe_callers}.items():
         owner = root / ('safety-' + name)
         owner.mkdir()
@@ -703,13 +691,14 @@ def controls(box):
         syntax = subprocess.run(['bash', '-n', str(direct)], capture_output=True, text=True)
         assert syntax.returncode == 0, (name, syntax)
         child = name in unsafe_callers
+        rejected = child or name in unresolved_parents
         errors = unchecked_calls(scanner)
-        assert bool(errors) == child, (name, errors)
+        assert bool(errors) == rejected, (name, errors)
         result = subprocess.run(['bash', str(direct), str(owner)], cwd=source_root, env=contract_env,
                                 capture_output=True, text=True, timeout=CALLER_TIMEOUT_SECONDS)
         assert (owner / 'refusals').read_text() == 'HELPER_REFUSED\n', (name, result)
         assert result.returncode == (0 if child else 1) and ('QS_REACHED' in result.stdout) == child, (name, result)
-        if child:
+        if rejected:
             gate = subprocess.run([sys.executable, '-B', str(checker), str(box)], cwd=fixture, capture_output=True,
                                   text=True, timeout=CALLER_TIMEOUT_SECONDS)
             assert gate.returncode == 1 and 'parent shell' in gate.stderr, (name, gate)
@@ -723,7 +712,7 @@ def controls(box):
     print(f'HEADLESS_COMMONS_BOUNDARY_CONTROLS parents={len(boundary_parents)} refusal exit=1 qs=not-started; children={len(boundary_children)} gate rejects exit=1')
     print(f'HEADLESS_COMMONS_NESTING_CONTROLS parents={len(nesting_parents)} refusal exit=1 qs=not-started; children={len(nesting_children)} recorded child scope and gate rejects exit=1')
     print(f'HEADLESS_COMMONS_UNSUPPORTED_CONTROLS children={len(unsupported_children)} reach parent qs but gate rejects exit=1; missing scope fails closed')
-    print(f'HEADLESS_COMMONS_SAFETY_CONTROLS parents={len(safety_parents)} refusal exit=1 qs=not-started; unsafe={len(unsafe_callers)} reach parent qs but gate rejects exit=1')
+    print(f'HEADLESS_COMMONS_SAFETY_CONTROLS parents={len(safety_parents)} refusal exit=1 qs=not-started; unresolved={len(unresolved_parents)} gate rejects exit=1; unsafe={len(unsafe_callers)} reach parent qs but gate rejects exit=1')
 
 
 if __name__ == '__main__':
