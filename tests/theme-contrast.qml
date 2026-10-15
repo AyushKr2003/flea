@@ -22,8 +22,8 @@ ShellRoot {
     readonly property double startedAt: Date.now()
     readonly property int capMs: shell.outerTimeoutS * shell.msPerSecond / shell.capShare
     readonly property string rootDir: Quickshell.env("BUTTONSYS_ROOT") || ""
-    // The palettes tests/theme-contrast.sh reads: the 22 stock themes and the Cool Dawn and Sunset fixtures.
-    readonly property int paletteCount: 24
+    // The shell pins 24 palettes on stable and 25 on dev, where Starship joins the installed stock themes.
+    readonly property int paletteCount: Number(Quickshell.env("THEMECONTRAST_PALETTES")) || 24
     // Alpha tolerance for a drawn wash against its role.
     readonly property real alphaEpsilon: 0.0001
     // glass.lua's blur brightness: Hyprland dims the blurred backdrop to this share before the translucent ground composes over it.
@@ -135,7 +135,19 @@ ShellRoot {
     readonly property var glassFloors: ({ "catppuccin": 253, "catppuccin-latte": 255, "ethereal": 240, "everforest": 255, "flexoki-light": 255,
         "gruvbox": 255, "hackerman": 255, "kanagawa": 255, "last-horizon": 253, "lumon": 255, "lupine": 255, "matte-black": 253, "miasma": 255,
         "nord": 255, "osaka-jade": 255, "retro-82": 255, "ristretto": 255, "rose-pine": 255, "solitude": 255, "tokyo-night": 255,
-        "vantablack": 249, "white": 254, "cool-dawn": 232, "sunset": 253 })
+        "vantablack": 249, "white": 254, "starship": 236, "cool-dawn": 232, "sunset": 253 })
+    // Option B: the lowest 8-bit alpha at which the unlifted muted and metadata ink hold 4.5 on the background plane alone, the plane under the list and preview.
+    function listFloor(c) {
+        var floor = shell.glassSteps
+        while (floor > 0 && Math.min(shell.inkWorstOn(c.muted, c.background, floor - 1), shell.inkWorstOn(c.metadata, c.background, floor - 1)) >= Flea.Theme.textContrast) floor--
+        return floor
+    }
+    function inkWorstOn(ink, plane, a) {
+        var worst = Infinity
+        for (var b = 0; b < shell.backdrops.length; b++)
+            worst = Math.min(worst, Contrast.ratio(String(ink), shell.glassGround(plane, a, shell.backdrops[b])))
+        return worst
+    }
     function glassSweep(name, c) {
         // Walk down from opaque while every step still passes; the step before the first miss is this palette's floor.
         var floor = shell.glassSteps
@@ -146,6 +158,146 @@ ShellRoot {
         shell.atLeast(name, "glass ink at opaque", "both planes over both backdrops", shell.glassWorst(c, shell.glassSteps).ratio, Flea.Theme.textContrast)
         var recorded = shell.glassFloors[name]
         shell.check(name + " glass floor " + floor + " is at or under the recorded " + recorded, recorded !== undefined && floor <= recorded, true)
+    }
+
+    // Option A: the glass alpha the lift table is drawn for, 0.75 in whole 8-bit steps.
+    readonly property int liftAlpha: 191
+    // Muted and metadata ink per palette, lifted toward the foreground to 4.5 on both planes over both backdrops at liftAlpha (RESULT, GLASSR3).
+    readonly property var glassLifts: ({
+        "catppuccin": { muted: "#b2b4be", metadata: "#afb5c4" },
+        "catppuccin-latte": { muted: "#3f4045", metadata: "#36384b" },
+        "ethereal": { muted: "#94a0c9", metadata: "#bb9b85" },
+        "everforest": { muted: "#c9cdce", metadata: "#d0ccc3" },
+        "flexoki-light": { muted: "#464642", metadata: "#0b0b0b" },
+        "gruvbox": { muted: "#c2beba", metadata: "#c6beaf" },
+        "hackerman": { muted: "#9fa2af", metadata: "#9eb0b6" },
+        "kanagawa": { muted: "#b5b5bf", metadata: "#b8b6a6" },
+        "last-horizon": { muted: "#a4a0a1", metadata: "#b3b4b3" },
+        "lumon": { muted: "#b0b9c2", metadata: "#b3b9bf" },
+        "lupine": { muted: "#444444", metadata: "#181818" },
+        "matte-black": { muted: "#a7a7a7", metadata: "#a7a7a7" },
+        "miasma": { muted: "#b8b8b8", metadata: "#b8b8af" },
+        "nord": { muted: "#c8ccd1", metadata: "#c9cccf" },
+        "osaka-jade": { muted: "#a6b2ab", metadata: "#afb19b" },
+        "retro-82": { muted: "#8fb2b8", metadata: "#baaa8c" },
+        "ristretto": { muted: "#c1bdbd", metadata: "#c2bcbc" },
+        "rose-pine": { muted: "#434242", metadata: "#3e3b56" },
+        "solitude": { muted: "#a6a8ab", metadata: "#a7a8a8" },
+        "starship": { muted: "#b2b2b5", metadata: "#b2b2b2" },
+        "tokyo-night": { muted: "#aeb1be", metadata: "#adb1c1" },
+        "vantablack": { muted: "#a0a0a0", metadata: "#b6b6b6" },
+        "white": { muted: "#494949", metadata: "#000000" },
+        "cool-dawn": { muted: "#b8c9bf", metadata: "#c2c6c2" },
+        "sunset": { muted: "#b1a7a2", metadata: "#b1a898" } })
+    // The closest shipped muted sits 1.31:1 from the primary ink (rose-pine), so a lifted muted nearer than this, or past the primary ink, has collapsed into it.
+    readonly property real stepFloor: 1.25
+    // Palettes whose lifted muted collapses into the primary ink: the primary ink itself sits near 4.5 on glass there, so no quieter ink holds the floor.
+    readonly property var glassCollapsed: ["catppuccin-latte", "everforest", "gruvbox", "miasma", "nord", "osaka-jade", "rose-pine", "tokyo-night", "sunset"]
+    // True where the lifted ink is nearer the primary ink than the step floor, or on its far side.
+    function collapsedInto(ink, c) {
+        var fg = Contrast.parse(c.foreground), bg = Contrast.parse(c.background), x = Contrast.parse(ink)
+        var lf = Contrast.luminance(fg[0], fg[1], fg[2]), lb = Contrast.luminance(bg[0], bg[1], bg[2]), lx = Contrast.luminance(x[0], x[1], x[2])
+        return (lf > lb ? lf - lx : lx - lf) <= 0 || Contrast.ratio(String(c.foreground), ink) < shell.stepFloor
+    }
+    // The least ratio one ink reaches on either plane over either backdrop at alpha a.
+    function inkWorst(ink, c, a) {
+        var worst = Infinity, planes = [c.background, c.surface]
+        for (var p = 0; p < planes.length; p++)
+            for (var b = 0; b < shell.backdrops.length; b++)
+                worst = Math.min(worst, Contrast.ratio(String(ink), shell.glassGround(planes[p], a, shell.backdrops[b])))
+        return worst
+    }
+    // The smallest lightness step from ink, keeping its hue, toward the side the foreground sits on that holds the floor on every glass ground (Theme's ensureRatio walk, over four grounds).
+    function liftToward(ink, c, a) {
+        if (shell.inkWorst(ink, c, a) >= Flea.Theme.textContrast) return String(ink)
+        var fg = Contrast.parse(c.foreground), bg = Contrast.parse(c.background)
+        var from = Contrast.parse(ink), to = Contrast.luminance(fg[0], fg[1], fg[2]) > Contrast.luminance(bg[0], bg[1], bg[2]) ? [1, 1, 1] : [0, 0, 0], lo = 0, hi = 1
+        for (var i = 0; i < 20; i++) {
+            var mid = (lo + hi) / 2
+            if (shell.inkWorst(Contrast.hexOf(Contrast.mix(from, to, mid)), c, a) >= Flea.Theme.textContrast) hi = mid
+            else lo = mid
+        }
+        for (var t = hi; t <= 1; t += 1 / 512) {
+            var hex = Contrast.hexOf(Contrast.mix(from, to, t))
+            if (shell.inkWorst(hex, c, a) >= Flea.Theme.textContrast) return hex
+        }
+        return Contrast.hexOf(to)
+    }
+    // The ink the glass look draws: the table's lift under alpha 255, none at it, so an opaque window draws what it drew before.
+    function glassInk(name, role, ink, a) {
+        var row = shell.glassLifts[name]
+        return a >= shell.glassSteps || row === undefined ? String(ink) : row[role]
+    }
+    function liftSweep(name, c) {
+        var roles = [["muted", c.muted], ["metadata", c.metadata]], lifted = {}
+        for (var r = 0; r < roles.length; r++) {
+            var role = roles[r][0], ink = roles[r][1]
+            lifted[role] = shell.liftToward(ink, c, shell.liftAlpha)
+            var got = shell.glassInk(name, role, ink, shell.liftAlpha)
+            shell.log("floor lift " + name + " " + role + " " + String(ink) + " to " + lifted[role] + ", ratio " + (Math.round(shell.inkWorst(lifted[role], c, shell.liftAlpha) * 100) / 100)
+                      + ", step to ink " + (Math.round(Contrast.ratio(String(c.foreground), lifted[role]) * 100) / 100) + " (opaque " + (Math.round(Contrast.ratio(String(c.foreground), String(ink)) * 100) / 100) + ")")
+            shell.atLeast(name, "lifted " + role + " ink at 0.75", "both planes over both backdrops", shell.inkWorst(got, c, shell.liftAlpha), Flea.Theme.textContrast)
+            shell.check(name + " " + role + " lift is the recorded " + got, got === lifted[role], true)
+        }
+        var collapsed = shell.collapsedInto(lifted.muted, c)
+        shell.log("floor collapse " + name + " " + collapsed + ", primary ink ratio at 0.75 " + (Math.round(shell.inkWorst(c.foreground, c, shell.liftAlpha) * 100) / 100))
+        shell.check(name + " lifted muted " + (shell.glassCollapsed.indexOf(name) >= 0 ? "is recorded as collapsed into the primary ink" : "keeps a step of " + shell.stepFloor + " from the primary ink"),
+                    collapsed, shell.glassCollapsed.indexOf(name) >= 0)
+        shell.check(name + " alpha 1 draws today's muted and metadata ink", [shell.glassInk(name, "muted", c.muted, shell.glassSteps), shell.glassInk(name, "metadata", c.metadata, shell.glassSteps)],
+                    [String(c.muted), String(c.metadata)])
+        var floor = shell.glassSteps
+        for (var a = shell.glassSteps; a >= shell.liftAlpha; a--) {
+            var muted = shell.liftToward(c.muted, c, a), metadata = shell.liftToward(c.metadata, c, a)
+            if (shell.collapsedInto(muted, c) || shell.collapsedInto(metadata, c) || shell.inkWorst(c.foreground, c, a) < Flea.Theme.textContrast) break
+            floor = a
+        }
+        shell.log("floor distinct " + name + " " + floor + "/255")
+    }
+
+    // The drawn mode roles, independently checked against both grounds and both extreme backdrops.
+    function modeWorst(ink, c, a, brightness) {
+        var planes = [c.background, c.surface], worst = Infinity
+        var white = Contrast.hexOf([brightness, brightness, brightness])
+        for (var p = 0; p < planes.length; p++)
+            for (var b = 0; b < 2; b++)
+                worst = Math.min(worst, Contrast.ratio(String(ink), Contrast.hexOf(Contrast.over(String(planes[p]), a / 255, b === 0 ? white : "#000000"))))
+        return worst
+    }
+    function pickedSweep(name, c) {
+        Flea.Glass.mode = "glassy"
+        Flea.Glass.focused = true
+        Flea.Glass.clear = true
+        var drawn = Flea.Theme.color, a = Math.round(Flea.Glass.alpha * 255), list = Math.round(Flea.Glass.listAlpha * 255)
+        shell.check(name + " A uses at least Nautilus's 0.75", a >= Math.ceil(0.75 * 255) && a < 255, true)
+        shell.atLeast(name, "picked primary", "both planes over both backdrops", shell.modeWorst(drawn.foreground, c, a, shell.blurBrightness), Flea.Theme.textContrast)
+        shell.atLeast(name, "picked muted", "both planes over both backdrops", shell.modeWorst(drawn.muted, c, a, shell.blurBrightness), Flea.Theme.textContrast)
+        shell.atLeast(name, "picked metadata", "both planes over both backdrops", shell.modeWorst(drawn.metadata, c, a, shell.blurBrightness), Flea.Theme.textContrast)
+        var primary = {foreground: drawn.foreground, background: c.background}
+        shell.check(name + " picked muted keeps its primary step", shell.collapsedInto(String(drawn.muted), primary), false)
+        shell.check(name + " picked metadata keeps its primary step", shell.collapsedInto(String(drawn.metadata), primary), false)
+        shell.check(name + " picked listing has its own floor", list, Flea.Glass.split ? Math.max(a, shell.listFloor(c)) : a)
+        var frames = [["muted frame", drawn.mutedFrame], ["metadata glyph", drawn.metadataFrame], ["accent frame", drawn.accentFrame]]
+        var texts = [["error", drawn.error], ["status error", drawn.errorOnSurface], ["symlink", drawn.symlink], ["executable", drawn.executable]]
+        for (var g = 0; g < frames.length; g++)
+            shell.atLeast(name, "picked " + frames[g][0], "both planes over both backdrops", shell.modeWorst(frames[g][1], c, a, shell.blurBrightness), Flea.Theme.frameContrast)
+        for (var t = 0; t < texts.length; t++)
+            shell.atLeast(name, "picked " + texts[t][0], "both planes over both backdrops", shell.modeWorst(texts[t][1], c, a, shell.blurBrightness), Flea.Theme.textContrast)
+        shell.log("floor PICK " + name + " alpha=" + a + " list=" + list + " primary=" + String(drawn.foreground) + " muted=" + String(drawn.muted) + " metadata=" + String(drawn.metadata))
+        Flea.Glass.mode = "transparent"
+        var focuses = [true, false], alphas = [251, 245]
+        for (var f = 0; f < focuses.length; f++) {
+            Flea.Glass.focused = focuses[f]
+            shell.check(name + " transparent focus " + focuses[f] + " alpha", Math.round(Flea.Glass.alpha * 255), alphas[f])
+            var roles = [["primary", drawn.foreground], ["muted", drawn.muted], ["metadata", drawn.metadata], ["error", drawn.error], ["status error", drawn.errorOnSurface], ["symlink", drawn.symlink], ["executable", drawn.executable]]
+            for (var r = 0; r < roles.length; r++)
+                shell.atLeast(name, "transparent " + roles[r][0] + " focus " + focuses[f], "unblurred extreme backdrops", shell.modeWorst(roles[r][1], c, alphas[f], 1), Flea.Theme.textContrast)
+            var graphics = [["muted frame", drawn.mutedFrame], ["metadata glyph", drawn.metadataFrame], ["accent frame", drawn.accentFrame]]
+            for (var j = 0; j < graphics.length; j++)
+                shell.atLeast(name, "transparent " + graphics[j][0] + " focus " + focuses[f], "unblurred extreme backdrops", shell.modeWorst(graphics[j][1], c, alphas[f], 1), Flea.Theme.frameContrast)
+        }
+        Flea.Glass.mode = "opaque"
+        shell.check(name + " opaque restores all three inks", [String(drawn.foreground), String(drawn.muted), String(drawn.metadata)], [String(c.foreground), String(c.muted), String(c.metadata)])
+        Flea.Glass.clear = false
     }
 
     function sweep(entry) {
@@ -171,13 +323,16 @@ ShellRoot {
         shell.check(name + " resting row metadata ink", rgba(restRow.cellInk), rgba(c.metadata))
         shell.check(name + " resting row file glyph", rgba(restRow.markColor()), rgba(c.metadataFrame))
         shell.glassSweep(name, c)
+        shell.liftSweep(name, c)
+        shell.log("floor list ground " + name + " " + shell.listFloor(c) + "/255")
+        shell.pickedSweep(name, {background: String(c.background), surface: String(c.surface), foreground: String(c.foreground), muted: String(c.muted), metadata: String(c.metadata)})
     }
 
     function run() {
         var inside = shell.rootDir.length > 0 && (Quickshell.env("HOME") || "").indexOf(shell.rootDir + "/") === 0
         shell.check("sandbox: HOME lies under the harness root", inside, true)
         if (!inside) { shell.finish(); return }
-        shell.check("the sweep reads the 22 stock palettes and two fixtures", Palettes.PALETTES.length, shell.paletteCount)
+        shell.check("the sweep reads the installed stock palettes and two fixtures", Palettes.PALETTES.length, shell.paletteCount)
         shell.check("a wash ground keeps the colour's own alpha", shell.groundOf({ color: Qt.rgba(1, 1, 1, 0.5), opacity: 0.5 }, "#000000"), "#404040")
         for (var i = 0; i < Palettes.PALETTES.length; i++)
             shell.sweep(Palettes.PALETTES[i])

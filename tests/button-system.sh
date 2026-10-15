@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # The Trash strip's Empty Trash and a destructive DialogButton draw one ladder in five states, and every ui/ file declaring the Button role and drawing a border.width is the control, a ruled set member, or named here; offscreen, no display or lock.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -114,7 +115,7 @@ for spec in $harnesses; do
     else
         ln -s "$PWD/ui" "$config/flea" || exit 1
     fi
-    ln -s "$(readlink -f ui/boot/Commons)" "$config/Commons" || exit 1
+    headless_commons "$test_root" "$config/Commons" || exit 1
     ln -s "$(readlink -f ui/boot/Ui)" "$config/Ui" || exit 1
     cp "tests/$qml" "$config/shell.qml" || exit 1
     cp tests/button-probe.js "$config/button-probe.js" || exit 1

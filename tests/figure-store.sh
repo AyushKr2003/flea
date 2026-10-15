@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # The persistent SVG cache through the real helper: a repeat answers from disk with no helper, and no other theme or advance is served it.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -28,7 +29,7 @@ trap 'sandbox_remove "$test_root"' EXIT
 mkdir -p "$test_root/config" "$test_root/home" "$test_root/state" "$test_root/cache" "$test_root/runtime" || exit 1
 chmod 700 "$test_root/runtime" || exit 1
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/figure-store.qml "$test_root/config/shell.qml" || exit 1
 
@@ -151,7 +152,7 @@ echo "figure-store: $expected check(s), 0 failed"
 # A store that reads every line and never answers: the same service, with Flea's own binary behind a stub whose store mode only reads.
 mkdir -p "$test_root/hung-config" "$test_root/hung-bin" || exit 1
 ln -s "$PWD/ui" "$test_root/hung-config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/hung-config/Commons" || exit 1
+headless_commons "$test_root" "$test_root/hung-config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/hung-config/Ui" || exit 1
 cp tests/figure-store-hung.qml "$test_root/hung-config/shell.qml" || exit 1
 cat > "$test_root/hung-bin/flea" <<STUB
@@ -178,7 +179,7 @@ echo "figure-store: $hung_expected hung-store check(s), 0 failed"
 # Two drains the service must tell apart: a store that answers every line and ignores EOF, and one that commits its puts slowly after EOF and then exits.
 mkdir -p "$test_root/drain-config" "$test_root/drain-bin" || exit 1
 ln -s "$PWD/ui" "$test_root/drain-config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/drain-config/Commons" || exit 1
+headless_commons "$test_root" "$test_root/drain-config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/drain-config/Ui" || exit 1
 cp tests/figure-store-drain.qml "$test_root/drain-config/shell.qml" || exit 1
 # The hung stub never ends; the slow stub keeps every line, answers a miss for each get, waits out its commit after EOF and only then replays the lines into Flea's own store, so a kill before the end loses the put. Its first start only is slow.

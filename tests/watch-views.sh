@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Another program creates, renames and deletes inside the open folder, and the real window must follow in every view; offscreen, no display.
 set -uo pipefail
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -11,7 +12,7 @@ cleanup() { sandbox_remove "$test_root"; }
 trap cleanup EXIT
 mkdir -p "$test_root"/{config,home,state/flea,cache,runtime,bin} || exit 1
 chmod 700 "$test_root/runtime" || exit 1
-ln -s "$(readlink -m ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -m ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 ln -s "$PWD/ui/boot/fleatab.qml" "$test_root/config/fleatab.qml" || exit 1
 cp tests/watch-views.qml "$test_root/config/shell.qml" || exit 1

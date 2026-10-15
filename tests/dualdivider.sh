@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # The Dual divider in the real WindowBody, offscreen: its split, its drag, its double click and the rail states.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -51,7 +52,7 @@ for ((n = 1; n <= 80; n++)); do printf 'x\n' > "$probe/home/fixture/file$(printf
 env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state \
     '{"view":"dual","preview":{"column":false,"thumbnails":"off"},"updates":{"autoCheck":false}}' >/dev/null || exit 1
 ln -s "$PWD/ui" "$probe/config/flea"
-ln -s "$(readlink -f ui/boot/Commons)" "$probe/config/Commons"
+headless_commons "$probe" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui"
 # The window loads its tab catcher from the shell directory, so the probe ships it as the product does.
 ln -s "$PWD/ui/boot/fleatab.qml" "$probe/config/fleatab.qml"

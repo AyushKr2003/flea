@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # The first answer of a search builds no row and no layout in list, columns and grid, and a first key typed with f draws one answer: the real Pane over the real backend, offscreen.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -21,7 +22,7 @@ mkdir -p "$test_root/config" "$test_root/home" "$test_root/state" "$test_root/ru
 chmod 700 "$test_root/runtime" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/search-warm.qml "$test_root/config/shell.qml" || exit 1
 # Three rows in the folder, 150 matches below it: the first answer grows every view past its viewport.

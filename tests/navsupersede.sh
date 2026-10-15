@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # A navigation made while a listing is out is taken, not refused: the newest folder lands, the folder let go never draws, offscreen with the real backend.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -10,7 +11,7 @@ sandbox_require "$root" || exit 1
 trap 'sandbox_remove "$root"' EXIT
 mkdir -p "$root/config" "$root/fixture/a" "$root/fixture/b" "$root/bin" || exit 1
 ln -s "$PWD/ui" "$root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$root/config/Commons" || exit 1
+headless_commons "$root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$root/config/Ui" || exit 1
 cp tests/navsupersede.qml "$root/config/shell.qml" || exit 1
 # Six files and two folders make eight entries in the start folder; a and b hold three files each under names no other folder has.

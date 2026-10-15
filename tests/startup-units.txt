@@ -44,6 +44,7 @@ PaneSwap.qml
 PaneWire.qml
 PhoneMounts.qml
 PrebuildDriver.qml
+RailDrop.qml
 RailHeading.qml
 RailPlaces.qml
 RailTrashRow.qml
@@ -67,6 +68,7 @@ TabBar.qml
 TabDragGeometry.qml
 Taildrop.qml
 Theme.qml
+ThemeColors.qml
 TransferCard.qml
 TrashHost.qml
 TrashMonitor.qml
@@ -118,6 +120,7 @@ js/LocalSend.js
 js/MakeDefault.js
 js/MarkdownPrepared.js
 js/Marks.js
+js/Material.js
 js/Marquee.js
 js/Match.js
 js/Menu.js
@@ -138,6 +141,7 @@ js/PlaceMenu.js
 js/Places.js
 js/PreviewKeys.js
 js/Protocols.js
+js/RailDrop.js
 js/RailKeys.js
 js/RailMenu.js
 js/Recent.js
@@ -171,4 +175,4 @@ js/TrashDates.js
 js/UiState.js
 js/Update.js
 js/UserDirs.js
-bytes 1640558
+bytes 1656921

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Pages and scrolls the Columns preview through the real Pane, preserving focus and each file's session position.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -14,7 +15,7 @@ tools/flea-qmllint-gate || exit 1
 mkdir -p "$test_root/config" "$test_root/home" "$test_root/state" "$test_root/runtime" "$test_root/fixture" "$test_root/shots" || exit 1
 chmod 700 "$test_root/runtime" || exit 1
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/preview-scroll.qml "$test_root/config/shell.qml" || exit 1
 python3 - "$test_root/fixture" <<'PY'

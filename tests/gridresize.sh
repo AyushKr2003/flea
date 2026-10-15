@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # A resized Grid still draws every tile's row, offscreen with the real backend, after width or height changes.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -13,7 +14,7 @@ trap 'sandbox_remove "$root"' EXIT
 mkdir -p "$root/config" "$root/fixture" "$root/run/home" "$root/run/state/flea" "$root/run/cache" "$root/run/runtime" || exit 1
 chmod 700 "$root/run/runtime" || exit 1
 ln -s "$PWD/ui" "$root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$root/config/Commons" || exit 1
+headless_commons "$root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$root/config/Ui" || exit 1
 cp tests/gridresize.qml "$root/config/shell.qml" || exit 1
 # Two thousand files: more than the held window at either width, so a far scroll lands past it.

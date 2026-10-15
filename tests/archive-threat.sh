@@ -1,4 +1,5 @@
 #!/bin/bash
+. "$(dirname "$0")/headless-commons.sh"
 # The archive password threat suite: a canary travels every password flow and may reach only a tool's stdin (A real 7z, B cards, C static).
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -190,7 +191,7 @@ echo "--- phase B: the offscreen card walk clears every terminal path ---"
 command -v qs >/dev/null || { echo "archive-threat.sh: qs is not installed, cannot walk the cards"; exit 1; }
 mkdir -p "$D/config" "$D/home" || exit 1
 ln -s "$PWD/ui" "$D/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$D/config/Commons" || exit 1
+headless_commons "$D" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$D/config/Ui" || exit 1
 cp tests/archive-threat.qml "$D/config/shell.qml" || exit 1
 run_timeout_s=60

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Quick Look takes the window's height for tall content: code, a PDF and a portrait picture open at their rect on the first revealed frame, and no shown surface resizes.
 set -uo pipefail
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -14,7 +15,7 @@ trap cleanup EXIT
 mkdir -p "$test_root"/{config,fixture,home,state/flea,cache,runtime} || exit 1
 chmod 700 "$test_root/runtime" || exit 1
 printf '{}\n' > "$test_root/state/flea/ui.json"
-ln -s "$(readlink -m ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -m ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 ln -s "$test_root/config/flea/boot/fleatab.qml" "$test_root/config/fleatab.qml" || exit 1
 cp -a ui "$test_root/config/flea" || exit 1

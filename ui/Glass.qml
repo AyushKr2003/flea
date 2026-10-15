@@ -4,14 +4,19 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Commons as Commons
+import "js/Material.js" as Material
 
 // shell.toml's [flea] background-alpha through Omarchy's reader, and Omarchy's Window Transparency mode: one plane per pixel, content opaque; AGENTS.md "Theme roles and sources".
 QtObject {
     id: root
 
     readonly property string key: "flea.background-alpha"
-    // Flea's own Glassy ground, held at today's look until the step 6 pick moves it in this one line.
-    property real glassAlpha: 1
+    // Pick candidate A: match Nautilus's 0.75 ground, lifting text rather than fading it like window opacity does.
+    property real glassAlpha: root.mode === "glassy" && root.usesDefault ? Material.floor(Theme.color.opaquePalette, Theme.textContrast) / 255 : 1
+    property bool focused: Qt.application.active
+    readonly property bool split: true
+    readonly property real transparentAlpha: root.focused ? 0.985 : 0.96
+    readonly property bool usesDefault: root.valueIn(Commons.Color.userShellValues) < 0 && root.valueIn(Commons.Color.themeShellValues) < 0
     // "opaque", "glassy" or "transparent" (Omarchy's default), read from its toggle files by reread().
     property string mode: "transparent"
     property bool hasOpaque: false
@@ -24,6 +29,8 @@ QtObject {
     readonly property bool on: root.alpha < 1
     readonly property color background: root.on ? Util.alpha(Theme.color.background, root.alpha) : Theme.color.background
     readonly property color surface: root.on ? Util.alpha(Theme.color.surface, root.alpha) : Theme.color.surface
+    readonly property real listAlpha: root.on && root.usesDefault && root.mode === "glassy" && root.split ? Math.max(root.alpha, Material.listFloor(Theme.color.opaquePalette, Theme.textContrast) / 255) : root.alpha
+    readonly property color listBackground: root.on ? Util.alpha(Theme.color.background, root.listAlpha) : Theme.color.background
 
     readonly property string toggleDir: (Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state") + "/omarchy/toggles/hypr"
     // A file test and not omarchy-hyprland-window-transparency, which needs OMARCHY_PATH that ssh and some launchers lack.
@@ -55,14 +62,14 @@ QtObject {
         var n = Number(v)
         return isFinite(n) ? Util.clampAlpha(n) : 1
     }
-    // The user's value wins, opaque is 1, glassy takes the theme's value else glassAlpha, transparent the theme's else 1.
+    // User and theme values keep their precedence; bare Transparent follows Omarchy's grounds unless its ink needs more alpha.
     function wanted() {
         var user = root.valueIn(Commons.Color.userShellValues)
         if (user >= 0) return user
         if (root.mode === "opaque") return 1
         var theme = root.valueIn(Commons.Color.themeShellValues)
         if (theme >= 0) return theme
-        return root.mode === "glassy" ? root.glassAlpha : 1
+        return root.mode === "glassy" ? root.glassAlpha : Material.transparentFloor(Theme.color.opaquePalette, Theme.textContrast, Math.round(root.transparentAlpha * 255)) / 255
     }
 
     function reread() {

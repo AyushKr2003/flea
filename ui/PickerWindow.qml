@@ -759,6 +759,7 @@ ShellRoot {
             // Only an absolute path is a folder, so a caller cannot name the Recent token, or any
             // other text, as the directory this window opens on.
             var start = win.req.folder.charAt(0) === "/" ? win.req.folder : win.home
+            win.showHidden = typeof win.req.hidden === "boolean" ? win.req.hidden : ViewState.state.hidden === true
             win.viewMode = Picker.rememberedView(ViewState.pickerView)
             // A one-time seed of a filename only: a binding would read first inside saveReady, and flea-portal passes current_name verbatim.
             win.saveName = Picker.validName(win.req.name) ? win.req.name : ""

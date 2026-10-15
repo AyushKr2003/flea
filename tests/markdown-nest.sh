@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Gate that a block nested in a list item or a quote draws with its top-level recipe, and that an empty heading or quote has no height.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -35,7 +36,7 @@ trap cleanup EXIT
 mkdir -p "$test_root/config" "$test_root/home" "$test_root/state" "$test_root/cache" "$test_root/runtime" "$test_root/docs" || exit 1
 chmod 700 "$test_root/runtime" || exit 1
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/markdown-nest.js "$test_root/config/" || exit 1
 cp tests/markdown-nest.qml "$test_root/config/shell.qml" || exit 1

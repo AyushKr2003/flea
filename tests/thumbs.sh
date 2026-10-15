@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Drives the real backend against the media fixture and asserts the thumbnail contract end to end.
 set -u
 set -o pipefail
@@ -372,7 +373,7 @@ chmod 700 "$prefetch_root/runtime" || { sandbox_remove "$D"; exit 1; }
 ln -s "$PWD/tests/thumbs-qlprefetch.qml" "$prefetch_root/config/shell.qml" || { sandbox_remove "$D"; exit 1; }
 # The probe plans with production Thumbs and ExtThumbs, so it reads ui/ as flea.
 ln -s "$PWD/ui" "$prefetch_root/config/flea" || { sandbox_remove "$D"; exit 1; }
-ln -s /usr/share/omarchy/shell/Commons "$prefetch_root/config/Commons" || { sandbox_remove "$D"; exit 1; }
+headless_commons "$prefetch_root" || { sandbox_remove "$D"; exit 1; }
 ln -s /usr/share/omarchy/shell/Ui "$prefetch_root/config/Ui" || { sandbox_remove "$D"; exit 1; }
 ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     HOME="$D" XDG_RUNTIME_DIR="$prefetch_root/runtime" TMPDIR="$D" \

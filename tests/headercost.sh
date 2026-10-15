@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # A list header builds its resize accents and fit metrics only while used, counted offscreen with no display or display lock. The fit loader stays empty until a double click or F4, persists one widths-map update per fit, and releases after; refusals persist nothing.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -37,7 +38,7 @@ done
 cp tests/headercost-viewstate.qml "$stage/ui/ViewState.qml" || exit 1
 ln -s "$stage/ui" "$test_root/config/flea" || exit 1
 # readlink -m, not -f: identical where the OEM shell exists, and a dangling link where it does not, so a box without it still reaches qs and fails with qs's own error in the log.
-ln -s "$(readlink -m ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -m ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/headercost.qml "$test_root/config/shell.qml" || exit 1
 cp tests/recentcol.qml "$test_root/config/recentcol.qml" || exit 1

@@ -113,7 +113,7 @@ function mirrorFallbacks(check) {
 
 // The heading ink: no bright key keeps the foreground, a dimmer one keeps it too, a brighter one wins; color15 stands in for an ANSI-ring palette.
 function brightSamples(check) {
-    var applied = Source.source("ui/Theme.qml")
+    var applied = Source.source("ui/Theme.qml") + Source.source("ui/ThemeColors.qml")
     check("Theme.qml derives the heading ink as color.foregroundBright from bright_foreground",
           applied.indexOf("foregroundBright") >= 0 && applied.indexOf('["bright_foreground", "color15"]') >= 0, true)
     var dark = "background = \"#1a1b26\"\nforeground = \"#a9b1d6\"\n"

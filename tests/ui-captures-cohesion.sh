@@ -1,4 +1,4 @@
-# Every focus-drawing control at rest, hover, focus, press and disabled on three themes at text size 14, for the cohesion montage; sourced by ui.sh.
+# Every focus-drawing control at rest, hover, focus, press and disabled, one theme per native case; sourced by ui.sh.
 . "$repo/tests/lib/pointer-glide.sh"
 
 # Seconds a hover or press poll waits for the control to report its state.
@@ -6,6 +6,8 @@ coh_wait_s=3
 # Seconds a dialog or an IPC reader may take to show, and the pause between two polls.
 coh_open_wait_s=15
 coh_poll_s=0.1
+# EPOCHREALTIME without its dot counts microseconds; a worker limit in seconds is compared in that unit.
+coh_usec_per_s=1000000
 # The window every surface is shot in, the pointer's offset from a control for the approach move, and the margin around a region.
 coh_win_w=1100
 coh_win_h=700
@@ -16,14 +18,14 @@ coh_metrics="13 12 14 37"
 # Down steps a menu walk takes, and the single stop of a surface with no walk.
 coh_menu_stops=5
 coh_still_stops=1
-# Pixels the pointer moves up while a press is held, so the release lands off the control and nothing acts.
-coh_away_px=150
 # Tab stops one keyboard walk takes at most, so a walk that leaves the surface still ends.
 coh_tab_limit=14
 # Pointer targets one surface takes at most, one per distinct control look.
 coh_target_limit=8
-# Seconds one theme may take; a surface due after that is skipped with a line, so a run ends inside its minipc slot.
-coh_budget_s=900
+# Seconds one theme may take, leaving teardown time inside the native runner's 900-second limit.
+coh_budget_s=840
+# Seconds budget expiry allows the existing EXIT teardown before forcibly ending the surface's process group.
+coh_teardown_s=30
 
 coh_ydotool() { YDOTOOL_SOCKET="$XDG_RUNTIME_DIR/.ydotool_socket" ydotool "$@" >/dev/null 2>&1; }
 
@@ -68,17 +70,35 @@ coh_launch() {
 
 # Window pixels to the screen through the same frame-carrying uinput path the drag and unlock captures use.
 coh_pointer_to() {
-    local x="$1" y="$2" wx wy ww wh
+    local x="$1" y="$2" wx wy ww wh ax ay outputs
     read -r wx wy ww wh < <(window_box) || fail "cohesion: native window coordinates unavailable"
-    pointer_glide "$((wx + x))" "$((wy + y))" || fail "cohesion: pointer move failed"
+    ax=$((wx + x)); ay=$((wy + y))
+    outputs=$(hyprctl monitors -j) || fail "cohesion: native output geometry unavailable"
+    # Sample input: [{"disabled":false,"x":0,"y":0,"width":2560,"height":1440,"scale":1,"transform":0}].
+    if ! jq -e --argjson x "$ax" --argjson y "$ay" 'any(.[]; .disabled != true and
+        (.scale // 1) > 0 and $x >= .x and $y >= .y and
+        $x < .x + ((if ((.transform // 0) % 2) == 1 then .height else .width end) / (.scale // 1)) and
+        $y < .y + ((if ((.transform // 0) % 2) == 1 then .width else .height end) / (.scale // 1)))' <<< "$outputs" >/dev/null; then
+        printf 'COH_POINTER_OUTSIDE %s %s local=%s,%s target=%s,%s window=%s outputs=%s\n' \
+            "$coh_theme" "${name:-unknown}" "$x" "$y" "$ax" "$ay" "$wx $wy $ww $wh" "$(jq -c . <<< "$outputs")"
+        fail "cohesion: pointer target is outside every output"
+    fi
+    pointer_glide "$ax" "$ay" || fail "cohesion: pointer move failed: target=$ax,$ay window=$wx,$wy,$ww,$wh outputs=$(jq -c . <<< "$outputs")"
 }
 
 # The left button is held between a press and its release; coh_held is read by the surface subshell's EXIT trap.
 coh_held=0
 coh_release_held() {
+    trap '' HUP INT TERM
     (( coh_held )) || return 0
     coh_held=0
     coh_ydotool click 0x80 || :
+}
+
+coh_trash_cleanup() {
+    local status="$1"
+    coh_release_held
+    trash_cleanup "$status"
 }
 
 # The status bar's empty left corner, where nothing draws a hover.
@@ -87,6 +107,32 @@ coh_park() {
     read -r wx wy ww wh < <(window_box) || fail "cohesion: native window coordinates unavailable"
     coh_pointer_to "$coh_approach_px" "$((wh - coh_approach_px))"
     settle
+}
+
+# A cancel motion from chrome starts WindowDrag; restore the viewport before any later pointer move.
+coh_cancel_press() {
+    local before after restored wx wy ww wh address end
+    before=$(window_box) || fail "cohesion: pre-release window coordinates unavailable"
+    read -r wx wy ww wh <<< "$before"
+    coh_pointer_to "$coh_approach_px" "$((wh - coh_approach_px))"
+    coh_ydotool click 0x80 || fail "cohesion: pointer release failed"
+    coh_held=0
+    settle
+    after=$(window_box) || fail "cohesion: post-release window coordinates unavailable"
+    if [[ "$before" != "$after" ]]; then
+        cap_resize "$ww" "$wh"
+        address=$(window_addr_of_pid "$(flea_pid)") || fail "cohesion: owned window address unavailable"
+        hypr_window_move "$address" "$wx" "$wy" || fail "cohesion: window position restore failed"
+        end=$((SECONDS + coh_wait_s))
+        restored=$(window_box) || fail "cohesion: restored window coordinates unavailable"
+        while [[ "$restored" != "$before" ]] && (( SECONDS < end )); do
+            sleep "$coh_poll_s"
+            restored=$(window_box) || fail "cohesion: restored window coordinates unavailable"
+        done
+        printf 'COH_DRAG_RESET %s %s before=%s displaced=%s restored=%s\n' \
+            "$coh_theme" "$name" "$before" "$after" "$restored"
+        [[ "$restored" == "$before" ]] || fail "cohesion: window geometry was not restored: expected=$before actual=$restored"
+    fi
 }
 
 # Sample manifest line: "cohesion-live-permissions-focus-0<TAB>live<TAB>permissions<TAB>focus<TAB>0<TAB>DialogButton|Open|900|700", the sidecar being NAME.json.
@@ -202,6 +248,7 @@ coh_open_trash_self() {
     trash_guard "$payload"
     mkdir "$payload" || fail "cohesion: trash payload creation failed"
     trash_start_bus
+    trap 'coh_trash_cleanup $?' EXIT
     printf 'alpha\n' > "$payload/alpha.txt"
     printf 'beta\n' > "$payload/beta.txt"
     export HOME="$home"
@@ -217,6 +264,58 @@ coh_open_trash_self() {
     settle
 }
 coh_open_colpdf() { seek_row_named manual.pdf || fail "cohesion: no manual.pdf row"; coh_until previewColumnState pdf; coh_until columnPdfLoaded true; }
+
+# One real wheel step wakes the PDF bar; a pointer in its lane keeps it drawn through slow screenshots.
+coh_pdf_receipt() {
+    local found exposed reader
+    # Sample input: {"captureReader":"porttp4d","controls":[{"surface":"PreviewColumn","kind":"ViewportScrollBar","value":"vertical","exposed":true}]}.
+    read -r found exposed reader < <(jq -r '[any(.controls[]; .surface == "PreviewColumn" and .kind == "ViewportScrollBar" and .value == "vertical"),
+        any(.controls[]; .surface == "PreviewColumn" and .kind == "ViewportScrollBar" and .value == "vertical" and .exposed), .captureReader // "missing"] | @tsv' <<< "$observed")
+    printf 'COH_WAKE %s cols-pdf bar=%s after=%s frame="%s" found=%s reader=%s observed=%s\n' \
+        "$coh_theme" "$exposed" "$(( $(date +%s%3N) - started ))" "$frame" "$found" "$reader" "$observed"
+}
+
+coh_wake_colpdf() {
+    local started deadline observed frame fx fy fw fh tx ty
+    started=$(date +%s%3N)
+    deadline=$((started + coh_wait_s * 1000))
+    frame=$(ipc columnFrameRect) || fail "cohesion: the PDF frame reader failed"
+    # Sample input: columnFrameRect answers "810 40 275 560", x y width height in window pixels.
+    read -r fx fy fw fh <<< "$frame"
+    [[ "$fx" =~ ^-?[0-9]+$ && "$fy" =~ ^-?[0-9]+$ && "$fw" =~ ^[0-9]+$ && "$fh" =~ ^[0-9]+$ ]] \
+        && (( fw > 2 && fh > 2 )) || fail "cohesion: invalid PDF frame [$frame]"
+    observed=$(ipc cohesionControls) || fail "cohesion: the PDF bar reader failed"
+    # Sample input: {"captureReader":"porttp4d","controls":[],"previewColumns":[],"scrollBars":[]}.
+    if ! jq -e '.captureReader == "porttp4d"' <<< "$observed" >/dev/null; then
+        coh_pdf_receipt
+        fail "cohesion: stale capture reader; expected porttp4d, see COH_HARNESS and COH_WAKE"
+    fi
+    # Sample input: {"controls":[{"surface":"PreviewColumn","kind":"ViewportScrollBar","value":"vertical","exposed":true,"hovered":true}]}.
+    coh_pdf_bar=$(jq -c '.controls[] | select(.surface == "PreviewColumn" and .kind == "ViewportScrollBar" and .value == "vertical" and .exposed and .hovered)' <<< "$observed")
+    [[ -z "$coh_pdf_bar" ]] || { coh_pdf_receipt; return 0; }
+    coh_pointer_to "$((fx + fw / 2))" "$((fy + fh / 2))"
+    omarchy-drive scroll down 1 >/dev/null || fail "cohesion: the PDF wake wheel step failed"
+    while (( $(date +%s%3N) < deadline )); do
+        observed=$(ipc cohesionControls) || fail "cohesion: the PDF wake reader failed"
+        # Sample input: {"controls":[{"surface":"PreviewColumn","kind":"ViewportScrollBar","value":"vertical","exposed":true,"targetX":1078,"targetY":115}]}.
+        coh_pdf_bar=$(jq -c '.controls[] | select(.surface == "PreviewColumn" and .kind == "ViewportScrollBar" and .value == "vertical" and .exposed)' <<< "$observed")
+        if [[ -n "$coh_pdf_bar" ]]; then
+            # Sample input: {"targetX":1078,"targetY":115}; jq answers "1078<TAB>115".
+            read -r tx ty < <(jq -r '[.targetX,.targetY] | @tsv' <<< "$coh_pdf_bar")
+            coh_pointer_to "$tx" "$ty"
+            if coh_wait_flag "$coh_pdf_bar" hovered; then
+                observed=$(ipc cohesionControls) || fail "cohesion: the PDF hover receipt reader failed"
+                coh_pdf_receipt
+                return 0
+            fi
+            break
+        fi
+        sleep "$coh_poll_s"
+    done
+    observed=$(ipc cohesionControls) || fail "cohesion: the failed PDF wake reader failed"
+    coh_pdf_receipt
+    fail "cohesion: cols-pdf reports no exposed pointer target or live lane hover after one wheel step"
+}
 
 # The transfer card stays up because the owned backend is paused mid-copy; the pause and the window end with the surface's subshell.
 coh_transfer_bytes=$((2 * 1024 * 1024 * 1024))
@@ -259,11 +358,10 @@ coh_open_transfer_self() {
 # One surface: open it, walk its keyboard stops, then point at one control of each look, hover and held press.
 coh_run_surface() {
     local name="$1" opener="$2" state="$3" step="$4" region="${5:-}" n="cohesion-$coh_theme-$1"
-    local k=0 limit="$coh_tab_limit" first="" sig st targets count i t cx cy tsig rx0 ry0 rx1 ry1 missed=0 surface=""
-    local trash_box="" payload="" trash_checks=0 trash_case_label=cohesion
-    local trash_parent_bus_id="" trash_private_bus_id="" trash_bus_address="" trash_bus_pid="" trash_provider_pid=""
+    local k=0 limit="$coh_tab_limit" first="" sig st targets count i t cx cy tsig rx0 ry0 rx1 ry1 missed=0 surface="" coh_pdf_bar=""
     [[ "$opener" == *_self ]] || coh_launch "$state"
     "$opener"
+    printf 'COH_GEOMETRY %s %s window=%s outputs=%s\n' "$coh_theme" "$name" "$(window_box)" "$(hyprctl monitors -j | jq -c .)"
     coh_park
     # A menu keeps the keyboard on itself and moves its highlight, so its walk is a fixed count of Down steps.
     [[ "$step" == down ]] && limit="$coh_menu_stops"
@@ -290,15 +388,23 @@ coh_run_surface() {
         copyto-empty|newfile|properties) surface=MenuActionDialog ;; delete) surface=TrashConfirm ;;
         collide) surface=CollideConfirm ;; trash) surface=TrashView ;; transfer) surface=TransferCard ;;
     esac
+    [[ "$name" != cols-pdf ]] || coh_wake_colpdf
     # One control per distinct look: kind, role, value and enabled state.
-    targets=$(ipc cohesionControls | jq -c --arg surface "$surface" --argjson x0 "$rx0" --argjson y0 "$ry0" --argjson x1 "$rx1" --argjson y1 "$ry1" --argjson cap "$coh_target_limit" '
+    st=$(ipc cohesionControls) || fail "cohesion: the target reader failed"
+    targets=$(jq -c --arg surface "$surface" --argjson x0 "$rx0" --argjson y0 "$ry0" --argjson x1 "$rx1" --argjson y1 "$ry1" --argjson cap "$coh_target_limit" '
         [.controls[] | select(.exposed and .w > 2 and .h > 2 and .surface == $surface
             and .targetX >= $x0 and .targetY >= $y0 and .targetX < $x1 and .targetY < $y1)]
-        | unique_by([.kind, .primary, .destructive, .member, .value, .enabled]) | .[:$cap]')
+        | unique_by([.kind, .primary, .destructive, .member, .value, .enabled]) | .[:$cap]' <<< "$st")
     count=$(jq length <<< "$targets")
+    printf 'COH_TARGETS %s %s surface=%s region=%s available=%s selected=%s\n' "$coh_theme" "$name" "$surface" "$region" \
+        "$(jq -c '[.controls[] | {surface,kind,name,exposed,targetX,targetY}]' <<< "$st")" "$targets"
     (( count > 0 )) || fail "cohesion: $name reports no exposed pointer target"
     for ((i = 0; i < count; i++)); do
         t=$(jq -c ".[$i]" <<< "$targets")
+        if [[ "$name" == cols-pdf ]] && jq -e '.kind == "ViewportScrollBar" and .value == "vertical"' <<< "$t" >/dev/null; then
+            coh_wake_colpdf
+            t="$coh_pdf_bar"
+        fi
         tsig=$(jq -r '"\(.kind)|\(.name)|\(.x)|\(.y)"' <<< "$t")
         cx=$(jq -r .targetX <<< "$t")
         cy=$(jq -r .targetY <<< "$t")
@@ -324,10 +430,7 @@ coh_run_surface() {
             settle
             coh_shot "$n-press-$i" "$name" press "$i" "$tsig"
         fi
-        coh_pointer_to "$coh_approach_px" "$((coh_win_h - coh_approach_px))"
-        coh_ydotool click 0x80 || fail "cohesion: pointer release failed"
-        coh_held=0
-        settle
+        coh_cancel_press
         # A release that acted anyway closes the surface; reopen it for the next control.
         if ! ipc cohesionControls | jq -e --arg sig "$tsig" '[.controls[] | select("\(.kind)|\(.name)|\(.x)|\(.y)" == $sig)] | length > 0' >/dev/null 2>&1; then
             printf 'COH_REOPEN %s %s after %s\n' "$coh_theme" "$name" "$tsig"
@@ -341,25 +444,118 @@ coh_run_surface() {
     (( missed == 0 )) || fail "cohesion: $name never reached $missed hover or press states"
 }
 
-# The surface runs in a subshell with errexit on, because an if-condition subshell would mask every failing step in it; the caller's errexit is restored as it was.
+# The caller disables errexit while this runner waits; job control gives only its worker and watchdog separate process groups.
+coh_bounded() {
+    local name="$1" limit="$2" remaining=$((coh_deadline - SECONDS)) started=${EPOCHREALTIME/./} finished worker="" watchdog="" status monitor=0 signal end group
+    local previous_traps interrupted=0
+    local -a pending_groups=()
+    shift 2
+    if (( remaining <= 0 )); then
+        printf 'COH_SKIPPED %s %s over the %ss budget\n' "$coh_theme" "$name" "$coh_budget_s"
+        return 124
+    fi
+    (( limit > 0 && limit < remaining )) || limit=$remaining
+    previous_traps=$(trap -p HUP INT TERM)
+    trap 'trap "" HUP INT TERM; interrupted=129; (( ${#pending_groups[@]} == 0 )) || kill -TERM -- "${pending_groups[@]}" 2>/dev/null || :; pending_groups=()' HUP
+    trap 'trap "" HUP INT TERM; interrupted=130; (( ${#pending_groups[@]} == 0 )) || kill -TERM -- "${pending_groups[@]}" 2>/dev/null || :; pending_groups=()' INT
+    trap 'trap "" HUP INT TERM; interrupted=143; (( ${#pending_groups[@]} == 0 )) || kill -TERM -- "${pending_groups[@]}" 2>/dev/null || :; pending_groups=()' TERM
+    [[ $- == *m* ]] && monitor=1
+    set -m
+    ( set +m; set -e; trap - EXIT HUP INT TERM; trap 'trap "" HUP INT TERM; exit 124' TERM; "$@" ) < /dev/null &
+    worker=$!
+    pending_groups+=("-$worker")
+    (
+        set +m
+        trap - EXIT HUP INT TERM
+        command sleep "$limit"
+        printf 'COH_SKIPPED %s %s cut after %ss (theme remaining %ss)\n' "$coh_theme" "$name" "$limit" "$remaining"
+        kill -TERM -- "-$worker" 2>/dev/null || :
+        command sleep "$coh_teardown_s"
+        kill -KILL -- "-$worker" 2>/dev/null || :
+    ) < /dev/null &
+    watchdog=$!
+    pending_groups+=("-$watchdog")
+    (( monitor )) || set +m
+    status=$interrupted
+    if (( interrupted == 0 )); then
+        wait "$worker"
+        status=$?
+    fi
+    finished=${EPOCHREALTIME/./}
+    (( ${#pending_groups[@]} == 0 )) || kill -TERM -- "${pending_groups[@]}" 2>/dev/null || :
+    pending_groups=()
+    # The native window belongs to launch/theme teardown; only these two recorded child groups are drained here.
+    for group in "$worker" "$watchdog"; do
+        if kill -0 -- "-$group" 2>/dev/null; then
+            for signal in TERM KILL; do
+                # TERM was sent once; a second one can re-enter EXIT and skip the held release.
+                [[ "$signal" != KILL ]] || kill -KILL -- "-$group" 2>/dev/null || :
+                end=$(( ${EPOCHREALTIME/./} + coh_teardown_s * coh_usec_per_s ))
+                while kill -0 -- "-$group" 2>/dev/null && (( ${EPOCHREALTIME/./} < end )); do
+                    command sleep "$coh_poll_s"
+                done
+                kill -0 -- "-$group" 2>/dev/null || break
+            done
+            if kill -0 -- "-$group" 2>/dev/null; then
+                printf 'COH_GROUP_FAILED %s %s pgid=%s survived teardown\n' "$coh_theme" "$name" "$group"
+                (( status != 0 )) || status=1
+            else
+                printf 'COH_GROUP %s %s pgid=%s remaining=none\n' "$coh_theme" "$name" "$group"
+            fi
+        fi
+    done
+    if ! kill -0 "$worker" 2>/dev/null; then wait "$worker" 2>/dev/null || :; fi
+    if ! kill -0 "$watchdog" 2>/dev/null; then wait "$watchdog" 2>/dev/null || :; fi
+    trap - HUP INT TERM
+    eval "$previous_traps"
+    if (( interrupted != 0 )); then
+        printf 'COH_INTERRUPTED %s %s signal=%s\n' "$coh_theme" "$name" "$((interrupted - 128))"
+        # The caller handles the original signal after its traps are restored and both child groups are stopped.
+        kill -"$((interrupted - 128))" "$BASHPID"
+        return "$interrupted"
+    fi
+    if (( status == 0 && finished - started >= limit * coh_usec_per_s )); then
+        printf 'COH_SKIPPED %s %s returned success after its %ss limit\n' "$coh_theme" "$name" "$limit"
+        status=124
+    fi
+    return "$status"
+}
+
+coh_surface_work() { coh_held=0; trap coh_release_held EXIT; coh_run_surface "$@"; }
+
+# The worker runs with errexit on, outside an if-condition that would mask failing steps; the caller's errexit is restored.
 coh_surface() {
-    local status=0 errexit=0
+    local status=0 errexit=0 started=$SECONDS
+    local trash_box="" payload="" trash_checks=0 trash_case_label=cohesion
+    local trash_parent_bus_id="" trash_private_bus_id="" trash_bus_address="" trash_bus_pid="" trash_provider_pid=""
     [[ $- == *e* ]] && errexit=1
     set +e
-    ( set -e; coh_held=0; trap coh_release_held EXIT; coh_run_surface "$@" ) < /dev/null
+    coh_bounded "$1" 0 coh_surface_work "$@"
     status=$?
     if (( errexit )); then set -e; fi
+    printf 'COH_TIMING %s %s seconds=%s exit=%s\n' "$coh_theme" "$1" "$((SECONDS - started))" "$status"
     (( status == 0 )) && return 0
     printf 'COH_FAILED %s %s\n' "$coh_theme" "$1"
     coh_failed+=" $coh_theme/$1"
 }
 
 # The picker is the portal's own process, so its walk runs in Python against the picker's IPC. Each run takes a fresh root, so no picker state carries over.
-coh_picker() {
-    local home status=0
+coh_picker_work() {
+    local home
+    kill_flea
     home=$(coh_home "$coh_theme")
-    FLEA_BIN="$flea_bin" FLEA_UI="$flea_ui" timeout 180 python3 "$repo/tests/ui-captures-cohesion-picker.py" \
-        "$fixture_root/coh-$coh_theme/picker-$RANDOM$RANDOM" "$home" "$evidence_dir" "$coh_theme" < /dev/null || status=$?
+    FLEA_BIN="$flea_bin" FLEA_UI="$flea_ui" python3 "$repo/tests/ui-captures-cohesion-picker.py" \
+        "$fixture_root/coh-$coh_theme/picker-$RANDOM$RANDOM" "$home" "$evidence_dir" "$coh_theme"
+}
+
+coh_picker() {
+    local status=0 errexit=0 started=$SECONDS
+    [[ $- == *e* ]] && errexit=1
+    set +e
+    coh_bounded picker 180 coh_picker_work
+    status=$?
+    if (( errexit )); then set -e; fi
+    printf 'COH_TIMING %s picker seconds=%s exit=%s\n' "$coh_theme" "$((SECONDS - started))" "$status"
     (( status == 0 )) && return 0
     printf 'COH_FAILED %s picker status %s\n' "$coh_theme" "$status"
     coh_failed+=" $coh_theme/picker"
@@ -380,24 +576,30 @@ coh_fixture() {
            "$dir/manual.pdf" || fail "cohesion: magick produced no manual.pdf"
 }
 
-# COH_THEMES and COH_SURFACES narrow a run to fit a minipc slot; both default to everything.
+# Full themes use the per-theme selectors; COH_SURFACES may still group a smaller cross-theme capture.
 case_cap_cohesion() {
     local coh_dir="$fixture_root/cohesion" coh_theme coh_failed="" live_foreground="$real_foreground" menus_checks=0 s coh_deadline
     local list='{"keys":"default","view":"list","menu":{"hidden":[]}}'
     local cols='{"keys":"default","view":"columns","columnsLimit":3,"preview":{"column":true,"loadOn":"automatic"},"menu":{"hidden":[]}}'
     local themes="${COH_THEMES:-live gruvbox catppuccin-latte}" want="${COH_SURFACES:-all}"
+    local -a theme_words=($themes)
+    if [[ "$want" == all ]] && (( ${#theme_words[@]} > 1 )); then
+        fail "cohesion: split full capture into ui:cap_cohesion_live ui:cap_cohesion_gruvbox ui:cap_cohesion_latte ui:cap_cohesion_kanagawa (one 900s slot each)"
+    fi
     local flea_ui
     flea_ui=$(coh_capture_ui) || fail "cohesion: the UI fixture could not be prepared"
+    # Sample input: sha256sum answers "0123456789abcdef...  tests/ui-captures-reader.qml"; the first field names the source.
+    printf 'COH_HARNESS helper=%s reader=%s ui=%s\n' "$(sha256sum "$repo/tests/ui-captures-cohesion.sh" | cut -d' ' -f1)" \
+        "$(sha256sum "$flea_ui/IpcControls.qml" | cut -d' ' -f1)" "$flea_ui"
     coh_fixture "$coh_dir"
     mkdir -p "$evidence_dir" || fail "cohesion: the evidence directory could not be created"
     : > "$evidence_dir/coh-manifest.tsv"
-    for coh_theme in $themes; do
+    for coh_theme in "${theme_words[@]}"; do
         coh_deadline=$((SECONDS + coh_budget_s))
         # The list comes in on fd 3 so no surface reads it off stdin, and it leads with one surface of each pane class for a run cut by its budget.
         while read -r -u 3 s opener state step region; do
             [[ "$want" == all || " $want " == *" $s "* ]] || continue
-            (( SECONDS < coh_deadline )) || { printf 'COH_SKIPPED %s %s over the %ss budget\n' "$coh_theme" "$s" "$coh_budget_s"; continue; }
-            [[ "$s" == picker ]] && { kill_flea; coh_picker; continue; }
+            [[ "$s" == picker ]] && { coh_picker; continue; }
             [[ "$region" == - ]] && region=""
             coh_surface "$s" "$opener" "${!state}" "$step" "${region//,/ }"
         done 3<<'EOF'
@@ -418,7 +620,7 @@ collide coh_open_collide list tab -
 convert coh_open_convert list tab -
 copyto-empty coh_open_copyto_empty list tab -
 newfile coh_open_newfile list tab -
-keymap coh_open_keymap list tab -
+keymap coh_open_keymap list none -
 pathbar coh_open_pathbar list tab -
 rename coh_open_rename list tab -
 ql-md coh_open_qlmd list tab -

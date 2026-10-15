@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Sidebar object counts and deferred menu work through real QML.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -11,7 +12,7 @@ trap 'sandbox_remove "$root"' EXIT
 mkdir -p "$root/config" "$root/home" "$root/state/flea" "$root/cache" "$root/runtime" "$root/data" "$root/home/a" "$root/home/b" "$root/home/c" || exit 1
 chmod 700 "$root/runtime" || exit 1
 ln -s "$PWD/ui" "$root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$root/config/Commons" || exit 1
+headless_commons "$root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$root/config/Ui" || exit 1
 cp tests/sidebarcost.qml "$root/config/shell.qml" || exit 1
 printf '%s\n' '{"updates":{"autoCheck":false},"places":{"showTrash":false,"showNetwork":false,"showDevices":false,"rail":"hidden","favourites":[{"label":"A","path":"~/a"},{"label":"B","path":"~/b"},{"label":"C","path":"~/c"}]}}' > "$root/state/flea/ui.json" || exit 1

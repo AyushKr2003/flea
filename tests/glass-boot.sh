@@ -53,9 +53,9 @@ setup_failed() {
     printf 'FAIL glass-boot %s: %s\n' "$1" "$2"
     failed=$((failed + 1))
 }
-# leg NAME THEME_VALUE CLEAR WINDOW EARLY: THEME_VALUE "-" writes no shell.toml; EARLY is whether the colour was cleared before the window was shown.
+# leg NAME THEME_VALUE CLEAR WINDOW EARLY [MODE]: an absent theme value keeps the mode's own ground.
 leg() {
-    local name=$1 value=$2 want_clear=$3 want_window=$4 want_early=$5
+    local name=$1 value=$2 want_clear=$3 want_window=$4 want_early=$5 mode=${6:-transparent}
     local probe="$work/$name" answer attempt
     local theme_dir="$probe/home/.local/state/omarchy/current/theme"
     mkdir -p "$probe"/{home/fixture,state,data,cache,runtime,config} "$theme_dir" && chmod 700 "$probe/runtime" \
@@ -69,6 +69,10 @@ leg() {
     fi
     env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state '{"updates":{"autoCheck":false}}' >/dev/null \
         || { setup_failed "$name" "$bin --ui-state failed"; return 1; }
+    if [[ "$mode" == opaque ]]; then
+        mkdir -p "$probe/state/omarchy/toggles/hypr" && printf 'return\n' > "$probe/state/omarchy/toggles/hypr/window-opaque.lua" \
+            || { setup_failed "$name" "writing its opaque mode failed"; return 1; }
+    fi
     # No FUSE bridge: gvfs would mount one in the runtime dir that can outlive the shell and block the cleanup.
     setsid env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLEA_SELECT \
         HOME="$probe/home" XDG_CONFIG_HOME="$probe/config" XDG_STATE_HOME="$probe/state" \
@@ -106,7 +110,8 @@ leg() {
 }
 
 leg glass 0.34 true '#00000000' true
-leg stock - false '#101315' false
+leg opaque - false '#101315' false opaque
+leg transparent - true '#00000000' true
 leg rounds 0.999 false '#101315' false
 printf 'glass-boot: failed=%s\n' "$failed"
 [[ "$failed" -eq 0 ]]

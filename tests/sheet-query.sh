@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # The real KeymapSheet over a stub pane draws CommandPalette's query states, then over the real pane runs its menu rows, offscreen with no display or lock.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -19,7 +20,7 @@ mkdir -p "$test_root/config" "$test_root/home" "$test_root/state" "$test_root/ru
 chmod 700 "$test_root/runtime" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/sheet-query.qml "$test_root/config/shell.qml" || exit 1
 
@@ -74,7 +75,7 @@ for name in a-special.txt b.txt c.txt d.txt; do printf 'sheet query fixture\n' >
 env HOME="$pane_root/home" XDG_STATE_HOME="$pane_root/state" "$bin" --ui-state \
     '{"view":"list","keys":"default","preview":{"column":false,"thumbnails":"off"},"updates":{"autoCheck":false},"display":{"textSize":{"mode":14}}}' >/dev/null || exit 1
 ln -s "$PWD/ui" "$pane_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$pane_root/config/Commons" || exit 1
+headless_commons "$pane_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$pane_root/config/Ui" || exit 1
 ln -s "$PWD/ui/boot/fleatab.qml" "$pane_root/config/fleatab.qml" || exit 1
 cp tests/sheet-query-pane.qml "$pane_root/config/shell.qml" || exit 1

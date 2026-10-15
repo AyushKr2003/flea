@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Exercise preview layout offscreen and fail on every engine binding loop, with no warning filter.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -13,7 +14,7 @@ trap cleanup EXIT
 mkdir -p "$test_root"/{config,home,state,cache,runtime} || exit 1
 chmod 700 "$test_root/runtime" || exit 1
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/preview-layout-loop.qml "$test_root/config/shell.qml" || exit 1
 cat > "$test_root/mixed.md" <<'DOC'

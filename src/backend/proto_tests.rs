@@ -332,8 +332,9 @@ fn emits_an_error_line_naming_operation_and_path() {
 #[test]
 fn a_devs_request_carries_the_paths_named_and_a_bare_one_carries_none() {
     assert!(matches!(parse_request(r#"{"c":"devs","paths":["/","/home/gm","/odd, [dir]"]}"#),
-        Request::Devs { paths } if paths == ["/", "/home/gm", "/odd, [dir]"]));
-    assert!(matches!(parse_request(r#"{"c":"devs"}"#), Request::Devs { paths } if paths.is_empty()));
+        Request::Devs { paths, id: 0 } if paths == ["/", "/home/gm", "/odd, [dir]"]));
+    assert!(matches!(parse_request(r#"{"c":"devs"}"#), Request::Devs { paths, id: 0 } if paths.is_empty()));
+    assert!(matches!(parse_request(r#"{"c":"devs","paths":["/usb"],"id":19}"#), Request::Devs { paths, id: 19 } if paths == ["/usb"]));
 }
 
 #[test]

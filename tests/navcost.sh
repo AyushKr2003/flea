@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Cursor steps through a real Pane serialize no held row, offscreen with the real backend; counts only, no timing.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -11,7 +12,7 @@ trap 'sandbox_remove "$root"' EXIT
 mkdir -p "$root/config" "$root/home" "$root/state/flea" "$root/cache" "$root/runtime" "$root/fixture" || exit 1
 chmod 700 "$root/runtime" || exit 1
 ln -s "$PWD/ui" "$root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$root/config/Commons" || exit 1
+headless_commons "$root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$root/config/Ui" || exit 1
 cp tests/navcost.qml "$root/config/shell.qml" || exit 1
 # Forty files fit one held window at this size, so no refetch replaces the counted rows.

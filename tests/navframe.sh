@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Enter and Back draw no frame and dirty no item before the landing in List, Columns and Grid, offscreen with the real backend.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -10,7 +11,7 @@ sandbox_require "$root" || exit 1
 trap 'sandbox_remove "$root"' EXIT
 mkdir -p "$root/config" "$root/fixture/a" "$root/fixture/e" "$root/bin" || exit 1
 ln -s "$PWD/ui" "$root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$root/config/Commons" || exit 1
+headless_commons "$root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$root/config/Ui" || exit 1
 cp tests/navframe.qml "$root/config/shell.qml" || exit 1
 # Eighty files make the rows scroll, a holds three, e is empty: 82 entries at the top.

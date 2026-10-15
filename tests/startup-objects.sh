@@ -2,6 +2,7 @@
 # Census the real window after a small listing settles, with no display or operator state.
 set -uo pipefail
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
+. "$(dirname "$0")/headless-commons.sh"
 cd "$(dirname "$0")/.." || exit 1
 command -v qs >/dev/null || { printf 'FAIL startup-objects: qs is required\n'; exit 1; }
 command -v dbus-run-session >/dev/null || { printf 'FAIL startup-objects: dbus-run-session is required\n'; exit 1; }
@@ -11,9 +12,9 @@ cleanup() { sandbox_remove "$test_root"; }
 trap cleanup EXIT
 mkdir -p "$test_root"/{config,home,state/flea,cache,runtime,fixture,bin} || exit 1
 chmod 700 "$test_root/runtime" || exit 1
+headless_commons "$test_root" || exit 1
 printf '{}\n' > "$test_root/state/flea/ui.json"
 touch "$test_root/fixture/a.txt" "$test_root/fixture/b.txt" "$test_root/fixture/c.txt"
-ln -s "$(readlink -m ui/boot/Commons)" "$test_root/config/Commons" || exit 1
 ln -s "$(readlink -m ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 # The window loads its tab catcher from the shell directory at startup, so the probe ships it as the product does.
 ln -s "$PWD/ui/boot/fleatab.qml" "$test_root/config/fleatab.qml" || exit 1
@@ -57,11 +58,6 @@ grep -a 'STARTUP_OBJECTS' "$log" || true
 if [ "$status" -ne 0 ] && [ "$status" -ne 143 ]; then
     printf 'FAIL startup-objects: qs exit %s\n' "$status"
     cat "$log"
-    exit 1
-fi
-warnings=$(grep -aE 'TypeError|ReferenceError|ERROR|WARN' "$log" | grep -vF 'This plugin does not support setting window masks' || true)
-if [ -n "$warnings" ]; then
-    printf 'FAIL startup-objects: engine warnings\n%s\n' "$warnings"
     exit 1
 fi
 trace_control=ui/js/Startup.js
@@ -121,6 +117,12 @@ ceiling=$(sed -n 's/^bytes //p' "$pinned")
 [[ "$ceiling" =~ ^[0-9]+$ ]] || { printf 'FAIL startup-objects: %s has no single numeric bytes line, got [%s]\n' "$pinned" "$ceiling"; exit 1; }
 if [ "$bytes" -gt "$ceiling" ]; then
     printf 'FAIL startup-objects: the first-frame units hold %s bytes, over the %s pinned in %s\n' "$bytes" "$ceiling" "$pinned"
+    exit 1
+fi
+# Keep the actual inventory visible on both Qt lanes even when an engine warning then rejects the run.
+warnings=$(grep -aE 'TypeError|ReferenceError|ERROR|WARN' "$log" | grep -vF 'This plugin does not support setting window masks' || true)
+if [ -n "$warnings" ]; then
+    printf 'FAIL startup-objects: engine warnings\n%s\n' "$warnings"
     exit 1
 fi
 # A listing that never answers must still build the IPC seam once the pane turns "waiting".

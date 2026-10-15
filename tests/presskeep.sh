@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # A press held across a watched re-read of an unchanged listing must still tap on release, in every view.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -18,7 +19,7 @@ for name in a.txt b.txt c.txt d.txt; do printf 'press keep fixture\n' > "$probe/
 env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state \
     '{"view":"list","keys":"default","menu":{"hidden":[]},"preview":{"column":false,"thumbnails":"off"},"updates":{"autoCheck":false},"display":{"textSize":{"mode":14}}}' >/dev/null || exit 1
 ln -s "$PWD/ui" "$probe/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$probe/config/Commons" || exit 1
+headless_commons "$probe" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui" || exit 1
 cp tests/presskeep.qml "$probe/config/shell.qml" || exit 1
 ln -s "$PWD/ui/boot/fleatab.qml" "$probe/config/fleatab.qml" || exit 1

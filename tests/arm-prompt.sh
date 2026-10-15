@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # A dd prompt lives exactly as long as its arm and leaves nothing stale, timed on the harness's own clock; offscreen, so no display and no lock.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -18,7 +19,7 @@ mkdir -p "$test_root/config" "$test_root/home" "$test_root/state" "$test_root/ca
 chmod 700 "$test_root/runtime" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 # The window loads its tab catcher from the shell directory, so the probe ships it as the product does.
 ln -s "$PWD/ui/boot/fleatab.qml" "$test_root/config/fleatab.qml" || exit 1

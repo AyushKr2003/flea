@@ -3,19 +3,17 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 . tests/qslog-gate.sh
+. tests/headless-commons.sh
+. tools/flea-sandbox-guard
 for tool in qs bat dbus-run-session python3; do
     command -v "$tool" >/dev/null || { printf 'FAIL fenceparity: %s is required\n' "$tool"; exit 1; }
 done
 bin=${FLEA_BIN:-$PWD/target/debug/flea}
 [ -x "$bin" ] || { printf 'FAIL fenceparity: build the backend first: %s\n' "$bin"; exit 1; }
-mkdir -p "$PWD/.superpowers/fenceparity" || exit 1
-box=$(mktemp -d "$PWD/.superpowers/fenceparity/run.XXXXXXXX") || exit 1
-: > "$box/.flea-test-sandbox"
-cleanup() {
-    case $box in
-        /*/.superpowers/fenceparity/run.?*) [ -n "$box" ] && [ -f "$box/.flea-test-sandbox" ] && rm -rf -- "$box" ;;
-    esac
-}
+sandbox_root_ok
+box=$(mktemp -d "$SANDBOX_ROOT/flea-fenceparity.XXXXXXXX") || exit 1
+: > "$box/$SANDBOX_MARKER" || exit 1
+cleanup() { sandbox_remove "$box"; }
 trap cleanup EXIT
 mkdir -p "$box/fixture" || exit 1
 python3 - "$box/fixture/fences.md" <<'PY' || exit 1
@@ -33,7 +31,7 @@ run_leg() {
     chmod 700 "$dir/runtime" || return 1
     printf '{}\n' > "$dir/state/flea/ui.json"
     cp -a ui "$dir/config/flea" || return 1
-    ln -s "$(readlink -m ui/boot/Commons)" "$dir/config/Commons" || return 1
+    headless_commons "$box" "$dir/config/Commons" || exit 1
     ln -s "$(readlink -m ui/boot/Ui)" "$dir/config/Ui" || return 1
     ln -s "$dir/config/flea/boot/fleatab.qml" "$dir/config/fleatab.qml" || return 1
     cp tests/fenceparity.qml "$dir/config/shell.qml" || return 1

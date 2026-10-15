@@ -162,6 +162,14 @@ def bytestring(text):
 code, req = ask("OpenFile", {"current_folder": bytestring(folder)}, "open")
 print("open %s %s" % (code, said(req.get("folder", ""))))
 
+# Alternate optional visibility requests to verify boolean overrides and absence without retained state.
+for method in ("OpenFile", "SaveFile", "SaveFiles"):
+    for token, option in (("true", GLib.Variant("b", True)), ("absent", None),
+                          ("false", GLib.Variant("b", False)), ("again", None),
+                          ("string", GLib.Variant("s", "true")), ("number", GLib.Variant("i", 1))):
+        code, req = ask(method, {} if option is None else {"show_hidden": option}, method + token)
+        print("hidden%s%s %s %s" % (method, token, code, json.dumps(req.get("hidden", "absent"))))
+
 code, req = ask("SaveFile", {"current_folder": bytestring(folder),
                              "current_file": bytestring(folder + "/notes.md")}, "save")
 print("save %s %s %s" % (code, said(req.get("folder", "")), said(req.get("file", ""))))
@@ -218,6 +226,14 @@ line() { printf '%s\n' "$out" | grep "^$1 " | head -1; }
 check "the backend owned its name" "0" "$(printf '%s\n' "$out" | grep -c '^ready never$')"
 check "the D-Bus driver completed" "0" "$ask_status"
 check "OpenFile decodes current_folder" "open 1 $dir/folder" "$(line open)"
+for method in OpenFile SaveFile SaveFiles; do
+    for option in true false absent again string number; do
+        value='"absent"'
+        case "$option" in true|false) value=$option ;; esac
+        token="hidden$method$option"
+        check "$method preserves optional show_hidden $option" "$token 1 $value" "$(line "$token")"
+    done
+done
 check "SaveFile decodes current_folder and current_file" "save 1 $dir/folder $dir/folder/notes.md" "$(line save)"
 check "SaveFiles answers its caller and decodes files" "savefiles 1 one.txt,two.txt" "$(line savefiles)"
 check "a current_folder that is not a bytestring is refused" "refused 1 (none)" "$(line refused)"

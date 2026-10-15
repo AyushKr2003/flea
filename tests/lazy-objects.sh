@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Bridge and wrapper arrive off launch; the host builds with the window, so its Loader stays active.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -51,7 +52,7 @@ printf '%s\n' "$absent_out" | grep -q 'LAZY_OBJECTS bridge-absent-fails-with-rea
 printf '%s\n' "$absent_out" | grep -q 'GvfsBridge.qml did not load: Loader status' || { printf 'FAIL missing bridge warning did not name its file\n%s\n' "$absent_out"; exit 1; }
 printf '%s\n' "$absent_out" | grep -q 'LAZY_OBJECTS FAIL' && { printf 'FAIL missing bridge live refused\n%s\n' "$absent_out"; exit 1; }
 printf 'lazy-objects: missing bridge fails with a reason, warns naming GvfsBridge.qml, no retry\n'
-ln -s /usr/share/omarchy/shell/Commons "$test_root/swap-config/Commons"
+headless_commons "$test_root" "$test_root/swap-config/Commons" || exit 1
 ln -s /usr/share/omarchy/shell/Ui "$test_root/swap-config/Ui"
 ln -s "$tree/tests/lazy-swap-live.qml" "$test_root/swap-config/shell.qml"
 swap_out=$(env HOME="$test_root/home" PATH="/usr/bin:/bin" QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_FORCE_STDERR_LOGGING=1 LAZY_SWAP_UI="$tree/ui" timeout 20 qs -p "$test_root/swap-config" 2>&1)

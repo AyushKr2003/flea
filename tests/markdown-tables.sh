@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Every Markdown table case (wide, long cells, breaks, inline marks, ragged, nested, CJK, 500 rows) in Quick Look and the preview column: geometry judged, frames grabbed.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -16,7 +17,7 @@ trap cleanup EXIT
 mkdir -p "$test_root/config" "$test_root/home" "$test_root/state" "$test_root/cache" "$test_root/runtime" "$test_root/docs" || exit 1
 chmod 700 "$test_root/runtime" || exit 1
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 cp tests/markdown-tables.js tests/markdown-tables-scroll.js tests/markdown-markers.js "$test_root/config/" || exit 1
 cp tests/markdown-tables.qml "$test_root/config/shell.qml" || exit 1

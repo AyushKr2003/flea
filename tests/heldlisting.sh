@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # A held first listing reads loading in List and Columns while the IPC seam stays unbuilt, and ui-captures-states.sh proves the reading shot by a live shell's "Target not found." for that absent seam.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -16,35 +17,35 @@ helper() {
             declare -F "$name" > /dev/null || { printf 'FAIL: %s is not defined by tests/ui-captures-states.sh\n' "$name"; exit 1; }
         done
         fail() { printf 'FAIL: %s\n' "$*"; exit 1; }
-        "$@"
+        eval "$@"
     )
 }
 
-out=$(helper eval 'ipc() { printf "Target not found.\n"; return 1; }; heldcolumns_expect_loading 2 "before its reading shot"; printf "loading\n"')
+out=$(helper 'ipc() { printf "Target not found.\n"; return 1; }; heldcolumns_expect_loading 2 "before its reading shot"; printf "loading\n"')
 [ "$out" = loading ] && ok "a live shell's absent seam proves the pane still reads loading" || bad "a live shell's absent seam must pass, got: $out"
 
-out=$(helper eval 'ipc() { printf "Target not found.\n"; }; heldcolumns_expect_loading 2 "before its reading shot"; printf "loading\n"')
+out=$(helper 'ipc() { printf "Target not found.\n"; }; heldcolumns_expect_loading 2 "before its reading shot"; printf "loading\n"')
 [ "$out" = loading ] && ok "the absent seam proves loading whatever the call's status" || bad "the absent seam must pass at status 0 too, got: $out"
 
-out=$(helper eval 'ipc() { return 1; }; heldcolumns_expect_loading 2 "before its reading shot"; printf "loading\n"')
+out=$(helper 'ipc() { return 1; }; heldcolumns_expect_loading 2 "before its reading shot"; printf "loading\n"')
 [ "$out" = "FAIL: heldcolumns: limit 2 got no live answer before its reading shot, ipc ready said 'nothing'" ] \
     && ok "a failed call with no answer fails: nothing proves the pane loading" || bad "a failed call must fail, got: $out"
 
-out=$(helper eval 'ipc() { printf "No running instances for \"/x/shell.qml\"\n" >&2; return 255; }; heldcolumns_expect_loading 4 "after its reading shot"; printf "loading\n"')
+out=$(helper 'ipc() { printf "No running instances for \"/x/shell.qml\"\n" >&2; return 255; }; heldcolumns_expect_loading 4 "after its reading shot"; printf "loading\n"')
 case $out in
     "FAIL: heldcolumns: limit 4 got no live answer after its reading shot, ipc ready said 'No running instances"*) ok "a dead shell's answer fails, stderr read too" ;;
     *) bad "a dead shell must fail, got: $out" ;;
 esac
 
-out=$(helper eval 'ipc() { return 124; }; heldcolumns_expect_loading 5 "before its reading shot"; printf "loading\n"')
+out=$(helper 'ipc() { return 124; }; heldcolumns_expect_loading 5 "before its reading shot"; printf "loading\n"')
 [ "$out" = "FAIL: heldcolumns: limit 5 got no live answer before its reading shot, ipc ready said 'nothing'" ] \
     && ok "a timed-out call fails" || bad "a timed-out call must fail, got: $out"
 
-out=$(helper eval 'ipc() { printf "true\n"; }; heldcolumns_expect_loading 3 "after its reading shot"; printf "loading\n"')
+out=$(helper 'ipc() { printf "true\n"; }; heldcolumns_expect_loading 3 "after its reading shot"; printf "loading\n"')
 [ "$out" = 'FAIL: heldcolumns: limit 3 left loading after its reading shot' ] \
     && ok "a built seam fails: the pane left loading" || bad "a built seam must fail, got: $out"
 
-out=$(helper eval 'calls=0; assert_theme() { calls=$((calls + 1)); }; launch() { assert_theme; launched=$1; }; heldcolumns_launch /held; during=$calls; assert_theme; printf "launch=%s during=%s after=%s\n" "$launched" "$during" "$calls"')
+out=$(helper 'calls=0; assert_theme() { calls=$((calls + 1)); }; launch() { assert_theme; launched=$1; }; heldcolumns_launch /held; during=$calls; assert_theme; printf "launch=%s during=%s after=%s\n" "$launched" "$during" "$calls"')
 [ "$out" = 'launch=/held during=0 after=1' ] \
     && ok "a held launch skips the seam wait and gives it back" || bad "a held launch must skip assert_theme once, got: $out"
 
@@ -135,7 +136,7 @@ ShellRoot {
     }
 }
 QML
-    out=$(helper eval 'ipc() { ctl_qs flea "$@"; }; heldcolumns_expect_loading 2 "with no shell"; printf "loading\n"')
+    out=$(helper 'ipc() { ctl_qs flea "$@"; }; heldcolumns_expect_loading 2 "with no shell"; printf "loading\n"')
     case $out in
         "FAIL: heldcolumns: limit 2 got no live answer with no shell, ipc ready said 'No running instances"*) ok "control: no shell fails the loading check" ;;
         *) bad "control: no shell must fail the loading check, got: $out" ;;
@@ -150,13 +151,13 @@ QML
     if [ -z "$up" ]; then
         bad "control: the shell never answered; log tail: $(tail -3 "$ctl/qs.log")"
     else
-        out=$(helper eval 'ipc() { ctl_qs flea "$@"; }; heldcolumns_expect_loading 2 "with a live shell"; printf "loading\n"')
+        out=$(helper 'ipc() { ctl_qs flea "$@"; }; heldcolumns_expect_loading 2 "with a live shell"; printf "loading\n"')
         [ "$out" = loading ] && ok "control: a live shell without the seam passes the loading check" || bad "control: a live shell without the seam must pass, got: $out"
     fi
     kill -TERM -- "-$runner" 2> /dev/null
     wait "$runner" 2> /dev/null
     runner=""
-    out=$(helper eval 'ipc() { ctl_qs flea "$@"; }; heldcolumns_expect_loading 2 "after the shell died"; printf "loading\n"')
+    out=$(helper 'ipc() { ctl_qs flea "$@"; }; heldcolumns_expect_loading 2 "after the shell died"; printf "loading\n"')
     case $out in
         "FAIL: heldcolumns: limit 2 got no live answer after the shell died, ipc ready said 'No running instances"*) ok "control: a shell that died fails the loading check" ;;
         *) bad "control: a dead shell must fail the loading check, got: $out" ;;
@@ -168,7 +169,7 @@ pane_leg() {
     local view=$1 probe="$work/pane-$1" out noisy
     leg_dirs "pane-$view" || { bad "pane $view: the probe directories could not be made"; return; }
     ln -s "$PWD/ui" "$probe/config/flea"
-    ln -s "$(readlink -f ui/boot/Commons)" "$probe/config/Commons"
+    headless_commons "$work" "$probe/config/Commons" || exit 1
     ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui"
     cp tests/heldlisting.qml "$probe/config/shell.qml"
     out=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
@@ -196,7 +197,7 @@ boot_ipc() {
 boot_leg() {
     local view=$1 limit=$2 probe="$work/boot-$1" held_at="" unbuilt=0 early="" built_at="" answer t seen_view=""
     leg_dirs "boot-$view" || { bad "boot $view: the probe directories could not be made"; return; }
-    HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state '{"view":"'"$view"'","columnsLimit":'"$limit"',"updates":{"autoCheck":false}}' > /dev/null \
+    HOME="$probe/home" XDG_STATE_HOME="$probe/state" env -- "$bin" --ui-state '{"view":"'"$view"'","columnsLimit":'"$limit"',"updates":{"autoCheck":false}}' > /dev/null \
         || { bad "boot $view: the state seed failed"; return; }
     setsid env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLEA_SELECT \
         HOME="$probe/home" XDG_CONFIG_HOME="$probe/config" XDG_STATE_HOME="$probe/state" \

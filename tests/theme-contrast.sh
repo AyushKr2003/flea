@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Applies each of the 24 palettes (the 22 stock themes, the Cool Dawn and Sunset fixtures) to the real ui/Theme.qml and holds its text and frame roles to their floors and a cursor row to the plain hover wash; offscreen, no display or lock.
+. "$(dirname "$0")/headless-commons.sh"
+# Applies installed stock palettes and Cool Dawn and Sunset to the real Theme, holding text, frames and cursor wash to their floors.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 cd "$(dirname "$0")/.." || exit 1
@@ -14,6 +15,8 @@ if ! command -v qs >/dev/null; then
     exit 1
 fi
 [ -d "$stock_dir" ] || { echo "FAIL theme-contrast.sh: $stock_dir is not there, so the 22 stock palettes cannot be read"; exit 1; }
+# Omarchy dev adds Starship to the 22 stable stock palettes; every other inventory change still fails.
+if [ -f "$stock_dir/starship/colors.toml" ]; then palettes_expected=25; fi
 
 # A marked sandbox of its own under the fixture root, so cleanup deletes only what this run owns.
 test_root=$(mktemp -d "$FIXTURE_ROOT/flea-theme-contrast-XXXXXX") || exit 1
@@ -42,13 +45,13 @@ palettes=$(wc -l < "$list")
 [ "$palettes" -eq "$palettes_expected" ] || fail "the sweep reads $palettes palettes, not $palettes_expected: a stock theme was added or removed, update palettes_expected here and paletteCount in tests/theme-contrast.qml with it"
 
 run_timeout_s=120
-# Per palette: 18 role, wash and cursor-recipe checks and 2 glass ones (opaque holds, the floor is at or under its record), then the 4 one-off checks (3 sandbox, the sunset frame/text split).
-expected_checks=$((palettes * 20 + 4))
+# Per palette: 18 role checks, 2 glass checks, 6 R3 lift checks and 37 picked-mode checks, then 4 one-off checks.
+expected_checks=$((palettes * 63 + 4))
 config="$test_root/config"
 mkdir -p "$config" || exit 1
 # The probe imports ui/ as Flea, and ui/'s qs.Commons resolves against this root, as it does from ui/boot.
 ln -s "$PWD/ui" "$config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$config/Commons" || exit 1
+headless_commons "$test_root" "$config/Commons" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$config/Ui" || exit 1
 cp tests/theme-contrast.qml "$config/shell.qml" || exit 1
 cp tests/button-probe.js "$config/button-probe.js" || exit 1
@@ -56,6 +59,7 @@ cp tests/qml-probe.js "$config/qml-probe.js" || exit 1
 # The palettes ride into the harness as one library, each colors.toml body whole.
 python3 -I - "$list" "$config/palettes.js" <<'PY' || exit 1
 import json, sys
+# Sample input: "nord<TAB>/usr/share/omarchy/themes/nord/colors.toml", one TSV line per palette.
 rows = [line.rstrip("\n").split("\t") for line in open(sys.argv[1])]
 with open(sys.argv[2], "w") as out:
     out.write(".pragma library\n\nvar PALETTES = " + json.dumps([{"name": n, "body": open(p).read()} for n, p in rows]) + "\n")
@@ -64,12 +68,13 @@ PY
 output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
     HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_CACHE_HOME="$test_root/cache" \
     XDG_DATA_HOME="$test_root/data" XDG_CONFIG_HOME="$test_root/home/.config" \
-    XDG_RUNTIME_DIR="$test_root/runtime" BUTTONSYS_ROOT="$test_root" BUTTONSYS_TIMEOUT_S="$run_timeout_s" \
+    XDG_RUNTIME_DIR="$test_root/runtime" BUTTONSYS_ROOT="$test_root" BUTTONSYS_TIMEOUT_S="$run_timeout_s" THEMECONTRAST_PALETTES="$palettes_expected" \
     QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_QPA_UPDATE_IDLE_TIME=1 QT_FORCE_STDERR_LOGGING=1 \
     timeout "$run_timeout_s" qs -p "$config" 2>&1 ) 2>/dev/null )
 # Sample input: "  INFO qml: THEMECONTRAST ok nord muted text on surface 5.02 >= 4.5" once per check, and "THEMECONTRAST DONE checks=484 failed=0" once.
 passed=$(printf '%s\n' "$output" | grep -c 'THEMECONTRAST ok ')
 failed=$(printf '%s\n' "$output" | grep -c 'THEMECONTRAST FAIL')
+printf '%s\n' "$output" | grep -a 'THEMECONTRAST DONE' || true
 # The glass floors print on a red run too, since they are what a red glass check is read against.
 printf '%s\n' "$output" | grep -a 'THEMECONTRAST floor '
 if [ "$failed" -ne 0 ]; then

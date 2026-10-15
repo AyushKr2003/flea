@@ -1121,11 +1121,13 @@ def take_display_lock(runtime_dir):
 
 
 def main():
+    from picker_issue313_native import test_issue313
     groups = {"single": test_single, "multiple": test_multiple, "directory": test_directory,
               "filters": test_filters, "changed": test_changed, "save": test_save,
               "savefocus": test_savefocus, "cancel": test_cancel, "failure": test_failure, "keys": test_keys,
               "sorting": test_sorting, "path": test_path}
-    selected = sys.argv[1:] or list(groups)
+    groups["issue313"] = lambda: test_issue313(globals())
+    selected = sys.argv[1:] or [name for name in groups if name != "issue313"]
     for name in selected:
         if name not in groups:
             raise AssertionError("unknown picker group: " + name)

@@ -1,4 +1,5 @@
 #!/bin/bash
+. "$(dirname "$0")/headless-commons.sh"
 # The slow-source counter gate on the real PreviewSwap, offscreen with no CPU limit so it runs in every lane.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -37,7 +38,7 @@ sandbox_scratch "$load_work"
 mkdir -p "$load_work"/{config,home,runtime,tmp} || exit 1
 chmod 700 "$load_work/runtime" || exit 1
 ln -s "$PWD/tests/slowsource-load.qml" "$load_work/config/shell.qml" || exit 1
-ln -s /usr/share/omarchy/shell/Commons "$load_work/config/Commons" || exit 1
+headless_commons "$load_work" || exit 1
 ln -s /usr/share/omarchy/shell/Ui "$load_work/config/Ui" || exit 1
 
 pass=0

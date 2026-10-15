@@ -1,4 +1,5 @@
 #!/bin/bash
+. "$(dirname "$0")/headless-commons.sh"
 # Column moves under the preview hold, offscreen on the threaded and basic loops: frames per key and a whole release frame.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -35,7 +36,7 @@ sandbox_scratch "$hf_work"
 mkdir -p "$hf_work"/{config,home,runtime,tmp} "$hf_work"/out-{threaded,basic} || exit 1
 chmod 700 "$hf_work/runtime" || exit 1
 ln -s "$PWD/tests/preview-holdframes.qml" "$hf_work/config/shell.qml" || exit 1
-ln -s /usr/share/omarchy/shell/Commons "$hf_work/config/Commons" || exit 1
+headless_commons "$hf_work" || exit 1
 ln -s /usr/share/omarchy/shell/Ui "$hf_work/config/Ui" || exit 1
 
 ui=${PREVIEW_HOLDFRAMES_UI:-$PWD/ui}

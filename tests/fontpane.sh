@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Quick Look's font page over a stub backend: the page whole in one turn, one ask per theme change, a stale answer dropped, a refusal shown as the unsupported state.
 set -uo pipefail
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -40,7 +41,7 @@ probe() {
     local name=$1 ui=$2 config="$test_root/config-$1"
     mkdir -p "$config" || return 1
     ln -s "$ui" "$config/flea" || return 1
-    ln -s "$(readlink -f ui/boot/Commons)" "$config/Commons" || return 1
+    headless_commons "$test_root" "$config/Commons" || exit 1
     ln -s "$(readlink -f ui/boot/Ui)" "$config/Ui" || return 1
     cp tests/fontpane.qml "$config/shell.qml" || return 1
     cp "$test_root/colors-dark.toml" "$palette/theme/colors.toml" || return 1

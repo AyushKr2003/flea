@@ -40,6 +40,15 @@ _hypr_reply_ok() {
     return 1
 }
 
+# Sample input: hypr_workspace_focus 21, the current Lua workspace focus with a validated id.
+hypr_workspace_focus() {
+    _hypr_arity hypr_workspace_focus 'ID' "$@" || return 1
+    _hypr_coordinate hypr_workspace_focus "$1" || return 1
+    local answer status=0
+    answer=$(hyprctl dispatch "hl.dsp.focus({ workspace = \"$1\" })" 2>&1) || status=$?
+    _hypr_reply_ok "$status" "$answer" "$@"
+}
+
 hypr_window_focus() {
     _hypr_arity hypr_window_focus 'ADDR' "$@" || return 1
     _hypr_address hypr_window_focus "$1" || return 1
@@ -129,6 +138,7 @@ _hypr_program() {
     [[ $# != 0 ]] || _hypr_refuse hypr-dispatch.sh "$operation" 'expected a typed operation' || return 1
     shift
     case "$operation" in
+        workspace_focus) hypr_workspace_focus "$@" ;;
         window_focus) hypr_window_focus "$@" ;;
         window_float) hypr_window_float "$@" ;;
         window_resize) hypr_window_resize "$@" ;;

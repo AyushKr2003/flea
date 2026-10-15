@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # A listing held past the wait reads loading, then waiting, then lands whole in Columns, offscreen with the real backend behind a holding proxy; it runs once at the shipped limit 3, and ui:cap_heldcolumns shoots limits 2 to 5.
 set -u
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -11,7 +12,7 @@ sandbox_require "$root" || exit 1
 trap 'sandbox_remove "$root"' EXIT
 mkdir -p "$root/config" "$root/fixture" "$root/bin" || exit 1
 ln -s "$PWD/ui" "$root/config/flea" || exit 1
-ln -s "$(readlink -f ui/boot/Commons)" "$root/config/Commons" || exit 1
+headless_commons "$root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$root/config/Ui" || exit 1
 cp tests/heldcolumns.qml "$root/config/shell.qml" || exit 1
 : > "$root/fixture/one.txt"; : > "$root/fixture/two.txt"

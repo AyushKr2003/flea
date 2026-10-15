@@ -3,6 +3,7 @@
 set -uo pipefail
 script_path=$(realpath -- "$0") || exit 1
 cd "$(dirname "$script_path")/.." || exit 1
+. "$PWD/tests/headless-commons.sh"
 . "$PWD/tools/flea-sandbox-guard"
 mode=${1:-invocations}
 case $mode in invocations|candidate|ground-mutant|card-mutant|ruler-mutant) ;; *) echo 'FAIL settings-ground unknown mode'; exit 1 ;; esac
@@ -82,7 +83,7 @@ else:
 path.write_text(text)
 PY
 fi
-ln -s "$(readlink -f ui/boot/Commons)" "$probe/config/Commons" || exit 1
+headless_commons "$probe" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui" || exit 1
 ln -s "$PWD/ui/boot/fleatab.qml" "$probe/config/fleatab.qml" || exit 1
 cp tests/settings-ground.qml "$probe/config/shell.qml" || exit 1

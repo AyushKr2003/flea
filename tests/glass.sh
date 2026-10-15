@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # [flea] background-alpha through the real WindowBody offscreen, one launch per case with its own theme and user shell.toml.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -64,7 +65,7 @@ setup_failed() {
 }
 # run_case NAME MODE EXPECT THEME USER [LATE]: THEME and USER are the [flea] value, "-" for no file and "" for a file without one.
 run_case() {
-    local name=$1 mode=$2 expect=$3 theme=$4 user=$5 late=${6:-}
+    local name=$1 mode=$2 expect=$3 theme=$4 user=$5 late=${6:-} stock=0
     local probe="$probe_root/$name" budget=$parse_budget_s
     local theme_dir="$probe/home/.local/state/omarchy/current/theme"
     [[ "$mode" == sweep ]] && budget=$sweep_budget_s
@@ -87,16 +88,26 @@ run_case() {
     env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state \
         '{"preview":{"thumbnails":"off"},"updates":{"autoCheck":false}}' >/dev/null \
         || { setup_failed "$name" "$bin --ui-state failed"; return 1; }
+    if [[ "$name" == none ]]; then
+        mkdir -p "$probe/state/omarchy/toggles/hypr" && printf 'return\n' > "$probe/state/omarchy/toggles/hypr/window-opaque.lua" \
+            || { setup_failed "$name" "writing its explicit opaque mode failed"; return 1; }
+    fi
+    if [[ "$name" == stock-glassy ]]; then
+        stock=1
+        mkdir -p "$probe/state/omarchy/toggles/hypr" && printf 'return\n' > "$probe/state/omarchy/toggles/hypr/window-glassy.lua" \
+            || { setup_failed "$name" "writing its glassy mode failed"; return 1; }
+    fi
     # The window loads its tab catcher from the shell directory, so the probe ships it as the product does.
-    ln -s "$PWD/ui" "$probe/config/flea" && ln -s "$(readlink -f ui/boot/Commons)" "$probe/config/Commons" \
-        && ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui" && ln -s "$PWD/ui/boot/fleatab.qml" "$probe/config/fleatab.qml" \
+    ln -s "$PWD/ui" "$probe/config/flea" || { setup_failed "$name" "linking the probe's UI failed"; return 1; }
+    headless_commons "$probe" || exit 1
+    ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui" && ln -s "$PWD/ui/boot/fleatab.qml" "$probe/config/fleatab.qml" \
         && cp tests/glass.qml "$probe/config/shell.qml" && cp tests/glass.js "$probe/config/glass.js" \
         || { setup_failed "$name" "linking the probe's shell directory failed"; return 1; }
     local log="$probe/qs.log" tick
     env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLEA_SELECT \
         HOME="$probe/home" XDG_STATE_HOME="$probe/state" XDG_CONFIG_HOME="$probe/config" \
         XDG_DATA_HOME="$probe/data" XDG_CACHE_HOME="$probe/cache" XDG_RUNTIME_DIR="$probe/runtime" \
-        FLEA_PATH="$probe/home/fixture" FLEA_BIN="$bin" GLASS_MODE="$mode" GLASS_EXPECT="$expect" \
+        FLEA_PATH="$probe/home/fixture" FLEA_BIN="$bin" GLASS_MODE="$mode" GLASS_EXPECT="$expect" GLASS_STOCK="$stock" \
         GLASS_LATE_USER="$late" GLASS_SHOTS="${GLASS_SHOTS:+$GLASS_SHOTS/$name}" \
         QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 \
         setsid dbus-run-session -- qs -p "$probe/config" >"$log" 2>&1 </dev/null &
@@ -134,6 +145,7 @@ run_case() {
 
 # Every plane and overlay at 0.34 from the theme, then live changes from the user's file.
 run_case sweep sweep 87 0.34 ""
+run_case stock-glassy sweep 192 - -
 # The user's file alone, and the user's value over the theme's.
 run_case user parse 128 - 0.5
 run_case override parse 153 0.34 0.6

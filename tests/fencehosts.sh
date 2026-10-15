@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Every fence in a Markdown file opens as a code block in the preview column and in Quick Look, whatever the line endings, the size or where the entry came from.
 set -uo pipefail
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -14,7 +15,7 @@ trap cleanup EXIT
 mkdir -p "$test_root"/{config,fixture,home,state/flea,cache,runtime} || exit 1
 chmod 700 "$test_root/runtime" || exit 1
 printf '{}\n' > "$test_root/state/flea/ui.json"
-ln -s "$(readlink -m ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -m ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
 cp tests/fencehosts.js "$test_root/config/fencehosts.js" || exit 1

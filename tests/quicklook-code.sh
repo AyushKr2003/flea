@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Quick Look on code and text over the real backend and bat: the bar, the gutter, w and its memory, the binary and too-large frames. Offscreen, in the flea-ci image.
 set -uo pipefail
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -15,7 +16,7 @@ cleanup() { sandbox_remove "$test_root"; }
 trap cleanup EXIT
 mkdir -p "$test_root"/{config,fixture,home,state/flea,cache,runtime} || exit 1
 chmod 700 "$test_root/runtime" || exit 1
-ln -s "$(readlink -m ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -m ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 ln -s "$test_root/config/flea/boot/fleatab.qml" "$test_root/config/fleatab.qml" || exit 1
 cp -a ui "$test_root/config/flea" || exit 1

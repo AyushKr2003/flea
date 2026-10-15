@@ -6,7 +6,7 @@ use std::time::Duration;
 
 // The asked paths as the request carries them, answered against an empty mount table.
 fn asked(paths: &[&str]) -> String {
-    answer(&paths.iter().map(|path| path.to_string()).collect::<Vec<_>>(), "")
+    answer(&paths.iter().map(|path| path.to_string()).collect::<Vec<_>>(), "", 0)
 }
 
 fn said(pairs: &[(&str, u64)]) -> String {
@@ -58,7 +58,7 @@ fn a_mount_marked_stuck_answers_zero_at_once_and_a_live_one_answers_its_device()
     // The share exists, so only the stuck mark answers it 0.
     let (stuck, ok) = (share.to_string_lossy().to_string(), live.to_string_lossy().to_string());
     let held = iomount::test_hold_stuck(share.clone());
-    let line = answer(&[stuck.clone(), ok.clone()], &body);
+    let line = answer(&[stuck.clone(), ok.clone()], &body, 0);
     drop(held);
     assert_eq!(line, said(&[(&stuck, 0), (&ok, std::fs::metadata(&live).unwrap().dev())]),
         "the mount that stopped answering is 0 with no stat, and a network mount that answers is read like any other");
@@ -69,9 +69,24 @@ fn the_request_answers_on_its_own_thread_through_the_ops_channel() {
     let sandbox = TestDir::new("devsthread");
     let (tx, rx) = std::sync::mpsc::channel();
     let path = sandbox.path().to_str().unwrap().to_string();
-    request(vec![path.clone()], tx);
+    request(vec![path.clone()], 0, tx);
     match rx.recv_timeout(Duration::from_secs(5)) {
         Ok(OpMsg::Meta { line }) => assert_eq!(line, said(&[(&path, std::fs::metadata(&path).unwrap().dev())])),
         _ => panic!("the answer rides the ops channel as a finished line"),
+    }
+}
+
+#[test]
+fn a_tagged_hover_answer_keeps_its_request_identity_off_the_loop() {
+    let sandbox = TestDir::new("devshover");
+    let (tx, rx) = std::sync::mpsc::channel();
+    let path = sandbox.path().to_str().unwrap().to_string();
+    request(vec![path.clone()], 19, tx);
+    match rx.recv_timeout(Duration::from_secs(5)) {
+        Ok(OpMsg::Meta { line }) => {
+            let expected = said(&[(&path, std::fs::metadata(&path).unwrap().dev())]);
+            assert_eq!(line, format!("{}, \"id\":19}}", &expected[..expected.len() - 1]));
+        }
+        _ => panic!("the hover answer did not reach the ops channel"),
     }
 }

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Real rendered Markdown and Quick Look scroll behavior against the release boards.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
@@ -9,7 +10,7 @@ test_root=$(mktemp -d "$SANDBOX_ROOT/flea-preview-hunt.XXXXXXXX") || exit 1
 trap 'sandbox_remove "$test_root"' EXIT
 mkdir -p "$test_root/config" "$test_root/fixture"
 ln -s "$PWD/ui" "$test_root/config/flea"
-ln -s "$(readlink -f ui/boot/Commons)" "$test_root/config/Commons"
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui"
 cp tests/preview-hunt.qml "$test_root/config/shell.qml"
 cp tests/qml-probe.js "$test_root/config/qml-probe.js"

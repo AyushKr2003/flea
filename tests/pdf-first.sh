@@ -1,4 +1,5 @@
 #!/bin/bash
+. "$(dirname "$0")/headless-commons.sh"
 # A turn before the first page lands must leave the cap alone and still land the turned-to page; offscreen, so no display and no lock.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -42,7 +43,7 @@ sandbox_scratch "$first_work"
 mkdir -p "$first_work"/{config,home,runtime,tmp} || exit 1
 chmod 700 "$first_work/runtime" || exit 1
 ln -s "$PWD/tests/pdf-first.qml" "$first_work/config/shell.qml" || exit 1
-ln -s /usr/share/omarchy/shell/Commons "$first_work/config/Commons" || exit 1
+headless_commons "$first_work" || exit 1
 ln -s /usr/share/omarchy/shell/Ui "$first_work/config/Ui" || exit 1
 
 # Two pages: a 54-megapixel noise JPEG that renders past any turn, then a light page that lands at once.

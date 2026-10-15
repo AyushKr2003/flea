@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # Every cursor key after a rename ends with Enter, Escape, the path field taking focus or a view switch reaches the pane's key handler and costs no more work than before it, in the real WindowBody, offscreen.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -47,7 +48,7 @@ chmod +x "$probe/bin/gio"
 env HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state \
     '{"preview":{"column":false,"thumbnails":"off"},"updates":{"autoCheck":false}}' >/dev/null || exit 1
 ln -s "$PWD/ui" "$probe/config/flea"
-ln -s "$(readlink -f ui/boot/Commons)" "$probe/config/Commons"
+headless_commons "$probe" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui"
 ln -s "$PWD/ui/boot/fleatab.qml" "$probe/config/fleatab.qml"
 cp tests/rename-cost.qml "$probe/config/shell.qml"

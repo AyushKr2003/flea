@@ -5,6 +5,7 @@
 .import "../../ui/js/Messages.js" as Messages
 .import "../../ui/js/Settings.js" as Settings
 .import "clipboard.js" as ClipboardSuite
+.import "raildrop.js" as RailDropSuite
 
 // Drops callouts 2 to 4 as pure functions: the hover band and rest, the FAT card's words and answer, and the image paste.
 
@@ -92,6 +93,7 @@ function imagePaste(check) {
 }
 
 function run(check) {
+    RailDropSuite.run(check)
     bands(check)
     setting(check)
     fatCard(check)

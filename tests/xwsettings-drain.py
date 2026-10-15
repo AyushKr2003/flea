@@ -14,13 +14,16 @@ expected = 1
 scratch = Path(os.environ.get('TMPDIR', repo / '.superpowers/tmp'))
 scratch.mkdir(parents=True, exist_ok=True)
 run = Path(tempfile.mkdtemp(prefix='xwsdrain-', dir=scratch))
+assert run.is_absolute() and len(run.parts) > 2
+(run / '.flea-test-sandbox').touch()
 (run / 'files').mkdir()
 for name in ('a.txt', 'b.txt', 'c.txt'):
     (run / 'files' / name).touch()
 config = run / 'ui' / 'boot'
 config.mkdir(parents=True)
-for name in ('Commons', 'Ui'):
-    (config / name).symlink_to((repo / 'ui' / 'boot' / name).resolve())
+(config / 'Ui').symlink_to((repo / 'ui' / 'boot' / 'Ui').resolve())
+subprocess.run(['bash', '-c', '. tools/flea-sandbox-guard; . tests/headless-commons.sh; headless_commons "$1" "$2"',
+                'headless_commons', str(run), str(config / 'Commons')], check=True)
 source = (repo / 'tests/xwsettings-start.qml').read_text()
 needle = 'function onQuitReady() { console.log("PROBE " + Quickshell.env("PROBE_ROLE") + " backend drained") }'
 assert source.count(needle) == 1

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "$0")/headless-commons.sh"
 # The first Space on a PDF, a clip, a picture or a text file compiles nothing: the kind's unit and Quick Look's own were held ready while the cursor rested, and a window that never rests on a kind never holds its unit.
 set -uo pipefail
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
@@ -12,7 +13,7 @@ sandbox_make "$test_root"
 cleanup() { sandbox_remove "$test_root"; }
 trap cleanup EXIT
 mkdir -p "$test_root"/{config,fixture/mixed/a-dir,fixture/filesonly} || exit 1
-ln -s "$(readlink -m ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -m ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 ln -s "$test_root/config/flea/boot/fleatab.qml" "$test_root/config/fleatab.qml" || exit 1
 cp -a ui "$test_root/config/flea" || exit 1
