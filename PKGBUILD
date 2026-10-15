@@ -28,6 +28,7 @@ license=('MIT' 'Apache-2.0' 'EPL-2.0' 'BSD-2-Clause')
 # an Android phone lists and nothing else does. Measured on an iPhone (iOS 26.6.2): its PTP leg mounts
 # and answers zero folders, and AFC is the one that lists DCIM, so the iPhone needs both.
 # quickjs-ng is what flea --figure-helper execs for Markdown maths and diagrams, so figures need it installed.
+
 # bat colours code previews and jq formats JSON before the sandbox renders it.
 depends=('bat' 'bubblewrap' 'expect' 'gcc-libs' 'glib2' 'glibc' 'gvfs' 'gvfs-afc' 'gvfs-dnssd' 'gvfs-gphoto2' 'gvfs-mtp' 'gvfs-nfs' 'gvfs-smb' 'hicolor-icon-theme' 'jq' 'kimageformats' 'libheif' 'omarchy' 'python' 'python-gobject' 'qt6-multimedia' 'qt6-webengine' 'quickjs-ng' 'quickshell' 'shared-mime-info' 'udisks2' 'usbmuxd' 'util-linux' 'wl-clipboard' 'xdg-terminal-exec' 'xdg-utils')
 makedepends=('cargo')
