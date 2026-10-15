@@ -3,6 +3,7 @@
 set -uo pipefail
 . "$(dirname "$0")/../tools/flea-sandbox-guard"
 . "$(dirname "$0")/qslog-gate.sh"
+. "$(dirname "$0")/headless-commons.sh"
 cd "$(dirname "$0")/.." || exit 1
 for tool in qs qml6 bat magick dbus-run-session python3; do
     command -v "$tool" >/dev/null || { printf 'FAIL html-preview: %s is required\n' "$tool"; exit 1; }
@@ -16,7 +17,7 @@ cleanup() { sandbox_remove "$test_root"; }
 trap cleanup EXIT
 mkdir -p "$test_root"/{config,fixture,home,state/flea,cache,runtime} || exit 1
 chmod 700 "$test_root/runtime" || exit 1
-ln -s "$(readlink -m ui/boot/Commons)" "$test_root/config/Commons" || exit 1
+headless_commons "$test_root" || exit 1
 ln -s "$(readlink -m ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 ln -s "$test_root/config/flea/boot/fleatab.qml" "$test_root/config/fleatab.qml" || exit 1
 cp -a ui "$test_root/config/flea" || exit 1

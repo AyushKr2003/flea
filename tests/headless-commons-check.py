@@ -10,6 +10,13 @@ import sys
 CALLER_TIMEOUT_SECONDS = 10
 
 
+def native_capture_source(path, line):
+    # This real-window RHI specimen needs OEM compositor reloads; copies remain offscreen-scanned.
+    native = Path(__file__).resolve().with_name('ui-captures-html.sh')
+    return (path.resolve() == native
+            and line.strip() == 'ln -s "$(readlink -m "$repo/ui/boot/Commons")" "$dir/boot/Commons"')
+
+
 def direct_sources(root):
     bad = []
     sources = ('ui/boot/' + 'Commons', 'ui/' + 'Commons', '/usr/share/omarchy/shell/' + 'Commons')
@@ -18,7 +25,8 @@ def direct_sources(root):
             continue
         for n, line in enumerate(path.read_text().splitlines(), 1):
             # Sample input: ln -s "$(readlink -f ui/boot/Commons/)" "$root/config/Commons" also links the live OEM source.
-            if not line.lstrip().startswith('#') and any(re.search(r'(?<![\w$])' + re.escape(source) + r'(?!\w)', line) for source in sources):
+            if (not line.lstrip().startswith('#') and not native_capture_source(path, line)
+                    and any(re.search(r'(?<![\w$])' + re.escape(source) + r'(?!\w)', line) for source in sources)):
                 bad.append(f'{path}:{n}: use headless_commons instead of a direct OEM Commons source')
     return bad
 
@@ -358,6 +366,19 @@ def controls(box):
     scanner = fixture / 'tests'
     scanner.mkdir()
     direct = scanner / 'new-suite.sh'
+    native = Path(__file__).resolve().with_name('ui-captures-html.sh')
+    native_link = 'ln -s "$(readlink -m "$repo/ui/boot/Commons")" "$dir/boot/Commons"'
+    assert native_capture_source(native, native_link)
+    assert not native_capture_source(native, 'ln -s ui/boot/Commons "$root/config/Commons"')
+    assert not native_capture_source(native, native_link + '; qs -p "$dir/boot"')
+    assert not native_capture_source(native, native_link.replace('$dir/boot/Commons', '$root/config/Commons'))
+    for name in ('new-suite.sh', native.name):
+        copied = scanner / name
+        copied.write_text(native_link + '\nQT_QPA_PLATFORM=offscreen qs -p "$root/config"\n')
+        errors = direct_sources(scanner)
+        assert len(errors) == 1 and f'{name}:1:' in errors[0], (name, errors)
+        copied.unlink()
+    print('HEADLESS_COMMONS_NATIVE_BOUNDARY exact native RHI link accepted; copied/offscreen and altered links rejected')
     direct_controls = 0
     for source in ('ui/boot/' + 'Commons', 'ui/' + 'Commons', '/usr/share/omarchy/shell/' + 'Commons'):
         for suffix in ('', '/', '/.', '/Style.qml'):
@@ -736,4 +757,4 @@ if __name__ == '__main__':
         controls(box)
     except AssertionError as error:
         raise SystemExit(f'FAIL headless Commons controls: {error}')
-    print('HEADLESS_COMMONS_RULE every suite uses the shared fixture')
+    print('HEADLESS_COMMONS_RULE offscreen suites use the shared fixture; native capture keeps live Commons')

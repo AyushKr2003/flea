@@ -4,6 +4,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 repo=$PWD
 . "$repo/tools/flea-sandbox-guard"
+. "$repo/tests/headless-commons.sh"
 FIXTURE_ROOT="$repo/.superpowers/raildrop"
 sandbox_root_ok
 mkdir -p "$SANDBOX_ROOT" || exit 1
@@ -16,7 +17,7 @@ chmod 700 "$probe/runtime" "$probe/undo"
 for name in a b c; do printf '%s incoming\n' "$name" > "$probe/fixture/source/$name.txt"; done
 printf 'occupied\n' > "$probe/fixture/favorite/c.txt"
 ln -s "$repo/ui" "$probe/config/flea"
-ln -s "$(readlink -f ui/boot/Commons)" "$probe/config/Commons"
+headless_commons "$probe" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$probe/config/Ui"
 ln -s "$repo/ui/boot/fleatab.qml" "$probe/config/fleatab.qml"
 cp tests/raildrop.qml "$probe/config/shell.qml"
