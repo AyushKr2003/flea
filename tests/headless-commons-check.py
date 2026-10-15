@@ -62,6 +62,7 @@ def call_scopes(source, comments=None):
     literal_executable = re.compile(r'(?:[A-Za-z0-9_./:+-]+|\[)(?=$|[\s();|&<>])')
     assignment_head = re.compile(r'[A-Za-z_]\w*\+?=')
     dispatchers = ('eval', 'trap', 'command', 'builtin', 'exec', 'export', 'declare', 'typeset')
+    command_query = re.compile(r'[ \t]+-[vV](?=$|[\s();|&<>])')
     at = 0
     while at < len(source):
         char = source[at]
@@ -235,6 +236,9 @@ def call_scopes(source, comments=None):
         joins_word = False
         array_ended = False
         at += len(word)
+        # Sample input: command -- "$@" can invoke eval; only literal command -v/-V forms query without executing.
+        if keyword and not in_pattern and word in ('command', 'builtin'):
+            uncertain_dispatch |= word != 'command' or not command_query.match(source, at)
         owner = next((function_groups[id(calls)] for _, _, calls in reversed(groups) if id(calls) in function_groups), None)
         # Sample input: prepare | cat, a subshell's prepare and wrapper() { prepare; } inherit their actual call context.
         if keyword and not opens_compound and word not in ('}', 'fi', 'done', 'esac', 'then', 'else', 'elif', 'do', 'in', '!', 'time') and re.fullmatch(r'\w+', word):
@@ -641,6 +645,9 @@ def controls(box):
         'function-concatenated-argument': 'prepare() {\n' + contract_call + '}\nprepare pre"pare"\n',
         'function-forwarded-external': 'prepare() {\n' + contract_call + '}\ndispatch() { "$@"; }\ndispatch printf "%s" ready\nprepare\n',
         'function-command-forwarded-external': 'prepare() {\n' + contract_call + '}\ndispatch() { command -- "$@"; }\ndispatch printf "%s" ready\nprepare\n',
+        'function-env-forwarded-external': 'prepare() {\n' + contract_call + '}\ndispatch() { env -- "$@"; }\ndispatch printf "%s" ready\nprepare\n',
+        'function-command-query': 'prepare() {\n' + contract_call + '}\ncommand -v printf\nprepare\n',
+        'function-command-query-verbose': 'prepare() {\n' + contract_call + '}\ncommand -V printf\nprepare\n',
         'heredoc-normal-parent': "cat <<'EOF'\n) # body only\nEOF\n" + contract_call,
         'heredoc-tabs-parent': "cat <<-'EOF'\n\t) # body only\n\tEOF\n" + contract_call,
     }
@@ -672,6 +679,9 @@ def controls(box):
         'function-dead-literal-assignment': 'prepare() {\n' + contract_call + '}\nif false; then prepare; fi\nFLAG=1 pre"pare" | cat\n',
         'function-forwarded-eval': 'prepare() {\n' + contract_call + '}\ndispatch() { "$@"; }\nif false; then prepare; fi\ndispatch eval prepare | cat\n',
         'function-forwarded-shift': 'prepare() {\n' + contract_call + '}\nif false; then prepare; fi\ndispatch() { shift; "$@"; }\ndispatch printf prepare | cat\n',
+        'function-command-forwarded-eval': 'prepare() {\n' + contract_call + '}\ndispatch() { command -- "$@"; }\nif false; then prepare; fi\ndispatch eval \'pre"pare"\' | cat\n',
+        'function-command-literal-eval': 'prepare() {\n' + contract_call + '}\nif false; then prepare; fi\ncommand eval \'pre"pare"\' | cat\n',
+        'function-builtin-forwarded-eval': 'prepare() {\n' + contract_call + '}\ndispatch() { builtin "$@"; }\nif false; then prepare; fi\ndispatch eval \'pre"pare"\' | cat\n',
         'heredoc-space-child': "(\ncat <<'EOF'\n EOF\n)\nEOF\n" + contract_call + ') | cat\n',
         'heredoc-normal-tab-child': "(\ncat <<'EOF'\n\tEOF\n)\nEOF\n" + contract_call + ') | cat\n',
         'heredoc-trailing-space-child': "(\ncat <<'EOF'\nEOF \n)\nEOF\n" + contract_call + ') | cat\n',
@@ -681,8 +691,8 @@ def controls(box):
         'heredoc-multiple-child': "(\ncat <<'FIRST' <<-'SECOND'\n FIRST\n)\nFIRST\n\tbody\n\tSECOND\n" + contract_call + ') | cat\n',
         'compound-process-redirect': '{\n' + contract_call + '} > >(cat; :) | cat\n',
     }
-    # Sample input: dispatch printf looks safe at runtime, but "$@" has no supported static function-dispatch proof.
-    unresolved_parents = {'function-forwarded-external'}
+    # Sample input: dispatch printf looks safe at runtime, but "$@" and command -- "$@" have no supported dispatch proof.
+    unresolved_parents = {'function-forwarded-external', 'function-command-forwarded-external'}
     for name, body in {**safety_parents, **unsafe_callers}.items():
         owner = root / ('safety-' + name)
         owner.mkdir()
