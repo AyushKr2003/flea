@@ -48,6 +48,7 @@ def restore_display(native, workspace, active, helper=None):
             raise AssertionError("saved workspace is not an integer")
         if native["run"](["bash", helper, "workspace_focus", workspace], native["drive_env"]) != "ok":
             raise AssertionError("workspace focus was refused")
+        # Sample input: {"id": 1, "name": "1", "monitor": "DP-2", "windows": 0}.
         restored = json.loads(native["run"](["hyprctl", "-j", "activeworkspace"], native["drive_env"]))
         if type(restored.get("id")) is not int or restored["id"] != workspace:
             raise AssertionError(f"workspace did not restore {workspace}: {restored!r}")
@@ -64,9 +65,11 @@ def restore_display(native, workspace, active, helper=None):
                 raise AssertionError(f"saved window {address} PID {pid} is missing or ambiguous")
             if native["run"](["bash", helper, "window_focus", address], native["drive_env"]) != "ok":
                 raise AssertionError("window focus was refused")
+            # Sample input: {"address": "0xabc", "pid": 71, "mapped": true, "hidden": false}.
             restored = json.loads(native["run"](["hyprctl", "-j", "activewindow"], native["drive_env"]))
             if restored.get("address") != address or type(restored.get("pid")) is not int or restored["pid"] != pid:
                 raise AssertionError(f"window did not restore {address} PID {pid}: {restored!r}")
+            # Sample input: {"id": 1, "name": "1", "monitor": "DP-2", "windows": 0}.
             restored = json.loads(native["run"](["hyprctl", "-j", "activeworkspace"], native["drive_env"]))
             if type(restored.get("id")) is not int or restored["id"] != workspace:
                 raise AssertionError(f"window focus left saved workspace {workspace}: {restored!r}")
