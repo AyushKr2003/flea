@@ -1,4 +1,5 @@
 # Execute the figure suite's real shell fragments with controlled lower-layer failures.
+import hashlib
 import json
 import os
 import pathlib
@@ -539,7 +540,13 @@ for path in ("ui/vendor/figure-helper.mjs", "src/backend/sandbox.rs", "ui/js/Fig
              "tests/markdown-figures.qml", "tools/vendor-js/build.sh"):
     recorded = re.search(re.escape(f"`{path}`") + r"(?: at |\s\d+ to )(\d+)", budget_paragraph)
     actual = len((tree / path).read_text().splitlines())
-    check(recorded is not None and int(recorded[1]) == actual,
+    matches = recorded is not None and int(recorded[1]) == actual
+    if path == "src/backend/sandbox.rs":
+        # Sample receipt: `src/backend/sandbox.rs` 365 to 401 (source sha256 4a732e3e123e01ee68dae16d2cb4cd623a87a13e4aeb067872bc12f64477319f).
+        receipt = re.search(re.escape(f"`{path}`")
+                            + r"\s\d+ to \d+ \(source sha256 ([0-9a-f]{64})\)", budget_paragraph)
+        matches = matches and receipt is not None and receipt[1] == hashlib.sha256((tree / path).read_bytes()).hexdigest()
+    check(matches,
           f"mx2a F29 mx2 records the final {path} line count ({actual})")
 sandbox = (tree / "src/backend/sandbox.rs").read_text()
 check("const READONLY_PREFIX_ARGS: usize = 4;" in sandbox
