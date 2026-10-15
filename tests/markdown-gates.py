@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix="md-gates-", dir=os.environ.get("TMPDIR"
     for directory in ["ui/boot/Commons", "ui/boot/Ui"]:
         (tree / directory).mkdir(parents=True)
     (tree / 'ui/boot/Commons/Style.qml').write_text('import QtQuick\nQtObject {\n  id: root\n}\n')
-    for name in ["headless-commons.sh", "markdown-figures-render.sh", "markdown-figures-render.qml", "markdown-figures-render.js"]:
+    for name in ["headless-commons.sh", "staticgates.py", "markdown-figures-render.sh", "markdown-figures-render.qml", "markdown-figures-render.js"]:
         shutil.copyfile(REPO / "tests" / name, tree / "tests" / name)
     shutil.copyfile(REPO / "tools/flea-sandbox-guard", tree / "tools/flea-sandbox-guard")
     for name in ["date", "python3", "dirname", "mkdir", "chmod", "ln", "readlink", "cp", "realpath", "rm", "env", "timeout", "grep", "head", "cat"]:

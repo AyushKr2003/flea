@@ -21,6 +21,7 @@ fail() { printf 'FAIL glasspick-case: %s\n' "$*" >&2; exit 1; }
 sed -n '/^flea_process_dir()/p; /^flea_process_owned()/,/^}/p' tests/ui.sh > "$test_root/ownership.sh"
 . "$test_root/ownership.sh"
 . "$PWD/tests/ui-captures-glass.sh"
+. "$PWD/tests/lib/hypr-dispatch.sh"
 cleanup() {
     local status=$? pids pid
     run_root="$test_root"
@@ -71,7 +72,7 @@ printf 'GLASSPICK_CASE owned=stopped foreign=refused gone=accepted\n'
 capture_targeting() (
     set -e
     trap - EXIT
-    local scenario="$1" helper replay="$test_root/replay-$1" capture_pid=100 capture_focus_pid=100 cursor=0 launches=0 status
+    local scenario="$1" helper replay="$test_root/replay-$1" capture_pid=100 cursor=0 launches=0 status
     local ipc_pid=sentinel flea_window_class=com.thisisgm.flea ipc_call_timeout=2s ipc_call_kill_after=1s
     local repo="$PWD" fixture_root="$replay/fixtures" evidence_dir="$replay/evidence" real_state_dir="$replay/current"
     local real_foreground='#dddddd' real_accent='#7799bb' caller_trap pid ownership expected
@@ -82,6 +83,14 @@ capture_targeting() (
     mkdir -p "$fixture_root" "$real_state_dir/theme" "$replay/bin" "$replay/foot-ready"
     local PATH="$replay/bin:$PATH"
     printf '#!/bin/sh\nexec sleep 60\n' > "$replay/bin/qs"
+    python3 -B - "$repo/tests/fixtures/glasspick-hyprctl.json" "$replay/bin/hyprctl" <<'PYCODE'
+import json, pathlib, sys
+pathlib.Path(sys.argv[2]).write_text("\n".join(json.loads(pathlib.Path(sys.argv[1]).read_text())["program"]) + "\n")
+PYCODE
+    chmod +x "$replay/bin/hyprctl"
+    export GLASSPICK_HYPR_ROOT="$replay"
+    printf '100\n' > "$replay/capture-pid"
+    printf '100\n' > "$replay/focus-pid"
     cat > "$replay/bin/foot" <<'STUB'
 #!/bin/bash
 set -uo pipefail
@@ -159,24 +168,14 @@ STUB
     }
     glasspick_address() { remember_pid "$1"; printf '0x%x\n' "$1"; }
     glasspick_client() { printf '{"at":[0,0]}\n'; }
-    glasspick_opacity() { :; }
     glasspick_place() { remember_pid "$1"; }
-    hypr_window_float() { :; }
-    hypr_window_resize() { :; }
-    hypr_window_focus() { capture_focus_pid=$(($1)); printf '%s\n' "$1" >> "$replay/focus"; }
-    hyprctl() {
-        case "$*" in
-            'activewindow -j') printf '{"address":"0x%x","class":"com.thisisgm.flea","pid":%s}\n' "$capture_focus_pid" "$capture_focus_pid" ;;
-            'clients -j') printf '[{"address":"0x%x","class":"com.thisisgm.flea","pid":%s},{"address":"0xb","class":"com.thisisgm.flea.glasspick.backdrop","pid":11},{"address":"0xc","class":"com.thisisgm.flea.glasspick.terminal","pid":12},{"address":"0x64","class":"replay.caller","pid":100}]\n' "$capture_pid" "$capture_pid" ;;
-            '-j getoption decoration:blur:enabled') printf '{"bool":true}\n' ;;
-            *) fail "unexpected compositor request: $*" ;;
-        esac
-    }
     launch() {
         [[ -z "$ipc_pid" ]] || fail "launch inherited a stale capture pid: $ipc_pid"
         launches=$((launches + 1))
         env FLEA_TEST_RUN_ROOT="$run_root" sleep 60 &
-        capture_pid=$!; capture_focus_pid=$capture_pid; cursor=0
+        capture_pid=$!; cursor=0
+        printf '%s\n' "$capture_pid" > "$replay/capture-pid"
+        printf '%s\n' "$capture_pid" > "$replay/focus-pid"
         remember_pid "$capture_pid"
         printf '%s\n' "$capture_pid" >> "$replay/launches"
     }
@@ -192,7 +191,7 @@ STUB
             cursor) printf '%s\n' "$cursor" ;;
             metrics) printf '13 12 14 37\n' ;;
             viewMode) printf 'columns\n' ;;
-            glass) jq -cn --arg mode "$mode" --argjson focused "$([[ "$capture_focus_pid" == "$capture_pid" ]] && printf true || printf false)" \
+            glass) jq -cn --arg mode "$mode" --argjson focused "$([[ "$(cat "$replay/focus-pid")" == "$capture_pid" ]] && printf true || printf false)" \
                 '{automatic:true, mode:$mode, focused:$focused, alpha:(if $focused then 251/255 else 245/255 end)}' ;;
             *) fail "unexpected IPC call: $*" ;;
         esac
@@ -268,11 +267,13 @@ STUB
     [[ "$(grep -c '^GLASSPICK foot-config=ok$' "$replay/capture.log")" == 12 ]] || fail "missing Foot preflight receipts"
     [[ "$(grep -c '^GLASSPICK owned-keys=ok preview=preview.png$' "$replay/capture.log")" == 12 ]] || fail "missing owned key receipts"
     grep -qx 'GLASSPICK shots=16' "$replay/capture.log" || fail "missing complete native receipt"
-    capture_pid=$(tail -1 "$replay/launches"); capture_focus_pid=$capture_pid
+    capture_pid=$(tail -1 "$replay/launches")
+    printf '%s\n' "$capture_pid" > "$replay/focus-pid"
     ipc_pid=""
     if ( key g ) > "$replay/ambiguous.log" 2>&1; then fail "broad selector was accepted"; fi
     grep -qx 'ambiguous selector flea: 3 fixture windows' "$replay/ambiguous.log" || fail "broad selector failed for another reason"
-    ipc_pid="$capture_pid"; capture_focus_pid=12
+    ipc_pid="$capture_pid"
+    printf '12\n' > "$replay/focus-pid"
     if ( key g ) > "$replay/focus.log" 2>&1; then fail "foreign focus was accepted"; fi
     grep -q 'so this case sends no more keys' "$replay/focus.log" || fail "focus guard failed for another reason"
     [[ "$(wc -l < "$replay/keys")" == 48 ]] || fail "a refused key reached the driver"

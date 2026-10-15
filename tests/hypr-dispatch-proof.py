@@ -17,7 +17,7 @@ FAKE_EXECUTABLE_MODE = 0o755
 FAILED_COMMAND_STATUS = 7
 PLACEMENT_FIRST_WINDOW_CALL = 2
 PLACEMENT_CALL_COUNT = 4
-STANDALONE_HARNESS_COUNT = 7
+STANDALONE_HARNESS_COUNT = 8
 PLACEMENT_FLOAT_INDEX = 1
 PLACEMENT_RESIZE_INDEX = 2
 TEST_PID = 111
@@ -28,7 +28,7 @@ PLACEMENT_WIDTH = 1000
 PLACEMENT_HEIGHT = 720
 SHARED_HELPER_FILE = "tests/lib/hypr-dispatch.sh"
 OPERATIONS = ("workspace_focus", "window_focus", "window_float", "window_resize", "window_move", "window_resize_absolute",
-              "window_move_absolute", "cursor_move", "session_exec_script")
+              "window_move_absolute", "window_opacity", "cursor_move", "session_exec_script")
 ENTRY_POINTS = tuple("hypr_" + operation for operation in OPERATIONS)
 LUA_PREFIX = "hl." + "dsp."
 FAKE = r'''#!/usr/bin/env bash
@@ -254,11 +254,46 @@ def main():
                         invalid.append(arguments[:index] + ["-1"] + arguments[index + 1:])
             if operation == "window_float":
                 invalid.extend([arguments[0], bad] for bad in ("ON", "toggle", 'on"', ""))
+            if operation == "window_opacity":
+                invalid.extend([arguments[0], bad, arguments[2]] for bad in
+                               ("bordercolor", "opacity;exit", 'opacity"', "", "opacity\n"))
+                bad_values = ("0", "-0.1", "1.1", "1.0", "nan", "0.5;exit", '0.5"', "")
+                if arguments[1].endswith("override"):
+                    bad_values += ("0.5", "0.96")
+                invalid.extend([arguments[0], arguments[1], bad] for bad in bad_values)
             for bad_arguments in invalid:
                 for prefix, code in ((["hypr_" + operation], shared_code), (["bash", str(helper), operation], "")):
                     rc, output, calls = run(shlex.join(prefix + bad_arguments), code=code)
                     check(operation + " refuses " + repr(bad_arguments),
                           rc == 1 and "hypr_" + operation + ": refused argument " in output and not calls, output)
+
+        glass_helpers = shared_code + "\n" + functions((root / "tests/ui-captures-glass.sh").read_text(), ["glasspick_opacity"])
+        glass_helpers += r'''
+fail() { printf '%s\n' "$*"; exit 1; }
+glasspick_address() { printf '0xabc\n'; }
+flea_process_owned() {
+    [[ "$1" == 111 && "$(wc -l < "$HYPR_FAKE_LOG")" -lt "${HYPR_FAKE_OWNER_LIMIT:-4}" ]]
+}
+'''
+        opacity_call = f"glasspick_opacity {TEST_PID} 0.985 0.96"
+        expected_properties = (("opacity", "0.985"), ("opacity_inactive", "0.96"),
+                               ("opacity_override", "1"), ("opacity_inactive_override", "1"))
+        expected_opacity = [LUA_PREFIX + 'window.set_prop({window = "address:0xabc", prop = "' + prop
+                            + '", value = "' + value + '"})' for prop, value in expected_properties]
+        rc, output, calls = run(opacity_call, code=glass_helpers)
+        check("Glass opacity keeps its exact four fixed writes", rc == 0 and calls == expected_opacity, output)
+        for limit in range(len(expected_opacity)):
+            rc, output, calls = run(opacity_call, code=glass_helpers, HYPR_FAKE_OWNER_LIMIT=str(limit))
+            check("Glass opacity rechecks PID ownership before write " + str(limit + 1),
+                  rc == 1 and "lost ownership before opacity" in output and calls == expected_opacity[:limit], output)
+        for status, reply in (("0", WARNING), (str(FAILED_COMMAND_STATUS), "ok")):
+            rc, output, calls = run(opacity_call, code=glass_helpers, HYPR_FAKE_STATUS=status, HYPR_FAKE_REPLY=reply)
+            check("Glass opacity stops on the first refused reply " + repr((status, reply)),
+                  rc == 1 and "cannot set opacity on owned fixture" in output and calls == expected_opacity[:1], output)
+        for active, inactive in (("1.1", "0.96"), ("0.985", "bad"), ('0.5"', "1")):
+            rc, output, calls = run(shlex.join(["glasspick_opacity", str(TEST_PID), active, inactive]), code=glass_helpers)
+            check("Glass opacity refuses invalid alpha before any write " + repr((active, inactive)),
+                  rc == 1 and "invalid fixture opacity" in output and not calls, output)
 
         for arguments in ([], ["dispatch", "arbitrary Lua"], ["unknown"]):
             rc, output, calls = run(shlex.join(["bash", str(helper), *arguments]))

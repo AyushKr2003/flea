@@ -175,4 +175,3 @@ run_case reload reload glassy 191 - - 0.75
 
 printf 'glass-mode: checks=%s failed=%s\n' "$total" "$failed"
 [[ "$failed" -eq 0 ]] || exit 1
-bash tests/material-startup.sh

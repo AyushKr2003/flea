@@ -1,12 +1,16 @@
 [
   {
     "operation": "workspace_focus",
-    "args": ["1"],
+    "args": [
+      "1"
+    ],
     "text": "hl.dsp.focus({ workspace = \"1\" })"
   },
   {
     "operation": "workspace_focus",
-    "args": ["-99"],
+    "args": [
+      "-99"
+    ],
     "text": "hl.dsp.focus({ workspace = \"-99\" })"
   },
   {
@@ -82,5 +86,50 @@
       "/home/flea-sandbox/iso/session-mount.ABCD/run.sh"
     ],
     "text": "hl.dsp.exec_cmd(\"/bin/bash '/home/flea-sandbox/iso/session-mount.ABCD/run.sh'\")"
+  },
+  {
+    "operation": "window_opacity",
+    "args": [
+      "0xAbC",
+      "opacity",
+      "1"
+    ],
+    "text": "hl.dsp.window.set_prop({window = \"address:0xAbC\", prop = \"opacity\", value = \"1\"})"
+  },
+  {
+    "operation": "window_opacity",
+    "args": [
+      "0xAbC",
+      "opacity",
+      "0.985"
+    ],
+    "text": "hl.dsp.window.set_prop({window = \"address:0xAbC\", prop = \"opacity\", value = \"0.985\"})"
+  },
+  {
+    "operation": "window_opacity",
+    "args": [
+      "0xAbC",
+      "opacity_inactive",
+      "0.96"
+    ],
+    "text": "hl.dsp.window.set_prop({window = \"address:0xAbC\", prop = \"opacity_inactive\", value = \"0.96\"})"
+  },
+  {
+    "operation": "window_opacity",
+    "args": [
+      "0xAbC",
+      "opacity_override",
+      "1"
+    ],
+    "text": "hl.dsp.window.set_prop({window = \"address:0xAbC\", prop = \"opacity_override\", value = \"1\"})"
+  },
+  {
+    "operation": "window_opacity",
+    "args": [
+      "0xAbC",
+      "opacity_inactive_override",
+      "1"
+    ],
+    "text": "hl.dsp.window.set_prop({window = \"address:0xAbC\", prop = \"opacity_inactive_override\", value = \"1\"})"
   }
 ]

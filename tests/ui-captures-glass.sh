@@ -22,7 +22,7 @@ glasspick_address() {
 
 # Properties are limited to owned fixture windows, with numeric values and the Lua dispatcher used by Omarchy dev.
 glasspick_opacity() {
-    local pid="$1" active="$2" inactive="$3" address prop value answer status
+    local pid="$1" active="$2" inactive="$3" address prop value
     address=$(glasspick_address "$pid") || return 1
     [[ "$active" =~ ^(1|0\.[0-9]+)$ && "$inactive" =~ ^(1|0\.[0-9]+)$ ]] || fail "glasspick: invalid fixture opacity"
     for prop in opacity opacity_inactive opacity_override opacity_inactive_override; do
@@ -32,9 +32,7 @@ glasspick_opacity() {
             *) value=1 ;;
         esac
         flea_process_owned "$pid" || fail "glasspick: fixture $pid lost ownership before opacity"
-        status=0
-        answer=$(hyprctl dispatch "hl.dsp.window.set_prop({window = \"address:$address\", prop = \"$prop\", value = \"$value\"})" 2>&1) || status=$?
-        [[ "$status" == 0 && "$answer" == ok ]] || fail "glasspick: $prop on $address answered $answer (exit $status)"
+        hypr_window_opacity "$address" "$prop" "$value" || fail "glasspick: cannot set $prop on owned fixture $pid"
     done
 }
 
