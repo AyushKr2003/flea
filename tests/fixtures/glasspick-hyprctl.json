@@ -23,6 +23,7 @@
     "    print('{\"bool\":true}')",
     "elif len(args) == 2 and args[0] == 'dispatch':",
     "    command = args[1]",
+    "    # Sample input: hl.dsp.focus({ window = \"address:0xabc\" })",
     "    patterns = (",
     "        r'hl\\.dsp\\.focus\\(\\{ window = \"address:(0x[0-9a-fA-F]+)\" \\}\\)',",
     "        r'hl\\.dsp\\.window\\.float\\(\\{ action = \"(?:on|off)\", window = \"address:0x[0-9a-fA-F]+\" \\}\\)',",
