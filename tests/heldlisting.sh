@@ -197,7 +197,7 @@ boot_ipc() {
 boot_leg() {
     local view=$1 limit=$2 probe="$work/boot-$1" held_at="" unbuilt=0 early="" built_at="" answer t seen_view=""
     leg_dirs "boot-$view" || { bad "boot $view: the probe directories could not be made"; return; }
-    HOME="$probe/home" XDG_STATE_HOME="$probe/state" "$bin" --ui-state '{"view":"'"$view"'","columnsLimit":'"$limit"',"updates":{"autoCheck":false}}' > /dev/null \
+    HOME="$probe/home" XDG_STATE_HOME="$probe/state" command -- "$bin" --ui-state '{"view":"'"$view"'","columnsLimit":'"$limit"',"updates":{"autoCheck":false}}' > /dev/null \
         || { bad "boot $view: the state seed failed"; return; }
     setsid env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLEA_SELECT \
         HOME="$probe/home" XDG_CONFIG_HOME="$probe/config" XDG_STATE_HOME="$probe/state" \

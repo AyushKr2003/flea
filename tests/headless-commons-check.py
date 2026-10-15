@@ -43,8 +43,14 @@ def call_scopes(source, comments=None):
     function_groups = {}
     owners = {}
     commands = {}
+    arguments = {}
+    opaque_commands = []
     references = []
     pending_function = None
+    prefix_assignment = False
+    array_depth = None
+    command_name = None
+    parameter_depth = 0
     shell_boundaries = '();|&<>'
     compound_ends = {'{': '}', 'if': 'fi', 'for': 'done', 'while': 'done', 'until': 'done', 'select': 'done', 'case': 'esac'}
     # Sample input: prepare() { and function prepare { are supported literal function headers, not brace arguments.
@@ -54,9 +60,40 @@ def call_scopes(source, comments=None):
     words = re.compile(r'\w+|;;&|;;|;&|&&|\|\||\|&|[();{}!|&]')
     delimiters = re.compile(r'(?<!<)<<(-?)(?!<)[ \t]*[\'"]?([A-Za-z_]\w*)[\'"]?')
     redirects = re.compile(r'&>>?|[<>]&')
+    literal_executable = re.compile(r'(?:[A-Za-z0-9_./:+-]+|\[)(?=$|[\s();|&<>])')
+    assignment_head = re.compile(r'[A-Za-z_]\w*\+?=')
+    first_argument = re.compile(r'[ \t]+([A-Za-z_]\w*)(?=$|[\s();|&<>])')
+    dispatchers = ('eval', 'trap', 'command', 'builtin', 'exec', 'export', 'declare', 'typeset')
+    forward_word = '"$@"'
     at = 0
     while at < len(source):
         char = source[at]
+        # Sample input: pre"pare", pre\pare and "$target" are unsupported executable words; prepare "pre"pare is argument data.
+        data = quoted or arithmetic or parameter_depth or array_depth is not None or conditionals and conditionals[-1] == depth or cases and cases[-1] == 'pattern'
+        continuation = char == '\\' and source[at + 1:at + 2] == '\n'
+        if not data and not continuation and word_start and (command_start or prefix_assignment) and not char.isspace() and char not in '#;|&(){}!':
+            assignment = assignment_head.match(source, at)
+            if assignment:
+                prefix_assignment = True
+                command_start = False
+                command_name = None
+                if source[assignment.end():assignment.end() + 1] == '(':
+                    array_depth = depth
+            else:
+                prefix_assignment = False
+                command_start = True
+                literal = literal_executable.match(source, at)
+                command_name = literal[0] if literal else None
+                if literal is None and not source.startswith('[[', at):
+                    owner = next((function_groups[id(calls)] for _, _, calls in reversed(groups) if id(calls) in function_groups), None)
+                    end = at + len(forward_word)
+                    forwarding = source.startswith(forward_word, at) and (end == len(source) or source[end].isspace() or source[end] in shell_boundaries)
+                    opaque_commands.append((owner, forwarding))
+        # Sample input: checks=${checks%% *} contains parameter data, while ${name} as an executable remains opaque.
+        if source.startswith('${', at):
+            parameter_depth += 1
+        elif char == '}' and parameter_depth:
+            parameter_depth -= 1
         if char == '\\':
             if source[at + 1:at + 2] != '\n':
                 command_start = False
@@ -79,9 +116,11 @@ def call_scopes(source, comments=None):
             heredocs.clear()
             command_start = True
             word_start = True
+            prefix_assignment = False
+            command_name = None
             continue
         if char == '"':
-            if not quoted:
+            if not quoted and command_name in dispatchers:
                 literal = re.match(r'"([A-Za-z_]\w*)"', source[at:])
                 if literal:
                     references.append(literal[1])
@@ -95,9 +134,13 @@ def call_scopes(source, comments=None):
             if source.startswith('$((', at):
                 arithmetic.append(depth)
             # Sample input: prepare > >(cat; :) | cat keeps the caller's pending pipeline context outside the substitution.
-            substitutions.append((depth, quoted, closed_calls, unmatched_tail))
+            substitutions.append((depth, quoted, closed_calls, unmatched_tail, prefix_assignment, array_depth, command_name, parameter_depth))
             closed_calls = set()
             unmatched_tail = False
+            prefix_assignment = False
+            array_depth = None
+            command_name = None
+            parameter_depth = 0
             quoted = False
             command_start = True
             word_start = True
@@ -114,7 +157,7 @@ def call_scopes(source, comments=None):
             ansi = char == '`' or at > 0 and source[at - 1] == '$'
             pattern = re.escape(char) + (r'(?:\\.|[^' + re.escape(char) + r'\\])*' if ansi else "[^']*") + re.escape(char)
             literal = re.compile(pattern, re.S).match(source, at)
-            if literal:
+            if literal and command_name in dispatchers:
                 references.append(literal[0][1:-1])
             at = len(source) if literal is None else literal.end()
             continue
@@ -164,6 +207,8 @@ def call_scopes(source, comments=None):
                 command_start = True
                 closed_calls.clear()
                 unmatched_tail = False
+                prefix_assignment = False
+                command_name = None
             elif not char.isspace():
                 command_start = False
             word_start = char.isspace() or char in '<>'
@@ -194,18 +239,21 @@ def call_scopes(source, comments=None):
         case_end = word == 'esac' and cases and word_start and separated and (command_start or in_pattern) and not re.match(r'\s*\)', source[token.end():])
         closes_compound = keyword and word in ('}', 'fi', 'done') and not in_pattern or case_end
         joins_word = False
+        array_ended = False
         at += len(word)
         owner = next((function_groups[id(calls)] for _, _, calls in reversed(groups) if id(calls) in function_groups), None)
         # Sample input: prepare | cat, a subshell's prepare and wrapper() { prepare; } inherit their actual call context.
         if keyword and not opens_compound and word not in ('}', 'fi', 'done', 'esac', 'then', 'else', 'elif', 'do', 'in', '!', 'time') and re.fullmatch(r'\w+', word):
             site = (line, token.start())
             commands[site] = word
+            argument = first_argument.match(source, at)
+            arguments[site] = argument[1] if argument else None
             owners[site] = owner
             scopes[site] = max(depth, int(pipe_next or any(piped for _, piped, _ in groups)))
             closed_calls.add(site)
             for _, _, calls in groups:
                 calls.add(site)
-        elif word_start and separated or token.start() > 0 and source[token.start() - 1] == '=':
+        elif command_name in dispatchers and word_start and separated:
             references.append(word)
         # Sample input: (\n headless_commons "$root" || exit 1\n) exits only a child; case x in x) is not a subshell close.
         if word == 'headless_commons':
@@ -228,10 +276,13 @@ def call_scopes(source, comments=None):
             depth += 1
         elif word == ')':
             depth = max(0, depth - 1)
+            if array_depth == depth:
+                array_depth = None
+                array_ended = True
             if arithmetic and depth == arithmetic[-1]:
                 arithmetic.pop()
             if substitutions and depth == substitutions[-1][0]:
-                _, quoted, closed_calls, unmatched_tail = substitutions.pop()
+                _, quoted, closed_calls, unmatched_tail, prefix_assignment, array_depth, command_name, parameter_depth = substitutions.pop()
                 joins_word = True
         # Sample input: if true; then\n headless_commons "$root" || exit 1\nfi | cat is an unsupported compound pipeline.
         if opens_compound:
@@ -258,6 +309,9 @@ def call_scopes(source, comments=None):
             unmatched_tail = False
         if word not in ('!', 'time'):
             pipe_next = word in ('|', '|&')
+        if word in (';', ';;', ';&', ';;&', '&&', '||', '|', '|&', '&', '(', ')') and not array_ended:
+            prefix_assignment = False
+            command_name = None
         # Sample input: echo if case in esac keeps argument words; ; case and a case arm's ) start commands.
         word_start = not joins_word and word in (';', ';;', ';&', ';;&', '&&', '||', '|', '|&', '&', '(', ')')
         command_start = (word in (';', ';;', ';&', ';;&', '&&', '||', '|', '|&', '&', '(') or bool(pattern_close) or bool(opens_brace)
@@ -265,13 +319,22 @@ def call_scopes(source, comments=None):
     if unknown_pipeline:
         scopes = {line: max(scope, 1) for line, scope in scopes.items()}
     resolved = {}
+    uncertain_dispatch = False
+    for owner, forwarding in opaque_commands:
+        # Sample input: helper() { "$@"; }; helper printf ... proves a non-local executable, never a local function invocation.
+        sites = [site for site, command in commands.items() if command == owner] if owner else []
+        targets = {arguments[site] for site in sites}
+        if not (forwarding and len(functions.get(owner, [])) == 1 and owner not in references and sites
+                and None not in targets and targets.isdisjoint(functions)):
+            uncertain_dispatch = True
+            break
 
     def function_scope(name, visiting):
         if name in resolved:
             return resolved[name]
         # Sample input: target=prepare; "$target" and unused/recursive definitions have no proven literal invocation context.
         sites = [site for site, command in commands.items() if command == name]
-        if name in visiting or len(functions.get(name, [])) != 1 or name in references or not sites:
+        if uncertain_dispatch or name in visiting or len(functions.get(name, [])) != 1 or name in references or not sites:
             return 1
         resolved[name] = max(max(scopes[site], function_scope(owners[site], visiting | {name}) if owners[site] else 0) for site in sites)
         return resolved[name]
@@ -591,6 +654,9 @@ def controls(box):
         'function-wrapper-parent': 'prepare() {\n' + contract_call + '}\nwrapper() { prepare; }\nwrapper\n',
         'function-loop-parent': 'prepare() {\n' + contract_call + '}\nfor leg in current; do prepare; done\n',
         'function-negated-parent': 'prepare() {\n' + contract_call + '}\n! prepare\n',
+        'function-quoted-name-argument': 'prepare() {\n' + contract_call + '}\nprepare "prepare"\n',
+        'function-concatenated-argument': 'prepare() {\n' + contract_call + '}\nprepare pre"pare"\n',
+        'function-forwarded-external': 'prepare() {\n' + contract_call + '}\ndispatch() { "$@"; }\ndispatch printf "%s" ready\nprepare\n',
         'heredoc-normal-parent': "cat <<'EOF'\n) # body only\nEOF\n" + contract_call,
         'heredoc-tabs-parent': "cat <<-'EOF'\n\t) # body only\n\tEOF\n" + contract_call,
     }
@@ -615,6 +681,11 @@ def controls(box):
         'function-eval': 'prepare() {\n' + contract_call + '}\neval prepare | cat\n',
         'function-quoted-name': 'prepare() {\n' + contract_call + '}\n"prepare" | cat\n',
         'function-escaped-name': 'prepare() {\n' + contract_call + '}\npre\\pare | cat\n',
+        'function-dead-literal-concatenated': 'prepare() {\n' + contract_call + '}\nif false; then prepare; fi\npre"pare" | cat\n',
+        'function-dead-literal-escaped': 'prepare() {\n' + contract_call + '}\nif false; then prepare; fi\npre\\pare | cat\n',
+        'function-dead-literal-expansion': 'prepare() {\n' + contract_call + '}\nif false; then prepare; fi\ntarget=pre; target+=pare\n"$target" | cat\n',
+        'function-dead-literal-wrapper': 'prepare() {\n' + contract_call + '}\nif false; then prepare; fi\nwrapper() { pre"pare"; }\nwrapper | cat\n',
+        'function-dead-literal-assignment': 'prepare() {\n' + contract_call + '}\nif false; then prepare; fi\nFLAG=1 pre"pare" | cat\n',
         'heredoc-space-child': "(\ncat <<'EOF'\n EOF\n)\nEOF\n" + contract_call + ') | cat\n',
         'heredoc-normal-tab-child': "(\ncat <<'EOF'\n\tEOF\n)\nEOF\n" + contract_call + ') | cat\n',
         'heredoc-trailing-space-child': "(\ncat <<'EOF'\nEOF \n)\nEOF\n" + contract_call + ') | cat\n',
