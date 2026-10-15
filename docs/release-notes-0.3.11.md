@@ -32,6 +32,7 @@
 - The file picker starts with the saved hidden-file setting and honours a per-request override (#313, @choirib).
 - Glassy mode gives file lists their own background opacity while keeping glass on the sidebar and window chrome.
 - Files can be dropped onto favourites and mounted drives in the sidebar, with Undo for moves and copies.
+- Settings keep the newest saved choice when an older refresh finishes later.
 
 ## Known issues
 
