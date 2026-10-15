@@ -6,6 +6,7 @@
 // Run the production visibility initialization and key handlers, recording each listing request.
 function windowFor(text, state, parent) {
     var source = Source.source("ui/PickerWindow.qml")
+    // Sample input: property bool showHidden: false
     var declaration = source.match(/property bool showHidden:[^\n]+/)
     if (!declaration) throw new Error("PickerWindow.qml: missing showHidden declaration")
     var completed = Source.block(source, "Component.onCompleted:", "ui/PickerWindow.qml")

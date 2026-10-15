@@ -70,6 +70,7 @@ cardsizes|needs the display, a real pointer through uinput, and Hyprland to resi
 bench|is a separate headless benchmark-contract suite
 package|needs a real makepkg archive in FLEA_PACKAGE_FILE
 picker|needs the display, a session bus, and Flea activatable as the FileChooser backend
+picker-issue313-native|needs native Omarchy input, Qt 6.12 and the serialized minipc display lane
 picker-040|is 0.3.10's acceptance suite and is red until the picker has path entry and collision review
 network-live|needs live share credentials and the approved runtime bundle, maintainer only
 hook-gate|standalone pinned-hk hook proof, verified separately in a marked Git fixture
