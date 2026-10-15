@@ -850,7 +850,7 @@ FocusScope {
     Rectangle {
         anchors { top: root.searchMode.length > 0 ? header.bottom : panePath.bottom; bottom: parent.bottom; left: railHost.right; right: parent.right }
         visible: Glass.on
-        color: Glass.background
+        color: Glass.listBackground
     }
 
     Flea.PanePath {

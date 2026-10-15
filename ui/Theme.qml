@@ -58,30 +58,7 @@ Singleton {
     // The board's fixed tag slot width, once a tagged row has been seen in the folder.
     readonly property int tagSlotWidth: 88
 
-    readonly property QtObject color: QtObject {
-        readonly property color background: Commons.Color.background
-        readonly property color foreground: Commons.Color.foreground
-        // The heading ink: a brighter step of the foreground, applyColors derives it from the palette.
-        property color foregroundBright: Commons.Color.foreground
-        // The text role, lifted to textContrast on the background and the surface; mutedFrame is the same palette colour for frames and glyphs.
-        property color muted: Qt.darker(Commons.Color.foreground, 1.4)
-        property color mutedFrame: Qt.darker(Commons.Color.foreground, 1.4)
-        // Metadata ink at rest, the foreground darkened and lifted like muted; metadataFrame is the unlifted derivation a resting glyph draws.
-        property color metadata: Qt.darker(Commons.Color.foreground, 1.4)
-        property color metadataFrame: Qt.darker(Commons.Color.foreground, 1.4)
-        readonly property color accent: Commons.Color.accent
-        property color error: Commons.Color.urgent
-        // Error ink on the status bar's own surface, lifted there the way error is on the background.
-        property color errorOnSurface: Commons.Color.urgent
-        property color surface: root.fallbackColor.surface
-        property color symlink: root.fallbackColor.symlink
-        property color executable: root.fallbackColor.executable
-        // The accent as a frame rather than as ink: on a card's own surface a frame is a graphical
-        // object, so it is lifted to 3:1 there the way symlink and executable are lifted on the list.
-        property color accentFrame: Commons.Color.accent
-        // True where the accent carries colour, so it can mark focus apart from the foreground and muted frames; kanagawa, solitude, vantablack and white do not.
-        property bool accentHasHue: Commons.Color.accent.hsvSaturation > root.hueFloor
-    }
+    readonly property QtObject color: ThemeColors { textContrast: root.textContrast; hueFloor: root.hueFloor }
 
     readonly property QtObject font: QtObject {
         readonly property string family: Style.font.family
@@ -353,27 +330,27 @@ Singleton {
         root.color.surface = surface;
         Commons.Color.loadColors(body);
         // Frames and glyphs draw the palette's muted lifted to frameContrast; text lifts that to textContrast on the background, then the surface.
-        root.color.mutedFrame = Contrast.ensureRatio(
+        root.color.opaqueMutedFrame = Contrast.ensureRatio(
             Palette.pick(found, ["muted"], Qt.darker(Commons.Color.foreground, 1.4)), bg, root.frameContrast);
-        root.color.muted = Contrast.ensureRatio(Contrast.ensureRatio(root.color.mutedFrame, bg, root.textContrast), surface, root.textContrast);
+        root.color.opaqueMuted = Contrast.ensureRatio(Contrast.ensureRatio(root.color.opaqueMutedFrame, bg, root.textContrast), surface, root.textContrast);
         // Metadata ink is the foreground darkened one step, lifted the same two ways; the unlifted step stays for glyphs that read it.
-        root.color.metadataFrame = Qt.darker(Commons.Color.foreground, 1.4);
-        root.color.metadata = Contrast.ensureRatio(Contrast.ensureRatio(root.color.metadataFrame, bg, root.textContrast), surface, root.textContrast);
+        root.color.opaqueMetadataFrame = Qt.darker(Commons.Color.foreground, 1.4);
+        root.color.opaqueMetadata = Contrast.ensureRatio(Contrast.ensureRatio(root.color.opaqueMetadataFrame, bg, root.textContrast), surface, root.textContrast);
         // Headings take the palette's bright foreground (the ANSI ring's color15 without one) when it has more contrast than the foreground.
         var bright = Palette.pick(found, ["bright_foreground", "color15"], String(Commons.Color.foreground));
-        root.color.foregroundBright = Contrast.ratio(bright, bg) > Contrast.ratio(String(Commons.Color.foreground), bg) ? bright : Commons.Color.foreground;
-        root.color.accentFrame = Contrast.ensureRatio(Commons.Color.accent, surface, 3);
+        root.color.opaqueForegroundBright = Contrast.ratio(bright, bg) > Contrast.ratio(String(Commons.Color.foreground), bg) ? bright : Commons.Color.foreground;
+        root.color.opaqueAccentFrame = Contrast.ensureRatio(Commons.Color.accent, surface, 3);
         root.color.accentHasHue = Commons.Color.accent.hsvSaturation > root.hueFloor;
-        root.color.symlink = Contrast.ensureRatio(
+        root.color.opaqueSymlink = Contrast.ensureRatio(
             Palette.pick(found, ["cyan", "color6"], root.fallbackColor.symlink), bg, 4.5);
-        root.color.executable = Contrast.ensureRatio(
+        root.color.opaqueExecutable = Contrast.ensureRatio(
             Palette.pick(found, ["green", "color2"], root.fallbackColor.executable), bg, 4.5);
         root.palette = found;
         // Urgent is the palette's own red: seven of the 23 installed themes leave it under 4.5:1 on their own ground, so it is lifted the way symlink and executable are, and the three whose red carries no chroma at all (solitude, white, vantablack) fall back to the foreground, because a destructive row drawn in the same grey as an unavailable one reads as switched off rather than as dangerous.
         var hued = Commons.Color.urgent.hsvSaturation > root.hueFloor;
-        root.color.error = hued ? Contrast.ensureRatio(Commons.Color.urgent, bg, Math.max(4.5, Contrast.ratio(String(root.color.muted), bg))) : String(Commons.Color.foreground);
+        root.color.opaqueError = hued ? Contrast.ensureRatio(Commons.Color.urgent, bg, Math.max(4.5, Contrast.ratio(String(root.color.opaqueMuted), bg))) : String(Commons.Color.foreground);
         // The status bar draws that same ink on the surface, where four themes land under 4.5; it is never quieter than the caption there.
-        root.color.errorOnSurface = hued ? Contrast.ensureRatio(Commons.Color.urgent, surface, Math.max(4.5, Contrast.ratio(String(root.color.muted), surface))) : String(Commons.Color.foreground);
+        root.color.opaqueErrorOnSurface = hued ? Contrast.ensureRatio(Commons.Color.urgent, surface, Math.max(4.5, Contrast.ratio(String(root.color.opaqueMuted), surface))) : String(Commons.Color.foreground);
         root.tag = Contrast.tagTheme(found, bg, surface);
         // A body that parsed to nothing left every role on its fallback, so the flag says so rather
         // than reporting that the read happened: text() returns "" for a file that is not there.

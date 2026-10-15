@@ -126,6 +126,7 @@ STUB
     stop_qs || { setup_failed "$name" "its shell did not stop"; return 1; }
     if [[ -n "$server_pid" ]]; then kill "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null; server_pid=""; fi
     grep -a 'GLASSM FAIL' "$log" | sed "s/^/  $name: /"
+    grep -a 'GLASSM EDGE' "$log" || true
     local tally
     tally=$(grep -ao 'GLASSM DONE checks=[0-9]* failed=[0-9]*' "$log" | tail -1)
     if [[ -z "$tally" ]]; then
@@ -156,20 +157,22 @@ run_case user-over-opaque precedence opaque 128 0.34 0.5
 run_case user-over-glassy precedence glassy 153 0.34 0.6
 # Row (b): opaque is 1, even over a theme value.
 run_case opaque precedence opaque 255 0.34 -
-# Row (c): glassy takes the theme's own value, else Glass.glassAlpha; the harness sets 0.75 (191 of 255) to prove the path, and the shipped default draws 255.
+# Row (c): glassy takes the theme's value, else its pick; the synthetic override still proves the 0.75 path.
 run_case glassy-theme precedence glassy 87 0.34 -
 run_case glassy-bare precedence glassy 191 - - 0.75
 run_case glassy-empty-theme precedence glassy 191 "" - 0.75
-run_case glassy-default precedence glassy 255 - -
-# Row (d): transparent, Omarchy's default and no toggle, is today's: the theme's value, else 1.
+run_case glassy-default precedence glassy 192 - -
+# Row (d): transparent takes the theme's value, else Omarchy's active ground at 251/255.
 run_case transparent-theme precedence - 87 0.34 -
-run_case transparent-bare precedence - 255 - -
+run_case transparent-bare precedence - 251 - -
+run_case transparent-edge edge - 251 - -
 # A value that is not a number is the default 1 where it is set, as before the mode existed.
 run_case user-word precedence glassy 255 0.34 abc
 # The same through a socket speaking Hyprland's event protocol: a workspace event sent after the rounding changed moves nothing, configreloaded moves the radius.
-run_case socket socket - 255 - -
+run_case socket socket - 251 - -
 # A reload moves the mode and the corner radius under a running window.
 run_case reload reload glassy 191 - - 0.75
 
 printf 'glass-mode: checks=%s failed=%s\n' "$total" "$failed"
-[[ "$failed" -eq 0 ]]
+[[ "$failed" -eq 0 ]] || exit 1
+bash tests/material-startup.sh

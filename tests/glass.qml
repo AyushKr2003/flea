@@ -15,6 +15,8 @@ ShellRoot {
     readonly property string mode: Quickshell.env("GLASS_MODE")
     // The 8-bit alpha the planes must carry at launch: 87 is 0.34, 255 is opaque.
     readonly property int expect: Number(Quickshell.env("GLASS_EXPECT"))
+    readonly property bool stock: Quickshell.env("GLASS_STOCK") === "1"
+    readonly property int listedAlpha: Pixels.listAlpha(Flea.Theme.color.opaquePalette, root.expect, root.stock && Flea.Glass.split && Flea.Glass.usesDefault && Flea.Glass.mode === "glassy")
     // Parse mode: a user value written after launch, which an opaque launch must not take until the next one.
     readonly property string lateUser: Quickshell.env("GLASS_LATE_USER") || ""
     // Where grabs are saved as PNG for the identity comparison against the base tree, or "" for none.
@@ -99,18 +101,11 @@ ShellRoot {
     // One plane of this colour at exactly the expected alpha; at 255 the colour must be today's to the bit.
     function plane(px, tag, item, role, want) {
         if (!item || !item.visible || item.width <= 0 || item.height <= 0) { root.check(false, tag + " has no drawn region"); return }
-        root.planeIn(px, tag, root.rectOf(item), role, want)
+        root.planeIn(px, tag, root.rectOf(item), role, want === undefined && role === "background" ? root.listedAlpha : want)
     }
     function planeIn(px, tag, box, role, want) {
-        var s = Pixels.solve(px, box, stage.width, stage.height)
-        if (!s) { root.check(false, tag + " has no pixels in its box"); return }
         var target = root.rgb(role === "surface" ? Flea.Theme.color.surface : Flea.Theme.color.background)
-        var a = want === undefined ? root.expect : want
-        root.check(Math.abs(s.alpha - a) <= root.alphaSlack, tag + " ground alpha " + s.alpha + " is not one plane at " + a)
-        if (a === 0) return
-        var slack = a === 255 ? 0 : root.colourSlack
-        var off = Math.max(Math.abs(s.colour[0] - target[0]), Math.abs(s.colour[1] - target[1]), Math.abs(s.colour[2] - target[2]))
-        root.check(off <= slack, tag + " ground colour " + s.colour + " is not the " + role + " " + target)
+        Pixels.checkPlane(root, stage, target, px, tag, box, want)
     }
     // An overlay hides what is under it: its modal pixel is the same over both backdrops.
     function opaque(px, tag, box) {
@@ -141,11 +136,12 @@ ShellRoot {
     }
     // The listing, the rail, the chrome, the header and the status bar at the expected alpha.
     function listPlanes(px, tag, a) {
-        root.plane(px, tag + " listing", root.pane.listSlot, "background", a)
+        var listed = root.stock && Flea.Glass.split && Flea.Glass.usesDefault && Flea.Glass.mode === "glassy" ? root.listedAlpha : a
+        root.plane(px, tag + " listing", root.pane.listSlot, "background", listed)
         root.plane(px, tag + " rail", root.find(root.pane, "Sidebar"), "surface", a)
         root.plane(px, tag + " chrome", root.find(body, "ChromeBar"), "surface", a)
         root.plane(px, tag + " status", root.find(body, "StatusBar"), "surface", a)
-        root.header(px, tag, a)
+        root.header(px, tag, listed)
     }
 
     function wait(test) { return function () { return test() } }
@@ -236,8 +232,8 @@ ShellRoot {
             root.settle(300),
             root.measure("dual", function (px) {
                 var left = root.primary(), right = root.otherPane()
-                root.plane(px, "dual left path", root.find(left, "PanePath"), body.focusSide === 0 ? "surface" : "background")
-                root.plane(px, "dual right path", root.find(right, "PanePath"), body.focusSide === 1 ? "surface" : "background")
+                root.plane(px, "dual left path", root.find(left, "PanePath"), body.focusSide === 0 ? "surface" : "background", root.expect)
+                root.plane(px, "dual right path", root.find(right, "PanePath"), body.focusSide === 1 ? "surface" : "background", root.expect)
                 root.plane(px, "dual left listing", left.listSlot, "background")
                 root.plane(px, "dual right listing", right.listSlot, "background")
                 root.noHoles(px, "dual")

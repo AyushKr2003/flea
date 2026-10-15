@@ -60,11 +60,6 @@ if [ "$status" -ne 0 ] && [ "$status" -ne 143 ]; then
     cat "$log"
     exit 1
 fi
-warnings=$(grep -aE 'TypeError|ReferenceError|ERROR|WARN' "$log" | grep -vF 'This plugin does not support setting window masks' || true)
-if [ -n "$warnings" ]; then
-    printf 'FAIL startup-objects: engine warnings\n%s\n' "$warnings"
-    exit 1
-fi
 trace_control=ui/js/Startup.js
 # A silent trace cannot prove that the picker library stayed cold.
 if ! grep -aFq "$trace_control" "$log"; then
@@ -122,6 +117,12 @@ ceiling=$(sed -n 's/^bytes //p' "$pinned")
 [[ "$ceiling" =~ ^[0-9]+$ ]] || { printf 'FAIL startup-objects: %s has no single numeric bytes line, got [%s]\n' "$pinned" "$ceiling"; exit 1; }
 if [ "$bytes" -gt "$ceiling" ]; then
     printf 'FAIL startup-objects: the first-frame units hold %s bytes, over the %s pinned in %s\n' "$bytes" "$ceiling" "$pinned"
+    exit 1
+fi
+# Keep the actual inventory visible on both Qt lanes even when an engine warning then rejects the run.
+warnings=$(grep -aE 'TypeError|ReferenceError|ERROR|WARN' "$log" | grep -vF 'This plugin does not support setting window masks' || true)
+if [ -n "$warnings" ]; then
+    printf 'FAIL startup-objects: engine warnings\n%s\n' "$warnings"
     exit 1
 fi
 # A listing that never answers must still build the IPC seam once the pane turns "waiting".

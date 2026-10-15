@@ -68,6 +68,7 @@ TabBar.qml
 TabDragGeometry.qml
 Taildrop.qml
 Theme.qml
+ThemeColors.qml
 TransferCard.qml
 TrashHost.qml
 TrashMonitor.qml
@@ -119,6 +120,7 @@ js/LocalSend.js
 js/MakeDefault.js
 js/MarkdownPrepared.js
 js/Marks.js
+js/Material.js
 js/Marquee.js
 js/Match.js
 js/Menu.js
@@ -173,4 +175,4 @@ js/TrashDates.js
 js/UiState.js
 js/Update.js
 js/UserDirs.js
-bytes 1649182
+bytes 1656921
