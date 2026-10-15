@@ -154,10 +154,11 @@ hyprctl() {
         printf '%s\n' "$replay_outputs"
         return 0
     fi
-    # Match only the owned window's move at the compositor boundary; the shared helper builds its command.
+    # Sample input: hl.dsp.window.move({ x = 701, y = 370, window = "address:0xabc" }).
     local move='[.]window[.]move[(][{] x = (-?[0-9]+), y = (-?[0-9]+), window = "address:0xabc" [}][)]$'
     [[ $# == 2 && "$2" =~ $move ]] || return 1
     if [[ "${replay_restore:-true}" == true ]]; then
+        # Sample input: the state file holds "701 752 900 600" before the position is restored.
         read -r x y w h < "$native_box_file" || return 1
         printf '%s %s %s %s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "$w" "$h" > "$native_box_file"
     fi
