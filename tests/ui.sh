@@ -249,7 +249,12 @@ flea_process_owned() {
         sleep 0.05
     done
     (( read )) || return 3
-    grep -Fx "FLEA_TEST_RUN_ROOT=$run_root" <<< "$environment" >/dev/null
+    grep -Fx "FLEA_TEST_RUN_ROOT=$run_root" <<< "$environment" >/dev/null && return 0
+    # A readable environ can become empty at exit, so missing ownership still needs an exit check.
+    [[ -d "$process" ]] || return 2
+    [[ "$(sed 's/.*) //' "$process/stat" 2>/dev/null | cut -d' ' -f1)" == Z ]] && return 2
+    [[ -d "$process" ]] || return 2
+    return 1
 }
 
 # Any Flea from this checkout that we did not start, captured once before anything is killed. The

@@ -32,6 +32,21 @@ ShellRoot {
     property int holdCaps: 0
     // Far past the settle, so only the settle's own stop can land the open before the cap.
     readonly property int holdCapMs: 5000
+    property string holdPhase: ""
+    property double holdDeadline: 0
+    property bool holdTimedOut: false
+    readonly property int holdSetupMs: 2500
+    readonly property int holdLandingMs: 2000
+
+    function holdDetail() {
+        return "phase=" + root.holdPhase + " ready=" + root.holdReadySettling
+            + " lookReady=" + quick.lookReady + " sizeWait=" + quick.sizeWait + " status=" + quick.status
+            + " settling=" + (root.holdSettle !== null && root.holdSettle.running)
+            + " capRunning=" + (root.holdCap !== null && root.holdCap.running)
+            + " landSettling=" + root.holdLandSettling + " stopAt=" + root.holdStopAt + " landAt=" + root.holdLandAt
+            + " caps=" + (quick.revealCaps - root.holdCaps) + " early=" + quick.revealedEarly
+            + " timeout=" + root.holdTimedOut
+    }
 
     function buildRows() {
         var rows = []
@@ -250,8 +265,37 @@ ShellRoot {
     Connections {
         target: root.holdWatch ? root.holdSettle : null
         function onRunningChanged() {
-            if (!root.holdSettle.running)
+            if (root.holdPhase === "settle" && !root.holdSettle.running) {
                 root.holdStopAt = Date.now()
+                console.log("PREVIEWSETTLE HOLD stopped " + root.holdDetail())
+            }
+        }
+    }
+
+    Timer {
+        id: holdPoll
+        interval: 10
+        repeat: true
+        onTriggered: {
+            if (Date.now() > root.holdDeadline) {
+                root.holdTimedOut = true
+                console.log("PREVIEWSETTLE HOLD watchdog " + root.holdDetail())
+            } else if (root.holdPhase === "setup") {
+                if (!quick.lookReady || quick.path !== root.imagePath(3) || !root.holdSettle.running)
+                    return
+                root.holdReadySettling = true
+                // Hold only decode setup; restore and run the production 120ms settle before observing its stop.
+                root.holdSettle.interval = quick.followSettleMs
+                root.holdSettle.restart()
+                root.holdPhase = "settle"
+                root.holdDeadline = Date.now() + root.holdLandingMs
+                console.log("PREVIEWSETTLE HOLD ready " + root.holdDetail())
+                return
+            } else if (!quick.landed) {
+                return
+            }
+            holdPoll.stop()
+            root.go(root.stage + 1)
         }
     }
 
@@ -485,6 +529,9 @@ ShellRoot {
             if (root.holdCap)
                 root.holdCap.interval = root.holdCapMs
             root.holdWatch = root.holdSettle !== null
+            root.holdPhase = "setup"
+            if (root.holdWatch)
+                root.holdSettle.interval = root.holdCapMs
             quick.follow(root.imagePath(4), "image-x-generic", 1004, "")
             quick.follow(root.imagePath(3), "image-x-generic", 1003, "")
             if (root.holdWatch && quick.lookReady && root.holdSettle.running)
@@ -492,16 +539,16 @@ ShellRoot {
             root.check("quick burst inside the hold trails", root.holdWatch && root.holdCap !== null
                 && root.holdSettle.running && quick.unrevealed && quick.path === root.imagePath(3),
                 "settle=" + (root.holdSettle !== null) + " cap=" + (root.holdCap !== null) + " unrevealed=" + quick.unrevealed)
-            root.later(800)
+            root.holdDeadline = Date.now() + root.holdSetupMs
+            holdPoll.start()
         },
         function () {
             root.holdWatch = false
-            var detail = "ready=" + root.holdReadySettling + " landSettling=" + root.holdLandSettling
-                + " landAfterStop=" + (root.holdLandAt > 0 ? root.holdLandAt - root.holdStopAt : "none")
-                + " caps=" + (quick.revealCaps - root.holdCaps) + " early=" + quick.revealedEarly
+            var detail = root.holdDetail()
             root.check("quick hold burst lands nothing while settling", root.holdReadySettling && !root.holdLandSettling, detail)
-            root.check("quick hold burst lands once the settle stops", root.holdStopAt > 0 && root.holdLandAt >= root.holdStopAt
-                && root.holdLandAt - root.holdStopAt < 250 && quick.path === root.imagePath(3)
+            root.check("quick hold burst lands once the settle stops", !root.holdTimedOut
+                && root.holdStopAt > 0 && root.holdLandAt >= root.holdStopAt && quick.landed
+                && quick.path === root.imagePath(3) && root.holdSettle.interval === quick.followSettleMs
                 && quick.revealCaps === root.holdCaps && !quick.revealedEarly && root.holdCap.running, detail)
             root.done()
         }

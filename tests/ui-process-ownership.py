@@ -60,10 +60,19 @@ process(346, "gio monitor trash:///")
 process(347, "gio monitor trash:///", readable=False)
 process(348, "gio monitor trash:///", state="Z")
 process(349, "gio monitor trash:///", state="S")
+process(350, "foot --config=fixture", state="S")
+process(351, "gio monitor trash:///", state="Z")
+process(352, "gio monitor trash:///", state="S")
+process(353, "gio monitor trash:///", own=False, state="S")
+(root / "proc/351/environ").write_bytes(b"")
+(root / "proc/352/environ").write_bytes(b"")
 helpers = "\n".join(function(name) for name in (
     "flea_pids", "flea_pid", "flea_process_owned", "backend_pids", "owned_trash_monitors",
     "kill_flea", "cleanup", "window_box", "click_row"
 ))
+# Sample input: glasspick_stop() { through the next top-level } in the real capture library.
+glass_source = Path(__file__).with_name("ui-captures-glass.sh").read_text()
+helpers += "\n" + re.search(r"(?ms)^glasspick_stop\(\) \{\n.*?^\}", glass_source).group()
 if "\nxwsettings_route_snapshot() {" in source:
     helpers += "\n" + function("xwsettings_route_snapshot")
 prelude = f"""
@@ -144,6 +153,13 @@ cases = [
      0, "", "FAIL"),
     ("live monitor with an unreadable environ fails closed", after_ownership(unreadable_environ) + "monitor_ids=349\nowned_trash_monitors\n",
      3, "", "FAIL"),
+    ("readable empty zombie is an exited identity", "flea_process_owned 351", 2, "", "SIMULATED_SIGNAL"),
+    ("readable empty live process stays foreign", "flea_process_owned 352", 1, "", "SIMULATED_SIGNAL"),
+    ("vanished after successful environ read is exited", 'tr() { command tr "$@"; mv "$(flea_process_dir 353)" "$run_root/vanished-after-read"; }; flea_process_owned 353',
+     2, "", "SIMULATED_SIGNAL"),
+    ("Glass stop accepts a readable zombie after TERM",
+     'kill() { printf "350 (foot) Z 1 350 350 0 -1 4194560\\n" > "$run_root/proc/350/stat"; : > "$run_root/proc/350/environ"; }; glasspick_stop 350',
+     0, "", "FAIL"),
 ]
 # Sample source: the addressed j follows the active-address poll and precedes both cursor assertions.
 key_start = source.index('    omarchy-drive key --window "$addrA" j')
