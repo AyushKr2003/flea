@@ -166,6 +166,24 @@ function run(check) {
         Keymap.lookupFor("default", Qt.Key_Backtab, "", Qt.ShiftModifier, "preview", "gui"), "focusPrevious")
     check("Return maps to open in the preview context",
         Keymap.lookupFor("default", Qt.Key_Return, "\r", Qt.NoModifier, "preview", "gui"), "open")
+    // Real pane dispatch must enter Compare even though it does not draw the text bar.
+    var compareSteps = []
+    var comparison = { stepFocus: function(back) { compareSteps.push(back) } }
+    var comparePane = { focusView: "list", viewMode: "list", searchMode: "", recentMode: "",
+        path: "/w", cursorIndex: 0, selectionVersion: 0, renameEditor: function() { return null },
+        preview: { active: true, isCompare: true, hasBar: false, revealStrip: function() {},
+            surfaceItem: function() { return comparison } } }
+    var comparePreset = Keymap.preset
+    for (var compareKeyPreset of ["default", "vim", "mac", "windows"]) {
+        Keymap.setPreset(compareKeyPreset)
+        compareSteps = []
+        check(compareKeyPreset + ": pane consumes Compare Tab", Focus.handleKey({ key: Qt.Key_Tab, text: "\t", modifiers: Qt.NoModifier }, comparePane, null), true)
+        check(compareKeyPreset + ": pane consumes Compare Shift+Tab", Focus.handleKey({ key: Qt.Key_Backtab, text: "", modifiers: Qt.ShiftModifier }, comparePane, null), true)
+        check(compareKeyPreset + ": Compare receives both focus directions", compareSteps.join(","), "false,true")
+    }
+    Keymap.setPreset(comparePreset)
+    comparison = null
+    check("Tab while Compare is still loading is consumed safely", Focus.handleKey({ key: Qt.Key_Tab, text: "\t", modifiers: Qt.NoModifier }, comparePane, null), true)
     var paneSrc = Source.source("ui/MarkdownPane.qml")
     var barSrc = Source.source("ui/QuickLookBar.qml")
     check("the close mark takes its keyboard state from the bar",

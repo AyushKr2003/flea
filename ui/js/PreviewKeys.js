@@ -112,10 +112,13 @@ function act(action, root) {
         return
     // Focus.js lets w through for a code or text Quick Look only; the choice is remembered in ui.json.
     case "toggleWrap": root.preview.toggleWrap(); return
-    // The bar's close mark is its one control on every text pane: Tab and Shift+Tab take the keyboard onto it and off it, and Return on it closes.
+    // The text bar toggles Close; Compare owns its actual Copy and Close focus walk.
     case "focusNext":
     case "focusPrevious":
-        if (root.preview.hasBar) root.preview.toggleMarkdownClose()
+        if (root.preview.isCompare) {
+            var compare = root.preview.surfaceItem()
+            if (compare) compare.stepFocus(action === "focusPrevious")
+        } else if (root.preview.hasBar) root.preview.toggleMarkdownClose()
         return
     case "open":
         if (root.preview.hasBar && root.preview.markdownCloseFocused) root.preview.close()

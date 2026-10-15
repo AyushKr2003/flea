@@ -60,6 +60,16 @@ Item {
             root.opener.copyText(root.patch)
     }
 
+    // The pane consumes preview Tab, so Compare enters and cycles its own real controls.
+    function stepFocus(back) {
+        if (!root.active) return
+        var controls = root.hasPatch ? [copyButton, barClose] : [barClose]
+        var at = controls.indexOf(copyButton.activeFocus ? copyButton : barClose.activeFocus ? barClose : null)
+        var next = at < 0 ? (back ? controls.length - 1 : 0)
+            : (at + (back ? -1 : 1) + controls.length) % controls.length
+        controls[next].forceActiveFocus(back ? Qt.BacktabFocusReason : Qt.TabFocusReason)
+    }
+
     // A new pair starts a new ask; the first waits for the end of the turn so one change of several properties asks once.
     function fresh() {
         root.answer = ""
@@ -162,9 +172,11 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             label: "Copy patch"
             inStrip: true
+            tabHandle: true
             // Compare.html pads the label 8 either side of its 1 px frame; the recipe's own padding is the gap.
             horizontalPadding: root.boardPx(root.copyPaddingBoardPx)
             onActivated: root.copyPatch()
+            onTabbed: function(from, back) { root.stepFocus(back) }
         }
 
         Flea.ChromeButton {
@@ -176,6 +188,10 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             glyph: "x"
             accessName: "Close"
+            activeFocusOnTab: true
+            keyboardFocused: barClose.activeFocus
+            Keys.onTabPressed: function(event) { root.stepFocus((event.modifiers & Qt.ShiftModifier) !== 0) }
+            Keys.onBacktabPressed: root.stepFocus(true)
             onActivated: root.closeRequested()
         }
     }

@@ -78,6 +78,12 @@ ShellRoot {
         var centre = target.mapToItem(null, target.width / 2, target.height / 2)
         root.clicker.mouseClick(look, centre.x, centre.y, Qt.LeftButton, Qt.NoModifier, 0)
     }
+    function previewKey(key, text, modifiers) {
+        return Focus.handleKey({ key: key, text: text, modifiers: modifiers }, {
+            preview: look, renameEditor: function() { return null }, searchMode: "", recentMode: "",
+            focusView: "list", viewMode: "list", path: root.stubA, cursorIndex: 0, selectionVersion: 0
+        }, null)
+    }
     function answer(index, state, patch) {
         stub.compareResult({ token: stub.asked[index].token, state: state, patch: patch })
     }
@@ -108,6 +114,10 @@ ShellRoot {
                 var before = opener.copies.length
                 PreviewKeys.act("copyPatch", { preview: look })
                 root.check(name + " y copies nothing", opener.copies.length, before)
+                root.previewKey(Qt.Key_Tab, "\t", Qt.NoModifier)
+                root.check(name + " Tab skips absent Copy and focuses Close", [g.copy.activeFocus, g.close.activeFocus, g.close.ringItem.visible], [false, true, true])
+                root.clicker.keyClick(Qt.Key_Backtab, Qt.ShiftModifier, -1)
+                root.check(name + " Shift+Tab stays on the only visible control", g.close.activeFocus, true)
                 root.check(name + " the overlay never showed an empty card", look.lookEmptyFrames, 0)
                 PreviewKeys.act("escape", { preview: look })
                 return root.closed
@@ -170,6 +180,17 @@ ShellRoot {
             // The diff scrolls by the text preview's own wheel handler: one FastScrollHandler parented to the list, not the bars' own.
             var list = root.item().children.filter(function (n) { return n.contentItem !== undefined })[0]
             root.check("the diff's wheel is the text preview's FastScrollHandler", root.descendants(root.item()).filter(function (n) { return n.objectName === "fleaScroll" && n.parent === list }).length, 1)
+            root.previewKey(Qt.Key_Backtab, "", Qt.ShiftModifier)
+            root.check("initial Shift+Tab enters Close with its own focus ring", [g.close.activeFocus, g.close.ringItem.visible], [true, true])
+            root.clicker.keyClick(Qt.Key_Tab, Qt.NoModifier, -1)
+            root.check("Tab wraps Close to Copy with its real focus frame", [g.copy.activeFocus, g.copy.focusShown], [true, true])
+            root.clicker.keyClick(Qt.Key_Tab, Qt.NoModifier, -1)
+            root.check("Tab advances Copy to Close", [g.copy.activeFocus, g.close.activeFocus], [false, true])
+            root.clicker.keyClick(Qt.Key_Backtab, Qt.ShiftModifier, -1)
+            root.check("Shift+Tab returns Close to Copy", g.copy.activeFocus, true)
+            root.clicker.keyClick(Qt.Key_Return, Qt.NoModifier, -1)
+            root.check("Return activates focused Copy once and keeps Compare open", [opener.copies.length, opener.copies[0], look.active], [1, root.stubPatch, true])
+            opener.copies = []
             // y and the button each copy the whole patch once, headers included.
             PreviewKeys.act("copyPatch", { preview: look })
             root.check("y copies the whole patch once", [opener.copies.length, opener.copies[0]], [1, root.stubPatch])
