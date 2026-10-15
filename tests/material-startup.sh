@@ -3,11 +3,13 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 . "$PWD/tools/flea-sandbox-guard"
+. "$PWD/tests/headless-commons.sh"
 bin=${FLEA_BIN:-$PWD/target/debug/flea}
 [[ -x "$bin" ]] || { echo 'FAIL material-startup needs the built backend'; exit 1; }
 sandbox_root_ok
 work=$(mktemp -d "$SANDBOX_ROOT/flea-material-startup.XXXXXX") || exit 1
 : > "$work/$SANDBOX_MARKER" || exit 1
+ui_copy="$work/ui"
 runner=""
 poll_s=0.1
 ready_polls=200
@@ -35,9 +37,12 @@ cleanup() { stop_shell && sandbox_remove "$work"; }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-cp -a ui "$work/ui" || exit 1
+cp -a ui "$ui_copy" || exit 1
+headless_commons "$work" "$work/commons" || exit 1
+[[ -L "$ui_copy/boot/Commons" ]] || exit 1
+ln -sfn "$work/commons" "$ui_copy/boot/Commons" || exit 1
 # Sample source: function floor(c, need) { ... }; only its name changes, with a timed wrapper preserving its arguments and result.
-python3 -I - "$work/ui/js/Material.js" "$work/ui/Glass.qml" <<'PY' || exit 1
+python3 -I - "$ui_copy/js/Material.js" "$ui_copy/Glass.qml" <<'PY' || exit 1
 from pathlib import Path
 import sys
 path = Path(sys.argv[1])
@@ -87,14 +92,14 @@ leg() {
     setsid env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u FLEA_SELECT DISPLAY=:material-startup \
         HOME="$probe/home" XDG_CONFIG_HOME="$probe/config" XDG_STATE_HOME="$probe/state" \
         XDG_DATA_HOME="$probe/data" XDG_CACHE_HOME="$probe/cache" XDG_RUNTIME_DIR="$probe/runtime" \
-        FLEA_BIN="$bin" FLEA_UI="$work/ui" GVFS_DISABLE_FUSE=1 QSG_RHI_BACKEND=opengl \
+        FLEA_BIN="$bin" FLEA_UI="$ui_copy" GVFS_DISABLE_FUSE=1 QSG_RHI_BACKEND=opengl \
         QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 \
         dbus-run-session -- "$bin" --gui "$probe/fixture" > "$probe/qs.log" 2>&1 </dev/null &
     runner=$!
     for ((tick = 0; tick < ready_polls; tick++)); do
         answer=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE DISPLAY=:material-startup \
             XDG_RUNTIME_DIR="$probe/runtime" QT_QPA_PLATFORM=offscreen \
-            timeout "$call_timeout_s" qs ipc -p "$work/ui/boot" call flea glass 2>/dev/null) && [[ "$answer" == '{'* ]] && break
+            timeout "$call_timeout_s" qs ipc -p "$ui_copy/boot" call flea glass 2>/dev/null) && [[ "$answer" == '{'* ]] && break
         answer=""
         sleep "$poll_s"
     done
@@ -105,17 +110,21 @@ leg() {
         tail -15 "$probe/qs.log"
         return 1
     fi
-    local calls elapsed actual
+    local calls elapsed actual sample
     # Sample log: "  INFO qml: MATERIAL_FLOOR ms=3", counted once per search.
     calls=$(grep -ac 'MATERIAL_FLOOR ms=' "$probe/qs.log" || true)
     # Sample log: "  INFO qml: MATERIAL_FLOOR ms=3", one elapsed whole-millisecond sample per call.
-    elapsed=$(sed -n 's/.*MATERIAL_FLOOR ms=\([0-9]*\).*/\1/p' "$probe/qs.log" | awk '{sum += $1} END {print sum+0}')
+    elapsed=0
+    while IFS= read -r sample; do
+        elapsed=$((elapsed + sample))
+    done < <(sed -n 's/.*MATERIAL_FLOOR ms=\([0-9]*\).*/\1/p' "$probe/qs.log")
     if [[ "$expect" == focus ]]; then
         # Sample IPC: {"focused":true,"alpha":0.984313725490196}, selected by the fixture window's actual focus state.
-        expect=$(jq -r --argjson active "$focused_alpha" --argjson inactive "$inactive_alpha" 'if .focused then $active else $inactive end' <<< "$answer")
+        expect=$(jq -er --argjson active "$focused_alpha" --argjson inactive "$inactive_alpha" \
+            'if (.focused | type) != "boolean" then error("invalid focus") else if .focused then $active else $inactive end end' <<< "$answer") || return 1
     fi
     # Sample IPC: {"alpha":0.7529411764705882}, which rounds to the 8-bit alpha 192.
-    actual=$(jq -r '(.alpha * 255) | round' <<< "$answer")
+    actual=$(jq -er 'if (.alpha | type) == "number" and .alpha >= 0 and .alpha <= 1 then (.alpha * 255) | round else error("invalid alpha") end' <<< "$answer") || return 1
     printf 'MATERIAL_STARTUP %s calls=%s floorMs=%s alpha=%s expected=%s\n' "$name" "$calls" "$elapsed" "$actual" "$expect"
     [[ "$actual" == "$expect" ]] || return 1
     if [[ "$name" == glassy ]]; then [[ "$calls" -gt 0 ]]; else [[ "$calls" -eq 0 ]]; fi

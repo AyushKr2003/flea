@@ -168,8 +168,7 @@ PY
     fixed_failed=$(grep -cF 'COHCAPTURE FAIL a press keeps the hit box and coordinate signature fixed' "$control_log" || true)
     caption_failed=$(grep -cF 'COHCAPTURE FAIL a press keeps the caption geometry fixed' "$control_log" || true)
     local_failed=$(grep -cF 'COHCAPTURE FAIL only the frame takes the exact whole-pixel press inset' "$control_log" || true)
-    # Both sides' assertions remain exact. Root scaling can also lose exact local coordinates
-    # through inverse-transform rounding, so count that named geometry failure when it occurs.
+    # Keep exact assertions and count any local-coordinate failure from inverse-transform rounding.
     expected_failed=3; expected_root=0; expected_fixed=0; expected_caption=0; expected_local=1
     if [ "$mutant" = root-scale ]; then
         expected_failed=$((5 + local_failed)); expected_root=1; expected_fixed=1; expected_caption=1
