@@ -89,7 +89,7 @@ fn trim(dir: &Path, files: usize, bytes: u64, now: SystemTime) {
             }
             continue;
         }
-        if !meta.is_file() || path.extension().is_none_or(|ext| ext != "png") {
+        if !meta.is_file() || path.extension().map_or(true, |ext| ext != "png") {
             continue;
         }
         count += 1;
