@@ -169,6 +169,9 @@ def request_for(method, title, app_id, options):
         "currentIndex": next((index for index, value in enumerate(filters if isinstance(filters, list) else [])
                               if value == options.get("current_filter")), -1),
     }
+    # Visibility is optional: missing or malformed values leave the picker's saved default intact.
+    if type(options.get("show_hidden")) is bool:
+        request["hidden"] = flag_option(options, "show_hidden")
     if mode == "save" and os.path.isabs(request["file"]):
         request["folder"], request["name"] = os.path.split(request["file"])
     return request

@@ -5,9 +5,11 @@
 .import "sourcefixture.js" as Source
 
 .import "pickerkeys.js" as PickerKeys
+.import "pickerhidden.js" as PickerHidden
 
 function run(check) {
     PickerKeys.run(check)
+    PickerHidden.run(check)
     // The shape tools/flea-portal writes for an OpenFile with two filters, taken from its request_for().
     var asked = JSON.stringify({
         mode: "open", title: "Send to unraid", app: "", accept: "Send", multiple: true,

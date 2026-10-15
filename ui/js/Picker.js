@@ -52,6 +52,7 @@ function request(text) {
         accept: String(read.accept || ""),
         multiple: read.multiple === true,
         directory: read.directory === true,
+        hidden: typeof read.hidden === "boolean" ? read.hidden : undefined,
         folder: String(read.folder || ""),
         file: String(read.file || ""),
         name: String(read.name || ""),
