@@ -142,58 +142,68 @@ check "the nested theme HOME passes the unchanged guard in the real archive case
 check "the theme HOME has a marked direct parent" "$([[ -f "$fixture_root/cap-archives-format-kanagawa-home/$SANDBOX_MARKER" ]] && echo yes || echo no)" yes
 
 # Replay WindowDrag's displaced origin through the real cancel and parking helpers.
-native_box='701 370 1100 700'
+. "$repo/tests/lib/hypr-dispatch.sh"
+# Command substitution runs the compositor stub in a subshell, so its geometry must live in a file.
+native_box_file="$scratch/native-box"
+printf '701 370 1100 700\n' > "$native_box_file"
 replay_outputs='[{"name":"fixture","x":0,"y":0,"width":2560,"height":1440,"scale":1,"transform":0}]'
-window_box() { printf '%s\n' "$native_box"; }
-hyprctl() { [[ "$*" == 'monitors -j' ]] && printf '%s\n' "$replay_outputs"; }
+window_box() { cat "$native_box_file"; }
+hyprctl() {
+    local x y w h
+    if [[ "$*" == 'monitors -j' ]]; then
+        printf '%s\n' "$replay_outputs"
+        return 0
+    fi
+    # Match only the owned window's move at the compositor boundary; the shared helper builds its command.
+    local move='[.]window[.]move[(][{] x = (-?[0-9]+), y = (-?[0-9]+), window = "address:0xabc" [}][)]$'
+    [[ $# == 2 && "$2" =~ $move ]] || return 1
+    if [[ "${replay_restore:-true}" == true ]]; then
+        read -r x y w h < "$native_box_file" || return 1
+        printf '%s %s %s %s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "$w" "$h" > "$native_box_file"
+    fi
+    printf 'ok\n'
+}
 pointer_glide() {
     printf '%s %s\n' "$1" "$2" >> "$scratch/moves.log"
-    if (( coh_held )); then native_box='701 752 900 600'; fi
+    if (( coh_held )); then printf '701 752 900 600\n' > "$native_box_file"; fi
 }
 coh_ydotool() { printf '%s\n' "$*" >> "$scratch/buttons.log"; }
 resizes=0
 cap_resize() {
     local x y w h
-    # Sample input: native_box="701 370 1100 700", the window's x, y, width and height.
-    read -r x y w h <<< "$native_box"
+    # Sample input: the state file holds "701 370 1100 700", the window's x, y, width and height.
+    read -r x y w h < "$native_box_file"
     resizes=$((resizes + 1))
-    native_box="$x $y $1 $2"
+    printf '%s %s %s %s\n' "$x" "$y" "$1" "$2" > "$native_box_file"
 }
 flea_pid() { printf '4242\n'; }
 window_addr_of_pid() { [[ "$1" == 4242 ]] && printf '0xabc\n'; }
-hypr_window_move() {
-    local x y w h
-    [[ "$1" == 0xabc ]] || return 1
-    # Sample input: native_box="701 752 900 600", the window's x, y, width and height.
-    read -r x y w h <<< "$native_box"
-    native_box="$2 $3 $w $h"
-}
 name=window
 coh_held=1
-( coh_cancel_press; coh_park; printf 'REPLAY_DRAG %s %s %s\n' "$resizes" "$coh_held" "$native_box" ) > "$scratch/drag.log" 2>&1
+( coh_cancel_press; coh_park; printf 'REPLAY_DRAG %s %s %s\n' "$resizes" "$coh_held" "$(window_box)" ) > "$scratch/drag.log" 2>&1
 check "a held chrome cancel restores geometry before the next park" "$?" 0
 check "the cancel restores position and size after releasing the button" "$(sed -n 's/^REPLAY_DRAG //p' "$scratch/drag.log")" '1 0 701 370 1100 700'
 check "both pointer moves stay inside the output" "$(tr '\n' '|' < "$scratch/moves.log")" '707 1064|707 1064|'
 grep -q '^COH_DRAG_RESET replay window .*displaced=701 752 900 600 restored=701 370 1100 700' "$scratch/drag.log"
 check "a chrome drag records original, displaced and restored geometry" "$?" 0
 coh_held=0
-( coh_held=1; pointer_glide() { native_box='701 752 900 600'; }; hypr_window_move() { :; }; coh_cancel_press ) > "$scratch/unrestored.log" 2>&1
+( coh_held=1; replay_restore=false; pointer_glide() { printf '701 752 900 600\n' > "$native_box_file"; }; coh_cancel_press ) > "$scratch/unrestored.log" 2>&1
 check "a compositor that does not restore position fails the cancel" "$?" 1
 grep -q 'window geometry was not restored' "$scratch/unrestored.log"
 check "a failed restoration reports the geometry mismatch" "$?" 0
-native_box='701 752 1100 700'
+printf '701 752 1100 700\n' > "$native_box_file"
 ( coh_pointer_to 6 694 ) > "$scratch/outside.log" 2>&1
 check "an off-output target is refused before motion" "$? $(wc -l < "$scratch/moves.log")" '1 2'
 grep -q '^COH_POINTER_OUTSIDE replay window .*target=707,1446 .*"height":1440' "$scratch/outside.log"
 check "the refusal names the target and physical output size" "$?" 0
 replay_outputs='[{"name":"fixture","x":0,"y":0,"width":2560,"height":1440,"scale":2,"transform":0}]'
-native_box='100 100 300 200'
+printf '100 100 300 200\n' > "$native_box_file"
 coh_pointer_to 150 100
 check "scaled outputs use logical pointer coordinates" "$?" 0
 ( coh_pointer_to 150 650 ) > "$scratch/scaled-outside.log" 2>&1
 check "a point inside physical pixels but outside logical pixels is refused" "$?" 1
 replay_outputs='[{"name":"fixture","x":0,"y":0,"width":1440,"height":2560,"scale":1,"transform":1}]'
-native_box='701 370 1100 700'
+printf '701 370 1100 700\n' > "$native_box_file"
 coh_pointer_to 1000 694
 check "rotated outputs swap their physical dimensions" "$?" 0
 check "the rotated replay reaches a point outside the unswapped width" "$(tail -n 1 "$scratch/moves.log")" '1701 1064'
