@@ -21,7 +21,7 @@ finish() {
         mkdir -p "$proof/evidence/native"
         cp -a "$native_root/." "$proof/evidence/native/" || status=1
     else
-        printf 'FAIL native evidence directory missing or invalid\n' >&2
+        printf 'FAIL picker native evidence directory %q missing or invalid (source %q)\n' "$native_root" "$proof/evidence/native.log" >&2
         [[ "$status" != 0 ]] || status=1
     fi
     python3 - "$proof/evidence/result.json" "$status" "$qt_status" "$native_status" "$version" "$FLEA_EXPECTED_SHA" "$native_root" <<'PY'

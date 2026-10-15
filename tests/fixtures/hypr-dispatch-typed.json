@@ -1,5 +1,15 @@
 [
   {
+    "operation": "workspace_focus",
+    "args": ["1"],
+    "text": "hl.dsp.focus({ workspace = \"1\" })"
+  },
+  {
+    "operation": "workspace_focus",
+    "args": ["-99"],
+    "text": "hl.dsp.focus({ workspace = \"-99\" })"
+  },
+  {
     "operation": "window_focus",
     "args": [
       "0xAbC"

@@ -39,6 +39,44 @@ def backend_request(native, name, folder, hidden):
     return BackendRequest()
 
 
+def restore_display(native, workspace, active, helper=None):
+    """Restore both saved identities, collecting failures so one cannot prevent the other attempt."""
+    helper = helper or native["REPO"] / "tests/lib/hypr-dispatch.sh"
+    failures = []
+    try:
+        if type(workspace) is not int:
+            raise AssertionError("saved workspace is not an integer")
+        if native["run"](["bash", helper, "workspace_focus", workspace], native["drive_env"]) != "ok":
+            raise AssertionError("workspace focus was refused")
+        restored = json.loads(native["run"](["hyprctl", "-j", "activeworkspace"], native["drive_env"]))
+        if type(restored.get("id")) is not int or restored["id"] != workspace:
+            raise AssertionError(f"workspace did not restore {workspace}: {restored!r}")
+    except Exception as error:
+        failures.append("workspace: " + str(error))
+    try:
+        if active:
+            address, pid = active.get("address", ""), active.get("pid")
+            if not isinstance(address, str) or not re.fullmatch(r"0x[0-9a-fA-F]+", address) or type(pid) is not int or pid <= 0:
+                raise AssertionError("saved window has no valid address and PID")
+            matches = [window for window in native["windows"]() if window.get("address") == address
+                       and type(window.get("pid")) is int and window["pid"] == pid]
+            if len(matches) != 1:
+                raise AssertionError(f"saved window {address} PID {pid} is missing or ambiguous")
+            if native["run"](["bash", helper, "window_focus", address], native["drive_env"]) != "ok":
+                raise AssertionError("window focus was refused")
+            restored = json.loads(native["run"](["hyprctl", "-j", "activewindow"], native["drive_env"]))
+            if restored.get("address") != address or type(restored.get("pid")) is not int or restored["pid"] != pid:
+                raise AssertionError(f"window did not restore {address} PID {pid}: {restored!r}")
+            restored = json.loads(native["run"](["hyprctl", "-j", "activeworkspace"], native["drive_env"]))
+            if type(restored.get("id")) is not int or restored["id"] != workspace:
+                raise AssertionError(f"window focus left saved workspace {workspace}: {restored!r}")
+        elif active != {}:
+            raise AssertionError("saved active-window observation is not an object")
+    except Exception as error:
+        failures.append("window: " + str(error))
+    return failures
+
+
 def test_issue313(native):
     root, check, write = native["root"], native["check"], native["write"]
     drive_env, run = native["drive_env"], native["run"]
@@ -134,16 +172,9 @@ def test_issue313(native):
                     None, None, native["Gio"].DBusCallFlags.NONE, 5000, None)
             except Exception as error:
                 failures.append(str(error))
-        try:
-            helper = native["REPO"] / "tests/lib/hypr-dispatch.sh"
-            check("issue313 restores workspace", run(["bash", helper, "workspace_focus", workspace], drive_env) == "ok")
-            address, pid = active.get("address", ""), active.get("pid")
-            if re.fullmatch(r"0x[0-9a-fA-F]+", address) and type(pid) is int and any(
-                    window.get("address") == address and window.get("pid") == pid for window in native["windows"]()):
-                native["drive"]("focus", address)
-        except Exception as error:
-            failures.append(str(error))
-        write(root / "issue313-cleanup.json", json.dumps({"primary": str(primary), "failures": failures}, indent=2))
+        failures.extend(restore_display(native, workspace, active))
+        write(root / "issue313-cleanup.json", json.dumps({"primary": str(primary), "failures": failures,
+              "workspace": workspace, "originalWindow": active}, indent=2))
         if failures:
             if primary is not None:
                 primary.add_note("issue313 cleanup: " + "; ".join(failures))
