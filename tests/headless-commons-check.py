@@ -23,7 +23,7 @@ def direct_sources(root):
     return bad
 
 
-def call_scopes(source):
+def call_scopes(source, comments=None):
     depth = 0
     cases = []
     scopes = {}
@@ -39,12 +39,20 @@ def call_scopes(source):
     word_start = True
     unmatched_tail = False
     unknown_pipeline = False
+    functions = {}
+    function_groups = {}
+    owners = {}
+    commands = {}
+    references = []
+    pending_function = None
     shell_boundaries = '();|&<>'
     compound_ends = {'{': '}', 'if': 'fi', 'for': 'done', 'while': 'done', 'until': 'done', 'select': 'done', 'case': 'esac'}
     # Sample input: prepare() { and function prepare { are supported literal function headers, not brace arguments.
     function_head = re.compile(r'(?:^|[;{}])\s*(?:function\s+)?\w+\s*\(\s*\)\s*$|(?:^|[;{}])\s*function\s+\w+\s*$')
+    # Sample input: prepare() followed by a newline and { is the same literal definition as function prepare {.
+    function_header = re.compile(r'(?:function[ \t]+([^\s(){};|&<>]+)(?:[ \t]*\([ \t]*\))?|([^\s(){};|&<>]+)[ \t]*\([ \t]*\))(?=[ \t\r\n#{}(])')
     words = re.compile(r'\w+|;;&|;;|;&|&&|\|\||\|&|[();{}!|&]')
-    delimiters = re.compile(r'(?<!<)<<-?(?!<)[ \t]*[\'"]?([A-Za-z_]\w*)[\'"]?')
+    delimiters = re.compile(r'(?<!<)<<(-?)(?!<)[ \t]*[\'"]?([A-Za-z_]\w*)[\'"]?')
     redirects = re.compile(r'&>>?|[<>]&')
     at = 0
     while at < len(source):
@@ -57,11 +65,14 @@ def call_scopes(source):
             continue
         if char == '\n' and heredocs:
             at += 1
-            for delimiter in heredocs:
+            for delimiter, strip_tabs in heredocs:
                 while at < len(source):
                     end = source.find('\n', at)
                     end = len(source) if end < 0 else end + 1
-                    line = source[at:end].strip()
+                    # Sample input: <<EOF requires column zero; <<-EOF permits leading tabs, never spaces or trailing whitespace.
+                    line = source[at:end].removesuffix('\n')
+                    if strip_tabs:
+                        line = line.lstrip('\t')
                     at = end
                     if line == delimiter:
                         break
@@ -70,6 +81,10 @@ def call_scopes(source):
             word_start = True
             continue
         if char == '"':
+            if not quoted:
+                literal = re.match(r'"([A-Za-z_]\w*)"', source[at:])
+                if literal:
+                    references.append(literal[1])
             quoted = not quoted
             command_start = False
             word_start = False
@@ -79,7 +94,10 @@ def call_scopes(source):
         if source.startswith('$(', at) or not quoted and source[at:at + 2] in ('<(', '>('):
             if source.startswith('$((', at):
                 arithmetic.append(depth)
-            substitutions.append((depth, quoted))
+            # Sample input: prepare > >(cat; :) | cat keeps the caller's pending pipeline context outside the substitution.
+            substitutions.append((depth, quoted, closed_calls, unmatched_tail))
+            closed_calls = set()
+            unmatched_tail = False
             quoted = False
             command_start = True
             word_start = True
@@ -96,10 +114,14 @@ def call_scopes(source):
             ansi = char == '`' or at > 0 and source[at - 1] == '$'
             pattern = re.escape(char) + (r'(?:\\.|[^' + re.escape(char) + r'\\])*' if ansi else "[^']*") + re.escape(char)
             literal = re.compile(pattern, re.S).match(source, at)
+            if literal:
+                references.append(literal[0][1:-1])
             at = len(source) if literal is None else literal.end()
             continue
         # Sample input: (# comment ) starts a comment; $(printf x)#suffix and \)#suffix continue the current shell word.
         if char == '#' and word_start:
+            if comments is not None:
+                comments[source.count('\n', 0, at) + 1] = at - source.rfind('\n', 0, at) - 1
             end = source.find('\n', at)
             at = len(source) if end < 0 else end
             continue
@@ -124,7 +146,7 @@ def call_scopes(source):
         # Sample input: cat <<'TEXT' skips its body; cat <<<ready is a here-string, never a heredoc at either trailing <<.
         heredoc = delimiters.match(source, at) if not arithmetic else None
         if heredoc:
-            heredocs.append(heredoc[1])
+            heredocs.append((heredoc[2], heredoc[1] == '-'))
             at += len(heredoc[0])
             continue
         # Sample input: } 2>&1 redirects; } >out\>& ends with an escaped filename character and a real background &.
@@ -160,6 +182,12 @@ def call_scopes(source):
         separated = token.end() == len(source) or source[token.end()].isspace() or source[token.end()] in shell_boundaries
         keyword = command_start and word_start and separated
         in_pattern = not arithmetic and cases and cases[-1] == 'pattern'
+        header = function_header.match(source, at) if keyword and not in_pattern else None
+        if header:
+            pending_function = header[1] or header[2]
+            at = header.end()
+            command_start = word_start = True
+            continue
         opens_brace = word == '{' and not in_pattern and word_start and separated and (command_start or function_head.search(source[:at].rsplit('\n', 1)[-1]))
         opens_compound = opens_brace or keyword and word in compound_ends and not in_pattern
         # Sample input: printf '' | case x in esac closes an empty case before the next parent-shell guard.
@@ -167,8 +195,21 @@ def call_scopes(source):
         closes_compound = keyword and word in ('}', 'fi', 'done') and not in_pattern or case_end
         joins_word = False
         at += len(word)
+        owner = next((function_groups[id(calls)] for _, _, calls in reversed(groups) if id(calls) in function_groups), None)
+        # Sample input: prepare | cat, a subshell's prepare and wrapper() { prepare; } inherit their actual call context.
+        if keyword and not opens_compound and word not in ('}', 'fi', 'done', 'esac', 'then', 'else', 'elif', 'do', 'in', '!', 'time') and re.fullmatch(r'\w+', word):
+            site = (line, token.start())
+            commands[site] = word
+            owners[site] = owner
+            scopes[site] = max(depth, int(pipe_next or any(piped for _, piped, _ in groups)))
+            closed_calls.add(site)
+            for _, _, calls in groups:
+                calls.add(site)
+        elif word_start and separated or token.start() > 0 and source[token.start() - 1] == '=':
+            references.append(word)
         # Sample input: (\n headless_commons "$root" || exit 1\n) exits only a child; case x in x) is not a subshell close.
         if word == 'headless_commons':
+            owners[line] = owner
             scopes[line] = max(depth, int(any(piped for _, piped, _ in groups)))
             for _, _, calls in groups:
                 calls.add(line)
@@ -190,11 +231,15 @@ def call_scopes(source):
             if arithmetic and depth == arithmetic[-1]:
                 arithmetic.pop()
             if substitutions and depth == substitutions[-1][0]:
-                _, quoted = substitutions.pop()
+                _, quoted, closed_calls, unmatched_tail = substitutions.pop()
                 joins_word = True
         # Sample input: if true; then\n headless_commons "$root" || exit 1\nfi | cat is an unsupported compound pipeline.
         if opens_compound:
             groups.append((compound_ends[word], pipe_next, set()))
+            if pending_function is not None:
+                functions.setdefault(pending_function, []).append(groups[-1][2])
+                function_groups[id(groups[-1][2])] = pending_function
+                pending_function = None
             closed_calls.clear()
             unmatched_tail = False
         elif closes_compound:
@@ -219,7 +264,20 @@ def call_scopes(source):
                          or command_start and word in ('if', 'elif', 'while', 'until', 'then', 'else', 'do', 'time', '!'))
     if unknown_pipeline:
         scopes = {line: max(scope, 1) for line, scope in scopes.items()}
-    return scopes
+    resolved = {}
+
+    def function_scope(name, visiting):
+        if name in resolved:
+            return resolved[name]
+        # Sample input: target=prepare; "$target" and unused/recursive definitions have no proven literal invocation context.
+        sites = [site for site, command in commands.items() if command == name]
+        if name in visiting or len(functions.get(name, [])) != 1 or name in references or not sites:
+            return 1
+        resolved[name] = max(max(scopes[site], function_scope(owners[site], visiting | {name}) if owners[site] else 0) for site in sites)
+        return resolved[name]
+
+    return {line: max(scope, function_scope(owners[line], set()) if owners.get(line) else 0)
+            for line, scope in scopes.items() if isinstance(line, int)}
 
 
 def unchecked_calls(root):
@@ -230,8 +288,11 @@ def unchecked_calls(root):
         source = path.read_text()
         if 'headless_commons' not in source:
             continue
-        scopes = call_scopes(source)
+        comments = {}
+        scopes = call_scopes(source, comments)
         for n, line in enumerate(source.splitlines(), 1):
+            # Sample input: helper "$root" # || exit 1 has no guard; quoted "#" and escaped \# remain argument data.
+            line = line[:comments[n]] if n in comments else line
             # Sample input: headless_commons "$root" must carry an exit guard even when the suite uses set -e.
             if line.lstrip().startswith('#') or not re.search(r'\bheadless_commons\b', line):
                 continue
@@ -516,6 +577,72 @@ def controls(box):
                                   text=True, timeout=CALLER_TIMEOUT_SECONDS)
             assert gate.returncode == 1 and 'parent shell' in gate.stderr, (name, gate)
         print(f'HEADLESS_COMMONS_EXTERNAL_CALLER {name} bash_n=0 scan_errors={len(errors)} caller_exit={result.returncode} qs={int(child)}')
+    # Sample inputs execute whole callers: a real refusing helper and an external QS sentinel expose any lost parent abort.
+    safety_parents = {
+        'guard-trailing-comment': contract_call.rstrip() + ' # || ignored guard text\n',
+        'guard-quoted-hash': 'headless_commons "$root" "# literal" || exit 1\n',
+        'guard-escaped-hash': 'headless_commons "$root" \\#literal || exit 1\n',
+        'guard-word-hash': 'headless_commons "$root" word#suffix || exit 1\n',
+        'guard-substitution-hash': 'headless_commons "$root" "$(printf \'#literal\')" || exit 1\n',
+        'function-parent': 'prepare() {\n' + contract_call + '}\nprepare\n',
+        'function-keyword-parent': 'function prepare {\n' + contract_call + '}\nprepare\n',
+        'function-keyword-parens-parent': 'function prepare() {\n' + contract_call + '}\nprepare\n',
+        'function-multiline-parent': 'prepare()\n# comment ) |\n{\n' + contract_call + '}\nprepare\n',
+        'function-wrapper-parent': 'prepare() {\n' + contract_call + '}\nwrapper() { prepare; }\nwrapper\n',
+        'function-loop-parent': 'prepare() {\n' + contract_call + '}\nfor leg in current; do prepare; done\n',
+        'function-negated-parent': 'prepare() {\n' + contract_call + '}\n! prepare\n',
+        'heredoc-normal-parent': "cat <<'EOF'\n) # body only\nEOF\n" + contract_call,
+        'heredoc-tabs-parent': "cat <<-'EOF'\n\t) # body only\n\tEOF\n" + contract_call,
+    }
+    unsafe_callers = {
+        'commented-guard': 'headless_commons "$root" # || exit 1\n',
+        'commented-guard-after-hash': 'headless_commons "$root" "# literal" # || exit 1\n',
+        'function-left': 'prepare() {\n' + contract_call + '}\nprepare | cat\n',
+        'function-right': 'prepare() {\n' + contract_call + '}\nprintf "" | prepare\n',
+        'function-both': 'prepare() {\n' + contract_call + '}\nprintf "" | prepare | cat\n',
+        'function-background': 'prepare() {\n' + contract_call + '}\nprepare &\nwait\n',
+        'function-subshell': 'prepare() {\n' + contract_call + '}\n(prepare)\n',
+        'function-substitution': 'prepare() {\n' + contract_call + '}\nout=$(prepare)\n',
+        'function-process': 'prepare() {\n' + contract_call + '}\ncat <(prepare)\n',
+        'function-redirect-pipe': 'prepare() {\n' + contract_call + '}\nprepare > >(cat; :) | cat\n',
+        'function-wrapper-left': 'prepare() {\n' + contract_call + '}\nwrapper() { prepare; }\nwrapper | cat\n',
+        'function-wrapper-right': 'prepare() {\n' + contract_call + '}\nwrapper() { prepare; }\nprintf "" | wrapper\n',
+        'function-multiline-left': 'prepare()\n# comment ) |\n{\n' + contract_call + '}\nprepare | cat\n',
+        'function-keyword-left': 'function prepare {\n' + contract_call + '}\nprepare | cat\n',
+        'function-mixed-context': 'prepare() {\n' + contract_call + '}\nif false; then prepare; fi\nprepare | cat\n',
+        'function-dynamic-alias': 'prepare() {\n' + contract_call + '}\ntarget=prepare\n"$target" | cat\n',
+        'function-dynamic-quoted-alias': 'prepare() {\n' + contract_call + '}\ntarget="prepare"\n"$target" | cat\n',
+        'function-eval': 'prepare() {\n' + contract_call + '}\neval prepare | cat\n',
+        'function-quoted-name': 'prepare() {\n' + contract_call + '}\n"prepare" | cat\n',
+        'function-escaped-name': 'prepare() {\n' + contract_call + '}\npre\\pare | cat\n',
+        'heredoc-space-child': "(\ncat <<'EOF'\n EOF\n)\nEOF\n" + contract_call + ') | cat\n',
+        'heredoc-normal-tab-child': "(\ncat <<'EOF'\n\tEOF\n)\nEOF\n" + contract_call + ') | cat\n',
+        'heredoc-trailing-space-child': "(\ncat <<'EOF'\nEOF \n)\nEOF\n" + contract_call + ') | cat\n',
+        'heredoc-dash-space-child': "(\ncat <<-'EOF'\n EOF\n)\nEOF\n" + contract_call + ') | cat\n',
+        'heredoc-dash-tab-space-child': "(\ncat <<-'EOF'\n\t EOF\n)\nEOF\n" + contract_call + ') | cat\n',
+        'heredoc-dash-trailing-tab-child': "(\ncat <<-'EOF'\nEOF\t\n)\nEOF\n" + contract_call + ') | cat\n',
+        'heredoc-multiple-child': "(\ncat <<'FIRST' <<-'SECOND'\n FIRST\n)\nFIRST\n\tbody\n\tSECOND\n" + contract_call + ') | cat\n',
+        'compound-process-redirect': '{\n' + contract_call + '} > >(cat; :) | cat\n',
+    }
+    for name, body in {**safety_parents, **unsafe_callers}.items():
+        owner = root / ('safety-' + name)
+        owner.mkdir()
+        (owner / '.flea-test-sandbox').touch()
+        direct.write_text('root=$1\n' + body + 'qs -p "$root"\n')
+        syntax = subprocess.run(['bash', '-n', str(direct)], capture_output=True, text=True)
+        assert syntax.returncode == 0, (name, syntax)
+        child = name in unsafe_callers
+        errors = unchecked_calls(scanner)
+        assert bool(errors) == child, (name, errors)
+        result = subprocess.run(['bash', str(direct), str(owner)], cwd=source_root, env=contract_env,
+                                capture_output=True, text=True, timeout=CALLER_TIMEOUT_SECONDS)
+        assert (owner / 'refusals').read_text() == 'HELPER_REFUSED\n', (name, result)
+        assert result.returncode == (0 if child else 1) and ('QS_REACHED' in result.stdout) == child, (name, result)
+        if child:
+            gate = subprocess.run([sys.executable, '-B', str(checker), str(box)], cwd=fixture, capture_output=True,
+                                  text=True, timeout=CALLER_TIMEOUT_SECONDS)
+            assert gate.returncode == 1 and 'parent shell' in gate.stderr, (name, gate)
+        print(f'HEADLESS_COMMONS_SAFETY_CALLER {name} bash_n=0 scan_errors={len(errors)} caller_exit={result.returncode} qs={int(child)}')
     print(f'HEADLESS_COMMONS_CONTROLS direct sources={direct_controls} reader drift={len(variants)} targets=5 passed; OEM token bytes preserved')
     print(f'HEADLESS_COMMONS_CALL_CONTROLS unchecked=6 rejected exit=1; callers={calls} scope-checked')
     print(f'HEADLESS_COMMONS_WHOLE_CALLERS parents={len(parents)} refusal exit=1 qs=not-started; children={len(children)} reach qs but gate rejects exit=1')
@@ -525,6 +652,7 @@ def controls(box):
     print(f'HEADLESS_COMMONS_BOUNDARY_CONTROLS parents={len(boundary_parents)} refusal exit=1 qs=not-started; children={len(boundary_children)} gate rejects exit=1')
     print(f'HEADLESS_COMMONS_NESTING_CONTROLS parents={len(nesting_parents)} refusal exit=1 qs=not-started; children={len(nesting_children)} recorded child scope and gate rejects exit=1')
     print(f'HEADLESS_COMMONS_UNSUPPORTED_CONTROLS children={len(unsupported_children)} reach parent qs but gate rejects exit=1; missing scope fails closed')
+    print(f'HEADLESS_COMMONS_SAFETY_CONTROLS parents={len(safety_parents)} refusal exit=1 qs=not-started; unsafe={len(unsafe_callers)} reach parent qs but gate rejects exit=1')
 
 
 if __name__ == '__main__':
