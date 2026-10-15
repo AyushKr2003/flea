@@ -26,6 +26,7 @@ ShellRoot {
     property var holdCap: null
     property bool holdWatch: false
     property bool holdReadySettling: false
+    property int holdReadyDrops: 0
     property bool holdLandSettling: false
     property double holdStopAt: 0
     property double holdLandAt: 0
@@ -40,7 +41,7 @@ ShellRoot {
 
     function holdDetail() {
         return "phase=" + root.holdPhase + " ready=" + root.holdReadySettling
-            + " lookReady=" + quick.lookReady + " sizeWait=" + quick.sizeWait + " status=" + quick.status
+            + " readyDrops=" + root.holdReadyDrops + " lookReady=" + quick.lookReady + " sizeWait=" + quick.sizeWait + " status=" + quick.status
             + " settling=" + (root.holdSettle !== null && root.holdSettle.running)
             + " capRunning=" + (root.holdCap !== null && root.holdCap.running)
             + " landSettling=" + root.holdLandSettling + " stopAt=" + root.holdStopAt + " landAt=" + root.holdLandAt
@@ -250,6 +251,8 @@ ShellRoot {
     Connections {
         target: root.holdWatch ? quick : null
         function onLookReadyChanged() {
+            if (root.holdPhase === "settle" && !quick.lookReady)
+                root.holdReadyDrops += 1
             if (quick.lookReady && root.holdSettle.running)
                 root.holdReadySettling = true
         }
@@ -520,7 +523,8 @@ ShellRoot {
             root.later(150)
         },
         function () {
-            // j then k inside followSettleMs of the open come back to its file, so nothing reloads and no lookReady change fires.
+            // No captured listing row: a same-file reload must not toggle the independent image-metadata readiness gate.
+            pane.cursorIndex = -1
             quick.lastMoveAt = 0
             quick.follow(root.imagePath(3), "image-x-generic", 1003, "")
             root.holdSettle = root.quickTimer(function (t) { return t.interval === quick.followSettleMs })
@@ -545,7 +549,8 @@ ShellRoot {
         function () {
             root.holdWatch = false
             var detail = root.holdDetail()
-            root.check("quick hold burst lands nothing while settling", root.holdReadySettling && !root.holdLandSettling, detail)
+            root.check("quick hold burst lands nothing while settling", root.holdReadySettling
+                && root.holdReadyDrops === 0 && !root.holdLandSettling, detail)
             root.check("quick hold burst lands once the settle stops", !root.holdTimedOut
                 && root.holdStopAt > 0 && root.holdLandAt >= root.holdStopAt && quick.landed
                 && quick.path === root.imagePath(3) && root.holdSettle.interval === quick.followSettleMs
