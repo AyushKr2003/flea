@@ -341,7 +341,7 @@ case_cap_menus() {
     click_background
     settle
     [[ "$(ipc contextMenuVisible)" == "true" ]] || fail "cap_menus: the background menu never opened"
-    local background_labels='New folder|New file|-|Paste|Select all|Invert selection|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|-|Settings'
+    local background_labels='New folder|New file|-|Paste|Select all|Invert selection|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|Hide code icons|-|Settings'
     [[ "$(ipc contextMenuEntries)" == "$background_labels" ]] \
         || fail "cap_menus: background specimen drew $(ipc contextMenuEntries), want $background_labels"
     shot cap-menus-background

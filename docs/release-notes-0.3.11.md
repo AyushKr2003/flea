@@ -8,6 +8,7 @@
 - Quick Look uses the available height for text, code and PDFs, and keeps portrait images in proportion.
 - PDFs scroll as a continuous stack of pages in the preview column.
 - Code previews use theme colours, including Markdown source and fenced code in List and Columns views (#204, @fsrodrig).
+- Language icons are on by default in List, Grid, Columns and Quick Look, and the menu can turn them off.
 - JSON previews format their contents for reading.
 - GIF previews animate while visible.
 - AppImages show their own icons.

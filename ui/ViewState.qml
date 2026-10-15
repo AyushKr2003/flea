@@ -81,6 +81,10 @@ QtObject {
     // file that never named them.
     readonly property bool keyHints: root.state.keyHints === true
 
+    // Code icons default on; only a saved boolean false disables them, matching schema healing.
+    readonly property bool langMarks: root.state.langMarks !== false
+    function toggleLangMarks() { root.changeKey("langMarks", !root.langMarks) }
+
     // Absent reads off, the way keyHints beside it does.
     readonly property bool highlightToday: root.state.highlightToday === true
 
@@ -329,6 +333,7 @@ QtObject {
     }
 
     function save() {
+        root.writeRevision += 1
         var next = UiState.asked(root.writeBook, root.patch())
         root.writeBook = next
         if (next.start.length > 0)
@@ -361,6 +366,9 @@ QtObject {
 
     // A change another window saved: the settled document with no argument, merged and validated, writes nothing.
     property string settleMode: ""
+    // Local saves and acknowledgements invalidate older snapshots, even after their owed keys clear.
+    property double writeRevision: 0
+    property double settleRevision: 0
     property bool settleDirty: false
     property string pruneInflight: ""
     property string pruneQueued: ""
@@ -380,6 +388,7 @@ QtObject {
         if (UiState.settleBusy(settler.running, root.settleMode, root.settleAnswer))
             return
         root.settleMode = mode
+        root.settleRevision = root.writeRevision
         root.settleAnswer = {}
         settler.command = [Quickshell.env("FLEA_BIN") || "flea", "--ui-state"]
         settler.running = true
@@ -425,6 +434,11 @@ QtObject {
             root.unsaved = UiState.dropInvalid(root.unsaved, root.pruneInflight)
             root.state = UiState.revertedState(root.state, root.pruneInflight, settled)
             root.finishPrune(false)
+            return
+        }
+        if (root.settleRevision !== root.writeRevision) {
+            root.settleDirty = true
+            root.settleNext()
             return
         }
         if (exitCode !== 0) { root.settleNext(); return }
@@ -499,8 +513,10 @@ QtObject {
         // what is still owed and not with the settings this one has just stored.
         root.saveStatus = exitCode === 0 ? "Saved"
             : "Could not save settings · changes apply to this session only"
-        if (exitCode === 0)
+        if (exitCode === 0) {
+            root.writeRevision += 1
             root.unsaved = UiState.acknowledged(root.unsaved, root.writeBook.inflight)
+        }
         var failedPatch = root.writeBook.inflight
         var next = UiState.exited(root.writeBook, exitCode, root.patch())
         root.writeBook = next

@@ -20,8 +20,57 @@ headless_commons "$test_root" || exit 1
 ln -s "$(readlink -m ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 ln -s "$test_root/config/flea/boot/fleatab.qml" "$test_root/config/fleatab.qml" || exit 1
 cp -a ui "$test_root/config/flea" || exit 1
+cp tests/quicklook-code-defaults.qml "$test_root/config/shell.qml" || exit 1
+mkdir -p "$test_root/defaults-state/flea" || exit 1
+
+# Read absent wrap through the actual singleton, before the full suite's navigation writes defaults.
+defaults_probe() {
+    local mode=$1 label=$2 log="$test_root/defaults-$2.log" status
+    case "$mode" in
+        empty) printf '{}\n' > "$test_root/defaults-state/flea/ui.json" ;;
+        off) printf '{"langMarks":false}\n' > "$test_root/defaults-state/flea/ui.json" ;;
+        seeded) env HOME="$test_root/home" XDG_STATE_HOME="$test_root/defaults-state" "$bin" --ui-state '{"langMarks":false}' > "$test_root/defaults-seed.json" || return 1 ;;
+        *) return 1 ;;
+    esac
+    cp "$test_root/defaults-state/flea/ui.json" "$test_root/defaults-input-$label.json" || return 1
+    env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
+        HOME="$test_root/home" XDG_STATE_HOME="$test_root/defaults-state" XDG_CACHE_HOME="$test_root/cache" \
+        XDG_RUNTIME_DIR="$test_root/runtime" QLCODE_DEFAULTS="$mode" FLEA_BIN="$bin" \
+        QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 \
+        dbus-run-session -- bash -c 'timeout 10 qs -p "$1" > "$2" 2>&1' _ "$test_root/config" "$log" 2> "$test_root/defaults-$label-bus.log"
+    status=$?
+    if [[ -n "${FLEA_CI_SUITE_LOGS:-}" ]]; then cp "$log" "$FLEA_CI_SUITE_LOGS/quicklook-defaults-$label.log" || return 1; fi
+    cmp "$test_root/defaults-input-$label.json" "$test_root/defaults-state/flea/ui.json" || return 1
+    [[ "$status" == 0 ]] && grep -aq "QLDEFAULT DONE mode=$mode failures=0" "$log" \
+        && ! grep -aqE 'QLDEFAULT FAIL|TypeError|ReferenceError|Unable to assign|Cannot assign' "$log"
+}
+for mode in empty off; do
+    defaults_probe "$mode" "$mode" || { cat "$test_root/defaults-$mode.log"; printf 'FAIL quicklook-code: absent-wrap %s context\n' "$mode"; exit 1; }
+    grep -ao 'QLDEFAULT .*' "$test_root/defaults-$mode.log"
+done
+# Explicit schema false masks this mutant; both genuinely missing-key contexts must reject it.
+python3 - "$test_root/config/flea/ViewState.qml" <<'PY' || exit 1
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+source = path.read_text()
+anchor = 'readonly property bool previewWrap: root.preview.wrap === true'
+assert source.count(anchor) == 1, 'wrap fallback anchor changed'
+path.write_text(source.replace(anchor, 'readonly property bool previewWrap: root.preview.wrap !== false'))
+PY
+defaults_probe seeded seeded-mutant || { cat "$test_root/defaults-seeded-mutant.log"; printf 'FAIL quicklook-code: schema-seeded masking control\n'; exit 1; }
+for mode in empty off; do
+    if defaults_probe "$mode" "$mode-mutant" > "$test_root/defaults-$mode-wrapper.log" 2>&1; then
+        printf 'FAIL quicklook-code: missing-wrap-true mutant passed %s\n' "$mode"; exit 1
+    fi
+    grep -aq "QLDEFAULT FAIL mode=$mode missing-wrap fallback got=true expected=false" "$test_root/defaults-$mode-mutant.log" \
+        || { cat "$test_root/defaults-$mode-wrapper.log"; printf 'FAIL quicklook-code: %s missed wrap fallback mutant\n' "$mode"; exit 1; }
+done
+cp ui/ViewState.qml "$test_root/config/flea/ViewState.qml" || exit 1
+printf 'QLDEFAULT MUTANT missing-wrap-true schema-seeded-accepted=1 empty-rejected=1 explicit-off-rejected=1\n'
 cp tests/quicklook-code.qml "$test_root/config/shell.qml" || exit 1
-printf '{}\n' > "$test_root/state/flea/ui.json"
+cp tests/langmark-count.js "$test_root/config/langmark-count.js" || exit 1
+env HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" "$bin" --ui-state '{"langMarks":true}' > "$test_root/seed.json" || exit 1
 
 # Sorted by name: a Markdown note, two Rust files (the first of 132 lines), a text file, a remote-route text file with markup, a NUL file, a file over 1 MiB, and 60 lines with a 6,000-character one at line 40.
 fixture="$test_root/fixture"

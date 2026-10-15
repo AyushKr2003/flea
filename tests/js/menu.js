@@ -28,18 +28,22 @@ function separated(rows) {
 }
 function run(check) {
     var file = Menu.listingEntries(state({}))
-    check("Menus and Places inventory has 56 actions", Menu.INVENTORY.length, 56)
+    check("Menus and Places inventory has 57 actions", Menu.INVENTORY.length, 57)
     check("Open with uses the authoritative cut geometry", Icons.pathFor("app-window"), "M3 4h18v16H3z M3 9h18 M6 6.5h.01 M9 6.5h.01")
     check("Restore all uses the authoritative undo geometry", Icons.pathFor("undo"), "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5")
-    check("inventory storage ids are unique", Object.keys(Menu.INVENTORY.reduce(function (out, row) { out[row[0]] = true; return out }, {})).length, 56)
+    check("inventory storage ids are unique", Object.keys(Menu.INVENTORY.reduce(function (out, row) { out[row[0]] = true; return out }, {})).length, 57)
     check("default image menu matches Menus specimen", actions(file),
-          "open,openWith,run,openAsText,cut,copy,paste,duplicate,rename,compress,convert,flashDrive,addToShelf,taildrop,dropbox,trash,addFavourite,toggleHidden")
+          "open,openWith,run,openAsText,cut,copy,paste,duplicate,rename,compress,convert,flashDrive,addToShelf,taildrop,dropbox,trash,addFavourite,toggleHidden,toggleLangMarks")
+    check("code icons ship enabled with the existing code glyph", entry(file, "toggleLangMarks").label + "|" + entry(file, "toggleLangMarks").glyph, "Hide code icons|code")
+    check("code icons flip their verb live", entry(Menu.listingEntries(state({langMarks: false})), "toggleLangMarks").label, "Show code icons")
+    check("Settings can hide the code-icons row", entry(Menu.listingEntries(state({hiddenActions: ["toggleLangMarks"]})), "toggleLangMarks").action, undefined)
+    check("the code-icons row follows Show hidden files", file.findIndex(function (r) { return r.action === "toggleLangMarks" }), file.findIndex(function (r) { return r.action === "toggleHidden" }) + 1)
     check("empty clipboard keeps Paste disabled", entry(file, "paste").disabled, true)
     check("populated clipboard enables Paste", entry(Menu.listingEntries(state({ clipboardAvailable: true })), "paste").disabled, false)
     check("folder omits run and open as text; Pane gives a folder no image or archive flag, so no conversion or extraction", actions(Menu.listingEntries(state({ rowMode: 0o040755, rowIsImage: false, rowName: "Photos" }))),
-          "open,openWith,cut,copy,paste,duplicate,rename,compress,addToShelf,taildrop,dropbox,trash,addFavourite,toggleHidden")
+          "open,openWith,cut,copy,paste,duplicate,rename,compress,addToShelf,taildrop,dropbox,trash,addFavourite,toggleHidden,toggleLangMarks")
     check("background menu includes real creation actions in order", actions(Menu.listingEntries(state({ hasRow: false }))),
-          "newFolder,newFile,paste,selectAll,openTerminal,addFavourite,sort,toggleHidden,settings")
+          "newFolder,newFile,paste,selectAll,openTerminal,addFavourite,sort,toggleHidden,toggleLangMarks,settings")
     var background = Menu.listingEntries(state({ hasRow: false, updateVersion: "0.3.4" }))
     check("a known newer build adds Update Flea under Settings, in the same group, with the download mark",
           background.slice(-2).map(function (r) { return (r.separator ? "|" : r.action) + ":" + r.glyph }).join(","),

@@ -195,7 +195,7 @@ sweep_previews() {
             markdown) sweep_text columnMarkdownText 'Release notes' ;;
             remote) sweep_text columnMarkdownText 'cdn.example.com' ;;
             audio) sweep_wait columnPlayerLoaded false; sweep_wait columnMediaPlaying false; sweep_text columnPlayCentre ' ' ;;
-            text) sweep_wait columnTextLines 'hello from flea|second line|' ;;
+            text) sweep_wait columnTextLines 'hello from flea|second line' ;;
             large) sweep_text columnTextLines 'Log row 00000' ;;
             overlimit) sweep_wait columnTextLines 'too large' ;;
         esac

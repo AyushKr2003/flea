@@ -293,3 +293,7 @@ If this saved you an afternoon, you can
 ## Licence
 
 [MIT](LICENSE).
+
+Language marks: the logos baked into `ui/js/LangMarkPaths.js` are the simple-icons geometry
+(CC0 1.0, https://github.com/simple-icons/simple-icons; the `.svg` sources carry no version
+stamp) and remain their owners' trademarks.

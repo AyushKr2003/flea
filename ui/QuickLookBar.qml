@@ -1,5 +1,6 @@
 import QtQuick
 import "." as Flea
+import "js/LangMarks.js" as LangMarks
 
 // Quick Look's strip: language mark, name, line count and close; no fill, the chrome surface rounds its corners.
 Item {
@@ -7,6 +8,10 @@ Item {
 
     property string markName: "file"
     property string name: ""
+    readonly property string langSlug: ViewState.langMarks ? LangMarks.slugForFile(root.name) : ""
+    readonly property bool thumbDrawn: false
+    property var langLoader: null
+    onLangSlugChanged: LangMarks.syncMark(root, barMark, Qt.resolvedUrl("LangMarkLoader.qml"), Component.Ready)
     // Empty hides the count; it hides too once the name has given up all its room.
     property string countLabel: ""
     // The keyboard is on the close mark; Quick Look's key handler owns the walk, as the PDF viewer's controls do.
@@ -23,7 +28,7 @@ Item {
 
     // The render suite reads the bar's order off these rects, the way PdfViewer.buttonFor opens its buttons.
     function geometry() {
-        return { mark: barMark, markName: barMark.name, name: barName, nameEnd: barName.x + Math.min(barName.width, barName.implicitWidth),
+        return { mark: barMark, language: root.langLoader ? root.langLoader.item : null, markName: barMark.name, name: barName, nameEnd: barName.x + Math.min(barName.width, barName.implicitWidth),
             lines: barLines, countShown: root.countShown, close: barClose, bar: root, height: root.height,
             segment: null, rendered: null, source: null }
     }
@@ -47,6 +52,7 @@ Item {
         y: Math.round((parent.height - Theme.spacing.hairline - height) / 2)
         width: Theme.chromeMarkSize
         height: Theme.chromeMarkSize
+        visible: root.langSlug === ""
         name: root.markName
         color: Theme.color.foreground
     }

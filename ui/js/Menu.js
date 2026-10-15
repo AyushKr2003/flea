@@ -104,6 +104,7 @@ var INVENTORY = [
     ["removeFavourite", "Remove from Favorites", "minus", "PR", "inspect"],
     ["sort", "Sort by", "sort", "B", "view"],
     ["toggleHidden", "Show hidden files", "eye", "FB", "view"],
+    ["toggleLangMarks", "Show code icons", "code", "FB", "view"],
     ["extThumbs", "Show thumbnails", "image", "B", "view"],
     ["settings", "Settings", "sliders", "B", "settings"],
     ["updateFlea", "Update Flea", "download", "B", "settings"],
@@ -259,6 +260,11 @@ function availableEntry(e, p, kind) {
         var hidden = hiddenRow(p.showHidden)
         e.label = hidden.label
         e.glyph = hidden.glyph
+    }
+    if (e.action === "toggleLangMarks") {
+        var code = codeIconsRow(p.langMarks)
+        e.label = code.label
+        e.glyph = code.glyph
     }
     // The class switch ships hidden; switched on, it is present only on network,
     // phone or USB storage and reads Show while that class is off, Hide while on.
@@ -457,14 +463,18 @@ function isHidden(hiddenActions, action) {
     return false
 }
 
-// The one state toggle either menu draws. The label flips with the state, the house pattern
-// (ui/MenuRow.qml draws no checkmark), and the verb is the key's own.
+// Hidden-files labels and glyphs flip with state; MenuRow draws no checkmark.
 function hiddenRow(showHidden) {
     return {
         label: showHidden ? "Hide hidden files" : "Show hidden files",
         action: "toggleHidden",
         glyph: showHidden ? "eye-off" : "eye"
     }
+}
+
+// Code icons use the hidden-files row's label flip and the existing code glyph.
+function codeIconsRow(langMarks) {
+    return { label: langMarks !== false ? "Hide code icons" : "Show code icons", action: "toggleLangMarks", glyph: "code" }
 }
 
 // ui/Header.qml's own rows, on a right click over the column titles. Name is not among them: it is

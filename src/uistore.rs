@@ -281,6 +281,23 @@ mod tests {
     }
 
     #[test]
+    fn language_marks_heal_on_and_saved_off_survives_settle() {
+        let d = TestDir::new("uistore-langmarks");
+        let s = store(&d);
+        assert_eq!(s.read().get("langMarks").and_then(Json::as_bool), Some(true));
+        fs::create_dir_all(s.file().parent().expect("state dir")).expect("state dir");
+        fs::write(s.file(), r#"{"langMarks":"false"}"#).expect("invalid preference");
+        s.settle().expect("heal before GUI launch");
+        let healed = fs::read_to_string(s.file()).expect("healed document");
+        assert_eq!(jsondoc::parse(&healed).expect("JSON").get("langMarks").and_then(Json::as_bool), Some(true));
+        fs::write(s.file(), r#"{"langMarks":false}"#).expect("saved off");
+        s.settle().expect("settle saved off");
+        s.update(&patch(r#"{"hidden":true}"#)).expect("unrelated preference");
+        let kept = fs::read_to_string(s.file()).expect("kept document");
+        assert_eq!(jsondoc::parse(&kept).expect("JSON").get("langMarks").and_then(Json::as_bool), Some(false));
+    }
+
+    #[test]
     fn a_malformed_file_reads_the_full_default_shape_rather_than_throwing() {
         let d = TestDir::new("uistore-malformed");
         let s = store(&d);

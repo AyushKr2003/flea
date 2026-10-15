@@ -6,6 +6,7 @@ import "js/Drag.js" as DragOps
 import "js/Format.js" as Format
 import "js/GridNames.js" as GridNames
 import "js/Icons.js" as Icons
+import "js/LangMarks.js" as LangMarks
 
 // One grid cell: the same mark the list row draws, in a larger slot, with the name under it.
 Item {
@@ -64,6 +65,12 @@ Item {
     // A thumbnail path is not a thumbnail: the cache file can be evicted between the pane's answer
     // and the decode, and a tile whose Image failed to load has to be marked by its kind instead.
     readonly property bool thumbDrawn: root.thumb.length > 0 && tileThumb.status !== Image.Error
+    // One filename lookup; only a mapped row without a thumbnail builds the mark's Loader.
+    readonly property string langSlug: ViewState.langMarks ? LangMarks.slugForRow(root.row) : ""
+    property var langLoader: null
+    function syncLangMark() { LangMarks.syncMark(root, markGlyph, Qt.resolvedUrl("LangMarkLoader.qml"), Component.Ready) }
+    onLangSlugChanged: root.syncLangMark()
+    onThumbDrawnChanged: root.syncLangMark()
     // The same alias ui/Row.qml carries, so ui/Ipc.qml's rowThumbReady answers for a tile too.
     readonly property alias iconStatus: tileThumb.status
     readonly property Item thumbItem: tileThumb
@@ -121,8 +128,9 @@ Item {
         }
 
         Flea.Glyph {
+            id: markGlyph
             anchors.fill: parent
-            visible: !root.thumbDrawn
+            visible: !root.thumbDrawn && root.langSlug === ""
             // A folder mark never grows past 128, centred in the larger slots, so only thumbnails grow.
             maxSize: Density.glyphCap(ViewState.thumbnailPixels)
             name: root.row ? Icons.glyphForRow(root.row.i, root.row.p) : "file"

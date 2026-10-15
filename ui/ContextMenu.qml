@@ -192,6 +192,7 @@ Item {
     function listingContext(flyoutAction, includeHidden) {
         return MenuContext.listingContext(root, flyoutAction, includeHidden, {
             scripts: Flea.Scripts.entries, hiddenActions: ViewState.menuHidden,
+            langMarks: ViewState.langMarks,
             thumbPreview: ViewState.preview, updateVersion: UpdateCheck.menuVersion
         })
     }
@@ -734,4 +735,6 @@ Item {
         }
     }
     onCompareKindsChanged: root.refreshProviderRows()
+    readonly property bool langMarks: ViewState.langMarks
+    onLangMarksChanged: root.refreshProviderRows()
 }

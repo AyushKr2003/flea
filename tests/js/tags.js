@@ -56,7 +56,7 @@ function run(check) {
           MenuSuite.entry(file, "tags").submenu.map(function (r) { return r.separator === true ? "sep" : r.id }).join(","), "Red,Orange,Yellow,Green,Blue,Purple,Gray,sep,__clear__")
     var states = Tags.statesFor([["Red", "Blue"], ["Red"]])
     check("the flyout carries each state", Tags.tagEntries(states).filter(function (r) { return r.id === "Red" || r.id === "Blue" }).map(function (r) { return r.tagRow.state }).join(","), "applied,mixed")
-    check("Tags row follows Add to Favorites", MenuSuite.actions(file).split(",").slice(-3).join(","), "addFavourite,tags,toggleHidden")
+    check("Tags row follows Add to Favorites", MenuSuite.actions(file).split(",").slice(-4).join(","), "addFavourite,tags,toggleHidden,toggleLangMarks")
     check("a menu with no flyout offers no Tags row, as where the filesystem cannot store tags", MenuSuite.entry(Menu.listingEntries(MenuSuite.state({})), "tags").action, undefined)
     var window = [{ n: "a", tg: ["Red", "Blue"] }, { n: "b" }]
     var use = {}

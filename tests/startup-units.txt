@@ -1,4 +1,4 @@
-# Units loaded before the startup-objects probe's first rows settle, one per line; bytes is their summed ceiling, see AGENTS.md.
+# First-frame UI units and their summed source bytes, pinned by startup-objects.sh.
 Backend.qml
 ChromeBar.qml
 ChromeButton.qml
@@ -25,6 +25,8 @@ Header.qml
 Ipc.qml
 IpcMenuState.qml
 IpcPreviewState.qml
+LangMark.qml
+LangMarkLoader.qml
 List.qml
 LoadingState.qml
 LocalSend.qml
@@ -115,14 +117,16 @@ js/Input.js
 js/KeyName.js
 js/Keymap.js
 js/Kinds.js
+js/LangMarkPaths.js
+js/LangMarks.js
 js/Lists.js
 js/LocalSend.js
 js/MakeDefault.js
 js/MarkdownPrepared.js
 js/Marks.js
-js/Material.js
 js/Marquee.js
 js/Match.js
+js/Material.js
 js/Menu.js
 js/MenuContext.js
 js/MenuWheel.js
@@ -175,4 +179,4 @@ js/TrashDates.js
 js/UiState.js
 js/Update.js
 js/UserDirs.js
-bytes 1656921
+bytes 1773136

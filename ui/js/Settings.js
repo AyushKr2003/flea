@@ -46,7 +46,7 @@ var MENU_GROUPS = [
     { id: "openInspect", label: "Open and inspect",
       ids: ["openwith", "run", "openAsText", "openTerminal", "moveto", "copyto", "properties", "permissions", "makeExecutable", "copyAs", "showOriginal", "tags"] },
     { id: "extras", label: "Extras", features: ["placeMenu"],  // features gate a surface, not a row
-      ids: ["shelf", "compress", "extract", "convert", "flashDrive", "taildrop", "localsend", "dropbox", "sharelink", "runScript", "placeMenu", "updateFlea", "extThumbs", "pasteAs", "invertSelection"] }
+      ids: ["shelf", "compress", "extract", "convert", "flashDrive", "taildrop", "localsend", "dropbox", "sharelink", "runScript", "placeMenu", "updateFlea", "toggleLangMarks", "extThumbs", "pasteAs", "invertSelection"] }
 ]
 
 // Open and Show hidden files draw the lock mark instead of a box, and the board says why: a menu that cannot open the row under the cursor is not a menu, and the hidden toggle is the one background row with no keyboard-independent alternative.
@@ -60,7 +60,7 @@ var LABELS = {
     compress: "Compress", extract: "Extract", localsend: "Send with LocalSend",
     convert: "Convert", flashDrive: "Flash to drive", taildrop: "Send with Taildrop", dropbox: "Move to Dropbox", tags: "Tags",
     sharelink: "Copy share link", open: "Open", toggleHidden: "Show hidden files", shelf: "Enable shelf", placeMenu: "Places row menu", runScript: "Run script",
-    updateFlea: "Update Flea", extThumbs: "Show thumbnails", run: "Run", openAsText: "Open as text"
+    updateFlea: "Update Flea", toggleLangMarks: "Show code icons", extThumbs: "Show thumbnails", run: "Run", openAsText: "Open as text"
 }
 
 // The four values of the Keys row, in SettingsKeys.html's own chooser order. The first is what a missing or unrecognised stored name resolves to, which that board says is Default.
@@ -75,7 +75,7 @@ var GLYPHS = {
     delete: "trash", openwith: "app-window", moveto: "folder-plus", copyto: "copy", properties: "info",
     extract: "archive-out",
     convert: "sliders", flashDrive: "drive", sharelink: "network", open: "folder-open", toggleHidden: "eye", placeMenu: "folder-open", runScript: "terminal",
-    updateFlea: "download", extThumbs: "image", shelf: "shelf", run: "play", openAsText: "file-text", tags: "tag"
+    updateFlea: "download", toggleLangMarks: "code", extThumbs: "image", shelf: "shelf", run: "play", openAsText: "file-text", tags: "tag"
 }
 
 // The shelf switch wears the cut glyph the menu row draws, never the animated brand mark.
@@ -354,6 +354,7 @@ function viewRows(state) {
         // Issue 70: a dependent greys in place at the same column while hidden files are off, with no hint.
         { kind: "check", id: "hiddenLast", label: "Hidden files last", glyph: "eye-off",
           on: data.hiddenLast === true, available: data.hidden === true },
+        { kind: "check", id: "langMarks", label: "Show code icons", glyph: "code", on: data.langMarks !== false },
         // Issue 179: the group's last row; off, every folder takes the default sort and nothing is written.
         { kind: "check", id: "rememberSort", label: "Remember each folder's sort", glyph: "sort",
           on: data.rememberSort !== false },

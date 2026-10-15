@@ -3,6 +3,7 @@
 import QtQuick
 import Quickshell
 import "flea" as Flea
+import "langmark-count.js" as LangCost
 
 // Rowcost: one Row and one GridTile, built as ui/List.qml and ui/GridArea.qml build them, are counted against the measured objects.
 ShellRoot {
@@ -111,6 +112,8 @@ ShellRoot {
     property int clipBuiltCount: -1
 
     function measureIdle() {
+        LangCost.plain(root.failures, probeRow, "rowcost", root.rowMax)
+        LangCost.plain(root.failures, probeTile, "rowcost-grid", root.gridMax)
         var rowCount = root.countUnder(probeRow)
         var gridCount = root.countUnder(probeTile)
         if (rowCount > root.rowMax)

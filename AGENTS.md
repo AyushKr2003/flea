@@ -2544,6 +2544,12 @@ Permissions buttons and the Permissions close mark.
 
 ## How the list renders
 
+Language marks default on through the persisted `langMarks` boolean in `src/uischema.rs`; saved false stays off.
+The file and background menus offer Hide code icons directly after Show hidden files, and Settings > View
+has the same switch. `ui/ViewState.qml` shares it across panes and windows. Off, `ui/Row.qml`,
+`ui/GridTile.qml`, `ui/ColumnRow.qml` and `ui/QuickLookBar.qml` keep the generic glyph slot and create
+neither a `LangMarkLoader` nor a `LangMark`; toggling changes the slot in place without a re-list.
+
 `ui/Pane.qml`'s `ListView` sets `clip: true` because the top row of a wheel-scrolled viewport is
 only partly inside the list, and the rest of it draws over the column header: the cursor's accent
 band, its edge bar and the row's filename all landed on top of the header labels and the header
@@ -4238,6 +4244,16 @@ After the Markdown Source merge, the current count and ceiling of `tests/markdow
 The gmfix rail and held-button repair moves three ceilings, re-derived with `wc -l`: `ui/Sidebar.qml` 713 to 721 for the single highlighted index and its separate current-place and visual bindings; `tests/sidebar-flows.qml` 687 to 691 for the fill, accent edge, Trash ink and unfocused recipe checks; and `tests/button-members.qml` 518 to 523 for the whole pixel press height, frame settling and save-review fixture. `tests/startup-units.txt` retains its 169 units and moves its bytes line from 1,628,263 to 1,629,710, the `wc -c` sum with the frame-only button animation and the rail highlight bindings and comments; no new first-frame unit is imported, and `startupObjectLimit` stays 583.
 
 The 0.3.11 stage join of the rail highlight fix and Drag to Trash re-derives two ceilings with `wc -l` on the merged tree: `ui/Sidebar.qml` 721 to 716, because the Trash rows leave for `ui/RailTrashRow.qml`, which carries the rail's `highlighted` binding, and `tests/button-members.qml` 523 to 525 for both sides' checks. `tests/rail-highlight.qml` shows the Trash row and checks that the keyboard cursor on it draws the fill; `tests/sidebar-flows.sh` rejects a Trash row without that binding.
+
+The 0.3.11 language-mark port re-derives three file ceilings with `wc -l`: `ui/Row.qml` 459 to 466 for the filename binding and demand-created Loader, `tests/rowcost.qml` 438 to 441 and `tests/columnscost.qml` 416 to 418 for the unchanged ordinary-row object census. `ui/LangMark.qml` (51 lines) retains the approved file page and filled logos; `ui/LangMarkLoader.qml` (25) supplies the existing glyph slot, ink and size without building on non-code rows. The first-frame unit pin adds `js/LangMarks.js` and sums its bytes with `wc -c`; the ordinary-window object ceiling stays 587 and its measured baseline stays 585.
+
+Under the superseded default-OFF ruling, the langtoggle follow-up re-derived `src/uischema.rs` 570 to 590 for the then opt-in boolean and its type checks, `ui/Pane.qml` 1234 to 1235 for dispatch, `ui/ViewState.qml` 549 to 553 for shared state, `ui/ContextMenu.qml` 737 to 740 for the live menu context and open-menu label refresh, `ui/js/Menu.js` 503 to 513 for the row recipe, `ui/js/Settings.js` 475 to 476 for its checkbox, `tests/js/menu.js` 669 to 673 and `tests/js/settings.js` 394 to 397 for the matching row assertions. `tests/startup-units.txt` keeps the same 173 units and sets bytes to 1644259, summed with `wc -c`; the default-off code listing still builds 585 objects. No code was compressed to fit a ceiling.
+
+The controller extension to the language-mark port uses the same demand-built mark in `ui/QuickLookBar.qml` (126 lines), following CodePreview and RenderedPreviews in the existing foreground slot. `tests/quicklook-code.qml` moves its recorded ceiling from 452 to 463, re-derived with `wc -l`, for the actual Rust mark, hidden kind glyph, ink and size checks and the native reader of drawn coloured text. The Markdown bar check reads both the approved page stroke and the original filled logo.
+
+Before the default-ON ruling, the language-mark startup follow-up kept the filename map, 35-key list and demand-construction helper in `ui/js/LangMarks.js` (114 lines, 3,453 bytes). The unchanged SVG table and lookup move to `ui/js/LangMarkPaths.js` (47 lines, 108,011 bytes), imported in production only by the demand-created `ui/LangMark.qml`. The first-frame unit set remains 173 and its source byte pin is 1,643,188, adding 3,917 bytes over b8: the mapping unit plus 464 bytes in the existing row bindings. The startup gate explicitly refuses both language QML units and the path-data unit before its startup cut; the object census remains exactly 585 with zero language objects.
+
+The default-ON language-mark ruling keeps the existing glyph slot and ink and respects a saved false. The first real default-ON startup census measured 600 objects, three LangMark and three LangMarkLoader objects, against 585 with explicit OFF. The unchanged two-object headroom puts the default ceiling at 602 and keeps explicit OFF at 587; both exact baselines are asserted. The measured default unit set is 176, adding LangMark.qml, LangMarkLoader.qml and js/LangMarkPaths.js to the prior 173; current source-byte sums are 1755027 ON and 1644293 OFF. The saved-OFF profile retains the same unit names and cold language units. File ceilings are re-derived with wc -l: src/uischema.rs 595, src/uistore.rs 568 and tests/js/settings.js 398 for missing/invalid fallback, actual pre-GUI settle and saved-false checks. No artwork, key or geometry changes.
 
 ## The key table is generated
 

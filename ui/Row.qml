@@ -4,6 +4,7 @@ import qs.Commons
 import "js/Columns.js" as Columns
 import "js/Format.js" as Format
 import "js/Icons.js" as Icons
+import "js/LangMarks.js" as LangMarks
 import "js/Match.js" as Match
 import "js/Recent.js" as Recent
 import "." as Flea
@@ -99,6 +100,12 @@ Item {
     // A thumbnail path is not a thumbnail: the cache file can be evicted between the pane's answer
     // and the decode, and a row whose Image failed to load has to be marked by its kind instead.
     readonly property bool thumbDrawn: root.thumb.length > 0 && thumbImage.status !== Image.Error
+    // One filename lookup; only a mapped row without a thumbnail builds the mark's Loader.
+    readonly property string langSlug: ViewState.langMarks ? LangMarks.slugForRow(root.row) : ""
+    property var langLoader: null
+    function syncLangMark() { LangMarks.syncMark(root, icon, Qt.resolvedUrl("LangMarkLoader.qml"), Component.Ready) }
+    onLangSlugChanged: root.syncLangMark()
+    onThumbDrawnChanged: root.syncLangMark()
 
     // The editor sits inside the row's own height at every density; only an error line below it adds to it.
     implicitHeight: root.renaming && renameLoader.item ? Theme.fileRowHeight + renameLoader.item.errorHeight : Theme.fileRowHeight
@@ -158,7 +165,7 @@ Item {
 
     Glyph {
         id: icon
-        visible: !root.thumbDrawn
+        visible: !root.thumbDrawn && root.langSlug === ""
         anchors.left: parent.left
         anchors.leftMargin: Theme.spacing.rowPaddingX + root.leadingSlot
         anchors.verticalCenter: parent.verticalCenter

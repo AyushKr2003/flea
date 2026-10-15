@@ -3,6 +3,7 @@
 import QtQuick
 import Quickshell
 import "flea" as Flea
+import "langmark-count.js" as LangCost
 // The same resolved URL ui/List.qml imports, so this is the list's own library instance and not a copy.
 import "flea/js/ClipMarks.js" as ClipMarks
 
@@ -177,6 +178,7 @@ ShellRoot {
         for (var i = 0; i < root.sampleRows.length; i++) {
             var d = root.delegateAt(i)
             if (d === null) continue
+            LangCost.plain(root.failures, d, "listcost-row-" + i, 22)
             if (d.clipMark !== "")
                 root.fail("empty draws " + d.clipMark + " on " + root.sampleRows[i].n + ", want no mark")
             if (d.width !== list.rowWidth)

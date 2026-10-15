@@ -3,6 +3,7 @@
 import QtQuick
 import Quickshell
 import "flea" as Flea
+import "langmark-count.js" as LangCost
 
 // e6 columnscost: a ColumnsArea at the shipped default limit (3) builds no
 // great-grandparent or grandparent pane, and one ColumnRow holds its ceiling.
@@ -269,6 +270,7 @@ ShellRoot {
     function fail(text) { root.failures.push(text) }
 
     function checkRowBudget() {
+        LangCost.plain(root.failures, probeRow, "columnscost", root.columnRowMax)
         var rowCount = root.countUnder(probeRow)
         if (rowCount > root.columnRowMax)
             root.fail("a column row holds " + rowCount + " objects over the " + root.columnRowMax + " ceiling")

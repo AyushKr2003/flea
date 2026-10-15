@@ -111,7 +111,7 @@ function runRows(check) {
     check("the current menu controls include Permissions, Update Flea and the retained hints preference",
           menus.filter(function (r) { return r.kind === "check" })
                .map(function (r) { return r.id }).join(","),
-          "cut,copy,paste,duplicate,rename,trash,delete,openwith,run,openAsText,openTerminal,moveto,copyto,properties,permissions,makeExecutable,copyAs,showOriginal,tags,shelf,compress,extract,convert,flashDrive,taildrop,localsend,dropbox,sharelink,runScript,placeMenu,updateFlea,extThumbs,pasteAs,invertSelection,keyHints")
+          "cut,copy,paste,duplicate,rename,trash,delete,openwith,run,openAsText,openTerminal,moveto,copyto,properties,permissions,makeExecutable,copyAs,showOriginal,tags,shelf,compress,extract,convert,flashDrive,taildrop,localsend,dropbox,sharelink,runScript,placeMenu,updateFlea,toggleLangMarks,extThumbs,pasteAs,invertSelection,keyHints")
     // The one check that is not a menu action: it says how every row is drawn, not whether it is. Since 2026-09-10 it is off by default, with the rail's own detail rows, and src/uischema.rs stores that default, so an absent preference reads off and not on.
     check("the hints row defaults off, as ruled over the boards",
           find(menus, "keyHints").label + "|" + find(menus, "keyHints").on,
@@ -224,7 +224,7 @@ function runPresets(check) {
         check("an override with no reset key announces the size alone", TextSize.announce({ mode: 16 }, 14), "Text size 16px")
     })
     var menuRows = Settings.menuRows([], true)
-    check("SettingsMenus contains exactly 34 action switches", menuRows.filter(function (r) { return r.kind === "check" && r.id !== "keyHints" }).length, 34)
+    check("SettingsMenus contains exactly 35 action switches", menuRows.filter(function (r) { return r.kind === "check" && r.id !== "keyHints" }).length, 35)
     // The board's Tags row is one of those switches.
     check("the added switch is the Tags menu row", find(menuRows, "tags").label, "Tags")
     check("Delete permanently is visually destructive", find(menuRows, "delete").role, "error")
@@ -232,6 +232,10 @@ function runPresets(check) {
 }
 
 function runCompletionRows(check) {
+    var code = find(Settings.rows("view", {}), "langMarks")
+    check("code icons have an on-by-default View checkbox", [code.kind, code.label, code.glyph, code.on].join("|"), "check|Show code icons|code|true")
+    check("the View checkbox respects saved OFF", find(Settings.rows("view", { data: { langMarks: false } }), "langMarks").on, false)
+    check("invalid code-icon values heal to the enabled checkbox", find(Settings.rows("view", { data: { langMarks: "false" } }), "langMarks").on, true)
     var places = Settings.rows("places", {})
     check("Places spells the manager group Favorites", places[0].label, "Favorites")
     // SettingsRest rules 3 and 4: Add rides the heading it governs, and nothing floats under the list.

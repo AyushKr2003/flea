@@ -26,7 +26,8 @@ function runInventory(check) {
           tagSubmenu: [{ id: "Red", label: "Red" }] }
     ]
     for (var s = 0; s < shapes.length; s++) {
-        var rows = Menu.listingEntries({
+        // Compare state-toggle wording while off, matching the customization labels.
+        var rows = Menu.listingEntries({ langMarks: false,
             showHidden: false, hasRow: true, dropboxPath: "/home/jw/Dropbox",
             taildropPeers: [{ id: "x", label: "Box" }], taildropInstalled: true, dropboxInstalled: true,
             localSendInstalled: true, clipboardAvailable: true,
@@ -56,7 +57,7 @@ function runInventory(check) {
         switched = switched.concat(Settings.MENU_GROUPS[g].ids)
     // The background menu's rows count too where a switch governs them, as Update Flea's does once an update is known.
     // storageClass "usb" builds the ExtThumbs row the way a removable drive does, so its switch is covered too.
-    var background = Menu.listingEntries({ hasRow: false, showHidden: false, hiddenActions: [], updateVersion: "0.3.4", storageClass: "usb", thumbPreview: {} })
+    var background = Menu.listingEntries({ hasRow: false, showHidden: false, langMarks: false, hiddenActions: [], updateVersion: "0.3.4", storageClass: "usb", thumbPreview: {} })
     for (var b = 0; b < background.length; b++) {
         if (switched.indexOf(background[b].id) >= 0) {
             built[background[b].id] = background[b].label
@@ -137,7 +138,7 @@ function runMaster(check) {
     check("every heading reports the group it governs, and a group of one row has no master at all",
           groups.map(function (row) { return row.label + "|" + (row.master ? row.value + "|" + row.state : "no master") }).join(", "),
           "Basic file actions|6 of 6|all, Destructive|no master, Open and inspect|8 of 12|some, "
-          + "Extras|15 of 15|all, Shortcuts|no master, Always shown|no master")
+          + "Extras|16 of 16|all, Shortcuts|no master, Always shown|no master")
     var inspect = groups[2]
     check("a heading with a master is a focus stop and one without is not",
           Settings.focusable(inspect) + "|" + Settings.focusable(groups[1]), "true|false")

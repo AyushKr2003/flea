@@ -28,6 +28,7 @@ function listingContext(root, flyoutAction, includeHidden, environment) {
     var view = providerView(root.lastProviderAnswer, live(root))
     return {
         showHidden: root.showHidden,
+        langMarks: environment.langMarks !== false,
         hasRow: root.hasRow,
         rowInDropbox: root.rowInDropbox,
         dropboxPath: view.dropboxPath,

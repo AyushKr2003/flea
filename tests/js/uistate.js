@@ -1,4 +1,5 @@
 .import "../../ui/js/UiState.js" as UiState
+.import "sourcefixture.js" as Source
 
 // ui/ViewState.qml's writer bookkeeping and the patch it builds. The window shows the column change
 // the instant it is made and the state file learns about it through a process, so the only thing
@@ -9,6 +10,46 @@
 var OLD = "{\"columns\":[\"name\",\"size\",\"date\"]}"
 var NEW = "{\"columns\":[\"name\",\"date\"]}"
 var THIRD = "{\"columns\":[\"name\"]}"
+
+
+// Execute the production async boundary with controlled process completion order.
+function sharedSettle() {
+    var source = Source.source("ui/ViewState.qml")
+    var settler = { running: false }
+    var disk = { value: '{"keys":"vim","columns":["name","size","date"],"density":"compact"}' }
+    var stateFile = { text: function () { return disk.value } }
+    var root = { state: JSON.parse(disk.value), unsaved: {}, writeBook: UiState.book(),
+                 writeRevision: 0, settleRevision: 0, settleMode: "", settleDirty: false,
+                 pruneQueued: "", pruneInflight: "", settleAnswer: {}, favouritesReadError: "",
+                 writes: [], failures: 0 }
+    root.run = function (patch) { root.writes.push(patch) }
+    root.saveFailed = function () { root.failures += 1 }
+    root.favouritesReadFailed = function () { throw new Error("unexpected favourites read failure") }
+    var functions = { changeKey: "key, value", owe: "key, next, owed", patch: "", save: "",
+                      rememberNavigation: "path, tabs", wrote: "exitCode", applyShared: "text",
+                      settleStart: "mode", settleLanded: "half", settleNext: "", settleDone: "exitCode, out",
+                      finishPrune: "failed", pruneFailed: "", syncFavourites: "text" }
+    function compile(body, parameters) {
+        return new Function("root", "UiState", "settler", "stateFile", "Quickshell",
+            "return function (" + parameters + ") {" + body + "}")(
+                root, UiState, settler, stateFile, { env: function () { return "" } })
+    }
+    for (var name in functions)
+        root[name] = compile(Source.block(source, "function " + name + "(", "ui/ViewState.qml"), functions[name])
+    var processSource = source.substring(source.indexOf("property var settler: Process"))
+    var stopped = compile(Source.block(processSource, "onRunningChanged:", "ui/ViewState.qml settler"), "")
+    function finish(text, exitFirst, idleLast) {
+        // A real exit precedes runningChanged, but either half can reach settleDone while running is still true.
+        settler.running = idleLast
+        root.settleLanded(exitFirst ? { code: 0 } : { text: text })
+        root.settleLanded(exitFirst ? { text: text } : { code: 0 })
+        if (idleLast) {
+            settler.running = false
+            stopped()
+        }
+    }
+    return { root: root, settler: settler, disk: disk, finish: finish }
+}
 
 function run(check) {
     check("a fresh book has landed nothing of its own", UiState.book().saved, "")
@@ -373,4 +414,76 @@ function run(check) {
     check("a queued prune spends before a dirty re-read", UiState.settleNext(true, '{"columns":[]}'), "prune")
     check("a dirty flag alone re-reads", UiState.settleNext(true, ""), "apply")
     check("and a quiet settle ends idle", UiState.settleNext(false, ""), "idle")
+
+    // A snapshot cannot rewind a local change once its writer has cleared the owed value.
+    for (var beforeIntent of [true, false]) {
+        for (var exitFirst of [true, false]) {
+            for (var idleLast of [true, false]) {
+                var race = sharedSettle()
+                var label = "read " + (beforeIntent ? "before intent" : "before acknowledgement") +
+                    (exitFirst ? ", exit first" : ", text first") + (idleLast ? ", idle last" : ", already idle")
+                if (beforeIntent) race.root.applyShared(race.disk.value)
+                race.root.changeKey("keys", "mac")
+                if (!beforeIntent) race.root.applyShared(race.disk.value)
+                race.disk.value = '{"keys":"mac"}'
+                race.root.wrote(0)
+                race.finish('{"keys":"vim"}', exitFirst, idleLast)
+                check(label + ": the older snapshot cannot rewind Mac", race.root.state.keys, "mac")
+                check(label + ": the write was acknowledged", JSON.stringify(race.root.unsaved), "{}")
+                check(label + ": the stale result starts a fresh read", race.root.settleMode, "apply")
+                // A newer external edit is still accepted by the fresh read and never starts a writer.
+                race.disk.value = '{"keys":"windows","density":"normal"}'
+                race.finish(race.disk.value, !exitFirst, idleLast)
+                check(label + ": a newer external preset still lands", race.root.state.keys, "windows")
+                check(label + ": an external key beside it still lands", race.root.state.density, "normal")
+                check(label + ": the fresh read drains", race.root.settleMode + "|" + race.root.settleDirty, "|false")
+                check(label + ": external reads never write", race.root.writes.length, 1)
+            }
+        }
+    }
+
+    // Navigation has its own local writer entry, and it invalidates an older whole-document snapshot too.
+    var navigation = sharedSettle()
+    navigation.root.applyShared(navigation.disk.value)
+    navigation.root.rememberNavigation("/a", { paths: ["/a"], index: 0 })
+    navigation.finish('{"keys":"default"}', true, false)
+    check("navigation keeps an older snapshot from applying beside its write", navigation.root.state.keys, "vim")
+    check("navigation asks for a fresh read", navigation.root.settleMode, "apply")
+
+    // A failed valid write keeps its owed value, applies unrelated external changes, and adds no phantom retry.
+    var failedWrite = sharedSettle()
+    failedWrite.root.changeKey("keys", "mac")
+    failedWrite.root.applyShared(failedWrite.disk.value)
+    failedWrite.root.wrote(2)
+    failedWrite.finish('{"keys":"vim","density":"normal"}', false, true)
+    check("a failed writer keeps the local preset", failedWrite.root.state.keys, "mac")
+    check("and still owes it", JSON.stringify(failedWrite.root.unsaved), '{"keys":"mac"}')
+    check("while an unrelated external change applies", failedWrite.root.state.density, "normal")
+    check("the failed writer is reported once", failedWrite.root.failures, 1)
+    check("and no writer or read is stranded", failedWrite.root.writeBook.inflight + "|" + failedWrite.root.settleMode, "|")
+
+    // A stale apply spends a queued prune first, keeps the dirty read, then retries only the valid owed key.
+    for (var pruneIdleLast of [true, false]) {
+        var prune = sharedSettle()
+        prune.root.changeKey("columns", ["name", "bogus"])
+        prune.root.applyShared(prune.disk.value)
+        prune.root.changeKey("density", "normal")
+        prune.root.wrote(2)
+        prune.finish(prune.disk.value, true, pruneIdleLast)
+        check("a queued prune precedes the stale read retry", prune.root.settleMode, "prune")
+        check("the dirty read survives the queued prune", prune.root.settleDirty, true)
+        prune.finish(prune.disk.value, false, pruneIdleLast)
+        check("the prune restores only the refused columns", JSON.stringify(prune.root.state.columns), '["name","size","date"]')
+        check("the valid local key survives the prune", prune.root.state.density, "normal")
+        check("only the valid key is retried", prune.root.writeBook.inflight, '{"density":"normal"}')
+        check("a queued valid write starts once after pruning", prune.root.writes.join("|"), '{"columns":["name","bogus"]}|{"density":"normal"}')
+        prune.root.wrote(0)
+        prune.finish(prune.disk.value, true, pruneIdleLast)
+        check("the post-prune acknowledgement also invalidates its old read", prune.root.state.density, "normal")
+        prune.disk.value = '{"columns":["name","size","date"],"density":"normal","hidden":true}'
+        prune.finish(prune.disk.value, false, pruneIdleLast)
+        check("the post-prune fresh read still accepts an external change", prune.root.state.hidden, true)
+        check("pruning and rereading leave no owed keys or pending process",
+              JSON.stringify(prune.root.unsaved) + "|" + prune.root.writeBook.inflight + "|" + prune.root.settleMode, "{}||")
+    }
 }

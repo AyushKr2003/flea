@@ -21,6 +21,7 @@ chmod 700 "$test_root/runtime" || exit 1
 ln -s "$PWD/ui" "$test_root/config/flea" || exit 1
 headless_commons "$test_root" || exit 1
 ln -s "$(readlink -f ui/boot/Ui)" "$test_root/config/Ui" || exit 1
+ln -s "$PWD/tests/langmark-count.js" "$test_root/config/langmark-count.js" || exit 1
 cp tests/columnscost.qml "$test_root/config/shell.qml" || exit 1
 
 output=$(env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
@@ -38,3 +39,4 @@ if [ "$pass_count" -ne 1 ] || [ "$fail_count" -ne 0 ]; then
     exit 1
 fi
 printf '%s\n' "$output" | grep -o 'COLUMNCOST PASS.*'
+printf '%s\n' "$output" | grep -ao 'LANGCOST .*'

@@ -4,8 +4,8 @@ import Quickshell
 
 ShellRoot {
     id: root
-    // The shared rail receiver adds one DropArea, two Connections and two inactive Loaders.
-    readonly property int startupObjectLimit: 592
+    // The shared rail receiver adds five objects; three enabled code slots add fifteen.
+    readonly property int startupObjectLimit: root.marksOff ? 592 : 607
     readonly property int sectorsWrittenField: 6
     readonly property int deadlineProbeMs: 1200
     readonly property int sectorChangeDelayMs: 600
@@ -14,6 +14,7 @@ ShellRoot {
     // The hang leg's backend never answers, so the pane turns "waiting" after Startup.LISTING_WAIT_MS (10 s).
     readonly property bool hang: Quickshell.env("STARTUP_OBJECTS_HANG") === "1"
     readonly property string earlyMenu: Quickshell.env("STARTUP_OBJECTS_MENU_EARLY")
+    readonly property bool marksOff: Quickshell.env("STARTUP_OBJECTS_MARKS_OFF") === "1"
     property bool finished: false
     property bool answered: false
     property bool coldReadChecked: false
@@ -247,6 +248,14 @@ ShellRoot {
             var names = Object.keys(sample.counts).sort()
             for (var i = 0; i < names.length; i++)
                 console.log("STARTUP_OBJECTS TYPE " + names[i] + " " + sample.counts[names[i]])
+            var marks = root.marksOff ? 0 : 3
+            if ((sample.counts.LangMark || 0) !== marks || (sample.counts.LangMarkLoader || 0) !== marks)
+                return root.finish(false, "the default or saved-OFF code slots have the wrong language object count")
+            var baseline = root.marksOff ? 590 : 605
+            if (sample.total !== baseline)
+                return root.finish(false, "startup moved from its " + baseline + "-object baseline to " + sample.total)
+            console.log("LANGCOST startup off=" + root.marksOff + " total=" + sample.total
+                + " added=" + (sample.total - 590) + " language=" + marks + " baseline=" + baseline)
             if ((sample.counts.ContextMenu || 0) !== 0)
                 return root.finish(false, "the context menu was built before the startup cut")
             if (sample.total > root.startupObjectLimit)

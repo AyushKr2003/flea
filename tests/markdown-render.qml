@@ -5,7 +5,7 @@ import QtTest
 import Quickshell
 import "flea" as Flea
 import "flea/js/Focus.js" as Focus
-import "flea/js/Icons.js" as Icons
+import "markdown-mark.js" as Mark
 import "markdown-render.js" as Checks
 import "markdown-centre.js" as Centre
 import "markdown-board.js" as Board
@@ -400,7 +400,8 @@ ShellRoot {
         shell.check(Bar.barError(g, tokens), "Quick Look bar order")
         shell.check(Bar.pressError(g.bar, g.close), "Quick Look close is the only bar control")
         shell.check(Bar.nameRoomError(longNamePane.barGeometry ? longNamePane.barGeometry() : null, tokens), "Quick Look name takes the freed room")
-        shell.check(Bar.plainBarChecks(plainBar.geometry(), longNamePane.barGeometry(), tokens), "Quick Look bar without the segment keeps its count one gap before close")
+        shell.check(Mark.visibilityControlError(plainBar.geometry(), tokens,
+            function (g, t) { return Bar.plainBarChecks(g, longNamePane.barGeometry(), t) }), "Quick Look bar without the segment keeps its count one gap before close")
         shell.barSqueezed(tokens)
         shell.barDriven(tokens)
     }
@@ -410,7 +411,7 @@ ShellRoot {
         return { chromeMark: Flea.Theme.chromeMarkSize, padX: Flea.Theme.spacing.rowPaddingX, gap: Flea.Theme.spacing.gap,
             chromeHeight: Flea.Theme.chromeHeight, controlHeight: Flea.Theme.chromeControlHeight, hairline: Flea.Theme.spacing.hairline,
             caption: Flea.Theme.font.caption,
-            markdownPath: Icons.pathFor("markdown"), foreground: String(Flea.Theme.color.foreground), muted: String(Flea.Theme.color.muted) }
+            foreground: String(Flea.Theme.color.foreground), muted: String(Flea.Theme.color.muted) }
     }
 
     // At 480 px the long name elides; below that the count hides before close moves.

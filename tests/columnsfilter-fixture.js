@@ -133,9 +133,13 @@ function armFailures(row, restItems) {
 function markFailures(slashRow, searchRowItem, pane, theme) {
     var slashItems = built(slashRow)
     var searchItems = built(searchRowItem)
-    console.log("COLUMNSFILTER rowitems slash=" + slashItems + " search=" + searchItems)
+    var languageItems = searchRowItem.langLoader ? built(searchRowItem.langLoader) : 0
+    console.log("COLUMNSFILTER rowitems slash=" + slashItems + " search=" + searchItems + " language=" + languageItems + " search-core=" + (searchItems - languageItems))
     var out = inkFailures(searchRowItem, theme)
-    if (slashItems > SLASH_ITEMS || searchItems > SEARCH_ITEMS) out.push("marked rows build " + slashItems + " and " + searchItems + " items, want at most " + SLASH_ITEMS + " and " + SEARCH_ITEMS)
+    if (searchRowItem.langSlug !== "markdown" || !searchRowItem.langLoader || !searchRowItem.langLoader.item || languageItems !== 3)
+        out.push("the Markdown search row builds " + languageItems + " language items, want its Loader, mark and Shape")
+    if (slashItems > SLASH_ITEMS || searchItems - languageItems > SEARCH_ITEMS)
+        out.push("marked row cores build " + slashItems + " and " + (searchItems - languageItems) + " items, want at most " + SLASH_ITEMS + " and " + SEARCH_ITEMS)
     var mark = slashRow.nameItem()
     if (!slashRow.marking || locating(slashRow)) out.push("slash row marking " + slashRow.marking + " locating " + locating(slashRow) + ", want true false")
     if (mark.matchStart !== 0 || mark.matchLength !== 2) out.push("slash run " + mark.matchStart + "," + mark.matchLength + ", want 0,2")

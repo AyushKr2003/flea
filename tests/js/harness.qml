@@ -53,6 +53,7 @@ import "icons.js" as IconsSuite
 import "jump.js" as JumpSuite
 import "jump-heldout.js" as JumpHeldoutSuite
 import "keymap.js" as KeymapSuite
+import "langmarks.js" as LangmarksSuite
 import "keyreach.js" as KeyReachSuite
 import "localsend.js" as LocalSendSuite
 import "markdown.js" as MarkdownSuite
@@ -200,7 +201,7 @@ Item {
             ["gridgeometry", GridGeometrySuite], ["density", DensitySuite],
             ["focus-lines", FocusLinesSuite], ["focus-wrap", FocusWrapSuite],
             ["fill", FillSuite], ["format", FormatSuite], ["icons", IconsSuite],
-            ["jump", JumpSuite], ["jump-heldout", JumpHeldoutSuite], ["keymap", KeymapSuite], ["keyreach", KeyReachSuite], ["localsend", LocalSendSuite], ["listbudget", ListBudgetSuite], ["match", MatchSuite], ["menu", MenuSuite], ["properties", PropertiesSuite], ["propertyfacts", PropertyFactsSuite], ["xwnewfile", XwNewFileSuite],
+            ["jump", JumpSuite], ["jump-heldout", JumpHeldoutSuite], ["keymap", KeymapSuite], ["langmarks", LangmarksSuite], ["keyreach", KeyReachSuite], ["localsend", LocalSendSuite], ["listbudget", ListBudgetSuite], ["match", MatchSuite], ["menu", MenuSuite], ["properties", PropertiesSuite], ["propertyfacts", PropertyFactsSuite], ["xwnewfile", XwNewFileSuite],
             ["marks", MarksSuite], ["markdown", MarkdownSuite], ["mdstructure", MdStructureSuite], ["mdlineends", MdLineEndsSuite], ["mdliteral", MdLiteralSuite], ["mdspecfix", MdSpecFixSuite], ["mddraw", MdDrawSuite], ["mdnest", MdNestSuite], ["mdhtml", MdHtmlSuite], ["mdhtmlgh", MdHtmlGhSuite], ["mdhead", MdHeadSuite], ["mdhtmlrow", MdHtmlRowSuite], ["mdr7", MdR7Suite], ["mdround4", MdRound4Suite], ["mdprogress", MdProgressSuite], ["mdslice", MdSliceSuite], ["markdownpictures", MarkdownPicturesSuite], ["mounts", MountsSuite], ["motion", MotionSuite], ["names", NamesSuite], ["nav", NavSuite], ["navnewest", NavNewestSuite], ["cursorreturn", CursorReturnSuite], ["crumbs", CrumbsSuite], ["devices", DevicesSuite], ["loopdevices", LoopDevicesSuite], ["network", NetworkSuite], ["navmouse", NavMouseSuite], ["mdtable", MdTableSuite],
             ["openwith", OpenWithSuite], ["ops", OpsSuite], ["opstrash", OpsTrashSuite],
             ["palette", PaletteSuite], ["pathbar", PathBarSuite], ["places", PlacesSuite], ["placemenu", PlaceMenuSuite], ["rail", RailSuite], ["fsslot", FsSlotSuite], ["scripts", ScriptsSuite],

@@ -19,6 +19,7 @@ pub const DEFAULTS: &str = r#"{
   "foldersFirst": true,
   "groupByKind": false,
   "hidden": false,
+  "langMarks": true,
   "hiddenLast": false,
   "highlightToday": false,
   "wrapAtEnds": false,
@@ -196,6 +197,7 @@ pub const SCHEMA: &[(&str, Rule)] = &[
     ("foldersFirst", Rule::Bool),
     ("groupByKind", Rule::Bool),
     ("hidden", Rule::Bool),
+    ("langMarks", Rule::Bool),
     ("hiddenLast", Rule::Bool),
     ("highlightToday", Rule::Bool),
     ("wrapAtEnds", Rule::Bool),
@@ -285,7 +287,7 @@ mod tests {
             keys,
             [
                 "view", "pickerView", "density", "columns", "columnsLimit", "columnWidths", "addressBar", "sort", "rememberSort", "folderSorts", "rememberViewPerFolder", "folderViews",
-                "dual", "foldersFirst", "groupByKind", "hidden", "hiddenLast", "highlightToday", "wrapAtEnds", "escapeUp", "openMode", "clickRename", "openFoldersWhileDragging", "keyHints", "startIn", "startFolder",
+                "dual", "foldersFirst", "groupByKind", "hidden", "langMarks", "hiddenLast", "highlightToday", "wrapAtEnds", "escapeUp", "openMode", "clickRename", "openFoldersWhileDragging", "keyHints", "startIn", "startFolder",
                 "lastPath", "lastTabs", "newTab", "trashAutoEmpty", "trashSweptOn", "places", "shelf",
                 "preview", "previewFacts", "keys",
                 "display", "menu", "updates", "stateVersion"
@@ -301,6 +303,7 @@ mod tests {
         assert_eq!(d.get("groupByKind").and_then(Json::as_bool), Some(false));
         assert_eq!(d.get("hidden").and_then(Json::as_bool), Some(false));
         assert_eq!(d.get("hiddenLast").and_then(Json::as_bool), Some(false));
+        assert_eq!(d.get("langMarks").and_then(Json::as_bool), Some(true));
         assert_eq!(d.get("highlightToday").and_then(Json::as_bool), Some(false));
         assert_eq!(d.get("wrapAtEnds").and_then(Json::as_bool), Some(false));
         // Escape stays put and a double click opens as in 0.3.4; slow click renames, on by the defaults ledger.
@@ -390,6 +393,28 @@ mod tests {
             // ui.json behaves as 0.2.1 did. placeMenu is the Places rows' own menu.
             ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions", "copyAs", "pasteAs", "invertSelection", "extThumbs", "run", "openAsText"]
         );
+    }
+
+    // Code icons default on; a saved false stays off, and invalid values heal to the default.
+    #[test]
+    fn language_marks_default_on_and_keep_a_saved_false() {
+        let current = crate::uistate::from_file("{}");
+        assert_eq!(current.get("langMarks").and_then(Json::as_bool), Some(true));
+        for value in ["true", "false"] {
+            let patch = jsondoc::parse(&format!(r#"{{"langMarks":{value}}}"#)).expect("boolean patch");
+            let next = crate::uistate::patched(&current, &patch).expect("boolean accepted");
+            assert_eq!(next.get("langMarks").and_then(Json::as_bool), Some(value == "true"));
+        }
+        let off = crate::uistate::from_file(r#"{"langMarks":false}"#);
+        let patch = jsondoc::parse(r#"{"hidden":true}"#).expect("unrelated patch");
+        let kept = crate::uistate::patched(&off, &patch).expect("saved false retained");
+        assert_eq!(kept.get("langMarks").and_then(Json::as_bool), Some(false));
+        for value in [r#""true""#, r#""false""#, "1", "null", "[]", "{}"] {
+            let text = format!(r#"{{"langMarks":{value}}}"#);
+            let patch = jsondoc::parse(&text).expect("patch");
+            assert!(crate::uistate::patched(&current, &patch).expect_err("not a boolean").contains("langMarks"));
+            assert_eq!(crate::uistate::from_file(&text).get("langMarks").and_then(Json::as_bool), Some(true));
+        }
     }
 
     // The facts mode takes its two words, and a file holding any other word reads as compact.

@@ -14,7 +14,7 @@ mkdir -p "$test_root"/{config,home,state/flea,cache,runtime,fixture,bin} || exit
 chmod 700 "$test_root/runtime" || exit 1
 headless_commons "$test_root" || exit 1
 printf '{}\n' > "$test_root/state/flea/ui.json"
-touch "$test_root/fixture/a.txt" "$test_root/fixture/b.txt" "$test_root/fixture/c.txt"
+touch "$test_root/fixture/a.rs" "$test_root/fixture/b.py" "$test_root/fixture/c.go"
 ln -s "$(readlink -m ui/boot/Ui)" "$test_root/config/Ui" || exit 1
 # The window loads its tab catcher from the shell directory at startup, so the probe ships it as the product does.
 ln -s "$PWD/ui/boot/fleatab.qml" "$test_root/config/fleatab.qml" || exit 1
@@ -40,11 +40,14 @@ SH
 chmod +x "$test_root/bin/gio" || exit 1
 # One probe run: run_probe LOG BACKEND HANG EARLY, where EARLY exercises cold or in-flight menu demand.
 run_probe() {
+    if [[ "${5:-}" == off ]]; then printf '{"langMarks":false}\n' > "$test_root/state/flea/ui.json";
+    else printf '{}\n' > "$test_root/state/flea/ui.json"; fi
     # The shell starts the GVfs trash daemon, so it runs on its own bus, whose daemons log to bus.log and stay out of the engine-warning scan.
     ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u QML_DISABLE_DISK_CACHE \
         HOME="$test_root/home" XDG_STATE_HOME="$test_root/state" XDG_CACHE_HOME="$test_root/cache" \
         XDG_RUNTIME_DIR="$test_root/runtime" FLEA_BIN="$2" STARTUP_OBJECTS_HANG="$3" \
         STARTUP_OBJECTS_MENU_EARLY="${4:-}" \
+        STARTUP_OBJECTS_MARKS_OFF="$([[ "${5:-}" == off ]] && printf 1 || printf 0)" \
         FLEA_PATH="$test_root/fixture" STARTUP_OBJECTS_UI="$PWD/ui" STARTUP_OBJECTS_DISK="$power_disk" \
         PATH="$test_root/bin:$PATH" STARTUP_OBJECTS_LEG_TIMEOUT_SECONDS="$leg_timeout_seconds" \
         QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 QML_IMPORT_TRACE=1 \
@@ -55,6 +58,15 @@ log="$test_root/startup.log"
 run_probe "$log" "$PWD/target/debug/flea" 0
 status=$?
 grep -a 'STARTUP_OBJECTS' "$log" || true
+# Measurements survive a red pin so the next value comes from the actual execution path.
+if grep -aq 'STARTUP_OBJECTS TOTAL' "$log"; then
+    # Sample input: Error loading "file:///fixture/ui/Row.qml" from disk cache: <reason> yields Row.qml before TOTAL.
+    measured=$(sed -n '1,/STARTUP_OBJECTS TOTAL/p' "$log" | grep -aoE 'Error loading "file://[^"]*/ui/[^"]+" from disk cache' | sed -E 's|.*/ui/([^"]+)".*|\1|' | sort -u)
+    measured_bytes=0
+    while IFS= read -r unit; do measured_bytes=$((measured_bytes + $(wc -c < "ui/$unit"))); done <<< "$measured"
+    printf 'STARTUP_OBJECTS MEASURE units=%s bytes=%s\n' "$(printf '%s\n' "$measured" | grep -c .)" "$measured_bytes"
+    printf '%s\n' "$measured" | sed 's/^/STARTUP_OBJECTS UNIT /'
+fi
 if [ "$status" -ne 0 ] && [ "$status" -ne 143 ]; then
     printf 'FAIL startup-objects: qs exit %s\n' "$status"
     cat "$log"
@@ -102,6 +114,9 @@ for cold in CardScroll.qml ContextMenu.qml IpcControls.qml LocalSendMark.qml Men
         exit 1
     fi
 done
+for enabled in LangMark.qml LangMarkLoader.qml js/LangMarkPaths.js; do
+    printf '%s\n' "$seen" | grep -Fxq "$enabled" || { printf 'FAIL startup-objects: default ON missed %s\n' "$enabled"; exit 1; }
+done
 bytes=0
 while IFS= read -r unit; do bytes=$((bytes + $(wc -c < "ui/$unit"))); done <<< "$seen"
 printf 'startup-objects: %s first-frame units, %s bytes\n' "$(printf '%s\n' "$seen" | grep -c .)" "$bytes"
@@ -125,6 +140,29 @@ if [ -n "$warnings" ]; then
     printf 'FAIL startup-objects: engine warnings\n%s\n' "$warnings"
     exit 1
 fi
+# Saved OFF keeps its measured object and unit budget independently of the new fresh default.
+off_log="$test_root/off.log"
+sandbox_scratch "$test_root/cache"
+run_probe "$off_log" "$PWD/target/debug/flea" 0 "" off
+status=$?
+grep -a 'STARTUP_OBJECTS' "$off_log" || true
+if { [ "$status" -ne 0 ] && [ "$status" -ne 143 ]; } \
+    || ! grep -aq 'STARTUP_OBJECTS PASS' "$off_log" \
+    || grep -aE 'STARTUP_OBJECTS FAIL|TypeError|ReferenceError|ERROR|WARN' "$off_log" | grep -vF 'This plugin does not support setting window masks'; then
+    printf 'FAIL startup-objects: saved-OFF leg\n'; exit 1
+fi
+# Sample input: Error loading "file:///fixture/ui/Row.qml" from disk cache: <reason> yields Row.qml before TOTAL.
+off_seen=$(sed -n '1,/STARTUP_OBJECTS TOTAL/p' "$off_log" | grep -aoE 'Error loading "file://[^"]*/ui/[^"]+" from disk cache' | sed -E 's|.*/ui/([^"]+)".*|\1|' | sort -u)
+off_listed=$(grep -vE '^(#|bytes )' tests/startup-units-off.txt | sort -u)
+[[ "$off_seen" == "$off_listed" ]] || { printf 'FAIL startup-objects: saved-OFF first-frame units moved\n'; exit 1; }
+off_bytes=0
+while IFS= read -r unit; do off_bytes=$((off_bytes + $(wc -c < "ui/$unit"))); done <<< "$off_seen"
+off_ceiling=$(sed -n 's/^bytes //p' tests/startup-units-off.txt)
+[[ "$off_ceiling" =~ ^[0-9]+$ && "$off_bytes" -le "$off_ceiling" ]] || { printf 'FAIL startup-objects: saved-OFF source bytes moved\n'; exit 1; }
+# Sample input: DEBUG qml: STARTUP_OBJECTS TOTAL 590 yields 590 from the first receipt.
+off_objects=$(awk '/STARTUP_OBJECTS TOTAL/ {print $NF; exit}' "$off_log")
+printf 'STARTUP_OBJECTS OFF units=%s bytes=%s objects=%s language=0\n' "$(printf '%s\n' "$off_seen" | grep -c .)" "$off_bytes" "$off_objects"
+if [[ -n "${FLEA_CI_SUITE_LOGS:-}" ]]; then cp "$off_log" "$FLEA_CI_SUITE_LOGS/startup-objects-off.log" || exit 1; fi
 # A listing that never answers must still build the IPC seam once the pane turns "waiting".
 printf '#!/bin/sh\nexec cat > /dev/null\n' > "$test_root/bin/flea-silent" && chmod +x "$test_root/bin/flea-silent" || exit 1
 hang_log="$test_root/hang.log"

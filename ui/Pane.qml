@@ -594,6 +594,7 @@ FocusScope {
         if (trashHost.confirming) return
         if (action === "openTrash" || action === "emptyTrash" || action === "restoreAll") { trashHost.action(action); return }
         if (action === "settings") { root.settingsPanel.open(root); return }
+        if (action === "toggleLangMarks") { ViewState.toggleLangMarks(); return }
         if (action === "permissions") { root.openPermissions(); return }
         if (action === "rename" && root.openBulkRename(paths)) return  // several rows open the bulk card
         // Recent is a history, not a directory: a new file there would land in the root it stands on.

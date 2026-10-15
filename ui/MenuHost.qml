@@ -179,6 +179,7 @@ Item {
         if (root.item) return root.item.listingContext(flyoutAction, includeHidden)
         return MenuContext.listingContext(root, flyoutAction, includeHidden, {
             scripts: Flea.Scripts.entries, hiddenActions: ViewState.menuHidden,
+            langMarks: ViewState.langMarks,
             thumbPreview: ViewState.preview, updateVersion: UpdateCheck.menuVersion
         })
     }

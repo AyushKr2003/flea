@@ -4,9 +4,10 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "flea" as Flea
+import "langmark-count.js" as LangCost
 import "flea/js/Icons.js" as Icons
 
-// tests/quicklook-code.sh's harness over the real backend and bat: QLCODE_RUN=fresh walks every state from an empty ui.json, again starts on the one fresh left, wrap on.
+// The full backend/bat sequence starts schema-seeded; quicklook-code-defaults.qml separately tests empty and explicit-OFF states with wrap absent.
 ShellRoot {
     id: root
 
@@ -171,7 +172,7 @@ ShellRoot {
                 if (root.again) {
                     root.check("a ui.json that holds wrap on starts wrapped", Flea.ViewState.previewWrap, true)
                 } else {
-                    root.check("a fresh ui.json starts unwrapped", [Flea.ViewState.previewWrap, root.savedWrap()], [false, ""])
+                    root.check("a schema-seeded ui.json starts unwrapped", [Flea.ViewState.previewWrap, root.savedWrap()], [false, "false"])
                     root.check("no Quick Look is built before the first Space", root.pv(), null)
                 }
                 return true
@@ -309,6 +310,16 @@ ShellRoot {
         root.check("the bar draws the row's mark, the name and the count, a close mark and no segment",
             [g.markName, g.name.text, g.lines.text, g.countShown, g.segment !== null, g.close !== null],
             [Icons.glyphForRow(row.i, row.p), "01-icons.rs", "132 lines", true, false, true])
+        var captured = LangCost.codeState(root.pane(), false, Text.StyledText)
+        root.check("the native capture reader sees real coloured code and its Rust bar",
+            [captured.path, captured.answer, captured.firstScreen, captured.colors.length > 0, captured.language.slug,
+                captured.colors.every(function(color) { return captured.inks.indexOf(color) >= 0 }),
+                captured.colors.some(function(color) { return color !== captured.inks[0] })],
+            [c.path, "styled", true, true, "rust", true, true])
+        root.check("the code bar draws its Rust mark in the existing foreground slot",
+            [g.language !== null ? g.language.slug : "", g.mark.visible, g.language !== null ? String(g.language.color) : "",
+                g.language !== null ? g.language.markSize : 0],
+            ["rust", false, String(root.bar().langLoader.glyph.color), g.mark.markSize])
         root.check("the bar reads mark, name, count, close from left to right", [g.mark.x < g.name.x, g.name.x < g.lines.x, g.lines.x < g.close.x], [true, true, true])
         var texts = root.bodies()
         root.check("the first line is line 1, coloured, with the gutter", [c.lines[0].indexOf("fn f1(") === 0, texts[0].text.indexOf("<font") >= 0, t.numbered, root.gutters()[0].text],

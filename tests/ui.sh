@@ -3504,9 +3504,9 @@ case_background() {
     [[ "$(ipc contextMenuVisible)" == "true" ]] \
         || fail "background: a right click on empty space opened no menu"
     # Menus.html's background column: New folder and New file lead it, and Add to Favorites stays.
-    [[ "$(ipc contextMenuEntries)" == "New folder|New file|-|Paste|Select all|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|-|Settings" ]] \
+    [[ "$(ipc contextMenuEntries)" == "New folder|New file|-|Paste|Select all|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|Hide code icons|-|Settings" ]] \
         || fail "background: the menu is not the board's column, it is $(ipc contextMenuEntries)"
-    [[ "$(ipc contextMenuGlyphs)" == "folder-plus|file-plus|-|clipboard|check|-|terminal|star|-|sort|eye|-|sliders" ]] \
+    [[ "$(ipc contextMenuGlyphs)" == "folder-plus|file-plus|-|clipboard|check|-|terminal|star|-|sort|eye|code|-|sliders" ]] \
         || fail "background: a row lost its mark, the set is $(ipc contextMenuGlyphs)"
     # A right click ON a row still gets that row's own menu: the two entrances share one instance,
     # so a hasRow left standing from the last open would be the defect this asserts against.
@@ -3595,7 +3595,7 @@ case_background() {
     # The empty listing is also the strongest case for this menu, and it has no row to aim from.
     click_background
     settle
-    [[ "$(ipc contextMenuEntries)" == "New folder|New file|-|Paste|Select all|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|-|Settings" ]] \
+    [[ "$(ipc contextMenuEntries)" == "New folder|New file|-|Paste|Select all|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|Hide code icons|-|Settings" ]] \
         || fail "background: an empty directory drew $(ipc contextMenuEntries)"
     # Its own name: the empty-mark poll above already owns background-empty.png.
     shot background-empty-menu
@@ -3636,7 +3636,7 @@ case_background() {
         settle
         printf 'BACKGROUND %s entries=%s\n' "$view" "$(ipc contextMenuEntries)"
         shot "background-$view"
-        [[ "$(ipc contextMenuEntries)" == "New folder|New file|-|Paste|Select all|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|-|Settings" ]] \
+        [[ "$(ipc contextMenuEntries)" == "New folder|New file|-|Paste|Select all|-|Open in terminal|Add to Favorites|-|Sort by|Show hidden files|Hide code icons|-|Settings" ]] \
             || fail "background: the $view view drew $(ipc contextMenuEntries)"
         key -k Escape >/dev/null
         settle
@@ -15587,6 +15587,7 @@ clipboard_wait() {
 . "$repo/tests/ui-captures-states.sh"
 . "$repo/tests/ui-captures-gridhover.sh"
 . "$repo/tests/ui-captures-gmlook.sh"
+. "$repo/tests/ui-captures-langmarks.sh"
 # README retakes, one launch per frame at its own size, text size and fixture; 2560x1440 corner park, wait and retry bounds.
 readme_park_x=2559
 readme_park_y=1439
