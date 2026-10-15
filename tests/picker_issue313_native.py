@@ -65,6 +65,7 @@ def test_issue313(native):
               and state["bodySmall"] == 13 and state["preset"] == "windows", state)
         check(f"{request.name}: {stage} current theme", state["themeLoaded"]
               and state["themeForeground"].lower() == foreground and theme_path.read_bytes() == theme_bytes, state)
+        # Sample environ entry: FLEA_PICKER={"hidden":true}\0
         environment = dict(item.split(b"=", 1) for item in Path(f"/proc/{request.pid}/environ").read_bytes().split(b"\0") if b"=" in item)
         payload = json.loads(environment[b"FLEA_PICKER"])
         check(f"{request.name}: {stage} exact portal override presence", ("hidden" in payload) == (override is not None)
@@ -79,6 +80,7 @@ def test_issue313(native):
         check(f"{request.name}: {stage} real PNG", data[:8] == b"\x89PNG\r\n\x1a\n" and len(data) > 100
               and all(size > 0 for size in struct.unpack(">II", data[16:24])))
         identity = {"pid": request.pid, "window": request.window(), "request": payload,
+                    # Sample stat suffix after pid/comm: R 1 123 123 0 -1 4194560 0 0 0 0 0 0 0 0 20 0 1 0 456789
                     "processStartTicks": Path(f"/proc/{request.pid}/stat").read_text().rsplit(") ", 1)[1].split()[19],
                     "savedHidden": saved, "expectedVisibleHidden": expected, "rowCentres": centres,
                     "png": picture.name, "pngSha256": hashlib.sha256(data).hexdigest(), "snapshot": state}
