@@ -252,6 +252,7 @@ flea_process_owned() {
     grep -Fx "FLEA_TEST_RUN_ROOT=$run_root" <<< "$environment" >/dev/null && return 0
     # A readable environ can become empty at exit, so missing ownership still needs an exit check.
     [[ -d "$process" ]] || return 2
+    # Sample /proc/PID/stat: "347 (gio) Z 1 347 ...", so the state follows the closing parenthesis.
     [[ "$(sed 's/.*) //' "$process/stat" 2>/dev/null | cut -d' ' -f1)" == Z ]] && return 2
     [[ -d "$process" ]] || return 2
     return 1
