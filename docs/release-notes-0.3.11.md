@@ -34,6 +34,7 @@
 
 ## Known issues
 
+- Local-list startup uses 0.82-0.91 seconds of CPU, compared with 0.77-0.80 seconds in 0.3.10.
 - Long sessions can retain render resources (#151, @marvreichmann).
 - Some office documents fail to preview inside the sandbox.
 - First previews from network shares, large-copy progress and Dual scrolling still have latency work pending.
