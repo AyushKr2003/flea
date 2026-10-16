@@ -104,6 +104,7 @@ GridView {
     Keys.onPressed: function (event) {
         root.prebuild.kick()
         root.holdCache()
+        ViewState.pointerKeyed(event)
         event.accepted = Focus.handleKey(event, root.pane, root.pane.sidebar)
     }
     // Written, not bound: a count change puts the view on row 0 as a reset does, which would drop a binding.
