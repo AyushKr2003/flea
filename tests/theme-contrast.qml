@@ -284,16 +284,11 @@ ShellRoot {
             shell.atLeast(name, "picked " + texts[t][0], "both planes over both backdrops", shell.modeWorst(texts[t][1], c, a, shell.blurBrightness), Flea.Theme.textContrast)
         shell.log("floor PICK " + name + " alpha=" + a + " list=" + list + " primary=" + String(drawn.foreground) + " muted=" + String(drawn.muted) + " metadata=" + String(drawn.metadata))
         Flea.Glass.mode = "transparent"
-        var focuses = [true, false], alphas = [251, 245]
+        var focuses = [true, false]
         for (var f = 0; f < focuses.length; f++) {
             Flea.Glass.focused = focuses[f]
-            shell.check(name + " transparent focus " + focuses[f] + " alpha", Math.round(Flea.Glass.alpha * 255), alphas[f])
-            var roles = [["primary", drawn.foreground], ["muted", drawn.muted], ["metadata", drawn.metadata], ["error", drawn.error], ["status error", drawn.errorOnSurface], ["symlink", drawn.symlink], ["executable", drawn.executable]]
-            for (var r = 0; r < roles.length; r++)
-                shell.atLeast(name, "transparent " + roles[r][0] + " focus " + focuses[f], "unblurred extreme backdrops", shell.modeWorst(roles[r][1], c, alphas[f], 1), Flea.Theme.textContrast)
-            var graphics = [["muted frame", drawn.mutedFrame], ["metadata glyph", drawn.metadataFrame], ["accent frame", drawn.accentFrame]]
-            for (var j = 0; j < graphics.length; j++)
-                shell.atLeast(name, "transparent " + graphics[j][0] + " focus " + focuses[f], "unblurred extreme backdrops", shell.modeWorst(graphics[j][1], c, alphas[f], 1), Flea.Theme.frameContrast)
+            shell.check(name + " transparent focus " + focuses[f] + " alpha", Math.round(Flea.Glass.alpha * 255), 255)
+            shell.check(name + " transparent draws opaque inks", [String(drawn.foreground), String(drawn.muted), String(drawn.metadata)], [String(c.foreground), String(c.muted), String(c.metadata)])
         }
         Flea.Glass.mode = "opaque"
         shell.check(name + " opaque restores all three inks", [String(drawn.foreground), String(drawn.muted), String(drawn.metadata)], [String(c.foreground), String(c.muted), String(c.metadata)])

@@ -154,8 +154,9 @@ run_case word parse 255 abc -
 run_case quoted parse 255 '"x"' -
 run_case above parse 255 1.5 -
 run_case below parse 0 -0.2 -
-# A value that rounds to 1 in 8 bits is 1, and so is no value at all; an opaque launch holds 1 until the next launch.
+# A value that rounds to 1 in 8 bits is 1, and so is no signal at all: bare Transparent draws the theme opaque.
 run_case rounds parse 255 0.999 -
+run_case bare parse 255 - -
 run_case none parse 255 - - 0.34
 
 printf 'glass: checks=%s failed=%s\n' "$total" "$failed"

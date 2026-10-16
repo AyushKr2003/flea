@@ -111,7 +111,7 @@ leg() {
 
 leg glass 0.34 true '#00000000' true
 leg opaque - false '#101315' false opaque
-leg transparent - true '#00000000' true
+leg transparent - false '#101315' false
 leg rounds 0.999 false '#101315' false
 printf 'glass-boot: failed=%s\n' "$failed"
 [[ "$failed" -eq 0 ]]

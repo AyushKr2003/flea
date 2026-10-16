@@ -15,8 +15,8 @@ poll_s=0.1
 ready_polls=200
 stop_polls=20
 call_timeout_s=5
-focused_alpha=251
-inactive_alpha=245
+focused_alpha=255
+inactive_alpha=255
 stop_shell() {
     [[ -n "$runner" ]] || return 0
     local tick

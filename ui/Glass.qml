@@ -15,7 +15,6 @@ QtObject {
     property real glassAlpha: root.mode === "glassy" && root.usesDefault ? Material.floor(Theme.color.opaquePalette, Theme.textContrast) / 255 : 1
     property bool focused: Qt.application.active
     readonly property bool split: true
-    readonly property real transparentAlpha: root.focused ? 0.985 : 0.96
     readonly property bool usesDefault: root.valueIn(Commons.Color.userShellValues) < 0 && root.valueIn(Commons.Color.themeShellValues) < 0
     // "opaque", "glassy" or "transparent" (Omarchy's default), read from its toggle files by reread().
     property string mode: "transparent"
@@ -62,14 +61,14 @@ QtObject {
         var n = Number(v)
         return isFinite(n) ? Util.clampAlpha(n) : 1
     }
-    // User and theme values keep their precedence; bare Transparent follows Omarchy's grounds unless its ink needs more alpha.
+    // User and theme values keep their precedence; bare Transparent is opaque: no shipped theme sets an opacity of its own, and no toggle file means transparency was never chosen.
     function wanted() {
         var user = root.valueIn(Commons.Color.userShellValues)
         if (user >= 0) return user
         if (root.mode === "opaque") return 1
         var theme = root.valueIn(Commons.Color.themeShellValues)
         if (theme >= 0) return theme
-        return root.mode === "glassy" ? root.glassAlpha : Material.transparentFloor(Theme.color.opaquePalette, Theme.textContrast, Math.round(root.transparentAlpha * 255)) / 255
+        return root.mode === "glassy" ? root.glassAlpha : 1
     }
 
     function reread() {

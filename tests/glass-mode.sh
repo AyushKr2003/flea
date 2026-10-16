@@ -162,14 +162,13 @@ run_case glassy-theme precedence glassy 87 0.34 -
 run_case glassy-bare precedence glassy 191 - - 0.75
 run_case glassy-empty-theme precedence glassy 191 "" - 0.75
 run_case glassy-default precedence glassy 192 - -
-# Row (d): transparent takes the theme's value, else Omarchy's active ground at 251/255.
+# Row (d): transparent takes the theme's value, else opaque at 255/255: no shipped theme sets an opacity and no toggle file means transparency was never chosen.
 run_case transparent-theme precedence - 87 0.34 -
-run_case transparent-bare precedence - 251 - -
-run_case transparent-edge edge - 251 - -
+run_case transparent-bare precedence - 255 - -
 # A value that is not a number is the default 1 where it is set, as before the mode existed.
 run_case user-word precedence glassy 255 0.34 abc
 # The same through a socket speaking Hyprland's event protocol: a workspace event sent after the rounding changed moves nothing, configreloaded moves the radius.
-run_case socket socket - 251 - -
+run_case socket socket - 255 - -
 # A reload moves the mode and the corner radius under a running window.
 run_case reload reload glassy 191 - - 0.75
 
