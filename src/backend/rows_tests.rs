@@ -141,8 +141,9 @@ fn a_window_at_a_nonzero_start_names_the_right_rows() {
     l.push("two-dir", true);
     let metas = vec![Meta { size: 7, mtime: 8, mode: 9, target_is_dir: false, target: String::new(), dev: 77 }];
     let (mime, icons, aliases, thumbs, mut kinds) = dbs();
+    let mounts = "1 0 0:77 / / rw - ext4 /dev/fixture rw\n";
     assert_eq!(
-        rows_line(std::path::Path::new("/nonexistent"), &l, &metas, 2, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds),
+        rows_line_in(std::path::Path::new("/nonexistent"), mounts, &l, &metas, 2, 0.0, &mime, &icons, &aliases, &thumbs, &mut kinds),
         r#"{"t":"rows","start":2,"rows":[{"n":"two-dir","d":true,"s":7,"m":8,"p":9,"i":"folder","t":false,"k":0,"v":77}],"kinds":["Folder"],"ms":0.000}"#
     );
 }

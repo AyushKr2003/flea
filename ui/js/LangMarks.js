@@ -93,10 +93,10 @@ function slugForRow(row) {
     return slugForFile(row.n)
 }
 
-// The Loader itself is demand-built, so an ordinary row pays for neither it nor a hidden Shape.
+// Ordinary rows build on demand; search keeps its bounded warm chain through result reuse.
 function syncMark(owner, glyph, url, readyStatus) {
     if (!glyph) return
-    if (owner.thumbDrawn || owner.langSlug === "") {
+    if (owner.langWarm !== true && (owner.thumbDrawn || owner.langSlug === "")) {
         if (owner.langLoader !== null) {
             owner.langLoader.active = false
             owner.langLoader.destroy()

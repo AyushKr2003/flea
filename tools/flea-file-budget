@@ -101,7 +101,7 @@ tests/js/watch.js 541
 tests/js/xwwatch.js 299
 tests/js/tabs.js 798
 tests/js/search.js 336
-tests/js/previewkeys.js 326
+tests/js/previewkeys.js 344
 tests/button-members.qml 524
 tests/chromering.qml 413
 tests/columnrow-geom.qml 426
@@ -171,7 +171,7 @@ ui/PreviewPdf.qml 482
 ui/PickerChrome.qml 295
 ui/PreviewMarkdown.qml 668
 tests/markdown-code.qml 477
-ui/Row.qml 466
+ui/Row.qml 469
 ui/SettingsPanel.qml 547
 ui/SettingsRow.qml 409
 ui/Sidebar.qml 716

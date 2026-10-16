@@ -20,8 +20,11 @@ Item {
     readonly property bool thumbDrawn: root.thumb.length > 0 && thumbImage.status !== Image.Error
     // One filename lookup; only a mapped row without a thumbnail builds the mark's Loader.
     readonly property string langSlug: ViewState.langMarks ? LangMarks.slugForRow(root.row) : ""
+    // A search warms the complete mark hidden, so its first answer only changes the slug.
+    readonly property bool langWarm: ViewState.langMarks && root.shown && root.pane !== null && root.pane.searchMode.length > 0 && root.pane.swap.searchWarm === true
     property var langLoader: null
     function syncLangMark() { LangMarks.syncMark(root, markGlyph, Qt.resolvedUrl("LangMarkLoader.qml"), Component.Ready) }
+    onLangWarmChanged: root.syncLangMark()
     onLangSlugChanged: root.syncLangMark()
     onThumbDrawnChanged: root.syncLangMark()
     readonly property alias iconStatus: thumbImage.status

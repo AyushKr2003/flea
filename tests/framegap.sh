@@ -46,7 +46,7 @@ output=$( ( env -u DISPLAY -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE \
 verdict=0
 fail() { printf 'FAIL %s\n' "$1"; verdict=1; }
 # Sample input: "  INFO qml: FRAMEGAP DONE checks=4660 failed=0 controls=96 controlMiss=0 focusMiss=0" once, after "FRAMEGAP HOSTS 25 ArchiveCompressDialog,...". Every row is one frame side at one stop and state.
-expected_checks=4660 # 4708, less 48 rows of the menu cursor frame (ui/MenuRow.qml menuCursorFrame, RULINGS 141) now a fill with no frame side to measure
+expected_preclip_sides=4684 # 1171 frames; a fold stands for its four sides, independent of the Settings scroll position.
 expected_hosts=25
 # Every GapDialog, GapCheck, GapChrome and GapCrossing side is a control row and must be flagged; GapChrome only draws its frame focused.
 expected_controls=96 # 72 plus GapCrossing, 4 sides over 3 stops and 2 states
@@ -58,7 +58,12 @@ if printf '%s\n' "$output" | grep -q 'FRAMEGAP FAIL'; then
 fi
 # A CLIPPED row is scrolled content cut by the fold, judged by what it shows; only the Settings card scrolls, and the count is positional so it is not pinned.
 clipped_rows=$(printf '%s\n' "$output" | grep -ao 'FRAMEGAP CLIPPED.*')
-printf 'FRAMEGAP clipped rows: %s\n' "$(printf '%s' "$clipped_rows" | grep -c .)"
+clipped_count=$(printf '%s' "$clipped_rows" | grep -c .)
+printf 'FRAMEGAP clipped rows: %s\n' "$clipped_count"
+expected_checks=$((expected_preclip_sides - 4 * clipped_count))
+printf '%s\n' "$output" > "$test_root/framegap-report.log"
+python3 -B tests/framegap-report.py "$test_root/framegap-report.log" "$expected_preclip_sides" \
+    || fail 'the raw frame-side inventory is incomplete or changed'
 tab=$(printf '\t')
 # Sample input: "FRAMEGAP CLIPPED SettingsPanel general<TAB>Rectangle<TAB>..." is a Settings section row and kept out; "FRAMEGAP CLIPPED GapDialog<TAB>..." is foreign.
 foreign_clipped=$(printf '%s\n' "$clipped_rows" | grep -v -e '^$' -e "^FRAMEGAP CLIPPED SettingsPanel [^$tab]*$tab")
