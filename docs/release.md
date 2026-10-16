@@ -39,7 +39,13 @@ replaced by the next tag, so a change goes in by pull request here.
 3. Run `tools/flea-pkgrel-check` on the candidate commit before tagging: it fails when `pkgver`
    changed since the previous `vX.Y.Z` tag and `pkgrel` is not 1 in either PKGBUILD, so a fresh
    version always starts at 1 and only a rebuild of one version keeps a higher number.
-4. Tag and push. Only the repository owner can create a `v*` tag (the ruleset below):
+4. Push the candidate commit to a `candidate/X.Y.Z` branch. The Candidate workflow
+   (`.github/workflows/candidate.yml`) runs the release's verify checks, with `Cargo.toml`'s version
+   in place of the tag, and its build job up to publication on both runners: the same packages,
+   `cargo test --release --locked`, the build and the flea-bin tarball check. Tag only the commit it
+   passed, then delete the branch. A Docker image of the runner OS cannot stand in for this; 0.3.10
+   and 0.3.11 were each tagged three times on failures only the runners showed.
+5. Tag and push. Only the repository owner can create a `v*` tag (the ruleset below):
 
    ```
    git tag -a vX.Y.Z -m "Flea X.Y.Z"
