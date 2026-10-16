@@ -68,7 +68,7 @@ Item {
     // One filename lookup; only a mapped row without a thumbnail builds the mark's Loader.
     readonly property string langSlug: ViewState.langMarks ? LangMarks.slugForRow(root.row) : ""
     // A search warms the complete mark hidden, so its first answer only changes the slug.
-    readonly property bool langWarm: ViewState.langMarks && root.renamePane !== null && root.renamePane.searchMode.length > 0 && root.renamePane.swap.searchWarm === true
+    readonly property bool langWarm: ViewState.langMarks && root.renamePane !== null && root.renamePane.viewMode === "grid" && root.renamePane.searchMode.length > 0 && root.renamePane.swap.searchWarm === true
     property var langLoader: null
     function syncLangMark() { LangMarks.syncMark(root, markGlyph, Qt.resolvedUrl("LangMarkLoader.qml"), Component.Ready) }
     onLangWarmChanged: root.syncLangMark()
