@@ -118,12 +118,12 @@ jobs:
         with:
           toolchain: stable
 
-      # bsdtar, gio and libvulkan.so.1 are what the suite calls beyond coreutils; it must run as a non-root user.
+      # bsdtar, gio, libvulkan.so.1 and bwrap are what the suite calls beyond coreutils; it must run as a non-root user.
       - name: Install what the test suite shells out to
         run: |
           set -eu
           sudo apt-get update -o Acquire::Retries=3
-          sudo apt-get install -y -o Acquire::Retries=3 libarchive-tools libglib2.0-bin libvulkan1
+          sudo apt-get install -y -o Acquire::Retries=3 libarchive-tools libglib2.0-bin libvulkan1 bubblewrap
 
       # The Rust half of check(); tests/js.sh and tests/keymap-gen.sh need qml6 and stay with the Arch build.
       - name: Test
