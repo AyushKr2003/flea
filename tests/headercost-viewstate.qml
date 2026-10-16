@@ -8,6 +8,7 @@ import QtQuick
 QtObject {
     id: root
     property var state: ({})
+    readonly property bool langMarks: root.state.langMarks !== false
     property var hiddenCols: ["mode", "kind"]
     property var commits: []
 
