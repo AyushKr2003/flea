@@ -4,6 +4,7 @@ TrashDropHandler 1.0 TrashDropHandler.qml
 singleton Theme 1.0 Theme.qml
 ThemeColors 1.0 ThemeColors.qml
 singleton Glass 1.0 Glass.qml
+GlassTagger 1.0 GlassTagger.qml
 singleton MediaSound 1.0 MediaSound.qml
 singleton Scripts 1.0 Scripts.qml
 singleton ViewState 1.0 ViewState.qml

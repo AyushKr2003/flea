@@ -180,7 +180,7 @@ ui/Theme.qml 480
 ui/TrashView.qml 492
 ui/UnlockDialog.qml 450
 ui/ViewState.qml 565
-ui/WindowBody.qml 816
+ui/WindowBody.qml 817
 ui/js/Anchor.js 379
 ui/js/ColumnsCarry.js 103
 ui/js/Devices.js 440

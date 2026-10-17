@@ -3005,6 +3005,8 @@ and timers to the new `ui/GvfsBridge.qml`, 122 lines inside it; `ui/StatusBar.qm
 busy mark and stays at 397, inside its 400 hard cap. Each count re-derived with `wc -l` at
 the commit that recorded it.
 
+The #323 hotfix takes `ui/WindowBody.qml` from its recorded 816 to 817 for the `clearSurface` flag `ui/boot/shell.qml` reads, re-derived with `wc -l`.
+
 Issue 194 takes `ui/NetworkMounts.qml` from its recorded 560 to 656 for the smb FUSE guard and the repair that peeks gio's folder, then opens the matching entry out of the FUSE root through backend.peek instead of reading a wrong mount as an unreadable directory, and `ui/WindowBody.qml` from its recorded 487 to 497 for routing a typed network address to the rail's own open-a-share path instead of a local listing. The matching lives in `ui/js/Protocols.js`, 202 to 296, and the bar's hand-back in `ui/js/PathBar.js`, 204 to 214, both over the soft budget and under the hard cap. Each count re-derived with `wc -l`.
 
 RailEject and CloudMounts raise five recorded ceilings rather than splitting a sixth file.
@@ -7484,12 +7486,18 @@ through the seam's `glass` reader, which exists once the first listing has answe
 `$XDG_STATE_HOME/omarchy/toggles/hypr/window-opaque.lua` or `window-glassy.lua`, neither meaning transparent, its default, and
 `ui/Glass.qml` reads it as a file test, because `OMARCHY_PATH` is missing over ssh and from some launchers. The ground alpha takes
 the first row that applies: the user's own `[flea] background-alpha` in `~/.config/omarchy/shell.toml` (a value that is not a
-number reads as 1, as before the mode existed); opaque, which is 1; glassy, the theme's own value, else `Glass.glassAlpha`, the translucent ground; transparent, the theme's value, else 1. With no toggle file and no user value Flea draws exactly
-what it drew before. Hyprland reloads its config for a Window Transparency, Window Corners or Window Gaps change with no theme
+number reads as 1, as before the mode existed); opaque, which is 1; glassy, the theme's own value, else `Glass.glassAlpha`, the translucent ground; transparent, the theme's value, else 1. Transparent with no value is Hyprland's to draw: when Hyprland opens a Flea window,
+`ui/Glass.qml` makes `ui/GlassTagger.qml`, after the first rows, and it gives each Flea window Hyprland leaves at opacity 1 the
+`transparent` tag Omarchy's transparency hotkey sets, so Omarchy's own rule draws it at its Transparent opacity, as Omarchy draws
+Nautilus. A window Hyprland already draws below 1, which stable Omarchy's catch-all rule does to every window, keeps that rule,
+so Flea's alpha never stacks on Hyprland's. Glassy, Opaque and a `[flea]` value take Flea's own tag off, and a tag the user set
+with the hotkey is never touched; a recorded window Hyprland draws at 1 again, such as a new window on a closed one's address,
+is tagged again. `ui/boot/shell.qml` clears the window from `WindowBody.clearSurface`, not the body colour. Hyprland reloads its config for a Window Transparency, Window Corners or Window Gaps change with no theme
 switch, and `ui/Theme.qml` listens for the `configreloaded` raw event of `Quickshell.Hyprland` (only inside Hyprland): it runs
-`Style.scheduleRefresh()`, so the corner radius follows, and `Glass.reread()`, so the mode does. A launch that decided on opaque
-holds 1 until the next launch, as before. `tests/glass-mode.sh` runs every precedence row, a reload under a running window, and the
-same reload through a socket speaking Hyprland's event protocol. `tests/theme-contrast.qml` holds muted and metadata text to 4.5 on
+`Style.scheduleRefresh()`, so the corner radius follows, and `Glass.reread()`, so the mode does. Every launch is made clear unless a `[flea]` value pins
+1, so a switch between Omarchy's three modes shows on a running window; a pinned launch holds 1 until the next. `tests/glass-mode.sh` runs every precedence row, a reload under a running window, the
+same reload through a socket speaking Hyprland's event protocol, and the tag through a stand-in hyprctl: tagged at 1, untagged
+in Glassy, tagged again in Transparent, and left alone at 0.985. `tests/theme-contrast.qml` holds muted and metadata text to 4.5 on
 the glass planes over a white and a black backdrop dimmed by glass.lua's blur brightness 0.75, and records each palette's floor, the
 lowest 8-bit alpha above which every step passes: it is 255 for 16 of the 24 palettes, so no translucent ground keeps those at 4.5
 until a look lifts the ink on glass, and a recorded floor only moves down.

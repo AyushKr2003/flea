@@ -18,6 +18,7 @@ import "watchgate.js" as WatchGateSuite
 import "codelines.js" as CodeLinesSuite
 import "csv.js" as CsvSuite
 import "contrast.js" as ContrastSuite
+import "glasstag.js" as GlassTagSuite
 import "copyas.js" as CopyAsSuite
 import "invert.js" as InvertSuite
 import "crumbs.js" as CrumbsSuite
@@ -189,7 +190,7 @@ Item {
 
         var suites = [
             ["clipboard", ClipboardSuite],
-            ["archive", ArchiveSuite], ["archives", ArchivesSuite], ["archivecards", ArchiveCardsSuite], ["background", BackgroundSuite], ["buttons", ButtonsSuite], ["cardink", CardInkSuite], ["bulkrename", BulkRenameSuite], ["bulksheet", BulkSheetSuite], ["collide", CollideSuite], ["collidemerge", CollideMergeSuite], ["clipmarks", ClipMarksSuite], ["columns", ColumnsSuite], ["columnskeep", ColumnsKeepSuite], ["columnsback", ColumnsBackSuite], ["watchgate", WatchGateSuite], ["contrast", ContrastSuite], ["codelines", CodeLinesSuite], ["csv", CsvSuite],
+            ["archive", ArchiveSuite], ["archives", ArchivesSuite], ["archivecards", ArchiveCardsSuite], ["background", BackgroundSuite], ["buttons", ButtonsSuite], ["cardink", CardInkSuite], ["bulkrename", BulkRenameSuite], ["bulksheet", BulkSheetSuite], ["collide", CollideSuite], ["collidemerge", CollideMergeSuite], ["clipmarks", ClipMarksSuite], ["columns", ColumnsSuite], ["columnskeep", ColumnsKeepSuite], ["columnsback", ColumnsBackSuite], ["watchgate", WatchGateSuite], ["contrast", ContrastSuite], ["glasstag", GlassTagSuite], ["codelines", CodeLinesSuite], ["csv", CsvSuite],
             ["dirsizes", DirSizesSuite], ["drag", DragSuite], ["dragout", DragOutSuite], ["dropkeys", DropKeysSuite], ["drops", DropsSuite], ["dropsflow", DropsFlowSuite], ["dst", DstSuite], ["ddtarget", DdtargetSuite],
             ["copyas", CopyAsSuite], ["invert", InvertSuite],
             ["edmonton", DstSuite],

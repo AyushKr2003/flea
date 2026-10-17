@@ -145,6 +145,8 @@ background-alpha = 0.34
 
 Values run from 0 to 1, and the default is 1. The listing, the rail and the bars let the desktop through at that value; text, icons, thumbnails, menus, dialogs and Quick Look stay opaque. With Auto-hide sidebar on, the rail stays opaque, because it opens over the listing.
 
+With no value set, Flea follows Omarchy's Window Transparency (Trigger > Appearance > Window Transparency). Transparent draws Flea the way Omarchy draws its own file browser, Glassy frosts the listing, the rail and the bars, and Opaque is solid. A switch shows on an open Flea window without a restart.
+
 ## Performance
 
 Measured on **12 October 2026**, using the **0.3.10** source tree.
