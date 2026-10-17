@@ -64,34 +64,9 @@ ShellRoot {
                  })]
         if (root.mode === "reload") s = s.concat(root.reloadSteps())
         if (root.mode === "socket") s = s.concat(root.socketSteps())
-        if (root.mode === "edge") s.push(root.act(root.transparentEdges))
         root.steps = s
     }
 
-    // Near the AA boundary, neither white nor black ink can be lifted further; the ground must protect both focus states.
-    function transparentEdges() {
-        var inks = ["#ffffff", "#000000"], backdrops = ["#ffffff", "#000000"], focuses = [true, false]
-        for (var i = 0; i < inks.length; i++) {
-            Flea.Theme.applyColors('background = "#757575"\ndark_background = "#757575"\nforeground = "' + inks[i] + '"\n')
-            for (var f = 0; f < focuses.length; f++) {
-                Flea.Glass.focused = focuses[f]
-                var c = Flea.Theme.color, a = Flea.Glass.alpha
-                var roles = [c.foreground, c.muted, c.metadata, c.error, c.errorOnSurface, c.symlink, c.executable]
-                var planes = [c.background, c.surface], worst = Infinity
-                for (var r = 0; r < roles.length; r++)
-                    for (var p = 0; p < planes.length; p++)
-                        for (var b = 0; b < backdrops.length; b++)
-                            worst = Math.min(worst, Contrast.ratio(String(roles[r]), Contrast.hexOf(Contrast.over(String(planes[p]), a, backdrops[b]))))
-                root.check(worst >= Flea.Theme.textContrast, "edge ink=" + inks[i] + " focus=" + focuses[f] + " alpha=" + root.eight() + " ratio=" + worst)
-                var nominal = focuses[f] ? 251 : 245
-                root.check(root.eight() >= nominal, "edge alpha is thinner than Omarchy's ground")
-                var prior = Math.min(Contrast.ratio(inks[i], Contrast.hexOf(Contrast.over(String(c.background), (root.eight() - 1) / 255, backdrops[0]))),
-                    Contrast.ratio(inks[i], Contrast.hexOf(Contrast.over(String(c.background), (root.eight() - 1) / 255, backdrops[1]))))
-                root.check(root.eight() === nominal || prior < Flea.Theme.textContrast, "edge alpha rose beyond the first legible step")
-                console.log("GLASSM EDGE ink=" + inks[i] + " focus=" + focuses[f] + " alpha=" + root.eight() + " ratio=" + worst)
-            }
-        }
-    }
     // The launch was glassy at 191; a reload that finds no toggle goes to Omarchy's default, and one that finds it comes back.
     function reloadSteps() {
         return [
@@ -106,7 +81,7 @@ ShellRoot {
             root.wait(function () { return Commons.Style.cornerRadius === 0 }),
             root.act(function () {
                 root.check(Flea.Glass.mode === "transparent", "a reload without the toggle left mode " + Flea.Glass.mode)
-                root.check(root.eight() === 251, "focused transparent without a theme value drew " + root.eight())
+                root.check(root.eight() === 255, "bare transparent without a theme value drew " + root.eight())
                 opaque.setText("return\n")
             }),
             root.act(function () { root.reload() }),

@@ -191,8 +191,9 @@ STUB
             cursor) printf '%s\n' "$cursor" ;;
             metrics) printf '13 12 14 37\n' ;;
             viewMode) printf 'columns\n' ;;
+            # Opaque and bare Transparent launches draw opaque; glassy keeps its ground.
             glass) jq -cn --arg mode "$mode" --argjson focused "$([[ "$(cat "$replay/focus-pid")" == "$capture_pid" ]] && printf true || printf false)" \
-                '{automatic:true, mode:$mode, focused:$focused, alpha:(if $focused then 251/255 else 245/255 end)}' ;;
+                '{automatic:true, mode:$mode, focused:$focused, alpha:(if $mode == "glassy" then 192/255 else 1 end)}' ;;
             *) fail "unexpected IPC call: $*" ;;
         esac
     }

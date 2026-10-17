@@ -7484,8 +7484,7 @@ through the seam's `glass` reader, which exists once the first listing has answe
 `$XDG_STATE_HOME/omarchy/toggles/hypr/window-opaque.lua` or `window-glassy.lua`, neither meaning transparent, its default, and
 `ui/Glass.qml` reads it as a file test, because `OMARCHY_PATH` is missing over ssh and from some launchers. The ground alpha takes
 the first row that applies: the user's own `[flea] background-alpha` in `~/.config/omarchy/shell.toml` (a value that is not a
-number reads as 1, as before the mode existed); opaque, which is 1; glassy, the theme's own value, else `Glass.glassAlpha`, which holds
-1 until the look pick, so Glassy bare draws what Transparent does; transparent, the theme's value, else 1. With no toggle file and no user value Flea draws exactly
+number reads as 1, as before the mode existed); opaque, which is 1; glassy, the theme's own value, else `Glass.glassAlpha`, the translucent ground; transparent, the theme's value, else 1. With no toggle file and no user value Flea draws exactly
 what it drew before. Hyprland reloads its config for a Window Transparency, Window Corners or Window Gaps change with no theme
 switch, and `ui/Theme.qml` listens for the `configreloaded` raw event of `Quickshell.Hyprland` (only inside Hyprland): it runs
 `Style.scheduleRefresh()`, so the corner radius follows, and `Glass.reread()`, so the mode does. A launch that decided on opaque
