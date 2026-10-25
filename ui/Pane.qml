@@ -65,7 +65,23 @@ FocusScope {
     property string flashZipAsked: ""
     onCursorIndexChanged: Ops.checkZip(root)
     onSelectionVersionChanged: Ops.checkZip(root)
-    onPathChanged: Ops.checkZip(root)
+    onPathChanged: {
+        Ops.checkZip(root)
+        if (root.nativeActive) {
+            root.nativeModel.path = root.path
+            root.nativeModel.showHidden = root.showHidden
+        }
+    }
+    onShowHiddenChanged: if (root.nativeActive) { root.nativeModel.showHidden = root.showHidden }
+    onSearchQueryChanged: if (root.nativeActive) { root.nativeModel.search(root.searchQuery) }
+
+    Loader {
+        id: nativeLoader
+        source: "NativeDir.qml"
+        active: true
+    }
+    readonly property var nativeModel: nativeLoader.status === Loader.Ready ? nativeLoader.item : null
+    readonly property bool nativeActive: root.nativeModel !== null && root.path.length > 0 && root.recentMode.length === 0 && !root.trash.opened
     onBackendChanged: Ops.checkZip(root)
     // Issue 27's state-file key: with it on a cursor step past an end comes round; ui/js/Focus.js step is the only reader.
     readonly property bool wrapAtEnds: ViewState.state.wrapAtEnds === true
@@ -563,6 +579,11 @@ FocusScope {
                                        ? root.listingPath : root.path
 
     function rowFor(index) {
+        if (root.nativeActive && root.nativeModel && root.nativeModel.count > 0) {
+            var nRow = root.nativeModel.get(index)
+            if (nRow && nRow.n !== undefined && nRow.n.length > 0)
+                return nRow
+        }
         var offset = index - root.held
         if (offset < 0 || offset >= root.rows.length)
             return null

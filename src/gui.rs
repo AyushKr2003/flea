@@ -182,7 +182,7 @@ fn apply_renderer(cmd: &mut Command, renderer: LaunchRenderer) {
 // The qs invocation both entry points share, including the renderer chosen at the last hand-off point.
 pub(crate) fn qs_command(target: PathBuf) -> Command {
     let mut cmd = Command::new("qs");
-    cmd.arg("-p").arg(target);
+    cmd.arg("-p").arg(&target);
     // Only the main window records a prefetch list; a chooser started from a Flea terminal must not overwrite it.
     cmd.env_remove(prefetch::LIST_ENV);
     cmd.env_remove(prefetch::SHELL_ENV);
@@ -211,6 +211,19 @@ pub(crate) fn qs_command(target: PathBuf) -> Command {
         }
     } else {
         apply_renderer(&mut cmd, automatic_renderer(crate::vkprobecache::usable()));
+    }
+    // Prepend Flea's modules directory to QML_IMPORT_PATH so FleaNative is found by Quickshell.
+    if let Some(parent) = target.parent() {
+        let modules = parent.parent().map(|p| p.join("modules")).unwrap_or_else(|| parent.join("modules"));
+        if modules.is_dir() {
+            let current = std::env::var("QML_IMPORT_PATH").unwrap_or_default();
+            let new_val = if current.is_empty() {
+                modules.to_string_lossy().into_owned()
+            } else {
+                format!("{}:{}", modules.to_string_lossy(), current)
+            };
+            cmd.env("QML_IMPORT_PATH", new_val);
+        }
     }
     cmd
 }
